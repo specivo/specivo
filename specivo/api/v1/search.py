@@ -342,7 +342,7 @@ async def search(
 
     # Audit log the search query. Skipped for anonymous visitors, and this is
     # the guard that matters most: unlike ``log_event``, ``log_search_query``
-    # writes unconditionally — it is a core feature, not enterprise-gated — so
+    # writes unconditionally, so
     # without this an anonymous crawl would persist one row per request. It is
     # also the only write on this path, which a read-only transaction would
     # otherwise refuse outright.

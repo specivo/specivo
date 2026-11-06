@@ -440,7 +440,7 @@ async def remove_wiki_tag(
 
 
 # ---------------------------------------------------------------------------
-# Bulk issue tagging (rides on the bulk_operations feature)
+# Bulk issue tagging
 # ---------------------------------------------------------------------------
 
 
@@ -452,12 +452,7 @@ async def bulk_tag_issues(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> dict:
-    """Apply/remove tags across many issues. Requires the bulk_operations feature."""
-    from specivo.core.features import has_feature
-
-    if not has_feature("bulk_operations"):
-        raise PermissionDeniedError("Bulk operations are not available")
-
+    """Apply/remove tags across many issues of the project."""
     project = await _get_project(project_key, current_user, db)
 
     # Restrict to issues that belong to the project and are visible to the user.

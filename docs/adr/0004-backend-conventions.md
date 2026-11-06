@@ -22,7 +22,7 @@ write makes, not the state of the issue (§6).
 
 ## Context
 
-Specivo's backend is a FastAPI + SQLAlchemy 2.0 async + Pydantic V2 application with a tiered plugin system (core/pro/enterprise). As the codebase grows, consistent patterns across routing, models, schemas, services, error handling, and testing are essential for maintainability and onboarding. This ADR documents the conventions observed in the codebase and establishes them as the canonical reference.
+Specivo's backend is a FastAPI + SQLAlchemy 2.0 async + Pydantic V2 application with a plugin system for password hashers, routers, services and templates. As the codebase grows, consistent patterns across routing, models, schemas, services, error handling, and testing are essential for maintainability and onboarding. This ADR documents the conventions observed in the codebase and establishes them as the canonical reference.
 
 ## Decision
 
@@ -442,19 +442,17 @@ Trusted proxy handling: only trusts `X-Forwarded-For` when the direct peer IP ma
 
 ### 10. Plugin System Architecture
 
-Three-tier architecture: **core** (open source) < **pro** < **enterprise**. Plugin loading order is enforced by tier.
+Everything ships in Specivo itself; there are no editions and no feature flags. Plugins add things core does not have (legacy password hashers, extra routers, services, templates, static files, translations) and load in the order `INSTALLED_PLUGINS` lists them.
 
 **Plugin contract** (`specivo.core.plugin`):
 
 ```python
 class PluginConfig(Protocol):
     name: str
-    tier: str         # "core", "pro", "enterprise"
     version: str
     def get_models(self) -> list: ...
     def get_routers(self, prefix: str) -> list: ...
     def get_services(self, registry: Any) -> None: ...
-    def get_features(self) -> list[str]: ...
     def get_celery_tasks(self, celery_app: Any) -> None: ...
     def get_migration_path(self) -> Path | None: ...
     def get_template_dirs(self) -> list: ...
@@ -467,7 +465,7 @@ class PluginConfig(Protocol):
 
 `BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`. `get_password_hashers` returns legacy password hashers (`WrappedLegacyHasher` subclasses from `specivo.services.password_hashers`); registering one does not enable it, since only algorithms listed in `LEGACY_PASSWORD_ALGORITHMS` ever verify a sign-in.
 
-**Feature registry** (`specivo.core.features`): plugins register feature flags (e.g., `"security_audit_log"`). Application code checks `has_feature("feature_name")` before enabling optional behavior. Templates access it via Jinja2 global `{% if has_feature("feature_name") %}`.
+**No feature registry.** There is no flag mechanism: a page or route either exists or it does not. A plugin's optional behaviour checks for its own plugin or setting. A plugin class with extra attributes or hooks that core no longer calls keeps loading; nothing reads them.
 
 **Service registry** (`specivo.core.services`): core registers default service implementations; plugins can `override()` them. `register()` raises if the name already exists; `override()` raises if it does not.
 
@@ -558,7 +556,6 @@ Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme suppor
 - `integration` -- API endpoint tests, requires database.
 - `service` -- service layer tests, requires database.
 - `slow` -- tests > 5 seconds.
-- `pro` / `enterprise` -- auto-skipped when the corresponding plugin is not installed.
 - `serial` -- cannot run under pytest-xdist (shared state like Redis rate limits, MCP globals).
 - `e2e` -- browser tests requiring a running server.
 - `sso_idp` -- single sign-on tests against the on-demand identity provider (`make sso-idp-up`); skipped when it is not up.
@@ -589,7 +586,7 @@ Variants: `AdminUserFactory`, `ServiceAccountFactory`.
 
 Operational detail — how to run the suite, the `DATABASE_URL` override the Makefile forces, fixtures, permission setup, and the gotchas — lives in the "Testing Conventions" wiki page in the SPECIVO project.
 
-**Plugin isolation:** `_restore_plugin_manager` autouse fixture restores the global `PluginManager` singleton after each test. `pytest_collection_modifyitems` auto-skips `pro`/`enterprise` tests when plugins are not installed.
+**Plugin isolation:** `_restore_plugin_manager` autouse fixture restores the global `PluginManager` singleton after each test. `pytest_collection_modifyitems` auto-skips `sso_idp` tests when the identity provider is not up.
 
 ### 17. Code Style
 
@@ -757,7 +754,7 @@ never hold tokens, codes, verifiers, secrets, claim sets or group names.
 - Consistent patterns across all modules reduce cognitive load -- once you have seen one router/service/model, you know the structure of all of them.
 - The `AppError` hierarchy with uniform JSON envelope means clients need a single error-handling path.
 - Transaction-rollback test isolation keeps the test suite fast even as it grows.
-- The plugin system allows pro/enterprise features to extend the core without modifying it.
+- The plugin system lets an install add hashers, routes and templates without modifying the core.
 - Stateless services with explicit session passing make testing straightforward (no hidden global state).
 
 **Negative:**

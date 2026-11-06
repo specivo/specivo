@@ -22,12 +22,11 @@ import secrets
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import CursorResult, delete, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.constants import API_KEY_ENTROPY_BYTES, API_KEY_PREFIX
+from specivo.core.constants import API_KEY_ENTROPY_BYTES, API_KEY_MAX_PER_USER, API_KEY_PREFIX
 from specivo.core.exceptions import AppError, NotFoundError, ValidationError
-from specivo.core.features import get_feature_registry
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import ApiKey
@@ -118,15 +117,9 @@ async def sso_api_keys_refused(session: AsyncSession, user: User) -> bool:
 class ApiKeyService:
     """Stateless service class — all state lives in the DB session."""
 
-    _MAX_KEYS_FREE = 20
-
-    async def _check_key_limit_exceeded(self, session: AsyncSession, user_id: int) -> bool:
-        """Return True if user has reached the core-tier key limit (20 keys)."""
-        from sqlalchemy import func
-
-        count_result = await session.execute(select(func.count()).where(ApiKey.user_id == user_id))
-        current_count = count_result.scalar_one()
-        return isinstance(current_count, int) and current_count >= self._MAX_KEYS_FREE
+    async def _key_count(self, session: AsyncSession, user_id: int) -> int:
+        """Return how many keys *user_id* holds, active and inactive."""
+        return int((await session.execute(select(func.count()).where(ApiKey.user_id == user_id))).scalar_one())
 
     async def create_key(
         self,
@@ -152,7 +145,8 @@ class ApiKeyService:
         route turns it off, since a service account may be given membership
         later. A key never exceeds its owner's roles either way.
 
-        Feature gate: without ``unlimited_api_keys``, max 20 keys per user.
+        A user holds at most ``API_KEY_MAX_PER_USER`` keys, active or not
+        (422 ``api_key_limit``).
         """
         owner = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
         if owner is not None and owner.is_system_principal:
@@ -160,18 +154,14 @@ class ApiKeyService:
         if owner is not None and await sso_api_keys_refused(session, owner):
             raise sso_api_keys_refused_error()
 
-        registry = get_feature_registry()
-
-        # Gate: enforce 5-key limit unless unlimited_api_keys feature is available
-        if not registry.has_feature("unlimited_api_keys"):
-            if await self._check_key_limit_exceeded(session, user_id):
-                raise AppError(
-                    code="api_key_limit",
-                    message=_("API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited keys.").format(
-                        limit=self._MAX_KEYS_FREE
-                    ),
-                    status_code=422,
-                )
+        if await self._key_count(session, user_id) >= API_KEY_MAX_PER_USER:
+            raise AppError(
+                code="api_key_limit",
+                message=_(
+                    "This account has reached the limit of {limit} API keys. Delete keys it no longer needs."
+                ).format(limit=API_KEY_MAX_PER_USER),
+                status_code=422,
+            )
 
         stored_scopes = await self._resolve_scopes(session, scopes, owner, check_access=check_scope_access)
 

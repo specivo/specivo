@@ -1,4 +1,7 @@
-"""GroupPolicyService — manage agent groups, memberships, and access policies."""
+"""GroupPolicyService — manage agent groups, memberships, and access policies.
+
+Its API is not mounted; not yet tested for release.
+"""
 
 from __future__ import annotations
 

@@ -1,7 +1,6 @@
 {% from "components/macros.html" import status_badge, priority_badge, tracker_badge, avatar %}
 {% for issue in issues %}
 <tr class="sp-row-hover">
-  {% if has_feature("bulk_operations") %}<td style="padding: var(--sp-space-sm); width: 32px;"><input type="checkbox" value="{{ issue.id }}" /></td>{% endif %}
   <td style="padding: var(--sp-space-sm); width: 24px;">{{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}</td>
   <td style="padding: var(--sp-space-sm);">
     <a href="/issue/{{ issue.display_key }}/"

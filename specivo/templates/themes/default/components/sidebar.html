@@ -93,26 +93,6 @@
   </div>
   {% endif %}
 
-  {# AI & Agents section — hidden until agent session UI is implemented #}
-
-  {% if has_feature("agent_groups") or has_feature("external_credentials") %}
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">{% trans %}Security{% endtrans %}</div>
-    {% if has_feature("agent_groups") %}
-    <a class="sidebar-item" href="#">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      {% trans %}Agent Policies{% endtrans %}
-    </a>
-    {% endif %}
-    {% if has_feature("external_credentials") %}
-    <a class="sidebar-item" href="#">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-      {% trans %}Credentials{% endtrans %}
-    </a>
-    {% endif %}
-  </div>
-  {% endif %}
-
   {% if user is defined and user and user.is_admin %}
   <div class="sidebar-section">
     <div class="sidebar-section-label">{% trans %}Administration{% endtrans %}</div>
@@ -123,7 +103,7 @@
   </div>
   {% endif %}
 
-  {# Pro/Enterprise sidebar items injected here #}
+  {# Plugin sidebar items injected here #}
   {% block sidebar_plugins %}{% endblock %}
 
   <div class="sidebar-spacer"></div>

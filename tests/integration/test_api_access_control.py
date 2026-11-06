@@ -259,7 +259,7 @@ async def test_metadata_schemas_404_for_non_member(client: AsyncClient, private_
 # ---------------------------------------------------------------------------
 # Billing rates
 # ---------------------------------------------------------------------------
-# Their router is mounted by an edition plugin, not by core, so a request to
+# Their router is not mounted by core (a plugin may mount it), so a request to
 # these URLs would be a 404 whatever the access rules; the route functions are
 # called directly instead. The permission rules for a public project are in
 # ``test_access_review_followups``.

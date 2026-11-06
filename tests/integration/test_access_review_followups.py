@@ -82,7 +82,7 @@ async def _anonymous(db: AsyncSession, w: World) -> User:
 # ---------------------------------------------------------------------------
 # Billing rates
 # ---------------------------------------------------------------------------
-# The router is mounted by an edition plugin, not by core, so the route
+# The router is not mounted by core (a plugin may mount it), so the route
 # functions are called directly.
 
 

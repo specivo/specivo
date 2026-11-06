@@ -14,7 +14,7 @@ def test_plugin_has_no_import_source_hook():
     """Importers are tools that write bundles; a plugin cannot add an import source."""
 
     class Bare(BasePluginConfig):
-        name, tier = "bare", "core"
+        name = "bare"
 
     assert isinstance(Bare(), PluginConfig)
     assert not hasattr(PluginConfig, "get_import_sources")

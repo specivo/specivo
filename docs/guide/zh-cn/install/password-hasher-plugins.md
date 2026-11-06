@@ -54,7 +54,7 @@ class AcmeTrackerMd5(WrappedLegacyHasher):
 
 
 class Plugin(BasePluginConfig):
-    name, tier, version = "acme-hashers", "core", "1.0"
+    name, version = "acme-hashers", "1.0"
 
     def get_password_hashers(self):
         return [AcmeTrackerMd5()]

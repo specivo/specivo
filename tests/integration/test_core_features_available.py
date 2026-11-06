@@ -1,22 +1,8 @@
-"""Integration tests for v0.15.0 tier rebalancing.
+"""Integration tests: collaboration and validation features work with no plugin.
 
-TDD RED phase -- these tests describe the DESIRED behaviour after
-the rebalancing is implemented.  They run in core-only mode
-(INSTALLED_PLUGINS=[]) and verify that features previously gated
-behind Pro now work without any plugin.
-
-Issue references:
-- -- Features moved from Pro to CE (threaded comments, reactions,
-          mentions, bulk, saved filters)
-- -- In-app notifications moved from Pro to CE
-- -- Metadata validation / workflow field rules apply in core
-- -- API key limit raised from 5 to 20
-
-Expected failures (RED):
-- Threaded comments: reply_to_id is silently dropped, resolve_thread raises
-- Reactions / saved-filters endpoints: 404 (routes not mounted in core)
-- In-app notification creation: not created without pro plugin
-- API key limit: 6th key fails (limit is still 5)
+Threaded comments, reactions, mentions, in-app notifications, saved filters,
+bulk updates, metadata validation and workflow field rules are all part of
+Specivo itself. These tests run without plugins (``INSTALLED_PLUGINS=[]``).
 """
 
 from __future__ import annotations
@@ -29,13 +15,11 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import AppError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.notification import Notification
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.models.workflow import WorkflowFieldRule, WorkflowTransition
-from specivo.services.api_key_service import ApiKeyService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, AdminUserFactory, UserFactory
@@ -125,7 +109,7 @@ async def priority(db_session: AsyncSession) -> IssuePriority:
 
 @pytest_asyncio.fixture
 async def project(db_session: AsyncSession) -> Project:
-    proj = ProjectFactory.build(key="TRB", identifier="tier-rebalance-test")
+    proj = ProjectFactory.build(key="CFA", identifier="core-features-test")
     db_session.add(proj)
     await db_session.commit()
     await db_session.refresh(proj)
@@ -134,7 +118,7 @@ async def project(db_session: AsyncSession) -> Project:
 
 @pytest_asyncio.fixture
 async def admin_user(db_session: AsyncSession) -> User:
-    user = AdminUserFactory.build(login="trb_admin", status="active")
+    user = AdminUserFactory.build(login="cfa_admin", status="active")
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
@@ -148,7 +132,7 @@ async def admin_token(admin_user: User, client: AsyncClient) -> str:
 
 @pytest_asyncio.fixture
 async def second_user(db_session: AsyncSession) -> User:
-    user = UserFactory.build(login="trb_user2", status="active")
+    user = UserFactory.build(login="cfa_user2", status="active")
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
@@ -161,7 +145,7 @@ async def second_user_member(db_session: AsyncSession, second_user: User, projec
     from specivo.models.member import Member, MemberRole
     from specivo.models.role import Role
 
-    role = Role(name="Trb Viewer", permissions=["view_issues"], builtin=0, issues_visibility="default")
+    role = Role(name="Cfa Viewer", permissions=["view_issues"], builtin=0, issues_visibility="default")
     member = Member(user_id=second_user.id, project_id=project.id)
     db_session.add_all([role, member])
     await db_session.flush()
@@ -176,12 +160,12 @@ async def second_token(second_user: User, client: AsyncClient) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Features now in core (no plugin needed)
+# Comments, reactions, saved filters and bulk updates
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_threaded_comments_work_without_pro(
+async def test_threaded_comment_replies_keep_their_parent(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -191,12 +175,7 @@ async def test_threaded_comments_work_without_pro(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """POST comment with reply_to_id succeeds in core-only mode.
-
-    Currently reply_to_id is silently dropped when threaded_comments is
-    not registered.  After rebalancing, threaded_comments is a core
-    feature and reply_to_id must be preserved.
-    """
+    """A comment posted with reply_to_id keeps it."""
     issue = await _create_issue(
         client,
         admin_token,
@@ -217,7 +196,7 @@ async def test_threaded_comments_work_without_pro(
     assert resp.status_code == 201, resp.text
     parent_id = resp.json()["id"]
 
-    # Create reply -- reply_to_id must be preserved (not silently dropped)
+    # Create reply -- reply_to_id must be preserved
     resp = await client.post(
         f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "Reply to parent", "reply_to_id": parent_id},
@@ -227,13 +206,11 @@ async def test_threaded_comments_work_without_pro(
     reply_data = resp.json()
 
     # The reply must reference the parent
-    assert reply_data.get("reply_to_id") == parent_id, (
-        "reply_to_id should be preserved in core-only mode after tier rebalancing"
-    )
+    assert reply_data.get("reply_to_id") == parent_id
 
 
 @pytest.mark.asyncio
-async def test_resolve_thread_works_without_pro(
+async def test_a_thread_can_be_resolved(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -243,11 +220,7 @@ async def test_resolve_thread_works_without_pro(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """resolve_thread must succeed in core-only mode after rebalancing.
-
-    Currently raises RuntimeError because threaded_comments feature is not
-    registered.
-    """
+    """resolve_thread marks a discussion resolved with its summary."""
     issue = await _create_issue(
         client,
         admin_token,
@@ -277,14 +250,14 @@ async def test_resolve_thread_works_without_pro(
         journal_id=journal_id,
         issue_id=issue["id"],
         user=admin_user,
-        summary="Resolved in core-only mode",
+        summary="Resolved",
     )
     assert resolved.is_resolved is True
-    assert resolved.resolved_summary == "Resolved in core-only mode"
+    assert resolved.resolved_summary == "Resolved"
 
 
 @pytest.mark.asyncio
-async def test_reactions_endpoint_in_core(
+async def test_reactions_endpoint_is_served(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -294,11 +267,7 @@ async def test_reactions_endpoint_in_core(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """POST /reactions must return non-404 in core-only mode.
-
-    Currently the reactions router is only mounted by ProPlugin, so this
-    returns 404 without the plugin.
-    """
+    """POST /reactions is served."""
     issue = await _create_issue(
         client,
         admin_token,
@@ -325,14 +294,11 @@ async def test_reactions_endpoint_in_core(
         json={"emoji": "+1"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code != 404, (
-        f"Reactions endpoint returned 404 in core-only mode; "
-        f"expected it to be available after tier rebalancing (got {resp.status_code})"
-    )
+    assert resp.status_code != 404, resp.text
 
 
 @pytest.mark.asyncio
-async def test_bulk_update_endpoint_in_core(
+async def test_bulk_update_endpoint_is_served(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -342,7 +308,7 @@ async def test_bulk_update_endpoint_in_core(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """POST /issues/bulk-update must return non-404 in core-only mode."""
+    """POST /issues/bulk-update is served."""
     issue = await _create_issue(
         client,
         admin_token,
@@ -358,33 +324,27 @@ async def test_bulk_update_endpoint_in_core(
         json={"issue_ids": [issue["id"]], "updates": {"subject": "Bulk updated"}},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code != 404, f"Bulk update endpoint returned 404; expected non-404 (got {resp.status_code})"
+    assert resp.status_code != 404, resp.text
 
 
 @pytest.mark.asyncio
-async def test_saved_filters_endpoint_in_core(
+async def test_saved_filters_endpoint_is_served(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
     admin_token: str,
     project: Project,
 ) -> None:
-    """GET /projects/{key}/saved-filters must return non-404 in core-only mode.
-
-    Currently saved-filters router is mounted by ProPlugin only.
-    """
+    """GET /projects/{key}/saved-filters/ is served."""
     resp = await client.get(
         f"/api/v1/projects/{project.key}/saved-filters/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code != 404, (
-        f"Saved filters endpoint returned 404 in core-only mode; "
-        f"expected it to be available after tier rebalancing (got {resp.status_code})"
-    )
+    assert resp.status_code != 404, resp.text
 
 
 @pytest.mark.asyncio
-async def test_mentions_work_without_pro(
+async def test_a_mention_notifies_the_mentioned_user(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -396,11 +356,7 @@ async def test_mentions_work_without_pro(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Comment with @mention creates a notification in core-only mode.
-
-    After rebalancing, the mention service must create Notification records
-    without requiring the pro plugin.
-    """
+    """A comment with an @mention creates an in-app notification."""
     issue = await _create_issue(
         client,
         admin_token,
@@ -429,16 +385,16 @@ async def test_mentions_work_without_pro(
         )
     )
     notif = result.scalar_one_or_none()
-    assert notif is not None, "Expected an in-app notification for @mention in core-only mode"
+    assert notif is not None, "Expected an in-app notification for the @mention"
 
 
 # ---------------------------------------------------------------------------
-# In-app notifications in core
+# In-app notifications
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_in_app_notifications_created_without_pro(
+async def test_assignment_creates_an_in_app_notification(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -450,11 +406,7 @@ async def test_in_app_notifications_created_without_pro(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """After issue assignment, a Notification record must exist in core-only mode.
-
-    Currently in-app notifications may only be created when the pro plugin
-    provides the feature.  After rebalancing, they are a core feature.
-    """
+    """Assigning an issue creates an in-app Notification for the assignee."""
     issue = await _create_issue(
         client,
         admin_token,
@@ -485,76 +437,49 @@ async def test_in_app_notifications_created_without_pro(
         )
     )
     notif = result.scalar_one_or_none()
-    assert notif is not None, "Expected an in-app Notification record for assignment in core-only mode"
+    assert notif is not None, "Expected an in-app Notification record for the assignment"
 
 
 @pytest.mark.asyncio
-async def test_notifications_endpoint_in_core(
+async def test_notifications_endpoint_is_served(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
     admin_token: str,
 ) -> None:
-    """GET /notifications must return non-404 in core-only mode."""
+    """GET /notifications/ is served."""
     resp = await client.get(
         "/api/v1/notifications/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code != 404, f"Notifications endpoint returned 404 in core-only mode (got {resp.status_code})"
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio
-async def test_notification_preferences_in_core(
+async def test_notification_preferences_are_served(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
     admin_token: str,
 ) -> None:
-    """Notification preferences must be accessible in core-only mode."""
+    """Notification preferences are served."""
     resp = await client.get(
         "/api/v1/notification-preferences/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code == 200, f"Notification preferences returned {resp.status_code} in core-only mode"
+    assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio
-async def test_notification_bell_not_feature_gated(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    admin_user: User,
-    admin_token: str,
-) -> None:
-    """The notification bell section in the header template must render
-    without the in_app_notifications feature being registered by a plugin.
-
-    Currently the header template uses:
-        {% if has_feature("in_app_notifications") %}
-    which means the bell is hidden in core-only mode.  After rebalancing,
-    the bell must be visible.
-    """
-    # Access any web page that renders the header
-    resp = await client.get(
-        "/",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    # The page should load (may redirect to login or dashboard, either is fine)
-    if resp.status_code in (200, 302, 307):
-        # If we got HTML, check for the notification element
-        if resp.status_code == 200 and "text/html" in resp.headers.get("content-type", ""):
-            body = resp.text
-            # After rebalancing, the notification section must be rendered
-            # regardless of plugin presence.  Look for the notification-related
-            # CSS class or element that the template conditionally renders.
-            assert "notification" in body.lower(), (
-                "Notification bell section not found in header; "
-                "it should render in core-only mode after tier rebalancing"
-            )
+async def test_notification_bell_renders(admin_client: AsyncClient) -> None:
+    """The header renders the notification bell and its dropdown."""
+    resp = await admin_client.get("/", cookies={"access_token": admin_client.state.token})
+    assert resp.status_code == 200, resp.text
+    assert "notif-dropdown" in resp.text
 
 
 # ---------------------------------------------------------------------------
-# Metadata/field rules moved to enterprise
+# Metadata validation and workflow field rules
 # ---------------------------------------------------------------------------
 
 
@@ -569,7 +494,7 @@ async def test_metadata_validation_applies_without_a_plugin(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Core alone validates metadata against the project's schemas, admins included."""
+    """Metadata is validated against the project's schemas, admins included."""
     from specivo.models.metadata_schema import MetadataSchema
 
     schema = MetadataSchema(
@@ -616,19 +541,19 @@ async def test_workflow_field_rules_apply_without_a_plugin(
     in_progress_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Core alone enforces field rules for a non-admin member."""
+    """Field rules are enforced for a non-admin member."""
     from specivo.models.member import Member, MemberRole
     from specivo.models.role import Role
 
     role = Role(
-        name="TierFieldRules",
+        name="CoreFieldRules",
         position=41,
         builtin=0,
         permissions=["view_issues", "add_issues", "edit_issues"],
         issues_visibility="default",
         settings={},
     )
-    member_user = UserFactory.build(login="tier_field_rules", status="active")
+    member_user = UserFactory.build(login="core_field_rules", status="active")
     db_session.add_all([role, member_user])
     await db_session.flush()
     member = Member(user_id=member_user.id, project_id=project.id)
@@ -665,40 +590,3 @@ async def test_workflow_field_rules_apply_without_a_plugin(
     )
     assert resp.status_code == 422, resp.text
     assert resp.json()["errors"][0]["code"] == "workflow_field_required"
-
-
-# ---------------------------------------------------------------------------
-# API key limit raised to 20
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_api_key_limit_is_20_in_core(
-    db_session: AsyncSession,
-    admin_user: User,
-) -> None:
-    """Core-only mode must allow creating 20 API keys (up from 5).
-
-    The 21st key must fail with api_key_limit error.
-    Currently _MAX_KEYS_FREE is 5, so key #6 already fails.
-    """
-    service = ApiKeyService()
-
-    # Create 20 keys -- all must succeed
-    for i in range(20):
-        _key, _raw = await service.create_key(
-            session=db_session,
-            user_id=admin_user.id,
-            name=f"key-{i + 1:02d}",
-        )
-    await db_session.flush()
-
-    # 21st key must fail
-    with pytest.raises(AppError) as exc_info:
-        await service.create_key(
-            session=db_session,
-            user_id=admin_user.id,
-            name="key-21-should-fail",
-        )
-    assert exc_info.value.code == "api_key_limit"
-    assert "20" in str(exc_info.value.message), "Error message should reference the new limit of 20"

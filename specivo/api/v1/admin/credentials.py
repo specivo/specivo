@@ -1,4 +1,7 @@
-"""Admin credential broker API — external systems, credential issuance, audit."""
+"""Admin credential broker API — external systems, credential issuance, audit.
+
+Not mounted; not yet tested for release.
+"""
 
 from __future__ import annotations
 
