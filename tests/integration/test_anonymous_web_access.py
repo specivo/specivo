@@ -513,6 +513,22 @@ async def test_the_issue_list_carries_no_create_or_filter_by_person_controls(cli
     assert live.public_issue.subject in resp.text
     assert "/issues/new/" not in resp.text
     assert "assigned_to_id" not in resp.text
+    # Nor a tag or release filter: their suggestions come from endpoints an
+    # anonymous visitor cannot call.
+    assert "data-filter-combo" not in resp.text
+    assert "/assignees/search/" not in resp.text
+
+
+async def test_the_issue_list_ignores_me_and_names_no_one_for_an_anonymous_visitor(
+    client: AsyncClient, live: World
+) -> None:
+    resp = await client.get(_pages(live)["issues"] + f"?assigned_to_id={live.member.id}&fixed_version_id=none")
+    assert resp.status_code == 200
+    assert "data-filter-chip" not in resp.text
+    assert MEMBER_LOGIN not in resp.text
+    resp = await client.get(_pages(live)["issues"] + "?assigned_to_id=me")
+    assert resp.status_code == 200
+    assert live.public_issue.subject not in resp.text
 
 
 async def test_the_wiki_page_is_readable_and_carries_no_controls(client: AsyncClient, live: World) -> None:

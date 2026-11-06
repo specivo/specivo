@@ -1,0 +1,96 @@
+{% from "components/macros.html" import avatar %}
+
+{# --- Searchable filter field (filterCombobox Alpine component) ---
+   One field of a GET filter form. With a value chosen it renders the value as
+   a chip, server-side: the label, a hidden input that keeps the value in the
+   form, and a plain link that clears it (works without JS). Without a value it
+   renders an ARIA combobox whose suggestions come page by page from
+   `endpoint`; picking one fills the hidden input and submits the form.
+
+   name      query parameter, e.g. "assigned_to_id"
+   label     accessible name of the field, e.g. "Assignee"
+   kind      "user" | "tag" | "version"
+   chip      None, or {value, label, clear_url, [login, display_name, avatar_url, avatar_color], [color]}
+   specials  fixed options listed first: [{value, label, [user]}]
+#}
+{% macro filter_combobox(name, label, placeholder, endpoint, kind, chip=none, specials=[], project_key='') %}
+{% set list_id = "sp-filter-" ~ name ~ "-list" %}
+{% if chip %}
+<span class="sp-filter-chip" data-filter-chip="{{ name }}">
+  {% if kind == "user" and chip.login %}
+  {{ avatar(chip.login, size='xs', color=chip.avatar_color, avatar_url=chip.avatar_url, display_name=chip.display_name) }}
+  {% elif kind == "tag" and chip.color %}
+  <span class="sp-tag-ac-color" style="background:{{ chip.color }}" aria-hidden="true"></span>
+  {% endif %}
+  <span class="sp-filter-chip-label"><span class="sp-visually-hidden">{{ label }}: </span>{{ chip.label }}</span>
+  <input type="hidden" name="{{ name }}" value="{{ chip.value }}">
+  <a href="{{ chip.clear_url }}" class="sp-filter-chip-clear"
+     aria-label="{% trans field=label %}Clear the %(field)s filter{% endtrans %}"
+     title="{% trans field=label %}Clear the %(field)s filter{% endtrans %}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+  </a>
+</span>
+{% else %}
+<div class="sp-filter-combo"
+     data-filter-combo="{{ name }}"
+     x-data='filterCombobox({
+       endpoint: {{ endpoint | tojson }},
+       kind: {{ kind | tojson }},
+       listId: {{ list_id | tojson }},
+       specials: {{ specials | tojson }},
+       projectKey: {{ project_key | tojson }}
+     })'>
+  <input type="text"
+         class="filter-select sp-filter-combo-input"
+         role="combobox"
+         aria-autocomplete="list"
+         aria-haspopup="listbox"
+         aria-expanded="false"
+         :aria-expanded="expanded()"
+         aria-controls="{{ list_id }}"
+         :aria-activedescendant="activeId()"
+         aria-label="{{ label }}"
+         placeholder="{{ placeholder }}"
+         autocomplete="off"
+         spellcheck="false"
+         x-model="query"
+         @focus="onFocus()"
+         @blur="onBlur()"
+         @keydown.down.prevent="moveDown()"
+         @keydown.up.prevent="moveUp()"
+         @keydown.enter="onEnter($event)"
+         @keydown.escape.prevent="onEscape()">
+  <input type="hidden" name="{{ name }}" value="" disabled x-ref="value">
+  <ul class="sp-ac-menu sp-filter-combo-menu" id="{{ list_id }}" role="listbox" aria-label="{{ label }}"
+      x-show="open" x-cloak @mousedown.prevent @scroll="onScroll($event)">
+    <template x-for="(item, idx) in items" :key="item.key">
+      <li class="sp-ac-row" role="option"
+          :id="optionId(idx)"
+          :aria-selected="isActive(idx)"
+          :class="{ 'sp-ac-row-active': idx === activeIndex, 'sp-filter-combo-special': item.special }"
+          @mouseenter="activeIndex = idx"
+          @click="choose(item)">
+        <template x-if="item.isUser && item.avatarIcon">
+          <span class="avatar-xs" :class="item.avatarIcon" aria-hidden="true"></span>
+        </template>
+        <template x-if="item.isUser && !item.avatarIcon && item.avatarUrl">
+          <img class="avatar-xs avatar-img" :src="item.avatarUrl" alt="">
+        </template>
+        <template x-if="item.isUser && !item.avatarIcon && !item.avatarUrl">
+          <span class="avatar-xs" :style="item.avatarStyle" x-text="item.initials" aria-hidden="true"></span>
+        </template>
+        <template x-if="item.color">
+          <span class="sp-tag-ac-color" :style="item.color" aria-hidden="true"></span>
+        </template>
+        <span class="sp-ac-name" x-text="item.label"></span>
+        <template x-if="item.secondary">
+          <span class="sp-ac-suffix" x-text="item.secondary"></span>
+        </template>
+      </li>
+    </template>
+    <li class="sp-ac-empty" role="presentation" x-show="loading">{% trans %}Searching…{% endtrans %}</li>
+    <li class="sp-ac-empty" role="presentation" x-show="!loading && items.length === 0">{% trans %}No matches{% endtrans %}</li>
+  </ul>
+</div>
+{% endif %}
+{% endmacro %}

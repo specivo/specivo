@@ -106,6 +106,20 @@ def order_versions[T](
     return _sorted_within(active, field, descending, get) + _sorted_within(closed, field, descending, get)
 
 
+def _picker_order(rows: Iterable[Version]) -> list[Version]:
+    """Order versions for a picker: open and locked first, then closed, most recent first."""
+    rows = list(rows)
+    active = order_versions((v for v in rows if v.status != "closed"), VERSION_SORT_DEFAULT)
+    closed = sorted(
+        (v for v in rows if v.status == "closed"),
+        key=lambda v: natural_sort_key(v.name),
+        reverse=True,
+    )
+    # Undated closed versions map to date.min and so land last.
+    closed.sort(key=lambda v: v.effective_date or datetime.date.min, reverse=True)
+    return active + closed
+
+
 class VersionService:
     """Service layer for Version operations."""
 
@@ -183,15 +197,48 @@ class VersionService:
         if q:
             stmt = stmt.where(Version.name.ilike(f"%{q}%"))
         rows = list((await session.execute(stmt)).scalars().all())
-        active = order_versions((v for v in rows if v.status != "closed"), VERSION_SORT_DEFAULT)
-        closed = sorted(
-            (v for v in rows if v.status == "closed"),
-            key=lambda v: natural_sort_key(v.name),
-            reverse=True,
-        )
-        # Undated closed versions map to date.min and so land last.
-        closed.sort(key=lambda v: v.effective_date or datetime.date.min, reverse=True)
-        return (active + closed)[: limit if q else 10]
+        return _picker_order(rows)[: limit if q else 10]
+
+    async def search_visible(
+        self,
+        session: AsyncSession,
+        project: Project,
+        reader: User,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[tuple[Version, str]]:
+        """Page through the versions *reader* may see from *project*, shared ones included.
+
+        For the issue list's release filter: the versions an issue of the
+        project can target (:meth:`visible_versions`), matched
+        case-insensitively on name when *query* is non-empty, in picker order
+        (open and locked first, see :meth:`search_for_project`). Returns
+        ``(version, owning project key)`` pairs.
+        """
+        rows = await self.visible_versions(session, project, reader)
+        q = (query or "").strip().casefold()
+        if q:
+            rows = [v for v in rows if q in v.name.casefold()]
+        page = _picker_order(rows)[offset : offset + limit]
+        if not page:
+            return []
+        owner_ids = {v.project_id for v in page}
+        keys = dict((await session.execute(select(Project.id, Project.key).where(Project.id.in_(owner_ids)))).all())
+        return [(v, keys.get(v.project_id, "")) for v in page]
+
+    async def get_visible(
+        self,
+        session: AsyncSession,
+        project: Project,
+        reader: User,
+        version_id: int,
+    ) -> Version | None:
+        """Version *version_id* if *reader* may see it from *project* (see :meth:`visible_versions`), else None."""
+        for version in await self.visible_versions(session, project, reader):
+            if version.id == version_id:
+                return version
+        return None
 
     async def update(
         self,

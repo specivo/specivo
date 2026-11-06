@@ -35,6 +35,7 @@ import { descriptionEditor } from './components/description-editor';
 import { issueSidebar } from './components/issue-sidebar';
 import { tagField } from './components/tag-field';
 import { tagFilter } from './components/tag-filter';
+import { filterCombobox } from './components/filter-combobox';
 import { projectTagsSettings } from './components/project-tags-settings';
 import { projectWebhooks } from './components/project-webhooks';
 import { projectRepositories } from './components/project-repositories';
@@ -102,6 +103,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('issueSidebar', issueSidebar);
   Alpine.data('tagField', tagField);
   Alpine.data('tagFilter', tagFilter);
+  Alpine.data('filterCombobox', filterCombobox);
   Alpine.data('projectTagsSettings', projectTagsSettings);
   Alpine.data('projectWebhooks', projectWebhooks);
   Alpine.data('projectRepositories', projectRepositories);

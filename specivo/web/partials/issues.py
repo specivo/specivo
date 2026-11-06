@@ -12,6 +12,7 @@ from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.services.activity_lookups import activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
+from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
@@ -41,6 +42,8 @@ async def issue_table_partial(
     tracker_id: str = Query(""),
     assigned_to_id: str = Query(""),
     priority_id: str = Query(""),
+    tag_id: str = Query(""),
+    fixed_version_id: str = Query(""),
     sort: str = Query("created_at:desc"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
@@ -62,10 +65,16 @@ async def issue_table_partial(
     filters: dict = {"status": status}
     if safe_int(tracker_id) is not None:
         filters["tracker_id"] = safe_int(tracker_id)
-    if safe_int(assigned_to_id) is not None:
-        filters["assigned_to_id"] = safe_int(assigned_to_id)
+    assignee = parse_assignee(assigned_to_id, me_id=user.id)
+    if assignee is not None:
+        filters["assigned_to_id"] = assignee
     if safe_int(priority_id) is not None:
         filters["priority_id"] = safe_int(priority_id)
+    if parse_id(tag_id) is not None:
+        filters["tag_id"] = parse_id(tag_id)
+    version = parse_version(fixed_version_id)
+    if version is not None:
+        filters["version_id"] = version
 
     issues, total = await _issue_svc.list_issues(
         db,

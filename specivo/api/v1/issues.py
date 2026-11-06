@@ -13,7 +13,12 @@ from specivo.core.constants import (
     DEVELOPMENT_TIMELINE_MAX_OFFSET,
 )
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
+from specivo.core.exceptions import (
+    AnonymousAccessDeniedError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from specivo.core.rate_limit import enforce_rate_limit, rate_limit
 from specivo.core.security import get_current_user, get_reader
 from specivo.models.issue import Issue
@@ -42,6 +47,7 @@ from specivo.services.activity_lookups import ActivityLookups, activity_lookup_m
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
+from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
@@ -155,10 +161,17 @@ async def list_issues(
         ),
     ),
     tracker_id: int | None = Query(default=None),
-    assigned_to_id: str | None = Query(default=None),
+    assigned_to_id: str | None = Query(
+        default=None, description="A user id, 'me' (the caller) or 'none' (unassigned issues)."
+    ),
     priority_id: int | None = Query(default=None),
     category_id: int | None = Query(default=None),
-    version_id: int | None = Query(default=None),
+    version_id: str | None = Query(
+        default=None, description="Target version id, or 'none' for issues without one. Same as fixed_version_id."
+    ),
+    fixed_version_id: str | None = Query(
+        default=None, description="Target version id, or 'none' for issues without one."
+    ),
     tag_id: int | None = Query(default=None),
     author_id: int | None = Query(default=None),
     subject_contains: str | None = Query(default=None),
@@ -198,6 +211,13 @@ async def list_issues(
             tracker_id = fd["tracker_id"]
         if assigned_to_id is None and "assigned_to_id" in fd:
             assigned_to_id = str(fd["assigned_to_id"])
+        if version_id is None and fixed_version_id is None:
+            for name in ("fixed_version_id", "version_id"):
+                if fd.get(name) is not None:
+                    fixed_version_id = str(fd[name])
+                    break
+        if tag_id is None and "tag_id" in fd:
+            tag_id = parse_id(fd["tag_id"])
         if priority_id is None and "priority_id" in fd:
             priority_id = fd["priority_id"]
         if category_id is None and "category_id" in fd:
@@ -217,16 +237,14 @@ async def list_issues(
         if sort == "created_at:desc" and "sort" in fd:
             sort = fd["sort"]
 
-    # Resolve "me" shorthand for assigned_to_id
-    resolved_assigned_to: int | None = None
-    if assigned_to_id is not None:
-        if assigned_to_id == "me":
-            resolved_assigned_to = current_user.id
-        else:
-            try:
-                resolved_assigned_to = int(assigned_to_id)
-            except ValueError:
-                resolved_assigned_to = None
+    # "me" stands for the caller (which matches nothing for an anonymous
+    # visitor); "none" selects unassigned issues. Anything unparseable is ignored.
+    resolved_assigned_to = parse_assignee(assigned_to_id, me_id=current_user.id)
+
+    raw_version = fixed_version_id if fixed_version_id is not None else version_id
+    resolved_version = parse_version(raw_version)
+    if raw_version is not None and raw_version.strip() and resolved_version is None:
+        raise ValidationError("version_id must be a version id or 'none'", field="fixed_version_id")
 
     filters: dict = {
         "status": status_filter,
@@ -234,7 +252,7 @@ async def list_issues(
         "assigned_to_id": resolved_assigned_to,
         "priority_id": priority_id,
         "category_id": category_id,
-        "version_id": version_id,
+        "version_id": resolved_version,
         "tag_id": tag_id,
         "author_id": author_id,
         "subject_contains": subject_contains,
