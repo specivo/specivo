@@ -86,6 +86,7 @@ _US_PER_BACKTICK_RUN = 15.0
 _US_PER_EMPHASIS_RUN = 12.0  # run of ``*`` or ``_``
 _US_PER_FENCE = 60.0  # fence line; each code block is highlighted on its own
 _US_PER_TOC_ENTRY = 3.5  # each ``[TOC]`` marker copies every heading
+_US_PER_BARE_URL = 15.0  # ``https://``, ``www.`` or ``mailto:`` the bare-URL pattern links
 
 # Microseconds per character rescanned, or per probe.
 _US_PER_BRACKET_SCAN = 0.16  # link text: from ``[`` to its ``]``
@@ -95,6 +96,9 @@ _US_PER_TAG_SCAN = 0.015  # ``<`` to the next ``>``, across the whole text
 _US_PER_HEADING_SPLIT = 0.001  # heading line times the size of its block
 _US_PER_DUPLICATE_ID = 0.4  # ``toc`` probing ``id_1``, ``id_2``, ...
 _US_PER_HASH_BACKTRACK = 0.01  # squared length of a ``#`` run in a heading
+# Each inline element Python-Markdown makes copies the rest of its text, so the
+# bare URLs of one paragraph cost its length each.
+_US_PER_BARE_URL_SCAN = 0.00005  # bare URL times the size of its block
 
 _BLOCK_SPLIT_RE = re.compile(r"\n[ \t]*\n")
 _INLINE_TOKEN_RE = re.compile(r"\\.|`+|\]\(|[\[\]()]", re.DOTALL)
@@ -109,6 +113,10 @@ _BLANKS_RE = re.compile(r"[ \t]*")
 _CONTAINER_MARKER_RE = re.compile(r">|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])")
 _SETEXT_UNDERLINE_RE = re.compile(r" {0,3}(?:=+|-+)[ \t]*$")
 _NON_WORD_RE = re.compile(r"\W+")
+# Where the bare-URL inline pattern may start a link (see
+# ``markdown_service.BARE_URL_PATTERN``), except a Markdown link or image
+# target, which the link patterns take first.
+_BARE_URL_START_RE = re.compile(r"(?<![^\s(\[{*_~\"'\x03])(?<!\]\()(?:https?://|www\.|mailto:)")
 
 
 class RenderDeadlineError(Exception):
@@ -176,6 +184,21 @@ def _inline_costs(text: str) -> float:
     if "[" in text or "`" in text:
         for block in _BLOCK_SPLIT_RE.split(text):
             cost += _block_scan_cost(block)
+    if "://" in text or "www." in text or "mailto:" in text:
+        cost += _bare_url_cost(text)
+    return cost
+
+
+def _bare_url_cost(text: str) -> float:
+    """Cost of linking bare URLs: a fixed part, plus a copy of its block per URL.
+
+    Counts every candidate, in code too, so the estimate never falls short of
+    what the bare-URL pattern may link.
+    """
+    cost = 0.0
+    for block in _BLOCK_SPLIT_RE.split(text):
+        urls = sum(1 for _ in _BARE_URL_START_RE.finditer(block))
+        cost += urls * (_US_PER_BARE_URL + len(block) * _US_PER_BARE_URL_SCAN)
     return cost
 
 

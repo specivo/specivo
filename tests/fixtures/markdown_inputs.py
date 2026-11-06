@@ -66,6 +66,9 @@ PATHOLOGICAL: dict[str, str] = {
     "indented-lists": "".join("    " * i + "- a\n" for i in range(300)),
     # Linear, but many elements at the size limit took 1.5 to 4 s.
     "issue-refs": fill("ACME-1 "),
+    # Bare URLs, each linked by the bare-URL pattern: the full limit took 0.6 s.
+    "bare-urls": fill("www.a.bc "),
+    "bare-urls-in-emphasis": fill("*https://a.b* "),
     "closed-wiki-links": fill("[[A]] "),
     "closed-inline-html": fill("<b>a</b> "),
     "empty-fenced-blocks": fill("~~~\n"),
