@@ -128,3 +128,4 @@
 .sp-spend-seat-label { font-style: italic; color: var(--sp-text-secondary); }
 .sp-spend-total-row td { font-weight: 600; border-top: 2px solid var(--sp-border); }
 .sp-aiu-filter-chip { padding: 2px 8px; border: 1px dashed var(--sp-border); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); }
+.sp-spend-table .sp-aiu-amount { font-size: inherit; font-weight: inherit; }

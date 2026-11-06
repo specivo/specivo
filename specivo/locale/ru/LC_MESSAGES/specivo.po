@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 13:59+0100\n"
+"POT-Creation-Date: 2026-11-06 14:23+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -1776,6 +1776,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:6
+#: specivo/web/pages/ai_spend_reports.py:295
 msgid "Local model"
 msgstr "Локальная модель"
 
@@ -5818,14 +5819,17 @@ msgid "No AI usage logged on this issue."
 msgstr "По этой задаче использование ИИ не учтено."
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:4
+#: specivo/web/pages/ai_spend_reports.py:293
 msgid "Subscription"
 msgstr "Подписка"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:5
+#: specivo/web/pages/ai_spend_reports.py:294
 msgid "API (pay per use)"
 msgstr "API (оплата за использование)"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:7
+#: specivo/web/pages/ai_spend_reports.py:296
 msgid "Free"
 msgstr "Бесплатно"
 
@@ -5834,6 +5838,7 @@ msgstr "Бесплатно"
 #: specivo/templates/themes/default/pages/issues/_activity.html:119
 #: specivo/templates/themes/default/pages/issues/detail.html:470
 #: specivo/templates/themes/default/pages/wiki/history.html:52
+#: specivo/web/pages/ai_spend_reports.py:298
 msgid "Unknown"
 msgstr "Неизвестно"
 
@@ -6120,7 +6125,7 @@ msgstr "%(input)s вход, %(output)s выход, %(cache)s кэш, %(reasoning
 #: specivo/templates/themes/default/pages/issues/list.html:61
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
-#: specivo/web/pages/issues.py:186
+#: specivo/web/pages/ai_spend_reports.py:290 specivo/web/pages/issues.py:186
 msgid "Unassigned"
 msgstr "Не назначен"
 
@@ -6152,12 +6157,14 @@ msgstr "Фильтр:"
 
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:25
 #: specivo/templates/themes/default/pages/ai_usage/report.html:38
+#: specivo/web/pages/ai_spend_reports.py:290
 msgid "No issue"
 msgstr "Без задачи"
 
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:29
 #: specivo/templates/themes/default/pages/ai_usage/project.html:84
 #: specivo/templates/themes/default/pages/ai_usage/report.html:38
+#: specivo/web/pages/ai_spend_reports.py:290
 msgid "No branch"
 msgstr "Без ветки"
 
@@ -6429,10 +6436,12 @@ msgstr "Прошлый месяц"
 #: specivo/templates/themes/default/pages/ai_usage/report.html:36
 #: specivo/templates/themes/default/pages/ai_usage/report.html:195
 #: specivo/templates/themes/default/pages/ai_usage/report.html:263
+#: specivo/web/pages/ai_spend_reports.py:286
 msgid "Unallocated seat cost"
 msgstr "Нераспределённая стоимость подписок"
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:37
+#: specivo/web/pages/ai_spend_reports.py:288
 msgid "An issue you cannot see"
 msgstr "Задача, которую вы не видите"
 
@@ -6592,6 +6601,7 @@ msgid "Pay-per-use"
 msgstr "За использование"
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:263
+#: specivo/web/pages/ai_spend_reports.py:323
 msgid "All usage"
 msgstr "Всё использование"
 

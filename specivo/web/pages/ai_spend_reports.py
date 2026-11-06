@@ -30,6 +30,7 @@ from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.exchange import ConversionSummary
 from specivo.core.i18n import get_locale
+from specivo.core.i18n import gettext as _
 from specivo.core.money import currency_display_name
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES
 from specivo.models.project import Project
@@ -278,11 +279,50 @@ def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str
     }
 
 
+def _cell_text(cell: dict[str, Any]) -> str:
+    """A row cell as plain text (chart labels), in the reader's language."""
+    kind, dim = cell["kind"], cell["dim"]
+    if kind == "seat":
+        return _("Unallocated seat cost")
+    if kind == "hidden":
+        return _("An issue you cannot see")
+    if kind == "none":
+        return {"project": _("Unassigned"), "issue": _("No issue"), "branch": _("No branch")}.get(dim, "–")
+    if dim == "cost_type":
+        labels = {
+            "subscription": _("Subscription"),
+            "api": _("API (pay per use)"),
+            "local": _("Local model"),
+            "free": _("Free"),
+        }
+        return labels.get(cell["value"], _("Unknown"))
+    return str(cell["label"])
+
+
+def _rates_view(report: SpendReport) -> list[dict[str, str]]:
+    """The rates used, one line per currency pair: the rate (or its range) and the dates it comes from."""
+    pairs: dict[tuple[str, str], list[Any]] = {}
+    for used in report.rates_used:
+        pairs.setdefault((used.from_currency, used.to_currency), []).append(used)
+    out = []
+    for (src, dst), items in sorted(pairs.items()):
+        rates = sorted({u.rate.normalize() for u in items})
+        dates = sorted(u.rate_date for u in items if u.rate_date is not None)
+        rate = f"{rates[0]:f}" if len(rates) == 1 else f"{rates[0]:f}–{rates[-1]:f}"
+        span = ""
+        if dates:
+            span = (
+                dates[0].isoformat() if dates[0] == dates[-1] else f"{dates[0].isoformat()} – {dates[-1].isoformat()}"
+            )
+        out.append({"from": src, "to": dst, "rate": rate[:30], "date": span, "count": str(len(dates))})
+    return out
+
+
 def _chart(report: SpendReport, views: list[dict[str, Any]]) -> dict[str, Any]:
     """The chart's data: spend per period bucket and group, or spend and API-equivalent value per group."""
     points = []
     for row, view in zip(report.rows[: CHART_MAX_ROWS * 10], views, strict=False):
-        label = " · ".join(c["label"] or c["kind"] for c in view["cells"]) or "total"
+        label = " · ".join(_cell_text(c) for c in view["cells"]) or _("All usage")
         points.append(
             {
                 "period": view["period"],
@@ -319,15 +359,7 @@ async def _context(db: AsyncSession, report: SpendReport | None, form: ReportFor
             totals=_row_view(report, report.totals, form, locale),
             chart=_chart(report, views),
             rate_dates=[d.isoformat() for d in report.rate_dates],
-            rates_used=[
-                {
-                    "from": r.from_currency,
-                    "to": r.to_currency,
-                    "rate": f"{r.rate.normalize():f}"[:14],
-                    "date": r.rate_date.isoformat() if r.rate_date else "",
-                }
-                for r in report.rates_used
-            ],
+            rates_used=_rates_view(report),
         )
     return context
 
