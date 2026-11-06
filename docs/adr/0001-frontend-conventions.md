@@ -7,6 +7,7 @@ JavaScript and CSS monoliths were split into modular sources.
 and the charting/icon vendors in §9.
 **Revised:** 2026-09-15 — generated bundles are no longer committed: `specivo/static/dist/` is
 gitignored and built in the Docker image, in CI and by the dev watcher container (§1, §9).
+**Revised:** 2026-11-06 — vendored D3 for Observable Plot; charts load both on demand (§9).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -267,7 +268,8 @@ specivo/static/
   vendor/                          # third-party — immutable
                                    #   bootstrap, alpine (standard + csp builds), htmx
                                    #   (+ json-enc ext), easymde, font-awesome,
-                                   #   observable-plot (charts), mermaid (diagrams,
+                                   #   observable-plot + d3 (charts, loaded on demand
+                                   #   by modules/spend-chart.js), mermaid (diagrams,
                                    #   loaded on demand by modules/mermaid.js)
   fonts/                           # self-hosted WOFF2 — immutable
   img/                             # SVG favicon

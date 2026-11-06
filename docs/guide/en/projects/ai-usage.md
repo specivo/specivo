@@ -65,6 +65,9 @@ service account's reports are easy to tell apart.
 
 **Days are UTC days.** A session that runs past midnight UTC is split into two entries.
 
+For totals per person, model, tool, issue or week, with subscription fees included, click
+**Spend report**: see [AI spend reports](ai-spend-reports.md).
+
 ## On an issue
 
 An issue's **AI usage** tab sits next to the **Time** tab. It loads when you open it and shows the
