@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 16:13+0100\n"
+"POT-Creation-Date: 2026-11-06 19:15+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -410,16 +410,16 @@ msgstr "สปรินต์นี้ไม่ได้อยู่ในโป
 msgid "Cannot assign issues to a completed sprint"
 msgstr "ไม่สามารถมอบหมายงานให้สปรินต์ที่เสร็จสิ้นแล้วได้"
 
-#: specivo/services/issue_service.py:1012
+#: specivo/services/issue_service.py:1006
 #: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "งานถูกแก้ไขโดยคำขออื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง"
 
-#: specivo/services/issue_service.py:1175
+#: specivo/services/issue_service.py:1169
 msgid "Issue is already in this project."
 msgstr "งานนี้อยู่ในโปรเจกต์นี้อยู่แล้ว"
 
-#: specivo/services/issue_service.py:1184
+#: specivo/services/issue_service.py:1178
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -427,12 +427,12 @@ msgstr ""
 "ไม่สามารถย้ายงานที่อยู่ในลำดับชั้นได้ กรุณาแยกงานนี้ออกจากงานหลัก "
 "และย้ายหรือแยกงานย่อยของงานนี้ออกก่อน"
 
-#: specivo/services/issue_service.py:1235
+#: specivo/services/issue_service.py:1229
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "ย้ายจาก {old} ไปยัง {new}"
 
-#: specivo/services/issue_service.py:1309
+#: specivo/services/issue_service.py:1303
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -472,6 +472,17 @@ msgstr "เมตาดาต้าไม่ตรงกับสคีมา '{
 #, python-brace-format
 msgid "Metadata field '{key}' does not match schema '{schema}': {reason}"
 msgstr "ฟิลด์เมตาดาต้า '{key}' ไม่ตรงกับสคีมา '{schema}': {reason}"
+
+#: specivo/services/nested_set_service.py:40
+#, python-format
+msgid ""
+"Hierarchy depth limit exceeded: with this parent the hierarchy, sub-tasks"
+" included, would be %(levels)s levels deep, and at most %(max)s are "
+"allowed."
+msgstr ""
+"เกินขีดจำกัดความลึกของลำดับชั้น: หากใช้งานหลักนี้ "
+"ลำดับชั้นรวมงานย่อยจะลึก %(levels)s ระดับ แต่อนุญาตได้ไม่เกิน %(max)s "
+"ระดับ"
 
 #: specivo/services/recurring_pattern_service.py:252
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31

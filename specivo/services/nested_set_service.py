@@ -11,17 +11,39 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import select, text, update
+from sqlalchemy import func, literal, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql.selectable import ScalarSelect
 
 from specivo.core.constants import MAX_HIERARCHY_DEPTH
 from specivo.core.exceptions import ValidationError
+from specivo.core.i18n import gettext as _
 from specivo.models.issue import Issue
 
 logger = logging.getLogger(__name__)
 
 MAX_DEPTH = MAX_HIERARCHY_DEPTH
+
+
+def depth_exceeded_error(new_depth: int) -> ValidationError:
+    """The error for a parent under which an issue would sit *new_depth* levels below its root.
+
+    Depths count from 0 (a top-level issue); the message counts levels from 1,
+    so the limit reads as "at most MAX_DEPTH levels". ``details`` keeps the
+    0-based depth the API has always reported.
+    """
+    return ValidationError(
+        message=_(
+            "Hierarchy depth limit exceeded: with this parent the hierarchy, sub-tasks included, "
+            "would be %(levels)s levels deep, and at most %(max)s are allowed."
+        )
+        % {"levels": new_depth + 1, "max": MAX_DEPTH},
+        field="parent_id",
+        details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
+    )
 
 
 class NestedSetService:
@@ -332,16 +354,28 @@ class NestedSetService:
             return False
         return issue.lft < potential_descendant.lft and potential_descendant.rgt < issue.rgt
 
-    async def _subtree_height(self, session: AsyncSession, issue: Issue) -> int:
-        """Return how many levels lie below *issue* (0 for a leaf), from one descendants query."""
-        open_rgts: list[int] = []
-        height = 0
-        for node in await self.get_descendants(session, issue):
-            while open_rgts and open_rgts[-1] < node.lft:
-                open_rgts.pop()
-            open_rgts.append(node.rgt)
-            height = max(height, len(open_rgts))
-        return height
+    @staticmethod
+    def _subtree_height_expr(issue_id: int) -> ScalarSelect[Any]:
+        """SQL for how many levels lie below issue *issue_id* (0 for a leaf).
+
+        One recursive CTE down ``parent_id``. The recursion stops at
+        MAX_DEPTH levels, which is already over any limit, so a corrupted
+        cycle cannot make it run forever.
+        """
+        child = aliased(Issue)
+        levels = (
+            select(Issue.id.label("id"), literal(1).label("level"))
+            .where(Issue.parent_id == issue_id)
+            .cte("subtree_levels", recursive=True)
+        )
+        levels = levels.union_all(
+            select(child.id, levels.c.level + 1).where(child.parent_id == levels.c.id, levels.c.level < MAX_DEPTH)
+        )
+        return select(func.coalesce(func.max(levels.c.level), 0)).scalar_subquery()
+
+    async def subtree_height(self, session: AsyncSession, issue: Issue) -> int:
+        """Return how many levels lie below *issue* (0 for a leaf), in one query."""
+        return int(await session.scalar(select(self._subtree_height_expr(issue.id))) or 0)
 
     async def is_descendant_of(self, session: AsyncSession, issue: Issue, potential_ancestor: Issue) -> bool:
         """Check if issue is a descendant of potential_ancestor."""
@@ -359,6 +393,9 @@ class NestedSetService:
         - parent is a descendant of issue (would create a cycle)
         - the resulting depth of the issue or of its deepest descendant
           (the subtree moves with it) would exceed MAX_DEPTH
+
+        The depth check is one statement: the parent's ancestors from the
+        nested set and the height of the issue's subtree from a recursive CTE.
         """
         if parent.id == issue.id:
             raise ValidationError(
@@ -373,17 +410,25 @@ class NestedSetService:
                 field="parent_id",
             )
 
-        # Check max depth
-        ancestors = await self.get_ancestors(session, parent)
-        # New depth = parent's depth + 1 (parent's ancestors + parent itself),
-        # plus the height of the subtree that moves along
-        new_depth = len(ancestors) + 1 + await self._subtree_height(session, issue)
+        await self.check_depth(session, parent, issue)
+
+    async def check_depth(self, session: AsyncSession, parent: Issue, issue: Issue | None = None) -> None:
+        """Raise ``ValidationError`` when *issue* (or a new issue, if None) may not go under *parent* for depth.
+
+        The deepest issue that moves is *issue*'s deepest descendant: its depth
+        is the parent's depth + 1 + the height of *issue*'s subtree.
+        """
+        parent_depth = (
+            select(func.count())
+            .select_from(Issue)
+            .where(Issue.root_id == parent.root_id, Issue.lft < parent.lft, Issue.rgt > parent.rgt)
+            .scalar_subquery()
+        )
+        height = self._subtree_height_expr(issue.id) if issue is not None and issue.id is not None else literal(0)
+        row = (await session.execute(select(parent_depth, height))).one()
+        new_depth = int(row[0]) + 1 + int(row[1])
         if new_depth >= MAX_DEPTH:
-            raise ValidationError(
-                message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
-                field="parent_id",
-                details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
-            )
+            raise depth_exceeded_error(new_depth)
 
     # ------------------------------------------------------------------
     # Parent attribute derivation

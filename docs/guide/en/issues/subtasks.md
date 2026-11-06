@@ -1,5 +1,5 @@
 ---
-description: Parent and child issues in Specivo — build a hierarchy up to 16 levels deep and roll subtasks up under a parent.
+description: Parent and child issues in Specivo — build a hierarchy up to 10 levels deep and roll subtasks up under a parent.
 ---
 
 # Subtasks & hierarchy
@@ -17,8 +17,9 @@ several children, create the parent first, then point each child at it.
 ## Build a hierarchy
 
 Subtasks can have subtasks of their own, so you can model real structure — an epic with features, each
-feature with tasks. Specivo supports nesting **up to 16 levels deep**, which is far more than most teams
-ever need.
+feature with tasks. Specivo supports nesting **up to 10 levels deep**, which is far more than most teams
+ever need. When you give an issue that has subtasks a new parent, its subtasks move with it, so the
+deepest of them has to fit within the limit too; otherwise the change is refused and nothing moves.
 
 ```
 ACME-1  Checkout redesign            (parent)

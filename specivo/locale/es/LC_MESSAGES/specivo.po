@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 16:13+0100\n"
+"POT-Creation-Date: 2026-11-06 19:15+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -430,18 +430,18 @@ msgstr "El sprint no pertenece a este proyecto"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "No se pueden asignar incidencias a un sprint completado"
 
-#: specivo/services/issue_service.py:1012
+#: specivo/services/issue_service.py:1006
 #: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 "La incidencia fue modificada por otra solicitud. Recarga e inténtalo de "
 "nuevo."
 
-#: specivo/services/issue_service.py:1175
+#: specivo/services/issue_service.py:1169
 msgid "Issue is already in this project."
 msgstr "La incidencia ya está en este proyecto."
 
-#: specivo/services/issue_service.py:1184
+#: specivo/services/issue_service.py:1178
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -450,12 +450,12 @@ msgstr ""
 "Sepárala de su incidencia padre y mueve o separa primero sus incidencias "
 "hijas."
 
-#: specivo/services/issue_service.py:1235
+#: specivo/services/issue_service.py:1229
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Movida de {old} a {new}."
 
-#: specivo/services/issue_service.py:1309
+#: specivo/services/issue_service.py:1303
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -497,6 +497,17 @@ msgstr "Los metadatos no cumplen el esquema '{schema}': {reason}"
 #, python-brace-format
 msgid "Metadata field '{key}' does not match schema '{schema}': {reason}"
 msgstr "El campo de metadatos '{key}' no cumple el esquema '{schema}': {reason}"
+
+#: specivo/services/nested_set_service.py:40
+#, python-format
+msgid ""
+"Hierarchy depth limit exceeded: with this parent the hierarchy, sub-tasks"
+" included, would be %(levels)s levels deep, and at most %(max)s are "
+"allowed."
+msgstr ""
+"Se ha superado el límite de profundidad de la jerarquía: con este padre "
+"la jerarquía, incluidas las subtareas, tendría %(levels)s niveles de "
+"profundidad, y se permiten como máximo %(max)s."
 
 #: specivo/services/recurring_pattern_service.py:252
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 16:13+0100\n"
+"POT-Creation-Date: 2026-11-06 19:15+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -387,27 +387,27 @@ msgstr "该冲刺不属于此项目"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "无法将工作项分配到已完成的冲刺"
 
-#: specivo/services/issue_service.py:1012
+#: specivo/services/issue_service.py:1006
 #: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "该工作项已被其他请求修改，请重新加载后再试。"
 
-#: specivo/services/issue_service.py:1175
+#: specivo/services/issue_service.py:1169
 msgid "Issue is already in this project."
 msgstr "工作项已在此项目中。"
 
-#: specivo/services/issue_service.py:1184
+#: specivo/services/issue_service.py:1178
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr "无法移动处于层级结构中的工作项。请先将其与父工作项解除关联，并移动其子工作项或解除它们的关联。"
 
-#: specivo/services/issue_service.py:1235
+#: specivo/services/issue_service.py:1229
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "已从 {old} 移动到 {new}。"
 
-#: specivo/services/issue_service.py:1309
+#: specivo/services/issue_service.py:1303
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -445,6 +445,14 @@ msgstr "元数据不符合架构 '{schema}'：{reason}"
 #, python-brace-format
 msgid "Metadata field '{key}' does not match schema '{schema}': {reason}"
 msgstr "元数据字段 '{key}' 不符合架构 '{schema}'：{reason}"
+
+#: specivo/services/nested_set_service.py:40
+#, python-format
+msgid ""
+"Hierarchy depth limit exceeded: with this parent the hierarchy, sub-tasks"
+" included, would be %(levels)s levels deep, and at most %(max)s are "
+"allowed."
+msgstr "超出层级深度上限：使用此父工作项后，层级（含子工作项）将有 %(levels)s 层，最多只允许 %(max)s 层。"
 
 #: specivo/services/recurring_pattern_service.py:252
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31

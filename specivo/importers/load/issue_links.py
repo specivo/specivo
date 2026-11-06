@@ -43,14 +43,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import AppError, ValidationError
+from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import EntityType, IRRelation
 from specivo.importers.core.links_file import LinksStore, PendingParent, PendingRelation
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.models.issue import Issue
-from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
+from specivo.services.nested_set_service import NestedSetService
 from specivo.services.relation_service import RelationService
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,6 @@ async def set_parent(
     try:
         # Every check runs before anything moves, so a refusal leaves the tree as it was.
         await _nested_set.validate_parent(session, child, parent)
-        await _check_subtree_depth(session, child, parent)
     except AppError as exc:
         return False, LinkProblem(PARENT_REFUSED, {**context, "reason": str(exc)})
     await _nested_set.move_to_parent(session, child, parent)
@@ -176,20 +175,6 @@ async def set_parent(
     await backdate(session, Issue, child.id, updated_at=child_updated)
     await backdate(session, Issue, parent.id, updated_at=parent_updated)
     return True, None
-
-
-async def _check_subtree_depth(session: AsyncSession, child: Issue, parent: Issue) -> None:
-    """Refuse a parent under which the child's own sub-tasks would sit deeper than Specivo allows."""
-    depth = {child.id: 0}
-    for descendant in await _nested_set.get_descendants(session, child):
-        depth[descendant.id] = depth.get(descendant.parent_id or child.id, 0) + 1
-    deepest = len(await _nested_set.get_ancestors(session, parent)) + 1 + max(depth.values())
-    if deepest >= MAX_DEPTH:
-        raise ValidationError(
-            message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
-            field="parent_id",
-            details={"max_depth": MAX_DEPTH, "current_depth": deepest},
-        )
 
 
 # --------------------------------------------------------------------------
