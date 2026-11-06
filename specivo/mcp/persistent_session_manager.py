@@ -133,6 +133,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 if TYPE_CHECKING:
     from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
     from mcp.server.lowlevel.server import Server
+    from mcp.shared._stream_protocols import ReadStream, WriteStream
 
     from specivo.mcp.session_store import RedisSessionStore
 
@@ -198,6 +199,34 @@ async def _serve_session(
         )
         return
 
+    await serve_initialized_connection(
+        server,
+        read_stream,
+        write_stream,
+        lifespan_state=lifespan_state,
+        session_id=session_id,
+        protocol_version=protocol_version,
+    )
+
+
+async def serve_initialized_connection(
+    server: Server[Any],
+    read_stream: ReadStream[SessionMessage | Exception],
+    write_stream: WriteStream[SessionMessage],
+    *,
+    lifespan_state: Any,
+    session_id: str | None,
+    protocol_version: str | None,
+) -> None:
+    """Serve a handshake-era connection whose request gate is open from the start.
+
+    The SDK's own recipe (``serve_loop``) with one change: the ``Connection``
+    is born initialized, so a client that already completed ``initialize`` on
+    an earlier connection (before a restart, or on an SSE stream that has
+    since dropped) is served instead of refused with ``-32602``. A client
+    that does send ``initialize`` is answered as usual and its negotiated
+    version and ``clientInfo`` are recorded.
+    """
     dispatcher: JSONRPCDispatcher[TransportContext] = JSONRPCDispatcher(
         read_stream,
         write_stream,
