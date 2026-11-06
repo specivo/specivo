@@ -3161,6 +3161,7 @@ msgid "View"
 msgstr "Voir"
 
 #: specivo/templates/themes/default/pages/admin/email.html:19
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Configured"
 msgstr "Configuré"
 
@@ -3217,7 +3218,6 @@ msgid "environment variables to enable email delivery."
 msgstr "les variables d'environnement pour activer l'envoi d'e-mails."
 
 #: specivo/templates/themes/default/pages/admin/email.html:63
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Set"
 msgstr "Définissez"
 
@@ -5117,13 +5117,14 @@ msgstr "Mettre fin à toutes ses sessions et désactiver ses clés API"
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
-"password, and never deactivates the account: a later sign-in works, but "
-"the keys stay off."
+"password that are not administrators, and never deactivates the account: "
+"a later sign-in works, but the keys stay off."
 msgstr ""
 "Le fournisseur envoie le même message quand quelqu'un se déconnecte que "
 "quand il est désactivé. La désactivation des clés API ne s'applique "
-"qu'aux comptes sans mot de passe et ne désactive jamais le compte : une "
-"connexion ultérieure fonctionne, mais les clés restent désactivées."
+"qu'aux comptes sans mot de passe qui ne sont pas administrateurs, et ne "
+"désactive jamais le compte : une connexion ultérieure fonctionne, mais "
+"les clés restent désactivées."
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:378
 msgid "Provisioning (SCIM)"

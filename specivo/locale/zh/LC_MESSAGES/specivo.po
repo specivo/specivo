@@ -2983,6 +2983,7 @@ msgid "View"
 msgstr "查看"
 
 #: specivo/templates/themes/default/pages/admin/email.html:19
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Configured"
 msgstr "已配置"
 
@@ -3037,7 +3038,6 @@ msgid "environment variables to enable email delivery."
 msgstr "环境变量以启用电子邮件发送。"
 
 #: specivo/templates/themes/default/pages/admin/email.html:63
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Set"
 msgstr "设置"
 
@@ -4786,9 +4786,9 @@ msgstr "结束其所有会话并关闭其 API 密钥"
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
-"password, and never deactivates the account: a later sign-in works, but "
-"the keys stay off."
-msgstr "用户登出和被停用时，提供商发送的是同一条消息。关闭 API 密钥只适用于没有密码的账户，且绝不会停用账户：之后仍可登录，但密钥保持关闭。"
+"password that are not administrators, and never deactivates the account: "
+"a later sign-in works, but the keys stay off."
+msgstr "用户登出和被停用时，提供商发送的是同一条消息。关闭 API 密钥只适用于没有密码且不是管理员的账户，且绝不会停用账户：之后仍可登录，但密钥保持关闭。"
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:378
 msgid "Provisioning (SCIM)"

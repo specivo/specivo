@@ -3091,6 +3091,7 @@ msgid "View"
 msgstr "ดู"
 
 #: specivo/templates/themes/default/pages/admin/email.html:19
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Configured"
 msgstr "ตั้งค่าแล้ว"
 
@@ -3147,7 +3148,6 @@ msgid "environment variables to enable email delivery."
 msgstr "ตัวแปรสภาพแวดล้อมเพื่อเปิดใช้งานการส่งอีเมล"
 
 #: specivo/templates/themes/default/pages/admin/email.html:63
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Set"
 msgstr "ตั้งค่า"
 
@@ -4996,11 +4996,11 @@ msgstr "สิ้นสุดเซสชันทั้งหมดของบ
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
-"password, and never deactivates the account: a later sign-in works, but "
-"the keys stay off."
+"password that are not administrators, and never deactivates the account: "
+"a later sign-in works, but the keys stay off."
 msgstr ""
 "ผู้ให้บริการส่งข้อความเดียวกันทั้งเมื่อมีคนออกจากระบบและเมื่อถูกปิดใช้งาน"
-" การปิด API key ใช้กับบัญชีที่ไม่มีรหัสผ่านเท่านั้น "
+" การปิด API key ใช้กับบัญชีที่ไม่มีรหัสผ่านและไม่ใช่ผู้ดูแลระบบเท่านั้น "
 "และจะไม่ปิดใช้งานบัญชี: การลงชื่อเข้าใช้ครั้งต่อไปยังทำได้ แต่ key "
 "จะยังคงปิดอยู่"
 

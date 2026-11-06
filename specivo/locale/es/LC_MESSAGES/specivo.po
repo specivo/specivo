@@ -3154,6 +3154,7 @@ msgid "View"
 msgstr "Ver"
 
 #: specivo/templates/themes/default/pages/admin/email.html:19
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Configured"
 msgstr "Configurado"
 
@@ -3210,7 +3211,6 @@ msgid "environment variables to enable email delivery."
 msgstr "las variables de entorno para habilitar el envío de correo."
 
 #: specivo/templates/themes/default/pages/admin/email.html:63
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Set"
 msgstr "Define"
 
@@ -5113,13 +5113,14 @@ msgstr "Terminar todas sus sesiones y desactivar sus claves API"
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
-"password, and never deactivates the account: a later sign-in works, but "
-"the keys stay off."
+"password that are not administrators, and never deactivates the account: "
+"a later sign-in works, but the keys stay off."
 msgstr ""
 "El proveedor envía el mismo mensaje cuando alguien cierra sesión que "
 "cuando se desactiva. Desactivar las claves API solo se aplica a cuentas "
-"sin contraseña y nunca desactiva la cuenta: un inicio de sesión posterior"
-" funciona, pero las claves siguen desactivadas."
+"sin contraseña que no sean de administrador, y nunca desactiva la cuenta:"
+" un inicio de sesión posterior funciona, pero las claves siguen "
+"desactivadas."
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:378
 msgid "Provisioning (SCIM)"
@@ -6869,9 +6870,9 @@ msgid ""
 "has no password, so there is none to change here. Manage your password at"
 " your identity provider."
 msgstr ""
-"Inicia sesión a través de su proveedor de identidad (%(providers)s). Esta"
-" cuenta no tiene contraseña, así que aquí no hay ninguna que cambiar. "
-"Gestione su contraseña en su proveedor de identidad."
+"Inicias sesión a través de tu proveedor de identidad (%(providers)s). "
+"Esta cuenta no tiene contraseña, así que aquí no hay ninguna que cambiar."
+" Gestiona tu contraseña en tu proveedor de identidad."
 
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:15
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:4
@@ -11987,16 +11988,16 @@ msgid ""
 "Your email domain is not allowed to sign in here. Contact your "
 "administrator."
 msgstr ""
-"El dominio de su correo electrónico no puede iniciar sesión aquí. Póngase"
-" en contacto con su administrador."
+"El dominio de tu correo electrónico no puede iniciar sesión aquí. "
+"Contacta con tu administrador."
 
 #: specivo/web/pages/sso.py:124
 msgid ""
 "Your identity provider account is not in a group that may sign in here. "
 "Contact your administrator."
 msgstr ""
-"Su cuenta del proveedor de identidad no pertenece a ningún grupo que "
-"pueda iniciar sesión aquí. Póngase en contacto con su administrador."
+"Tu cuenta del proveedor de identidad no pertenece a ningún grupo que "
+"pueda iniciar sesión aquí. Contacta con tu administrador."
 
 #: specivo/web/pages/sso.py:127
 msgid ""
@@ -12004,7 +12005,7 @@ msgid ""
 "administrator to send only the groups assigned to the application, or app"
 " roles."
 msgstr ""
-"Su proveedor de identidad envió demasiados grupos para leerlos. Pida a su"
+"Tu proveedor de identidad envió demasiados grupos para leerlos. Pide a tu"
 " administrador que envíe solo los grupos asignados a la aplicación, o "
 "roles de aplicación."
 
