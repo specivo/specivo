@@ -259,6 +259,9 @@ class Settings(BaseSettings):
     git_hook_rate_limit_per_minute: int = Field(default=120, ge=1)
     git_hook_unknown_rate_limit_per_minute: int = Field(default=30, ge=1)
 
+    # AI usage ingest (``/api/v1/ai-usage/ingest``): batches per minute per account.
+    ai_usage_ingest_rate_limit_per_minute: int = Field(default=60, ge=1)
+
     # SCIM provisioning (``/scim/v2/{provider_slug}/``): the largest request
     # body, requests per minute per provider (and per client address for
     # requests that fail authentication), and the most resources one list
