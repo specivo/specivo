@@ -285,6 +285,18 @@ through the `agent_session_id_var` context variable that `_get_session_and_user`
 their signatures, and both writes run in a savepoint so a failure never fails the tool.
 `AgentSessionService.issue_for(user_id, started_at, ended_at)` returns the issue of the window overlapping a time
 range longest (ties: most recently active); it is an attribution hint, so callers still check they may log there.
+The id of the API key that authenticated a tool call is published the same way (`mcp_api_key_id_var`), for tools
+that record their reporting key (`specivo_log_ai_usage`).
+
+**AI usage surfaces.** The REST routes (`api/v1/ai_usage.py`) mirror time entries: `/projects/{key}/ai-usage/`,
+`/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and
+`include/`; the router is included after the ingest router so `/ai-usage/ingest/` is matched first. An entry written
+there has the source `api` with an API key and `manual` without one; the MCP tools (`specivo.mcp.ai_usage_tools`, a
+module of its own beside `tools.py`) write `mcp`. Both log through `AiUsageService.create_for`, which resolves
+`on_behalf_of` with `resolve_target`, and render pages with `AiUsageService.references`: users, project keys and the
+issue keys the reader may see in three queries; an issue the reader cannot see shows as no issue. List filters live
+in `AiUsageService.list_entries` (a model filter matches its price aliases; an unknown login filter matches nothing
+rather than saying it is unknown).
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 

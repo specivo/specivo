@@ -23,8 +23,14 @@ from pydantic import Field
 
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
+from specivo.mcp.ai_usage_tools import _ai_usage, _log_ai_usage
 from specivo.mcp.auth import authenticate_mcp_tool
-from specivo.mcp.client_context import ClientInfoMiddleware, agent_session_id_var, mcp_client_var
+from specivo.mcp.client_context import (
+    ClientInfoMiddleware,
+    agent_session_id_var,
+    mcp_api_key_id_var,
+    mcp_client_var,
+)
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools import (
     _add_comment,
@@ -156,9 +162,11 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
                         await savepoint.rollback()
                     logger.debug("AgentSession tracking failed", exc_info=True)
                 session_token = agent_session_id_var.set(agent_session_id)
+                key_token = mcp_api_key_id_var.set(api_key.id)
                 try:
                     yield session, user
                 finally:
+                    mcp_api_key_id_var.reset(key_token)
                     agent_session_id_var.reset(session_token)
                 await session.commit()
             except Exception as exc:
@@ -1191,6 +1199,173 @@ async def specivo_timer(
     """
     async with _get_session_and_user() as (session, user):
         return await _timer(session, user, op, issue_ref, activity, comments)
+
+
+_NO_COUNTERS = (
+    "You cannot see your own token counters: never estimate or invent the numbers. Log only figures that come "
+    "from a hook, the Specivo reporter, or the tool's own usage output (for example Claude Code's /cost). "
+    "Prefer the reporter (POST /api/v1/ai-usage/ingest/) for routine logging; this tool is for one-off entries."
+)
+
+
+@mcp.tool(
+    description=(
+        "Log one AI usage entry (tokens an AI tool used), the sibling of specivo_log_time. "
+        + _NO_COUNTERS
+        + "\n\nWhere it goes: issue_ref (its project), else project_key, else the issue this agent session works "
+        "on (self-assigned, moved to an active status or timed) when you may log there, else unassigned. "
+        "Needs log_ai_usage in the project (none for unassigned usage in your own name). on_behalf_of logs in "
+        "another user's name: it needs log_ai_usage_for_others in the project and the user must be an active "
+        "member; unassigned usage for someone else is for administrators only. "
+        "The server prices the tokens itself. cost_type (subscription, api, local, free, unknown) defaults "
+        "from the user's AI subscriptions; cost_amount + cost_currency is what the usage actually cost, used as "
+        "the spend for cost_type 'api'. Entries are stored with source 'mcp' and the calling key."
+    )
+)
+async def specivo_log_ai_usage(
+    tool: Annotated[str, Field(description="AI tool slug, e.g. 'claude-code', 'codex', 'cursor'.")],
+    model: Annotated[str, Field(description="Model name as the tool reports it, e.g. 'claude-sonnet-4-5'.")],
+    input_tokens: Annotated[int, Field(ge=0, description="Input tokens, from a hook, the reporter or /cost.")],
+    output_tokens: Annotated[int, Field(ge=0, description="Output tokens.")],
+    project_key: Annotated[str | None, Field(description="Uppercase project identifier, e.g. ACME.")] = None,
+    issue_ref: Annotated[str | None, Field(description="Issue display key, e.g. ACME-12.")] = None,
+    cache_write_tokens: Annotated[int, Field(ge=0, description="Cache write tokens (5-minute cache).")] = 0,
+    cache_write_1h_tokens: Annotated[int, Field(ge=0, description="Cache write tokens (1-hour cache).")] = 0,
+    cache_read_tokens: Annotated[int, Field(ge=0, description="Cache read tokens.")] = 0,
+    reasoning_tokens: Annotated[int, Field(ge=0, description="Reasoning (thinking) tokens.")] = 0,
+    request_count: Annotated[int, Field(ge=0, description="Number of model requests, if known.")] = 0,
+    provider: Annotated[str | None, Field(description="e.g. 'anthropic', 'openai'. Defaults from the tool.")] = None,
+    cost_type: Annotated[
+        str | None, Field(description="subscription, api, local, free or unknown. Omit to derive it.")
+    ] = None,
+    cost_amount: Annotated[
+        str | None, Field(description="What the usage cost, as a decimal string, e.g. '0.42'. Needs cost_currency.")
+    ] = None,
+    cost_currency: Annotated[str | None, Field(description="ISO currency code of cost_amount, e.g. 'USD'.")] = None,
+    usage_date: Annotated[str | None, Field(description="UTC day YYYY-MM-DD. Defaults to today (UTC).")] = None,
+    on_behalf_of: Annotated[str | None, Field(description="Login of the user whose usage this is.")] = None,
+    comments: Annotated[str | None, Field(description="A short note. Never paste prompts or code.")] = None,
+    session_id: Annotated[str | None, Field(description="The tool's own session id, if known.")] = None,
+) -> str:
+    tokens = {
+        "input": input_tokens,
+        "output": output_tokens,
+        "cache_write_5m": cache_write_tokens,
+        "cache_write_1h": cache_write_1h_tokens,
+        "cache_read": cache_read_tokens,
+        "reasoning": reasoning_tokens,
+    }
+    async with _get_session_and_user() as (session, user):
+        return await _log_ai_usage(
+            session,
+            user,
+            tool=tool,
+            model=model,
+            tokens=tokens,
+            project_key=project_key,
+            issue_ref=issue_ref,
+            provider=provider,
+            request_count=request_count,
+            cost_type=cost_type,
+            cost_amount=cost_amount,
+            cost_currency=cost_currency,
+            usage_date=usage_date,
+            on_behalf_of=on_behalf_of,
+            comments=comments,
+            session_id=session_id,
+        )
+
+
+@mcp.tool(
+    description=(
+        "Read and manage AI usage entries. Ops: list (a project's entries you may read with project_key, or "
+        "issue_ref; without either, the entries logged in your name, unassigned ones included; filters "
+        "user_login, tool, model, cost_type, date_from, date_to, excluded, unassigned, offset, limit); get "
+        "(entry_id); update (entry_id plus the fields to change: project_key moves the entry, '' makes it "
+        "unassigned; issue_ref, '' clears it; comments; and for entries not from the reporter the usage: tool, "
+        "model, provider, usage_date, the token counts, request_count, cost_type, cost_amount + cost_currency); "
+        "exclude / include (entry_id: leave an entry out of reports, or count it again). "
+        "You may change entries logged in your name, or any with manage_ai_usage in their project. Entries "
+        "from the reporter or an import keep their usage (only project, issue and comments change) and are "
+        "excluded rather than deleted. " + _NO_COUNTERS
+    )
+)
+async def specivo_ai_usage(
+    op: Annotated[str, Field(description="One of: list, get, update, exclude, include.")],
+    entry_id: Annotated[int | None, Field(description="Entry ID, for get, update, exclude and include.")] = None,
+    project_key: Annotated[
+        str | None, Field(description="list: the project. update: move the entry there ('' = unassigned).")
+    ] = None,
+    issue_ref: Annotated[
+        str | None, Field(description="list: only this issue. update: attribute to this issue ('' clears it).")
+    ] = None,
+    user_login: Annotated[str | None, Field(description="list with a project: only this user's entries.")] = None,
+    tool: Annotated[str | None, Field(description="list: filter. update: new tool slug.")] = None,
+    model: Annotated[str | None, Field(description="list: filter (aliases match). update: new model.")] = None,
+    provider: Annotated[str | None, Field(description="update: new provider ('' clears it).")] = None,
+    cost_type: Annotated[
+        str | None, Field(description="list: filter. update: subscription, api, local, free or unknown.")
+    ] = None,
+    date_from: Annotated[str | None, Field(description="list: first day, YYYY-MM-DD.")] = None,
+    date_to: Annotated[str | None, Field(description="list: last day, YYYY-MM-DD.")] = None,
+    usage_date: Annotated[str | None, Field(description="update: new UTC day, YYYY-MM-DD.")] = None,
+    excluded: Annotated[
+        bool | None, Field(description="list: true for excluded entries only, false for counted ones only.")
+    ] = None,
+    unassigned: Annotated[bool | None, Field(description="list without a project: true for unassigned only.")] = None,
+    input_tokens: Annotated[int | None, Field(ge=0, description="update: new input token count.")] = None,
+    output_tokens: Annotated[int | None, Field(ge=0, description="update: new output token count.")] = None,
+    cache_write_tokens: Annotated[int | None, Field(ge=0, description="update: cache writes (5-minute).")] = None,
+    cache_write_1h_tokens: Annotated[int | None, Field(ge=0, description="update: cache writes (1-hour).")] = None,
+    cache_read_tokens: Annotated[int | None, Field(ge=0, description="update: cache reads.")] = None,
+    reasoning_tokens: Annotated[int | None, Field(ge=0, description="update: reasoning tokens.")] = None,
+    request_count: Annotated[int | None, Field(ge=0, description="update: number of requests.")] = None,
+    cost_amount: Annotated[
+        str | None, Field(description="update: what it cost, e.g. '0.42' ('' with no currency clears it).")
+    ] = None,
+    cost_currency: Annotated[str | None, Field(description="update: ISO currency of cost_amount.")] = None,
+    comments: Annotated[str | None, Field(description="update: new note ('' clears it).")] = None,
+    offset: Annotated[int, Field(description="list: entries to skip.")] = 0,
+    limit: Annotated[int, Field(description="list: max entries (1-100).")] = 25,
+) -> str:
+    sent = {
+        "input": input_tokens,
+        "output": output_tokens,
+        "cache_write_5m": cache_write_tokens,
+        "cache_write_1h": cache_write_1h_tokens,
+        "cache_read": cache_read_tokens,
+        "reasoning": reasoning_tokens,
+    }
+    tokens = {name: count for name, count in sent.items() if count is not None}
+    async with _get_session_and_user() as (session, user):
+        return await _ai_usage(
+            session,
+            user,
+            op,
+            entry_id=entry_id,
+            project_key=project_key,
+            issue_ref=issue_ref,
+            user_login=user_login,
+            tool=tool,
+            model=model,
+            provider=provider,
+            cost_type=cost_type,
+            date_from=date_from,
+            date_to=date_to,
+            usage_date=usage_date,
+            excluded=excluded,
+            unassigned=unassigned,
+            tokens=tokens or None,
+            request_count=request_count,
+            cost_amount=cost_amount,
+            cost_currency=cost_currency,
+            comments=comments,
+            offset=offset,
+            limit=limit,
+        )
+
+
+# specivo_ai_usage_report: added with the AI usage report service.
 
 
 @mcp.tool()

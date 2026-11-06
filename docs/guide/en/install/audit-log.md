@@ -27,7 +27,7 @@ The viewer groups event types into categories:
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
 | Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
 | Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
-| AI usage | AI usage logged in another person's name, entries changed by someone other than their owner, entries excluded from reports or included again, entries deleted, and costs recomputed after a price change. |
+| AI usage | AI usage logged in another person's name, entries changed by someone other than their owner, entries excluded from reports or included again, entries deleted, costs recomputed after a price change, and AI usage logged or changed by an agent over MCP. |
 
 Every MCP tool call is recorded with `source: mcp` in its details, including the client address,
 request id and user agent of the call.
@@ -183,9 +183,11 @@ never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 | `ai_usage_updated_by_other` | the person who changed somebody else's entry | the same, plus `changes`: each changed field with `old` and `new`; a changed comment shows only as `comments: {"changed": true}` |
 | `ai_usage_excluded`, `ai_usage_included` | whoever excluded the entry from reports, or included it again | the entry, as above |
 | `ai_usage_deleted` | whoever deleted the entry | the entry, plus its `tokens` and `cost_type` |
+| `ai_usage_logged`, `ai_usage_changed` | the agent account, over MCP (`specivo_log_ai_usage`; `specivo_ai_usage` updating, excluding or including an entry) | `tool: "log_ai_usage"` or `"ai_usage"`, `source: "mcp"`, and the `entry_id`; a logged entry adds `target_login`, `tool`, `model`, `usage_date`, `project_key` and `issue`, a change its `op` and the changed `fields` |
 | `ai_usage_costs_recomputed` | the administrator who started the recompute | `provider`, `models`, `from`, `to`, `entries` (read), `changed`, and `before` / `after` totals per currency of the marginal cost and the API-equivalent value |
 
-Usage people log for themselves is not recorded here: they can always see their own entries. Comments
+Usage people log for themselves through the web or the REST API is not recorded here: they can
+always see their own entries. Over MCP, like every agent tool call, it is (`ai_usage_logged`). Comments
 are free text and never copied into the log, and no prompt, code or file name is ever stored with
 AI usage.
 ## Personal data

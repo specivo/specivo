@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 mcp_client_var: contextvars.ContextVar[ClientInfo | None] = contextvars.ContextVar("mcp_client", default=None)
 agent_session_id_var: contextvars.ContextVar[int | None] = contextvars.ContextVar("mcp_agent_session_id", default=None)
+#: The id of the API key that authenticated the current tool call (set by the tool session helper).
+mcp_api_key_id_var: contextvars.ContextVar[int | None] = contextvars.ContextVar("mcp_api_key_id", default=None)
 
 _agent_session_svc = AgentSessionService()
 

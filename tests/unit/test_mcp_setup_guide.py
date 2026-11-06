@@ -66,3 +66,15 @@ def test_the_guide_teaches_mermaid_diagrams(fmt: str) -> None:
 def test_the_connect_instructions_mention_mermaid() -> None:
     """Clients show the server instructions before any tool call, so diagrams are known up front."""
     assert "```mermaid" in (mcp.instructions or "")
+
+
+def test_the_guide_teaches_ai_usage() -> None:
+    guide = generate_setup_guide(fmt="generic", mcp_server=mcp)
+    for name in ("specivo_log_ai_usage", "specivo_ai_usage"):
+        assert f"| `{name}` |" in guide
+    assert "### Log AI usage" in guide
+    assert "You cannot see your own token counters" in guide
+    assert "/cost" in guide
+    for op in ("list", "update", "exclude"):
+        assert f'op="{op}"' in guide
+    assert "token counts" in guide.split("## Anti-patterns", 1)[1]

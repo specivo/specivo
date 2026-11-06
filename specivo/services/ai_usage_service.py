@@ -232,6 +232,15 @@ class RecomputeOutcome:
     after: dict[str, dict[str, str]]
 
 
+@dataclass
+class EntryReferences:
+    """What a page of entries names: users by id, project keys by id, and the issue keys the reader may see."""
+
+    users: dict[int, User] = field(default_factory=dict)
+    project_keys: dict[int, str] = field(default_factory=dict)
+    issue_keys: dict[int, str] = field(default_factory=dict)
+
+
 class _Totals:
     def __init__(self) -> None:
         self.sums: dict[str, dict[str, Decimal]] = {"marginal": {}, "api_equivalent": {}}
@@ -375,11 +384,23 @@ class AiUsageService:
         user_id: int | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
-        include_excluded: bool = True,
+        tool: str | None = None,
+        model: str | None = None,
+        cost_type: str | None = None,
+        issue_id: int | None = None,
+        source: str | None = None,
+        excluded: bool | None = None,
+        unassigned: bool | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
-        """Entries *viewer* may read, newest day first; in *project* when given. Returns ``(page, total)``."""
+        """Entries *viewer* may read, newest day first; in *project* when given. Returns ``(page, total)``.
+
+        Filters: *model* matches the aliases of its price rows too;
+        *excluded* ``True`` / ``False`` keeps only excluded / counted entries
+        (None: both); *unassigned* ``True`` / ``False`` keeps only entries
+        without / with a project.
+        """
         conditions: list[ColumnElement[bool]] = []
         if project is not None:
             conditions.append(AiUsageEntry.project_id == project.id)
@@ -394,8 +415,24 @@ class AiUsageService:
             conditions.append(AiUsageEntry.usage_date >= date_from)
         if date_to is not None:
             conditions.append(AiUsageEntry.usage_date <= date_to)
-        if not include_excluded:
-            conditions.append(AiUsageEntry.excluded_at.is_(None))
+        if tool:
+            conditions.append(AiUsageEntry.tool_slug == tool.strip().lower())
+        if model and model.strip():
+            conditions.append(AiUsageEntry.model.in_(await self.model_names(session, None, model)))
+        if cost_type:
+            if cost_type not in AI_USAGE_COST_TYPES:
+                raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
+            conditions.append(AiUsageEntry.cost_type == cost_type)
+        if source:
+            if source not in AI_USAGE_SOURCES:
+                raise _invalid(f"source must be one of {', '.join(AI_USAGE_SOURCES)}", "source")
+            conditions.append(AiUsageEntry.source == source)
+        if issue_id is not None:
+            conditions.append(AiUsageEntry.issue_id == issue_id)
+        if excluded is not None:
+            conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
+        if unassigned is not None:
+            conditions.append(AiUsageEntry.project_id.is_(None) if unassigned else AiUsageEntry.project_id.is_not(None))
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
             (
@@ -1156,6 +1193,68 @@ class AiUsageService:
         await session.delete(entry)
         await session.flush()
         await self._audit(session, AuditEvent.AI_USAGE_DELETED, actor, entry, details, request)
+
+    # -- REST and MCP surfaces ------------------------------------------------------
+
+    async def create_for(
+        self,
+        session: AsyncSession,
+        actor: User,
+        data: AiUsageInput,
+        *,
+        project: Project | None,
+        on_behalf_of: str | None = None,
+        source: str = "manual",
+        api_key_id: int | None = None,
+        request: Request | None = None,
+    ) -> AiUsageEntry:
+        """Log *data* in *project* (None: unassigned), in the name of the login *on_behalf_of* or the actor's.
+
+        The login is resolved by :meth:`resolve_target`, so whoever may not log
+        for others there gets the same refusal for every login.
+        """
+        target = await self.resolve_target(session, actor, on_behalf_of, project)
+        data.project_id = project.id if project is not None else None
+        if data.project_id is None:
+            data.attribution_method = "none"
+        return await self.log(
+            session, actor, data, target=target, source=source, api_key_id=api_key_id, request=request
+        )
+
+    async def project_id_for_key(self, session: AsyncSession, actor: User, key: str | None) -> int | None:
+        """The id of the project *key* the actor can reach (404 otherwise); None for no key (unassigned)."""
+        from specivo.services.project_service import ProjectService
+
+        if key is None or not key.strip():
+            return None
+        project = await ProjectService().get_by_key(session, key.strip().upper())
+        await ProjectService().require_project_access(session, project, actor)
+        return project.id
+
+    async def references(self, session: AsyncSession, viewer: User, entries: list[AiUsageEntry]) -> EntryReferences:
+        """The users, project keys and issue keys *entries* name, in three queries.
+
+        Issues *viewer* cannot see are left out.
+        """
+        from specivo.services.issue_service import IssueService
+
+        user_ids = {e.user_id for e in entries} | {e.reporter_user_id for e in entries}
+        project_ids = {e.project_id for e in entries if e.project_id is not None}
+        issue_ids = {e.issue_id for e in entries if e.issue_id is not None}
+        refs = EntryReferences()
+        if user_ids:
+            rows = (await session.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
+            refs.users = {u.id: u for u in rows}
+        if project_ids:
+            rows_p = await session.execute(select(Project.id, Project.key).where(Project.id.in_(project_ids)))
+            refs.project_keys = {pid: key for pid, key in rows_p.all()}
+        if issue_ids:
+            stmt = select(Issue.id, Issue.project_key, Issue.sequence_number).where(Issue.id.in_(issue_ids))
+            clause = await IssueService().visible_issues_clause(session, viewer)
+            if clause is not None:
+                stmt = stmt.where(clause)
+            refs.issue_keys = {iid: f"{key}-{number}" for iid, key, number in (await session.execute(stmt)).all()}
+        return refs
 
     # -- range recompute ------------------------------------------------------------
 
