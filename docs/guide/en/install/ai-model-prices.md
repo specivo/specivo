@@ -9,6 +9,9 @@ pay-as-you-go price list. The prices live in a table administrators manage under
 **Admin → AI model prices**. Each version of Specivo ships the list prices of several hundred models,
 and you can add your own, in any enabled [currency](currencies.md).
 
+Usage covered by a flat-rate plan such as Claude Max is still valued at these prices, to compare it
+with the plan's fee; record the plans under [AI subscriptions](ai-subscriptions.md).
+
 Prices change over time, so the table is a **history**. Every price is valid for a period, and usage
 is always priced with the price that was valid at its own time. Changing a price never rewrites an
 old one.

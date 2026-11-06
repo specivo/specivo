@@ -9,6 +9,9 @@ display name, login, email address, language, timezone and when you last signed 
 your display name and photo there, and your email address. Language, timezone and your sessions
 are under **Preferences**.
 
+The profile also links to **My AI subscriptions**, where you record the flat-rate AI plans you pay
+for, such as Claude Max or ChatGPT Plus; see [AI subscriptions](../install/ai-subscriptions.md).
+
 ## Changing your email address
 
 Specivo sends sign-in help, password reset links and notifications to your email address, and
