@@ -193,6 +193,22 @@ class AuditEvent(StrEnum):
     AI_SUBSCRIPTION_UPDATED = "ai_subscription_updated"
     AI_SUBSCRIPTION_DELETED = "ai_subscription_deleted"
     AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED = "ai_subscriptions_self_service_toggled"
+    # AI usage entries. Logged in another user's name (details: ``entry_id``,
+    # ``target_user_id``, ``target_login``, ``source``, ``tool``,
+    # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
+    # ``project_key``, ``issue``); changed by someone other than the entry's
+    # user (the same plus ``changes``: ``{field: {old, new}}``, comments only
+    # as ``{"changed": true}``); excluded from reports, or included again;
+    # deleted. Costs recomputed for a range (``provider``, ``models``,
+    # ``from``, ``to``, ``entries``, ``changed``, and ``before`` / ``after``
+    # totals per currency of ``marginal`` and ``api_equivalent``). Never
+    # comments, prompts or code.
+    AI_USAGE_LOGGED_FOR_OTHER = "ai_usage_logged_for_other"
+    AI_USAGE_UPDATED_BY_OTHER = "ai_usage_updated_by_other"
+    AI_USAGE_EXCLUDED = "ai_usage_excluded"
+    AI_USAGE_INCLUDED = "ai_usage_included"
+    AI_USAGE_DELETED = "ai_usage_deleted"
+    AI_USAGE_COSTS_RECOMPUTED = "ai_usage_costs_recomputed"
 
 
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
@@ -229,6 +245,17 @@ _AI_SUBSCRIPTION_ROW_EVENTS = frozenset(
 )
 _AI_SUBSCRIPTION_EVENTS = _AI_SUBSCRIPTION_ROW_EVENTS | {AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED}
 
+_AI_USAGE_EVENTS = frozenset(
+    {
+        AuditEvent.AI_USAGE_LOGGED_FOR_OTHER,
+        AuditEvent.AI_USAGE_UPDATED_BY_OTHER,
+        AuditEvent.AI_USAGE_EXCLUDED,
+        AuditEvent.AI_USAGE_INCLUDED,
+        AuditEvent.AI_USAGE_DELETED,
+        AuditEvent.AI_USAGE_COSTS_RECOMPUTED,
+    }
+)
+
 
 class AuditCategory(StrEnum):
     """The groups the admin viewer filters by; every :class:`AuditEvent` belongs to one."""
@@ -241,6 +268,7 @@ class AuditCategory(StrEnum):
     SSO = "sso"
     PROVISIONING = "provisioning"
     SESSIONS = "sessions"
+    AI_USAGE = "ai_usage"
 
 
 #: The category of each event. "Agents" holds the events only MCP tools write;
@@ -394,6 +422,17 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.SSO_SESSION_REJECTED,
         ],
         AuditCategory.SESSIONS,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.AI_USAGE_LOGGED_FOR_OTHER,
+            AuditEvent.AI_USAGE_UPDATED_BY_OTHER,
+            AuditEvent.AI_USAGE_EXCLUDED,
+            AuditEvent.AI_USAGE_INCLUDED,
+            AuditEvent.AI_USAGE_DELETED,
+            AuditEvent.AI_USAGE_COSTS_RECOMPUTED,
+        ],
+        AuditCategory.AI_USAGE,
     ),
 }
 
@@ -1474,6 +1513,38 @@ class SecurityAuditService:
             user_id=user_id,
             resource_type="ai_subscription" if event_type in _AI_SUBSCRIPTION_ROW_EVENTS else "setting",
             resource_id=resource_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+
+    async def log_ai_usage_change(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        user_id: int | None,
+        details: dict[str, Any],
+        resource_id: int | None = None,
+        project_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log an AI usage entry written for someone else, changed, excluded or deleted, or a cost recompute.
+
+        Written in the caller's transaction, in a savepoint, like
+        :meth:`log_exchange_rate_change`.
+        """
+        if event_type not in _AI_USAGE_EVENTS:
+            raise ValueError(f"Not an AI usage event: {event_type!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event_type,
+            user_id=user_id,
+            resource_type="ai_usage_entry",
+            resource_id=resource_id,
+            project_id=project_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],

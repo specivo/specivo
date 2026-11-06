@@ -10,6 +10,8 @@
 {% elif code == "threshold_invalid" %}{% trans %}The long context threshold must be a whole number of tokens.{% endtrans %}
 {% elif code == "seed_invalid" %}{% trans %}The bundled price file could not be read.{% endtrans %}
 {% elif code == "not_found" %}{% trans %}That price no longer exists.{% endtrans %}
+{% elif code == "queue_unavailable" %}{% trans %}The recompute could not be started because the task queue is unavailable. Try again later.{% endtrans %}
+{% elif code == "ai_usage_invalid" %}{% trans %}Check the range to recompute: its end must be after its start.{% endtrans %}
 {%- endif %}
 {%- endmacro %}
 

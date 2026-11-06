@@ -38,6 +38,13 @@ TIME_ENTRIES_VISIBILITY_ALL = "all"
 TIME_ENTRIES_VISIBILITY_OWN = "own"
 TIME_ENTRIES_VISIBILITY_VALUES: tuple[str, ...] = (TIME_ENTRIES_VISIBILITY_ALL, TIME_ENTRIES_VISIBILITY_OWN)
 
+# ``roles.ai_usage_visibility`` values (``ck_roles_ai_usage_visibility``). The
+# default is ``own``: per-person AI spend is shown to a role only when an
+# administrator widens it (the seeded Manager role is ``all``).
+AI_USAGE_VISIBILITY_ALL = "all"
+AI_USAGE_VISIBILITY_OWN = "own"
+AI_USAGE_VISIBILITY_VALUES: tuple[str, ...] = (AI_USAGE_VISIBILITY_ALL, AI_USAGE_VISIBILITY_OWN)
+
 
 class Role(Base, TimestampMixin):
     """Project role with a set of permissions.
@@ -70,8 +77,13 @@ class Role(Base, TimestampMixin):
     - ``"all"`` - every time entry in the project
     - ``"own"`` - only the entries the user logged
 
-    Both default to ``"all"``. When a user holds several roles the most
-    permissive value wins; see ``permission_service``.
+    ``ai_usage_visibility``:
+    - ``"all"`` - every AI usage entry in the project
+    - ``"own"`` - only the entries logged in the user's name (or reported by them)
+
+    ``users_visibility`` and ``time_entries_visibility`` default to ``"all"``,
+    ``ai_usage_visibility`` to ``"own"``. When a user holds several roles the
+    most permissive value wins; see ``permission_service``.
     """
 
     __tablename__ = "roles"
@@ -92,6 +104,10 @@ class Role(Base, TimestampMixin):
         CheckConstraint(
             "time_entries_visibility IN ('all', 'own')",
             name="ck_roles_time_entries_visibility",
+        ),
+        CheckConstraint(
+            "ai_usage_visibility IN ('all', 'own')",
+            name="ck_roles_ai_usage_visibility",
         ),
         CheckConstraint(
             "builtin = 0 OR NOT assignable",
@@ -135,6 +151,11 @@ class Role(Base, TimestampMixin):
     # Which time entries this role may read in a project: all, or the user's own
     time_entries_visibility: Mapped[str] = mapped_column(
         String(30), nullable=False, default=TIME_ENTRIES_VISIBILITY_ALL, server_default=TIME_ENTRIES_VISIBILITY_ALL
+    )
+
+    # Which AI usage entries this role may read in a project: all, or the user's own
+    ai_usage_visibility: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=AI_USAGE_VISIBILITY_OWN, server_default=AI_USAGE_VISIBILITY_OWN
     )
 
     # Extensible settings JSONB (reserved for future use, e.g. Phase 2 workflow)
