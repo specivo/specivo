@@ -1,0 +1,104 @@
+/* AI usage: the project tab, the issue tab, My AI usage and the entry form. */
+.sp-aiu-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+  margin-bottom: var(--sp-space-lg);
+}
+.sp-aiu-filter { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+.sp-aiu-filter .filter-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-aiu-filter-actions { display: flex; gap: var(--sp-space-sm); }
+
+.sp-aiu-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+  margin-bottom: var(--sp-space-lg);
+}
+.sp-aiu-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-space-sm) var(--sp-space-md);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-border-radius);
+  background: var(--sp-bg-surface);
+}
+.sp-aiu-total-label {
+  font-size: var(--sp-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sp-text-muted);
+}
+.sp-aiu-amount { font-size: var(--sp-font-size-lg, 1.125rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sp-aiu-unconverted { display: block; font-size: var(--sp-font-size-xs); color: var(--sp-warning, #b45309); }
+
+.sp-aiu-table td { vertical-align: top; }
+.sp-aiu-toolcell { min-width: 12rem; }
+.sp-aiu-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-aiu-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-aiu-check { width: 1%; }
+.sp-aiu-model { display: block; font-family: var(--sp-font-mono, monospace); font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }
+.sp-aiu-comment { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); white-space: pre-line; }
+.sp-aiu-excluded td { opacity: 0.6; }
+.sp-aiu-excluded td.sp-aiu-actions { opacity: 1; }
+.sp-aiu-badge {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: var(--sp-font-size-xs);
+  background: var(--sp-warning-subtle, var(--sp-border));
+  color: var(--sp-warning, var(--sp-text-secondary));
+}
+.sp-aiu-actions { white-space: nowrap; text-align: right; }
+.sp-aiu-actions > * { margin-left: 4px; }
+.sp-aiu-inline-form { display: inline; margin: 0; }
+.sp-aiu-table--compact td,
+.sp-aiu-table--compact th { padding-left: var(--sp-space-sm); padding-right: var(--sp-space-sm); }
+.sp-aiu-table--compact .sp-aiu-toolcell { min-width: 9rem; }
+.sp-aiu-table--compact .sp-aiu-actions { white-space: normal; min-width: 7rem; }
+.sp-aiu-table--compact .sp-aiu-actions > * { margin: 0 0 4px 4px; }
+.sp-aiu-empty { padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted); }
+
+.sp-aiu-reassign {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-aiu-reassign-title { flex-basis: 100%; font-weight: 600; }
+.sp-aiu-reassign-hint { flex-basis: 100%; margin: 0; }
+
+.sp-aiu-issue { margin-top: var(--sp-space-md); }
+.sp-aiu-issue-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-md); }
+
+.sp-aiu-form-card { max-width: 52rem; }
+.sp-aiu-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-aiu-field { display: flex; flex-direction: column; gap: var(--sp-space-xs, 4px); min-width: 0; }
+.sp-aiu-field .form-label { margin: 0; }
+.sp-aiu-wide { grid-column: 1 / -1; }
+.sp-aiu-more summary { cursor: pointer; font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-sm); }
+.sp-aiu-cost-row { display: flex; gap: var(--sp-space-sm); }
+.sp-aiu-cost-row input { flex: 1 1 6rem; min-width: 0; }
+.sp-aiu-cost-row select { flex: 1 1 8rem; min-width: 0; }
+.sp-aiu-form-actions { display: flex; justify-content: flex-end; gap: var(--sp-space-md); }
+.sp-aiu-readonly { display: grid; grid-template-columns: max-content 1fr; gap: var(--sp-space-xs, 4px) var(--sp-space-md); margin: 0; }
+.sp-aiu-readonly dt { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-aiu-readonly dd { margin: 0; overflow-wrap: anywhere; }
+.sp-aiu-entry-info { display: flex; flex-direction: column; gap: var(--sp-space-xs, 4px); }
+
+@media (max-width: 640px) {
+  .sp-aiu-filters,
+  .sp-aiu-reassign { flex-direction: column; align-items: stretch; }
+  .sp-aiu-filter .filter-input,
+  .sp-aiu-filter .filter-select { width: 100%; }
+  .sp-aiu-form { grid-template-columns: 1fr; }
+  .sp-aiu-cost-row { flex-direction: column; }
+}

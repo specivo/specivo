@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% from "pages/ai_usage/_macros.html" import error_text, cost_type_label, source_label with context %}
+
+{% block title %}{{ _("Edit AI usage") if entry else _("Log AI usage") }}{% if project %} - {{ project.name }}{% endif %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  {% if project %}
+  <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
+  <span class="sep">/</span>
+  <a href="/projects/{{ project.key }}/ai-usage/">{% trans %}AI usage{% endtrans %}</a>
+  {% else %}
+  <a href="/my/ai-usage/">{% trans %}My AI usage{% endtrans %}</a>
+  {% endif %}
+  <span class="sep">/</span>
+  <span class="current">{{ _("Edit AI usage") if entry else _("Log AI usage") }}</span>
+</div>
+
+<h1 class="sp-page-h1">{{ _("Edit AI usage") if entry else _("Log AI usage") }}</h1>
+
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="aiu-form-error">{{ error_text(error) }}</div>{% endif %}
+
+{% if entry %}
+<div class="card sp-card-pad sp-mb-md sp-aiu-entry-info" data-testid="aiu-entry-info">
+  <div><span class="sp-text-muted-xs">{% trans %}Logged in the name of{% endtrans %}</span> {{ entry.user_name }}</div>
+  <div><span class="sp-text-muted-xs">{% trans %}Source{% endtrans %}</span> {{ source_label(entry.source) }}{% if entry.on_behalf %} · {% if entry.key_name %}{% trans reporter=entry.reporter_name, key=entry.key_name %}logged by {{ reporter }} via key {{ key }}{% endtrans %}{% else %}{% trans reporter=entry.reporter_name %}logged by {{ reporter }}{% endtrans %}{% endif %}{% endif %}</div>
+  <div><span class="sp-text-muted-xs">{% trans %}Spend{% endtrans %}</span> {{ entry.marginal or "–" }} · <span class="sp-text-muted-xs">{% trans %}API value{% endtrans %}</span> {{ entry.api_equivalent or "–" }}</div>
+  {% if entry.excluded %}<div><span class="sp-aiu-badge">{% trans %}Excluded{% endtrans %}</span> {% trans %}This entry is left out of totals and reports.{% endtrans %}</div>{% endif %}
+</div>
+{% endif %}
+
+<div class="card sp-card-pad sp-aiu-form-card">
+  <form method="post" action="{{ form_action }}" class="sp-aiu-form" data-testid="aiu-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+
+    {% if project %}
+    <input type="hidden" name="project" value="{{ project.key }}">
+    {% else %}
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-project">{% trans %}Project{% endtrans %}</label>
+      <select id="aiu-project" name="project" class="form-input" data-testid="aiu-form-project">
+        <option value="">{% trans %}No project (unassigned){% endtrans %}</option>
+        {% for p in projects %}<option value="{{ p.key }}" {{ 'selected' if p.key == form.project else '' }}>{{ p.name }} ({{ p.key }})</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-issue">{% trans %}Issue (optional){% endtrans %}</label>
+      <input id="aiu-issue" type="text" name="issue" class="form-input" maxlength="50" value="{{ form.issue }}" placeholder="{{ _('e.g. %(key)s-1') % {'key': project.key} if project else _('e.g. PROJ-42') }}" data-testid="aiu-form-issue">
+    </div>
+    {% if can_log_for_others %}
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-behalf">{% trans %}On behalf of (login, optional){% endtrans %}</label>
+      <input id="aiu-behalf" type="text" name="on_behalf_of" class="form-input" maxlength="255" value="{{ form.on_behalf_of }}" autocomplete="off" data-testid="aiu-form-behalf">
+    </div>
+    {% endif %}
+
+    {% if locked %}
+    <div class="sp-aiu-wide sp-aiu-locked" data-testid="aiu-locked">
+      <p class="sp-text-muted-xs">{% trans %}Reported by an AI tool: the tool, model, tokens and cost stay as reported. You can change the project, the issue and the comments, or exclude the entry.{% endtrans %}</p>
+      <dl class="sp-aiu-readonly">
+        <dt>{% trans %}Tool{% endtrans %}</dt><dd>{{ entry.tool }}</dd>
+        <dt>{% trans %}Model{% endtrans %}</dt><dd>{{ entry.model }}{% if entry.provider %} <span class="sp-text-muted-xs">{{ entry.provider }}</span>{% endif %}</dd>
+        <dt>{% trans %}Day (UTC){% endtrans %}</dt><dd>{{ entry.usage_date }}</dd>
+        <dt>{% trans %}Tokens{% endtrans %}</dt><dd>{{ entry.total_tokens }} <span class="sp-text-muted-xs">{% trans input=entry.input, output=entry.output, cache=entry.cache %}{{ input }} in · {{ output }} out · {{ cache }} cache{% endtrans %}</span></dd>
+        <dt>{% trans %}Cost type{% endtrans %}</dt><dd>{{ cost_type_label(entry.cost_type) }}</dd>
+        {% if entry.reported %}<dt>{% trans %}Reported cost{% endtrans %}</dt><dd>{{ entry.reported }}</dd>{% endif %}
+      </dl>
+    </div>
+    {% else %}
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-tool">{% trans %}Tool{% endtrans %}</label>
+      <select id="aiu-tool" name="tool" class="form-input" data-testid="aiu-form-tool">
+        {% for t in tools %}<option value="{{ t.slug }}" {{ 'selected' if t.slug == form.tool else '' }}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-model">{% trans %}Model{% endtrans %}</label>
+      <input id="aiu-model" type="text" name="model" class="form-input" maxlength="200" value="{{ form.model }}" list="aiu-models" required autocomplete="off" placeholder="claude-sonnet-4-5" data-testid="aiu-form-model">
+      <datalist id="aiu-models">
+        {% for m in models %}<option value="{{ m.model }}">{{ m.provider }}</option>{% endfor %}
+      </datalist>
+    </div>
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-provider">{% trans %}Provider (optional){% endtrans %}</label>
+      <input id="aiu-provider" type="text" name="provider" class="form-input" maxlength="50" value="{{ form.provider }}" placeholder="anthropic">
+    </div>
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-date">{% trans %}Day (UTC){% endtrans %}</label>
+      <input id="aiu-date" type="date" name="usage_date" class="form-input" value="{{ form.usage_date }}" required data-testid="aiu-form-date">
+    </div>
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-input">{% trans %}Input tokens{% endtrans %}</label>
+      <input id="aiu-input" type="number" min="0" step="1" name="tokens_input" class="form-input" value="{{ form.tokens.input }}" inputmode="numeric" data-testid="aiu-form-input">
+    </div>
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-output">{% trans %}Output tokens{% endtrans %}</label>
+      <input id="aiu-output" type="number" min="0" step="1" name="tokens_output" class="form-input" value="{{ form.tokens.output }}" inputmode="numeric" data-testid="aiu-form-output">
+    </div>
+    <details class="sp-aiu-wide sp-aiu-more" {{ 'open' if (form.tokens.cache_read or form.tokens.cache_write_5m or form.tokens.cache_write_1h or form.tokens.reasoning or form.request_count) else '' }}>
+      <summary>{% trans %}Cache, reasoning and requests{% endtrans %}</summary>
+      <div class="sp-aiu-form">
+        <div class="sp-aiu-field">
+          <label class="form-label" for="aiu-cache-read">{% trans %}Cache read tokens{% endtrans %}</label>
+          <input id="aiu-cache-read" type="number" min="0" step="1" name="tokens_cache_read" class="form-input" value="{{ form.tokens.cache_read }}" inputmode="numeric">
+        </div>
+        <div class="sp-aiu-field">
+          <label class="form-label" for="aiu-cache-5m">{% trans %}Cache write tokens (5 minutes){% endtrans %}</label>
+          <input id="aiu-cache-5m" type="number" min="0" step="1" name="tokens_cache_write_5m" class="form-input" value="{{ form.tokens.cache_write_5m }}" inputmode="numeric">
+        </div>
+        <div class="sp-aiu-field">
+          <label class="form-label" for="aiu-cache-1h">{% trans %}Cache write tokens (1 hour){% endtrans %}</label>
+          <input id="aiu-cache-1h" type="number" min="0" step="1" name="tokens_cache_write_1h" class="form-input" value="{{ form.tokens.cache_write_1h }}" inputmode="numeric">
+        </div>
+        <div class="sp-aiu-field">
+          <label class="form-label" for="aiu-reasoning">{% trans %}Reasoning tokens{% endtrans %}</label>
+          <input id="aiu-reasoning" type="number" min="0" step="1" name="tokens_reasoning" class="form-input" value="{{ form.tokens.reasoning }}" inputmode="numeric">
+        </div>
+        <div class="sp-aiu-field">
+          <label class="form-label" for="aiu-requests">{% trans %}Requests{% endtrans %}</label>
+          <input id="aiu-requests" type="number" min="0" step="1" name="request_count" class="form-input" value="{{ form.request_count }}" inputmode="numeric">
+        </div>
+      </div>
+    </details>
+    <div class="sp-aiu-field">
+      <label class="form-label" for="aiu-cost-type">{% trans %}Cost type{% endtrans %}</label>
+      <select id="aiu-cost-type" name="cost_type" class="form-input" data-testid="aiu-form-cost-type">
+        <option value="" {{ 'selected' if not form.cost_type else '' }}>{% trans %}Automatic (from your AI subscriptions){% endtrans %}</option>
+        {% for c in cost_types %}<option value="{{ c }}" {{ 'selected' if form.cost_type == c else '' }}>{{ cost_type_label(c) }}</option>{% endfor %}
+      </select>
+      <span class="sp-text-muted-xs" data-testid="aiu-form-subscriptions">
+        {% if subscriptions %}{% trans plans=subscriptions | map(attribute="name") | join(", ") %}Automatic counts usage of a tool your plan covers as subscription usage. Active plans: {{ plans }}.{% endtrans %}
+        {% else %}{% trans %}Automatic: you have no active AI subscription, so the cost type is Unknown unless you choose one.{% endtrans %}{% endif %}
+      </span>
+    </div>
+    <div class="sp-aiu-field sp-aiu-cost">
+      <span class="form-label">{% trans %}Known cost (optional){% endtrans %}</span>
+      <div class="sp-aiu-cost-row">
+        <input id="aiu-cost" type="text" inputmode="decimal" name="cost_amount" class="form-input" value="{{ form.cost_amount }}" placeholder="0.00" aria-label="{{ _('Amount') }}" data-testid="aiu-form-cost">
+        <select name="cost_currency" class="form-input" aria-label="{{ _('Currency') }}">
+          {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == form.cost_currency else '' }}>{{ c.code }} · {{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <span class="sp-text-muted-xs">{% trans %}What the provider billed, if you know it. Used as the spend of pay-per-use usage; otherwise the spend is computed from the price table.{% endtrans %}</span>
+    </div>
+    {% endif %}
+
+    <div class="sp-aiu-field sp-aiu-wide">
+      <label class="form-label" for="aiu-comments">{% trans %}Comments{% endtrans %}</label>
+      <textarea id="aiu-comments" name="comments" class="form-input" rows="2" maxlength="10000" data-testid="aiu-form-comments">{{ form.comments }}</textarea>
+    </div>
+
+    <div class="sp-aiu-form-actions sp-aiu-wide">
+      <a href="{{ back_url }}" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
+      <button type="submit" class="sp-btn sp-btn-primary" data-testid="aiu-form-submit">{% if entry %}{% trans %}Save{% endtrans %}{% else %}{% trans %}Log AI usage{% endtrans %}{% endif %}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

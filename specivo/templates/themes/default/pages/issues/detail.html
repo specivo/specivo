@@ -279,6 +279,9 @@
         {% if can_view_time_entries or can_log_time %}
         <a class="activity-tab" data-tab="time" :class="{ active: tab === 'time' }" @click.prevent="show('time')" href="#time">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         {% endif %}
+        {% if show_ai_usage_tab %}
+        <a class="activity-tab" data-tab="ai-usage" data-testid="ai-usage-tab" :class="{ active: tab === 'ai-usage' }" @click.prevent="show('ai-usage')" href="#ai-usage">{% trans %}AI usage{% endtrans %}</a>
+        {% endif %}
         <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
         <a class="activity-tab" data-tab="attachments" :class="{ active: tab === 'attachments' }" @click.prevent="show('attachments')" href="#attachments">{% trans %}Attachments{% endtrans %}</a>
@@ -488,6 +491,18 @@
           {% trans %}No time entries logged.{% endtrans %}
         </div>
         {% endif %}
+      </div>
+      {% endif %}
+
+      {# AI usage tab: loaded via htmx when first opened #}
+      {% if show_ai_usage_tab %}
+      <div x-show="tab === 'ai-usage'" x-cloak
+           id="issue-ai-usage-tab"
+           data-testid="ai-usage-tab-panel"
+           hx-get="/partials/issues/{{ issue.display_key }}/ai-usage/"
+           hx-trigger="sp-show-tab-ai-usage from:body once"
+           hx-swap="innerHTML">
+        <div class="sp-aiu-empty">{% trans %}Loading AI usage…{% endtrans %}</div>
       </div>
       {% endif %}
 

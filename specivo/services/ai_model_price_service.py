@@ -323,6 +323,17 @@ class AiModelPriceService:
         rows = (await session.execute(ordered.offset(offset).limit(limit))).scalars().all()
         return list(rows), int(total)
 
+    async def model_suggestions(self, session: AsyncSession, limit: int = 500) -> list[tuple[str, str]]:
+        """``(provider, model)`` of the active price rows, for model pickers; each pair once."""
+        rows = await session.execute(
+            select(AiModelPrice.provider, AiModelPrice.model)
+            .where(AiModelPrice.is_active.is_(True))
+            .distinct()
+            .order_by(AiModelPrice.provider, AiModelPrice.model)
+            .limit(limit)
+        )
+        return [(provider, model) for provider, model in rows.all()]
+
     async def providers(self, session: AsyncSession) -> list[str]:
         rows = await session.execute(select(AiModelPrice.provider).distinct().order_by(AiModelPrice.provider))
         return [r[0] for r in rows.all()]

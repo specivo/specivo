@@ -21,6 +21,7 @@ import { initConfirmDialog } from './modules/confirm-dialog';
 import { initModal } from './modules/modal';
 import { initVersionSort } from './modules/version-sort';
 import { initMermaid } from './modules/mermaid';
+import { initSelectAll } from './modules/select-all';
 
 document.addEventListener('DOMContentLoaded', function () {
     initCsrf();
@@ -37,4 +38,5 @@ document.addEventListener('DOMContentLoaded', function () {
     initModal();
     initVersionSort();
     initMermaid();
+    initSelectAll();
 });
