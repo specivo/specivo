@@ -1,9 +1,8 @@
-"""Agent cost tracking models: ModelCostConfig, AgentTokenLog, BillingRate."""
+"""Agent cost tracking models: ModelCostConfig, AgentTokenLog."""
 
-from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from specivo.models.base import Base, TimestampMixin
@@ -44,21 +43,3 @@ class AgentTokenLog(Base, TimestampMixin):
         return (
             f"<AgentTokenLog id={self.id} session_id={self.session_id} model_name={self.model_name!r} cost={self.cost}>"
         )
-
-
-class BillingRate(Base, TimestampMixin):
-    """Hourly billing rate per user/project."""
-
-    __tablename__ = "billing_rates"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
-    project_id: Mapped[int | None] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    hourly_rate: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
-    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
-
-    def __repr__(self) -> str:
-        return f"<BillingRate id={self.id} hourly_rate={self.hourly_rate} currency={self.currency!r}>"

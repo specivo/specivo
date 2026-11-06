@@ -22,7 +22,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.models.agent_cost import BillingRate
+from specivo.models.billing_rate import BillingRate
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
@@ -310,7 +310,11 @@ async def test_own_role_on_billing_report(db_session: AsyncSession, setup: dict,
     project, viewer, colleague = setup["project"], setup["viewer"], setup["colleague"]
     await _entry(db_session, project, viewer, activity, comments="bill-viewer", billable=True)
     await _entry(db_session, project, colleague, activity, comments="bill-colleague", billable=True)
-    db_session.add(BillingRate(project_id=project.id, hourly_rate=Decimal("10"), effective_from=date(2026, 1, 1)))
+    db_session.add(
+        BillingRate(
+            project_id=project.id, hourly_rate=Decimal("10"), currency_code="USD", effective_from=date(2026, 1, 1)
+        )
+    )
     role = await _role(db_session, "Rolevis Own Billing", time_entries_visibility="own")
     await _member(db_session, project, [role], user=viewer)
     await _member(db_session, project, [await _role(db_session, "Rolevis All Billing")], user=colleague)
@@ -318,9 +322,9 @@ async def test_own_role_on_billing_report(db_session: AsyncSession, setup: dict,
     service = BillingRateService()
     span = (date(2026, 1, 1), date(2026, 12, 31))
     report = await service.billable_report(db_session, project, viewer, *span)
-    assert {e["user_id"] for e in report["entries"]} == {viewer.id}
+    assert {e.user_id for e in report.entries} == {viewer.id}
     report = await service.billable_report(db_session, project, colleague, *span)
-    assert {e["user_id"] for e in report["entries"]} == {viewer.id, colleague.id}
+    assert {e.user_id for e in report.entries} == {viewer.id, colleague.id}
 
 
 # ---------------------------------------------------------------------------

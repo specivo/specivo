@@ -8,7 +8,6 @@ agent costs, and metadata endpoints.
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 
 import pytest
 import pytest_asyncio
@@ -22,7 +21,8 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.role import Role
 from specivo.models.user import User
-from specivo.schemas.agent_cost import BillingRateCreate
+from specivo.schemas.billing_rate import BillingRateCreate
+from specivo.schemas.money import MoneyIn
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, UserFactory
@@ -273,7 +273,9 @@ async def test_agent_costs_404_for_non_member(db_session: AsyncSession, private_
 
 @pytest.mark.asyncio
 async def test_billing_rates_404_for_non_member(db_session: AsyncSession, private_project: Project, outsider: User):
-    rate = BillingRateCreate(user_id=None, hourly_rate=Decimal("50"), currency="USD", effective_from=date(2026, 1, 1))
+    rate = BillingRateCreate(
+        user_id=None, hourly_rate=MoneyIn(amount="50", currency="USD"), effective_from=date(2026, 1, 1)
+    )
     with pytest.raises(NotFoundError):
         await list_billing_rates(private_project.key, request=None, current_user=outsider, db=db_session)
     with pytest.raises(NotFoundError):

@@ -16,13 +16,10 @@ from specivo.models.user import User
 from specivo.schemas.agent_cost import (
     AgentTokenLogCreate,
     AgentTokenLogOut,
-    BillingRateCreate,
-    BillingRateOut,
-    BillingRateUpdate,
-    BillingReportOut,
     CostSummaryItem,
     IssueCostOut,
 )
+from specivo.schemas.billing_rate import BillingRateCreate, BillingRateOut, BillingRateUpdate, BillingReportOut
 from specivo.services.agent_cost_service import AgentCostService
 from specivo.services.billing_rate_service import BillingRateService
 from specivo.services.issue_service import IssueService
@@ -132,7 +129,7 @@ async def create_billing_rate(
         db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
     )
     rate = await _billing_service.create_rate(db, project.id, data)
-    return BillingRateOut.model_validate(rate)
+    return BillingRateOut.from_model(rate)
 
 
 @router.get(
@@ -149,7 +146,7 @@ async def list_billing_rates(
         db, project_key, current_user, Permission.VIEW_TIME_ENTRIES, request, _VIEW_RATES_DENIED
     )
     rates = await _billing_service.list_rates(db, project.id)
-    return [BillingRateOut.model_validate(r) for r in rates]
+    return [BillingRateOut.from_model(r) for r in rates]
 
 
 @router.patch(
@@ -168,7 +165,7 @@ async def update_billing_rate(
         db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
     )
     rate = await _billing_service.update_rate(db, rate_id, project.id, data)
-    return BillingRateOut.model_validate(rate)
+    return BillingRateOut.from_model(rate)
 
 
 @router.delete(
@@ -212,4 +209,4 @@ async def get_billing_report(
     if not await check_permission(current_user, project.id, Permission.VIEW_TIME_ENTRIES, db, request=request):
         raise PermissionDeniedError("You do not have permission to view time entries in this project")
     report = await _billing_service.billable_report(db, project, current_user, date_from, date_to)
-    return BillingReportOut(**report)
+    return BillingReportOut.from_report(report)

@@ -40,12 +40,14 @@ from specivo.api.v1.agent_costs import (
     update_billing_rate,
 )
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+from specivo.core.money import Money
 from specivo.models.agent_cost import AgentTokenLog
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueStatus
 from specivo.models.user import User
 from specivo.models.wiki import WikiPage
-from specivo.schemas.agent_cost import BillingRateCreate, BillingRateUpdate
+from specivo.schemas.billing_rate import BillingRateCreate, BillingRateUpdate
+from specivo.schemas.money import MoneyIn
 from specivo.services.agent_cost_service import AgentCostService
 from specivo.services.anonymous_user_service import get_anonymous_user
 from specivo.services.api_key_scope import ProjectScope, bound_scope
@@ -92,7 +94,9 @@ async def _rate(db: AsyncSession, w: World) -> int:
     rate = await BillingRateService().create_rate(
         db,
         w.p.id,
-        BillingRateCreate(user_id=None, hourly_rate=Decimal("80"), currency="USD", effective_from=date(2026, 1, 1)),
+        BillingRateCreate(
+            user_id=None, hourly_rate=MoneyIn(amount="80", currency="USD"), effective_from=date(2026, 1, 1)
+        ),
     )
     await db.commit()
     return rate.id
@@ -100,19 +104,26 @@ async def _rate(db: AsyncSession, w: World) -> int:
 
 async def _assert_rates_refused(db: AsyncSession, w: World, user: User, error: type[Exception]) -> None:
     rate_id = await _rate(db, w)
-    new = BillingRateCreate(user_id=None, hourly_rate=Decimal("1"), currency="USD", effective_from=date(2026, 2, 1))
+    new = BillingRateCreate(
+        user_id=None, hourly_rate=MoneyIn(amount="1", currency="USD"), effective_from=date(2026, 2, 1)
+    )
     with pytest.raises(error):
         await create_billing_rate(w.p.key, new, request=None, current_user=user, db=db)
     with pytest.raises(error):
         await update_billing_rate(
-            w.p.key, rate_id, BillingRateUpdate(hourly_rate=Decimal("1")), request=None, current_user=user, db=db
+            w.p.key,
+            rate_id,
+            BillingRateUpdate(hourly_rate=MoneyIn(amount="1", currency="USD")),
+            request=None,
+            current_user=user,
+            db=db,
         )
     with pytest.raises(error):
         await delete_billing_rate(w.p.key, rate_id, request=None, current_user=user, db=db)
     with pytest.raises(error):
         await list_billing_rates(w.p.key, request=None, current_user=user, db=db)
     rates = await BillingRateService().list_rates(db, w.p.id)
-    assert [(r.id, r.hourly_rate) for r in rates] == [(rate_id, Decimal("80.00"))]
+    assert [(r.id, r.rate) for r in rates] == [(rate_id, Money("80", "USD"))]
 
 
 @pytest.mark.parametrize("reader", ["reporter", "outsider"])
@@ -138,12 +149,20 @@ async def test_billing_rates_are_not_found_for_a_key_limited_to_another_project(
 async def test_a_project_manager_manages_billing_rates(db_session: AsyncSession, world: World) -> None:
     w = world
     m = w.manager
-    new = BillingRateCreate(user_id=None, hourly_rate=Decimal("90"), currency="USD", effective_from=date(2026, 3, 1))
+    new = BillingRateCreate(
+        user_id=None, hourly_rate=MoneyIn(amount="90", currency="USD"), effective_from=date(2026, 3, 1)
+    )
     created = await create_billing_rate(w.p.key, new, request=None, current_user=m, db=db_session)
     updated = await update_billing_rate(
-        w.p.key, created.id, BillingRateUpdate(hourly_rate=Decimal("95")), request=None, current_user=m, db=db_session
+        w.p.key,
+        created.id,
+        BillingRateUpdate(hourly_rate=MoneyIn(amount="95", currency="USD")),
+        request=None,
+        current_user=m,
+        db=db_session,
     )
-    assert updated.hourly_rate == Decimal("95")
+    assert updated.hourly_rate.currency == "USD"
+    assert Decimal(updated.hourly_rate.amount) == Decimal("95")
     listed = await list_billing_rates(w.p.key, request=None, current_user=m, db=db_session)
     assert [r.id for r in listed] == [created.id]
     await delete_billing_rate(w.p.key, created.id, request=None, current_user=m, db=db_session)

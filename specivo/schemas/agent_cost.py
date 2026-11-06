@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -57,37 +57,6 @@ class AgentTokenLogOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# BillingRate
-# ---------------------------------------------------------------------------
-
-
-class BillingRateCreate(BaseModel):
-    user_id: int | None = None
-    hourly_rate: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
-    currency: str = Field(default="USD", max_length=3)
-    effective_from: date
-
-
-class BillingRateUpdate(BaseModel):
-    hourly_rate: Decimal | None = Field(None, gt=0, max_digits=10, decimal_places=2)
-    currency: str | None = Field(None, max_length=3)
-    effective_from: date | None = None
-
-
-class BillingRateOut(BaseModel):
-    model_config = {"from_attributes": True}
-
-    id: int
-    user_id: int | None
-    project_id: int | None
-    hourly_rate: Decimal
-    currency: str
-    effective_from: date
-    created_at: datetime
-    updated_at: datetime
-
-
-# ---------------------------------------------------------------------------
 # Cost aggregation responses
 # ---------------------------------------------------------------------------
 
@@ -104,19 +73,3 @@ class CostSummaryItem(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
     total_cost: Decimal
-
-
-class BillingReportEntry(BaseModel):
-    time_entry_id: int
-    user_id: int
-    hours: Decimal
-    rate: Decimal
-    amount: Decimal
-    spent_on: date
-
-
-class BillingReportOut(BaseModel):
-    total_hours: Decimal
-    total_amount: Decimal
-    currency: str
-    entries: list[BillingReportEntry]
