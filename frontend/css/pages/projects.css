@@ -108,6 +108,20 @@
 .sp-repo-check input { width: 16px; height: 16px; flex-shrink: 0; }
 .sp-repo-sub { margin-left: calc(16px + var(--sp-space-sm)); }
 .sp-repo-sub.form-group, .sp-repo-sub .form-group { margin-top: var(--sp-space-sm); }
+/* Environment types: rows of name (or prefix*) and type */
+.sp-repo-env-list { display: flex; flex-direction: column; gap: var(--sp-space-sm); margin: var(--sp-space-sm) 0; }
+.sp-repo-env-list:focus { outline: none; }
+.sp-repo-env-list:empty { margin: 0; }
+.sp-repo-env-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) auto; gap: var(--sp-space-sm); align-items: start; }
+.sp-repo-env-field { min-width: 0; }
+.sp-repo-env-field .form-input { width: 100%; }
+.sp-repo-env-remove { margin-top: 4px; }
+.sp-repo-env-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 480px) {
+  .sp-repo-env-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .sp-repo-env-row .sp-repo-env-field:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .sp-repo-env-remove { grid-column: 2; grid-row: 1; }
+}
 
 /* Branch names card */
 .sp-branch-settings { padding-bottom: var(--sp-space-lg); }
