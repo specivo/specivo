@@ -332,7 +332,7 @@ async def test_issue_and_version_sums_and_billing_hide_everything_without_view(
         report = await BillingRateService().billable_report(
             db_session, project, user, date(2026, 1, 1), date(2026, 12, 31)
         )
-        assert report["entries"] == []
+        assert (report.entries, report.unrated) == ((), ())
     viewer = world["users"]["viewer"]
     assert len(await _svc.list_for_issue(db_session, issue.id, project, viewer)) == 5
     assert await _svc.sum_hours_for_issues(db_session, [issue.id], project, viewer) == Decimal("5.00")

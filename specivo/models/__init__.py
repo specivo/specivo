@@ -1,11 +1,12 @@
 # Import all models here so that Alembic's autogenerate sees them
 # when it inspects Base.metadata.
-from specivo.models.agent_cost import AgentTokenLog, BillingRate, ModelCostConfig
+from specivo.models.agent_cost import AgentTokenLog, ModelCostConfig
 from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPolicy
 from specivo.models.agent_session import AgentSession
 from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
+from specivo.models.billing_rate import BillingRate
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
 from specivo.models.currency import Currency
 from specivo.models.entity_link import EntityLink
