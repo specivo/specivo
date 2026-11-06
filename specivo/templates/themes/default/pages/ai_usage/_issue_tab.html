@@ -1,0 +1,17 @@
+{# The issue's AI usage tab, loaded by htmx when the tab opens (ai_usage.issue_ai_usage_partial). #}
+{% from "pages/ai_usage/_macros.html" import totals_box, entry_table with context %}
+<div class="sp-aiu-issue" data-testid="aiu-issue-tab">
+  <div class="sp-aiu-issue-actions">
+    {% if can_log %}<a class="sp-btn sp-btn-sm sp-btn-primary" href="{{ log_url }}" data-testid="aiu-issue-log">{% trans %}Log AI usage{% endtrans %}</a>{% endif %}
+    <a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ list_url }}">{% trans %}Open in the project list{% endtrans %}</a>
+  </div>
+  {% if rows %}
+  {{ totals_box(totals) }}
+  {{ entry_table(rows, return_to, show_issue=False, compact=True) }}
+  {% if total > rows | length %}
+  <p class="sp-text-muted-xs">{% trans shown=rows | length, total=total %}Showing the newest {{ shown }} of {{ total }} entries.{% endtrans %}</p>
+  {% endif %}
+  {% else %}
+  <div class="sp-aiu-empty" data-testid="aiu-empty">{% trans %}No AI usage logged on this issue.{% endtrans %}</div>
+  {% endif %}
+</div>

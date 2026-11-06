@@ -239,6 +239,27 @@ class EntryReferences:
     users: dict[int, User] = field(default_factory=dict)
     project_keys: dict[int, str] = field(default_factory=dict)
     issue_keys: dict[int, str] = field(default_factory=dict)
+    #: Names of the API keys that reported entries for someone else ("logged by X via key Y").
+    key_names: dict[int, str] = field(default_factory=dict)
+
+
+@dataclass
+class UsageSummary:
+    """Totals of a filtered set of entries, excluded ones left out (see ``summarize_entries``).
+
+    ``marginal`` and ``api_equivalent`` hold one amount per day and currency,
+    ready for ``ExchangeRateService.summarize``.
+    """
+
+    entries: int = 0
+    excluded: int = 0
+    tokens: dict[str, int] = field(default_factory=dict)
+    marginal: list[tuple[Money, date]] = field(default_factory=list)
+    api_equivalent: list[tuple[Money, date]] = field(default_factory=list)
+
+    @property
+    def total_tokens(self) -> int:
+        return sum(self.tokens.values())
 
 
 class _Totals:
@@ -401,6 +422,120 @@ class AiUsageService:
         (None: both); *unassigned* ``True`` / ``False`` keeps only entries
         without / with a project.
         """
+        conditions = await self._list_conditions(
+            session,
+            viewer,
+            project=project,
+            user_id=user_id,
+            date_from=date_from,
+            date_to=date_to,
+            tool=tool,
+            model=model,
+            cost_type=cost_type,
+            issue_id=issue_id,
+            source=source,
+            excluded=excluded,
+            unassigned=unassigned,
+        )
+        total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
+        rows = (
+            (
+                await session.execute(
+                    select(AiUsageEntry)
+                    .where(*conditions)
+                    .order_by(AiUsageEntry.usage_date.desc(), AiUsageEntry.id.desc())
+                    .offset(offset)
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return list(rows), int(total)
+
+    async def summarize_entries(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None = None,
+        user_id: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        tool: str | None = None,
+        model: str | None = None,
+        cost_type: str | None = None,
+        issue_id: int | None = None,
+        source: str | None = None,
+        unassigned: bool | None = None,
+    ) -> UsageSummary:
+        """Totals of the entries ``list_entries`` would return with the same filters, excluded ones left out.
+
+        Two grouped queries: the token sums, and the costs per day and
+        currency (so the caller converts each day at its own rate, see
+        ``ExchangeRateService.summarize``). The number of excluded entries
+        matching the filters is counted apart.
+        """
+        conditions = await self._list_conditions(
+            session,
+            viewer,
+            project=project,
+            user_id=user_id,
+            date_from=date_from,
+            date_to=date_to,
+            tool=tool,
+            model=model,
+            cost_type=cost_type,
+            issue_id=issue_id,
+            source=source,
+            unassigned=unassigned,
+        )
+        counted = AiUsageEntry.excluded_at.is_(None)
+        row = (
+            await session.execute(
+                select(
+                    func.count().filter(counted),
+                    func.count().filter(AiUsageEntry.excluded_at.is_not(None)),
+                    *[func.coalesce(func.sum(getattr(AiUsageEntry, c)).filter(counted), 0) for c in TOKEN_CLASSES],
+                ).where(*conditions)
+            )
+        ).one()
+        summary = UsageSummary(
+            entries=int(row[0]),
+            excluded=int(row[1]),
+            tokens={c: int(v) for c, v in zip(TOKEN_CLASSES, row[2:], strict=True)},
+        )
+        for name in ("marginal", "api_equivalent"):
+            amount = getattr(AiUsageEntry, f"{name}_amount")
+            currency = getattr(AiUsageEntry, f"{name}_currency")
+            stmt = (
+                select(AiUsageEntry.usage_date, currency, func.sum(amount))
+                .where(*conditions, counted, amount.is_not(None), currency.is_not(None))
+                .group_by(AiUsageEntry.usage_date, currency)
+                .order_by(AiUsageEntry.usage_date, currency)
+            )
+            items = [(Money(total, code), day) for day, code, total in (await session.execute(stmt)).all()]
+            setattr(summary, name, items)
+        return summary
+
+    async def _list_conditions(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None = None,
+        user_id: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        tool: str | None = None,
+        model: str | None = None,
+        cost_type: str | None = None,
+        issue_id: int | None = None,
+        source: str | None = None,
+        excluded: bool | None = None,
+        unassigned: bool | None = None,
+    ) -> list[ColumnElement[bool]]:
+        """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
         if project is not None:
             conditions.append(AiUsageEntry.project_id == project.id)
@@ -433,21 +568,7 @@ class AiUsageService:
             conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
         if unassigned is not None:
             conditions.append(AiUsageEntry.project_id.is_(None) if unassigned else AiUsageEntry.project_id.is_not(None))
-        total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
-        rows = (
-            (
-                await session.execute(
-                    select(AiUsageEntry)
-                    .where(*conditions)
-                    .order_by(AiUsageEntry.usage_date.desc(), AiUsageEntry.id.desc())
-                    .offset(offset)
-                    .limit(limit)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        return list(rows), int(total)
+        return conditions
 
     # -- authorization ------------------------------------------------------------
 
@@ -561,6 +682,20 @@ class AiUsageService:
             stmt = stmt.where(Project.id.in_(select(Member.project_id).where(member_principal_clause(actor.id))))
         projects = (await session.execute(stmt)).scalars().all()
         return bool(await projects_granting(session, actor, projects, Permission.LOG_AI_USAGE_FOR_OTHERS))
+
+    async def loggable_projects(self, session: AsyncSession, actor: User) -> list[Project]:
+        """The projects *actor* may log their own AI usage in (``log_ai_usage``), by name.
+
+        For pickers: the manual entry form and the bulk reassignment.
+        """
+        from specivo.services.permission_service import Permission, projects_granting
+        from specivo.services.project_service import ProjectService
+
+        if actor.is_anonymous:
+            return []
+        projects, _total = await ProjectService().list_projects(session, actor, limit=1000)
+        granted = await projects_granting(session, actor, projects, Permission.LOG_AI_USAGE)
+        return [p for p in projects if p.id in granted]
 
     async def resolve_target(
         self, session: AsyncSession, actor: User, login: str | None, project: Project | None
@@ -1232,16 +1367,26 @@ class AiUsageService:
         return project.id
 
     async def references(self, session: AsyncSession, viewer: User, entries: list[AiUsageEntry]) -> EntryReferences:
-        """The users, project keys and issue keys *entries* name, in three queries.
+        """The users, project keys and issue keys *entries* name, in up to four queries.
 
-        Issues *viewer* cannot see are left out.
+        Issues *viewer* cannot see are left out. Key names are loaded only for
+        entries reported for someone else.
         """
+        from specivo.models.auth import ApiKey
         from specivo.services.issue_service import IssueService
 
         user_ids = {e.user_id for e in entries} | {e.reporter_user_id for e in entries}
         project_ids = {e.project_id for e in entries if e.project_id is not None}
         issue_ids = {e.issue_id for e in entries if e.issue_id is not None}
+        key_ids = {
+            e.reporter_api_key_id
+            for e in entries
+            if e.reporter_api_key_id is not None and e.reporter_user_id != e.user_id
+        }
         refs = EntryReferences()
+        if key_ids:
+            rows_k = await session.execute(select(ApiKey.id, ApiKey.name).where(ApiKey.id.in_(key_ids)))
+            refs.key_names = {kid: name for kid, name in rows_k.all()}
         if user_ids:
             rows = (await session.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
             refs.users = {u.id: u for u in rows}

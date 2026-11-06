@@ -66,6 +66,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       {% trans %}Time Tracking{% endtrans %}
     </a>
+    <a class="sidebar-item{% if active_page == 'ai_usage' %} active{% endif %}" href="/projects/{{ active_project.key }}/ai-usage/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+      {% trans %}AI usage{% endtrans %}
+    </a>
     <a class="sidebar-item{% if active_page == 'sprints' %} active{% endif %}" href="/projects/{{ active_project.key }}/sprints/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       {% trans %}Sprints{% endtrans %}

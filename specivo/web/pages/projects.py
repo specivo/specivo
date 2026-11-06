@@ -191,6 +191,10 @@ async def project_detail(
         members = await _svc.list_members(db, project, limit=10)
         modules = await _svc.get_modules(db, project)
     can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
+    show_ai_usage = not anonymous and (
+        await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
+        or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
+    )
 
     # Fetch subprojects, narrowed to the ones this visitor could open anyway,
     # as the project list does: a project the visitor reaches may hold private
@@ -220,6 +224,7 @@ async def project_detail(
             "people_count": people_count,
             "modules": modules,
             "can_view_time_entries": can_view_time_entries,
+            "show_ai_usage": show_ai_usage,
             "subprojects": subprojects,
             "status_label": _STATUS_LABELS.get(project.status, "unknown"),
         },

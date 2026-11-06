@@ -306,3 +306,47 @@ class TestDesktopSpecificLayout:
             if layout.count() > 0:
                 cols = layout.evaluate("el => window.getComputedStyle(el).gridTemplateColumns")
                 assert " " in cols, f"Issue detail should be two-column on desktop, got: {cols}"
+
+
+class TestResponsiveAiUsage:
+    """The AI usage pages: the project tab, My AI usage and the entry form, with a long model name."""
+
+    @pytest.fixture(autouse=True)
+    def _entry(self, api_client, responsive_project: str) -> None:
+        resp = api_client.get(f"/api/v1/projects/{responsive_project}/ai-usage/")
+        if resp.status_code == 200 and resp.json()["total_count"]:
+            return
+        resp = api_client.post(
+            f"/api/v1/projects/{responsive_project}/ai-usage/",
+            json={
+                "tool": "claude-code",
+                "model": "a-rather-long-model-name-from-a-local-runtime-2026-03-10-instruct-q4",
+                "usage_date": "2026-03-10",
+                "tokens": {"input": 1_234_567, "output": 89_012, "cache_read": 4_500_000},
+                "cost_type": "api",
+                "cost": {"amount": "12.50", "currency": "EUR"},
+                "comments": "Responsive check: a long comment that wraps inside its cell, not widening the page",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+    @pytest.mark.parametrize("path", ["/projects/{key}/ai-usage/", "/my/ai-usage/", "/projects/{key}/ai-usage/new/"])
+    def test_no_horizontal_overflow(self, responsive_page: Page, responsive_project: str, path: str):
+        responsive_page.goto(path.format(key=responsive_project))
+        responsive_page.wait_for_load_state("networkidle")
+        assert _no_horizontal_overflow(responsive_page), f"{path} has horizontal overflow"
+
+    @pytest.mark.parametrize("path", ["/projects/{key}/ai-usage/", "/my/ai-usage/"])
+    def test_header_actions_not_clipped(
+        self, responsive_page: Page, responsive_project: str, viewport_size: dict, path: str
+    ):
+        responsive_page.goto(path.format(key=responsive_project))
+        responsive_page.wait_for_load_state("networkidle")
+        expect(responsive_page.get_by_test_id("aiu-totals")).to_be_visible()
+        _buttons_within_viewport(responsive_page, ".page-header-actions .sp-btn", viewport_size["width"])
+
+    def test_form_fields_fit(self, responsive_page: Page, responsive_project: str, viewport_size: dict):
+        responsive_page.goto(f"/projects/{responsive_project}/ai-usage/new/")
+        responsive_page.wait_for_load_state("networkidle")
+        _buttons_within_viewport(responsive_page, ".sp-aiu-form .form-input", viewport_size["width"])
+        _buttons_within_viewport(responsive_page, ".sp-aiu-form-actions .sp-btn", viewport_size["width"])

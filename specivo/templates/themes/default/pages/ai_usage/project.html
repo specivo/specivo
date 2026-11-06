@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, pagination %}
+{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label with context %}
+
+{% block title %}{% trans %}AI usage{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": _("AI usage")}
+]) }}
+
+<div class="page-header">
+  <h1>{% trans %}AI usage{% endtrans %}</h1>
+  {% if can_log %}
+  <div class="page-header-actions">
+    <a href="/projects/{{ project.key }}/ai-usage/new/" class="sp-btn sp-btn-primary" data-testid="aiu-log-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-16"><path d="M12 5v14M5 12h14"/></svg>
+      {% trans %}Log AI usage{% endtrans %}
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+{% if notice %}<div class="flash flash-success" role="status" data-testid="aiu-notice">{{ notice_text(notice) }}</div>{% endif %}
+{% if error %}<div class="flash flash-error" role="alert" data-testid="aiu-error">{{ list_error_text(error) }}</div>{% endif %}
+
+<form method="get" action="/projects/{{ project.key }}/ai-usage/" class="sp-aiu-filters" data-testid="aiu-filters">
+  {% if members %}
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}User{% endtrans %}</span>
+    <select name="user_id" class="filter-select">
+      <option value="">{% trans %}Everyone{% endtrans %}</option>
+      {% for m in members %}<option value="{{ m.id }}" {{ 'selected' if filters.user_id == m.id | string else '' }}>{{ m.name }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Tool{% endtrans %}</span>
+    <select name="tool" class="filter-select">
+      <option value="">{% trans %}All tools{% endtrans %}</option>
+      {% for t in tools %}<option value="{{ t.slug }}" {{ 'selected' if filters.tool == t.slug else '' }}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Model{% endtrans %}</span>
+    <input type="text" name="model" value="{{ filters.model }}" class="filter-input" maxlength="200">
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Cost type{% endtrans %}</span>
+    <select name="cost_type" class="filter-select">
+      <option value="">{% trans %}All{% endtrans %}</option>
+      {% for c in cost_types %}<option value="{{ c }}" {{ 'selected' if filters.cost_type == c else '' }}>{{ cost_type_label(c) }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Issue{% endtrans %}</span>
+    <input type="text" name="issue" value="{{ filters.issue }}" class="filter-input" maxlength="50" placeholder="{{ _('e.g. %(key)s-1') % {'key': project.key} }}">
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}From{% endtrans %}</span>
+    <input type="date" name="from_date" value="{{ filters.from_date }}" class="filter-input">
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}To{% endtrans %}</span>
+    <input type="date" name="to_date" value="{{ filters.to_date }}" class="filter-input">
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Show{% endtrans %}</span>
+    <select name="status" class="filter-select">
+      <option value="">{% trans %}All entries{% endtrans %}</option>
+      <option value="counted" {{ 'selected' if filters.status == 'counted' else '' }}>{% trans %}Counted only{% endtrans %}</option>
+      <option value="excluded" {{ 'selected' if filters.status == 'excluded' else '' }}>{% trans %}Excluded only{% endtrans %}</option>
+    </select>
+  </label>
+  <div class="sp-aiu-filter-actions">
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
+    {% if page_query %}<a class="sp-btn sp-btn-ghost" href="/projects/{{ project.key }}/ai-usage/">{% trans %}Clear{% endtrans %}</a>{% endif %}
+  </div>
+</form>
+{% if issue_unknown %}<div class="flash flash-info" role="status">{% trans %}No issue with that key in this project, or you cannot see it.{% endtrans %}</div>{% endif %}
+
+{{ totals_box(totals) }}
+
+{% if rows %}
+<div class="card">
+  {{ entry_table(rows, return_to) }}
+</div>
+{{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/ai-usage/", page_query) }}
+{% else %}
+<div class="card sp-aiu-empty" data-testid="aiu-empty">
+  {% if page_query %}{% trans %}No AI usage matches these filters.{% endtrans %}
+  {% elif can_log %}{% trans %}No AI usage yet. Log it by hand, or let your AI tools report it.{% endtrans %}
+  {% else %}{% trans %}No AI usage yet.{% endtrans %}{% endif %}
+</div>
+{% endif %}
+{% endblock %}

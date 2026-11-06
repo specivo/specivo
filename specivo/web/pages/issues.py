@@ -525,6 +525,12 @@ async def issue_detail(
     # log-time form only with log_time, as the time entries API requires.
     can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
     can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
+    # The AI usage tab is loaded when opened (/partials/issues/{key}/ai-usage/);
+    # it is offered to those who may view or log AI usage in the project.
+    show_ai_usage_tab = not anonymous and (
+        await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
+        or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
+    )
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -721,6 +727,7 @@ async def issue_detail(
             "can_manage_relations": can_manage_relations,
             "can_view_time_entries": can_view_time_entries,
             "can_log_time": can_log_time,
+            "show_ai_usage_tab": show_ai_usage_tab,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             "metadata_value_names": value_names,
