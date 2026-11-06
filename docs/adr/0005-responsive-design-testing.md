@@ -1,7 +1,8 @@
 # ADR-0005: Responsive Design Testing Strategy
 
 **Date:** 2026-04-11
-**Revised:** 2026-09-08 — refreshed the test counts as pages were added.
+**Revised:** 2026-09-08 — refreshed the test counts as pages were added. 2026-11-06 — removed the
+visual regression baselines (see below); structural assertions are the only automated layer.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -32,11 +33,11 @@ Defined in `tests/e2e/conftest.py` as `VIEWPORTS` dict. The `responsive_page` fi
 
 ### Seed data isolation
 
-Responsive and visual tests use a dedicated project (`RTEST`) with deterministic seed data: 8 issues, a wiki home page. The `responsive_project` session-scoped fixture creates this idempotently. This avoids dependency on dev server data or other test side effects.
+Responsive tests use a dedicated project (`RTEST`) with deterministic seed data: 8 issues, a wiki home page. The `responsive_project` session-scoped fixture creates this idempotently. This avoids dependency on dev server data or other test side effects.
 
-### Two test layers
+### Test layer
 
-**1. Structural assertions** (`test_mobile_responsive.py`)
+**Structural assertions** (`test_mobile_responsive.py`)
 
 CSS property checks that run at all 4 viewports via `@pytest.mark.parametrize`:
 - No horizontal overflow on any page
@@ -46,42 +47,31 @@ CSS property checks that run at all 4 viewports via `@pytest.mark.parametrize`:
 
 Plus viewport-specific classes for mobile-only checks (sidebar hidden, hamburger visible) and desktop-only checks (sidebar visible, two-column issue detail).
 
-**2. Visual regression baselines** (`test_visual_regression.py`)
+### Visual regression baselines (removed)
 
-Screenshot comparison for 7 page types × 4 viewports = 28 baselines:
-- `page.screenshot()` captures viewport-only (not full page — avoids size variance from dynamic content)
-- Baseline PNGs stored in `tests/e2e/snapshots/` (committed to repo)
-- Comparison uses Pillow pixel-level diff with per-channel tolerance of 5 and max 2% differing pixels
-- `UPDATE_SNAPSHOTS=1` environment variable regenerates baselines
-
-### Why not `expect(page).to_have_screenshot()`
-
-Playwright Python's `PageAssertions` doesn't include `to_have_screenshot()` in our version (1.58.0 / pytest-playwright 0.7.2). Manual comparison with Pillow gives us control over tolerance without adding dependencies.
-
-### Why viewport-only screenshots (not full page)
-
-Full-page screenshots change height when other tests create data that appears on shared pages (dashboard). Viewport-only captures are stable regardless of content volume below the fold.
+The first version also compared screenshots of 7 page types at 4 viewports (28 baseline PNGs)
+with a Pillow pixel diff. It was removed on 2026-11-06. The baselines went stale with every
+intended UI change and differed between macOS and Linux CI, so most of them failed on an
+unchanged branch and the suite was already skipped in CI. Structural assertions catch the layout
+regressions that matter (overflow, clipping, hidden or visible elements per breakpoint) without
+pixel baselines to maintain. Screenshots for the user guide are taken separately by the private
+docs tooling.
 
 ## Consequences
 
 **Positive:**
 - Layout regressions caught automatically at 4 breakpoints (was: only manual testing)
 - Breakpoint matrix wiki page serves as design spec and test oracle
-- Visual regression detects subtle CSS changes that structural assertions miss
 - Same pytest/Playwright ecosystem — no new tools
-- `make test-e2e-update-snapshots` for easy baseline updates after intentional changes
 
 **Negative:**
-- 81 structural + 28 visual = 109 additional test runs (~50s total)
-- Snapshot baselines must be regenerated after any visual change
-- 2% pixel tolerance may miss very subtle regressions; byte-exact comparison would catch more but produces false positives from anti-aliasing
-- Screenshots are OS/font-dependent — baselines generated on macOS won't match Linux CI (mitigate by regenerating in CI environment)
+- The structural tests add test runs at 4 viewports per page
+- Subtle visual changes (colours, spacing) are not caught automatically; they are checked by eye
 
 ## Makefile targets
 
 ```makefile
-make test-e2e                    # Runs all E2E including responsive + visual
-make test-e2e-update-snapshots   # Regenerate visual baselines
+make test-e2e                    # Runs all E2E including the responsive tests
 ```
 
 ## File locations
@@ -90,6 +80,4 @@ make test-e2e-update-snapshots   # Regenerate visual baselines
 |-----------|------|
 | Viewport definitions + fixtures | `tests/e2e/conftest.py` |
 | Structural responsive tests | `tests/e2e/test_mobile_responsive.py` |
-| Visual regression tests | `tests/e2e/test_visual_regression.py` |
-| Screenshot baselines | `tests/e2e/snapshots/*.png` |
 | Breakpoint matrix (wiki) | SPECIVO project → "Responsive Design Spec" |
