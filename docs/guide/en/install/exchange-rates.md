@@ -121,8 +121,26 @@ fails with "Could not reach the feed" and nothing else is affected.
 - a self-hosted [Frankfurter](https://frankfurter.dev) instance (MIT licence), which serves the
   same ECB data as JSON: `/v1/latest` or `/v2/rates?providers=ecb` on your server.
 
-Specivo reads the ECB XML and the Frankfurter v1 and v2 JSON formats. The address must be `http://`
-or `https://`, and link-local or cloud metadata addresses are refused.
+Specivo reads the ECB XML and the Frankfurter v1 and v2 JSON formats, in UTF-8. The address must be
+`http://` or `https://`.
+
+**Which addresses the fetch may reach.** Every request, and every redirect (at most three), is
+checked where it really goes: the host name is resolved and each address it resolves to is checked,
+and the connection is made to the checked address.
+
+- Link-local and cloud metadata addresses (such as `169.254.169.254`) are always refused.
+- Loopback and private addresses (`127.0.0.1`, `10.x`, `172.16-31.x`, `192.168.x`, `fd00::/8`) are
+  refused too, unless the operator sets `EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS=true` in `.env`.
+  Set it when your Frankfurter instance runs on your internal network. It is an environment setting
+  on purpose: the admin page cannot open internal addresses.
+- Numeric host spellings other than an ordinary address (`0x7f.1`, `2130706433`) are refused.
+- Behind a proxy, the target host is still checked when the server can resolve it. When only the
+  proxy can resolve names, the request is handed to the proxy, which then decides what is reachable.
+- The whole fetch, download included, must finish within 20 seconds, and the file may be at most
+  8 MB.
+
+Error messages on the admin page name what went wrong ("the feed returned an error", "invalid rate
+in item 3") but never repeat what the server sent.
 
 ### Terms of use of the ECB rates
 

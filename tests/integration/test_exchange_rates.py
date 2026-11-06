@@ -872,3 +872,17 @@ async def test_admin_page_renders_in_thai(client: AsyncClient, db_session: Async
     assert resp.status_code == 200
     assert "อัตราแลกเปลี่ยน" in resp.text
     assert "฿375.33" in resp.text
+
+
+async def test_stored_fetch_error_holds_no_response_content(db_session: AsyncSession, admin: User) -> None:
+    marker = "INTERNAL-SECRET-7f3a"
+
+    def leaky(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=f'{{"status": 500, "message": "{marker}"}}'.encode())
+
+    result = await _service.fetch_and_store(db_session, force=True, transport=httpx.MockTransport(leaky))
+
+    last = (await _service.get_settings(db_session)).last_fetch
+    assert result.ok is False
+    assert last is not None and last["error"] == "The feed returned an error"
+    assert marker not in (result.error or "")

@@ -277,6 +277,11 @@ class Settings(BaseSettings):
     sso_allow_insecure_http: bool = False
     # Timeout for each request to an identity provider.
     sso_http_timeout_seconds: float = Field(default=5.0, gt=0)
+    # Let the optional exchange rate fetch reach loopback and private networks
+    # (a self-hosted Frankfurter on the internal network). Off: only public
+    # addresses. Link-local and cloud metadata addresses are refused always.
+    # An environment setting on purpose, so the admin UI cannot open it.
+    exchange_rate_feed_allow_private_networks: bool = False
     # Leeway for exp / iat / nbf when validating ID and logout tokens.
     # Values above the cap are lowered to it.
     sso_clock_skew_seconds: int = Field(default=60, ge=0)

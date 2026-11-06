@@ -6,6 +6,8 @@ API on 2026-11-05. No test here touches the network.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -99,16 +101,19 @@ def test_refuses_xml_with_a_doctype_or_entities(body: bytes) -> None:
 @pytest.mark.parametrize(
     ("body", "message"),
     [
-        (b"", "neither"),
-        (b"Service unavailable", "neither"),
+        (b"", "not a valid"),
+        (b"Service unavailable", "not a valid"),
         (b"<html><body>Proxy error</body></html>", "no euro reference rates"),
-        (b"<Cube><Cube time='2026-11-05'><Cube currency='THB' rate='-1'/></Cube></Cube>", "positive"),
-        (b"<Cube><Cube time='2026-11-05'><Cube currency='THB' rate='abc'/></Cube></Cube>", "not a number"),
-        (b"<Cube><Cube time='yesterday'><Cube currency='THB' rate='1'/></Cube></Cube>", "not a date"),
-        (b"<Cube><Cube time='2026-11-05'><Cube currency='baht' rate='1'/></Cube></Cube>", "currency code"),
-        (b'{"status": 422, "message": "invalid currency"}', "error"),
-        (b"[1, 2]", "not an object"),
-        (b"{not json", "Not valid JSON"),
+        (b"<Cube><Cube time='2026-11-05'><Cube currency='THB' rate='-1'/></Cube></Cube>", "Invalid rate in item 1"),
+        (b"<Cube><Cube time='2026-11-05'><Cube currency='THB' rate='abc'/></Cube></Cube>", "Invalid rate in item 1"),
+        (b"<Cube><Cube time='yesterday'><Cube currency='THB' rate='1'/></Cube></Cube>", "Invalid date"),
+        (
+            b"<Cube><Cube time='2026-11-05'><Cube currency='baht' rate='1'/></Cube></Cube>",
+            "Invalid currency code in item 1",
+        ),
+        (b'{"status": 422, "message": "invalid currency"}', "returned an error"),
+        (b"[1, 2]", "Unexpected value in item 1"),
+        (b"{not json", "not a valid"),
     ],
 )
 def test_bad_bodies_raise_feed_error(body: bytes, message: str) -> None:
@@ -145,7 +150,9 @@ async def test_fetch_reads_the_body_through_the_transport() -> None:
         return httpx.Response(200, content=ECB_XML, headers={"Content-Type": "text/xml"})
 
     rates = await fetch_feed(
-        "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml", transport=httpx.MockTransport(handler)
+        "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
+        transport=httpx.MockTransport(handler),
+        allow_private=False,
     )
 
     assert len(rates) == 29
@@ -164,7 +171,9 @@ async def test_fetch_reads_the_body_through_the_transport() -> None:
 )
 async def test_fetch_failures_become_feed_errors(handler, message: str) -> None:
     with pytest.raises(FeedError, match=message):
-        await fetch_feed("https://rates.example.com/daily.xml", transport=httpx.MockTransport(handler))
+        await fetch_feed(
+            "https://rates.example.com/daily.xml", transport=httpx.MockTransport(handler), allow_private=False
+        )
 
 
 async def test_fetch_refuses_a_redirect_to_a_metadata_address() -> None:
@@ -175,22 +184,209 @@ async def test_fetch_refuses_a_redirect_to_a_metadata_address() -> None:
         return httpx.Response(302, headers={"Location": "http://169.254.169.254/latest/meta-data"})
 
     with pytest.raises(FeedError, match="cannot be used"):
-        await fetch_feed("https://rates.example.com/daily.xml", transport=httpx.MockTransport(handler))
+        await fetch_feed(
+            "https://rates.example.com/daily.xml", transport=httpx.MockTransport(handler), allow_private=False
+        )
     assert calls == ["https://rates.example.com/daily.xml"]
 
 
-async def test_fetch_honours_the_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The client reads HTTPS_PROXY / NO_PROXY from the environment (``trust_env``), like the model download."""
-    created: list[dict] = []
-    real_client = httpx.AsyncClient
+# ---------------------------------------------------------------------------
+# Destinations: host names, redirects, numeric spellings, proxies
+# ---------------------------------------------------------------------------
 
-    def spy(*args, **kwargs):  # type: ignore[no-untyped-def]
-        created.append(kwargs)
-        kwargs["transport"] = httpx.MockTransport(lambda r: httpx.Response(200, content=ECB_XML))
-        return real_client(*args, **kwargs)
 
-    monkeypatch.setattr("specivo.services.exchange_rate_feed.httpx.AsyncClient", spy)
+def _resolver(table: dict[str, list[str]]):  # type: ignore[no-untyped-def]
+    async def resolve(host: str, port: int) -> list[str]:
+        if host not in table:
+            raise OSError("no such host")
+        return table[host]
 
-    await fetch_feed("https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml")
+    return resolve
 
-    assert created[0]["trust_env"] is True
+
+def _never_called(request: httpx.Request) -> httpx.Response:
+    raise AssertionError(f"request sent to {request.url}")
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "10.1.2.3", "192.168.1.10", "169.254.169.254", "::1", "fd00::1"])
+async def test_host_names_resolving_to_internal_addresses_are_refused(address: str) -> None:
+    with pytest.raises(FeedError, match="cannot be used"):
+        await fetch_feed(
+            "https://rates.example.com/daily.xml",
+            transport=httpx.MockTransport(_never_called),
+            resolver=_resolver({"rates.example.com": ["93.184.215.14", address]}),
+            allow_private=False,
+        )
+
+
+async def test_private_networks_can_be_allowed_but_metadata_never() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=ECB_XML)
+
+    rates = await fetch_feed(
+        "http://frankfurter.internal/v1/latest",
+        transport=httpx.MockTransport(handler),
+        resolver=_resolver({"frankfurter.internal": ["10.0.0.5"]}),
+        allow_private=True,
+    )
+    assert len(rates) == 29
+
+    with pytest.raises(FeedError, match="cannot be used"):
+        await fetch_feed(
+            "http://metadata.internal/latest",
+            transport=httpx.MockTransport(_never_called),
+            resolver=_resolver({"metadata.internal": ["169.254.169.254"]}),
+            allow_private=True,
+        )
+
+
+async def test_public_host_is_pinned_to_the_checked_address() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, content=ECB_XML)
+
+    await fetch_feed(
+        "https://rates.example.com/daily.xml",
+        transport=httpx.MockTransport(handler),
+        resolver=_resolver({"rates.example.com": ["93.184.215.14"]}),
+        allow_private=False,
+    )
+
+    assert seen[0].url.host == "93.184.215.14"
+    assert seen[0].headers["host"] == "rates.example.com"
+
+
+async def test_redirect_to_an_internal_host_name_is_refused() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.headers["host"])
+        return httpx.Response(302, headers={"Location": "http://intranet.example.com/admin"})
+
+    with pytest.raises(FeedError, match="cannot be used"):
+        await fetch_feed(
+            "https://rates.example.com/daily.xml",
+            transport=httpx.MockTransport(handler),
+            resolver=_resolver({"rates.example.com": ["93.184.215.14"], "intranet.example.com": ["10.0.0.7"]}),
+            allow_private=False,
+        )
+    assert calls == ["rates.example.com"]
+
+
+@pytest.mark.parametrize(
+    "url", ["http://0x7f.1/rates.xml", "http://2130706433/rates.xml", "http://017.0.0.1/rates.xml", "http://127.1/"]
+)
+async def test_non_canonical_numeric_hosts_are_refused(url: str) -> None:
+    with pytest.raises(ValueError):
+        validate_feed_url(url)
+    with pytest.raises(FeedError, match="cannot be used"):
+        await fetch_feed(url, transport=httpx.MockTransport(_never_called), allow_private=True)
+
+
+def test_ordinary_host_names_with_hex_letters_are_not_numeric() -> None:
+    assert validate_feed_url("https://cafe.ca/rates.xml") == "https://cafe.ca/rates.xml"
+
+
+async def test_proxy_comes_from_the_environment_and_the_guard_still_applies(monkeypatch: pytest.MonkeyPatch) -> None:
+    from specivo.services import exchange_rate_feed as feed
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.internal:3128")
+    monkeypatch.setenv("NO_PROXY", "frankfurter.internal")
+    monkeypatch.delenv("https_proxy", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+
+    assert feed._environment_proxy("https://www.ecb.europa.eu/x.xml") == "http://proxy.internal:3128"
+    assert feed._environment_proxy("https://frankfurter.internal/v1/latest") is None
+
+    # Through the proxy, a target that resolves to an internal address is still refused,
+    # before anything is sent (the proxy address is never contacted).
+    with pytest.raises(FeedError, match="cannot be used"):
+        await fetch_feed(
+            "https://rates.example.com/daily.xml",
+            resolver=_resolver({"rates.example.com": ["10.9.9.9"]}),
+            allow_private=False,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Encodings and XML declarations
+# ---------------------------------------------------------------------------
+
+
+_XXE = '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><Cube time="2026-11-05"/>'
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _XXE.encode("utf-16"),  # with a BOM
+        _XXE.encode("utf-16-le"),  # without a BOM: NUL bytes
+        _XXE.encode("utf-16-be"),
+        _XXE.encode("utf-32"),
+        b'<?xml version="1.0" encoding="UTF-16"?><Cube/>',
+        b'<?xml version="1.0" encoding="ISO-8859-1"?><Cube/>',
+        b"<Cube time='2026-11-05'>\xff\xfe</Cube>",
+    ],
+)
+def test_bodies_in_other_encodings_are_refused(body: bytes) -> None:
+    with pytest.raises(FeedError, match="UTF-8|DOCTYPE"):
+        parse_feed(body)
+
+
+def test_utf8_bom_and_declaration_are_fine() -> None:
+    assert len(parse_feed(b"\xef\xbb\xbf" + ECB_XML)) == 29
+
+
+# ---------------------------------------------------------------------------
+# Error messages never carry response content
+# ---------------------------------------------------------------------------
+
+MARKER = "INTERNAL-SECRET-7f3a"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f'{{"status": 500, "message": "{MARKER}"}}',
+        f'{{"amount": 1, "base": "EUR", "date": "2026-11-05", "rates": {{"THB": "{MARKER}"}}}}',
+        f'{{"amount": 1, "base": "EUR", "date": "2026-11-05", "rates": {{"{MARKER}": 1}}}}',
+        f'{{"amount": 1, "base": "EUR", "date": "{MARKER}", "rates": {{"THB": 1}}}}',
+        f'[{{"date": "2026-11-05", "base": "EUR", "quote": "THB", "rate": "{MARKER}"}}]',
+        f"<Cube><Cube time='2026-11-05'><Cube currency='{MARKER}' rate='1'/></Cube></Cube>",
+        f"<Cube><Cube time='2026-11-05'><Cube currency='THB' rate='{MARKER}'/></Cube></Cube>",
+        f"<Cube><{MARKER}></Cube>",
+        f"{{{MARKER}",
+        MARKER,
+    ],
+)
+def test_error_messages_hold_no_response_content(body: str) -> None:
+    with pytest.raises(FeedError) as caught:
+        parse_feed(body.encode())
+    assert MARKER not in str(caught.value)
+    assert MARKER.lower() not in str(caught.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# Total deadline
+# ---------------------------------------------------------------------------
+
+
+class _DripStream(httpx.AsyncByteStream):
+    async def __aiter__(self):  # type: ignore[no-untyped-def]
+        while True:
+            yield b"<"
+            await asyncio.sleep(0.05)
+
+
+async def test_a_slow_drip_is_cut_off_at_the_total_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    from specivo.services import exchange_rate_feed as feed
+
+    monkeypatch.setattr(feed, "FEED_TIMEOUT_SECONDS", 0.3)
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, stream=_DripStream()))
+
+    started = time.monotonic()
+    with pytest.raises(FeedError, match="in time"):
+        await fetch_feed("https://rates.example.com/daily.xml", transport=transport, allow_private=False)
+    assert time.monotonic() - started < 2

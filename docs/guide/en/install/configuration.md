@@ -291,6 +291,15 @@ them keep their passwords. A bundle can carry the old password hashes (see
 | `PASSWORD_HASHERS` | Extra hasher classes by dotted path, e.g. `["acme_hashers.AcmeTrackerMd5"]`. |
 | `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers. |
 
+## Exchange rate feed
+
+| Variable | Meaning |
+|---|---|
+| `EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS` | Let the optional daily exchange rate fetch reach loopback and private addresses, for a self-hosted Frankfurter on your internal network. Default `false`: only public addresses. Link-local and cloud metadata addresses are refused either way. See [Exchange rates](exchange-rates.md#fetch-the-ecb-rates-automatically-optional). |
+
+The fetch itself is switched on by an administrator on **Admin → Exchange rates**; it honours
+`HTTPS_PROXY` and `NO_PROXY`.
+
 ## Semantic search model
 
 Hybrid and semantic search match by meaning, which needs an embedding model. Specivo runs one on
