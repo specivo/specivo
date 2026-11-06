@@ -23,7 +23,7 @@ from pydantic import Field
 
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
-from specivo.mcp.ai_usage_tools import _ai_usage, _log_ai_usage
+from specivo.mcp.ai_usage_tools import _ai_usage, _ai_usage_report, _log_ai_usage
 from specivo.mcp.auth import authenticate_mcp_tool
 from specivo.mcp.client_context import (
     ClientInfoMiddleware,
@@ -1365,7 +1365,59 @@ async def specivo_ai_usage(
         )
 
 
-# specivo_ai_usage_report: added with the AI usage report service.
+@mcp.tool(
+    description=(
+        "AI spend report: AI usage grouped and totalled in one reporting currency. With project_key, the "
+        "project's entries you may read; without it, the whole instance (administrators only). group_by is a "
+        "comma list of user, project, issue, tool, provider, model, cost_type, branch (default 'user'; '' for "
+        "one total); period adds day, week or month buckets. Dates are UTC days (date_from, date_to) or a "
+        "preset: 7d, 30d (default), this_month, last_month. Each row: entries, tokens, spend (marginal spend "
+        "plus seat cost: subscription fees spread over the entries that used them, weighted by API-equivalent "
+        "value), API-equivalent value (the same tokens at pay-per-use prices, not a bill) and leverage. "
+        "Amounts without an exchange rate are listed apart, never dropped. Seat cost shows only to "
+        "administrators and to whoever reads every entry of the project. Rows are sorted by the grouping key; "
+        "sort='spend' orders by spend."
+    )
+)
+async def specivo_ai_usage_report(
+    project_key: Annotated[str | None, Field(description="Uppercase project key; omit for the instance.")] = None,
+    group_by: Annotated[
+        str | None, Field(description="Comma list: user, project, issue, tool, provider, model, cost_type, branch.")
+    ] = None,
+    period: Annotated[str | None, Field(description="day, week or month buckets.")] = None,
+    date_from: Annotated[str | None, Field(description="First UTC day, YYYY-MM-DD.")] = None,
+    date_to: Annotated[str | None, Field(description="Last UTC day, YYYY-MM-DD (included).")] = None,
+    preset: Annotated[str | None, Field(description="7d, 30d, this_month or last_month (without dates).")] = None,
+    currency: Annotated[str | None, Field(description="ISO code; default the reporting currency.")] = None,
+    rate_policy: Annotated[
+        str | None, Field(description="entry_date (default), latest, or a fixed date YYYY-MM-DD.")
+    ] = None,
+    include_seat_cost: Annotated[bool, Field(description="Allocate subscription fees (default true).")] = True,
+    user_login: Annotated[str | None, Field(description="Only this user's usage.")] = None,
+    tool: Annotated[str | None, Field(description="Only this tool slug.")] = None,
+    model: Annotated[str | None, Field(description="Only this model.")] = None,
+    cost_type: Annotated[str | None, Field(description="subscription, api, local, free or unknown.")] = None,
+    sort: Annotated[str, Field(description="key (default) or spend.")] = "key",
+) -> str:
+    async with _get_session_and_user() as (session, user):
+        return await _ai_usage_report(
+            session,
+            user,
+            project_key=project_key,
+            date_from=date_from,
+            date_to=date_to,
+            preset=preset,
+            group_by=group_by,
+            period=period,
+            currency=currency,
+            rate_policy=rate_policy,
+            include_seat_cost=include_seat_cost,
+            user_login=user_login,
+            tool=tool,
+            model=model,
+            cost_type=cost_type,
+            sort=sort,
+        )
 
 
 @mcp.tool()

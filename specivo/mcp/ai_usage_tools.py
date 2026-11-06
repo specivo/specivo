@@ -482,3 +482,136 @@ async def _list(
     refs = await _usage.references(session, user, entries)
     lines.extend(f"  {_line(entry, refs)}" for entry in entries)
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
+
+#: Most rows the report tool writes out (the totals line always follows).
+REPORT_MAX_ROWS = 200
+
+
+def _report_amount(summary: Any) -> str:
+    """A report amount with what could not be converted, e.g. ``12.50 USD (+ 3.00 EUR no_rate)``."""
+    if summary is None:
+        return "-"
+    text = f"{format_decimal_plain(summary.total.quantize().amount)} {summary.currency}"
+    extra = [f"{format_decimal_plain(g.amount.amount)} {g.currency} {g.reason}" for g in summary.unconverted]
+    return text + (f" (+ not converted: {', '.join(extra)})" if extra else "")
+
+
+def _report_line(row: Any, report: Any) -> str:
+    from specivo.services.ai_spend_report_service import HIDDEN_ISSUE
+
+    parts: list[str] = []
+    if row.period is not None:
+        parts.append(row.period.isoformat())
+    for dim in report.group_by:
+        if row.seat_only and row.key.get(dim) is None:
+            label = "(unallocated seat)"
+        elif dim == "issue" and row.key.get(dim) == HIDDEN_ISSUE:
+            label = "(issue you cannot see)"
+        else:
+            label = row.labels.get(dim) or f"(no {dim})"
+        parts.append(f"{dim}={label}")
+    head = " ".join(parts) or "all"
+    measures = [
+        f"entries={row.entries}",
+        f"tokens={row.total_tokens}",
+        f"spend={_report_amount(row.total_spend)}",
+        f"api_equivalent={_report_amount(row.api_equivalent)}",
+    ]
+    if report.seat_cost_shown:
+        measures.insert(2, f"marginal={_report_amount(row.marginal)}")
+        measures.insert(3, f"seat={_report_amount(row.seat_allocated)}")
+        if row.seat_unallocated is not None and row.seat_unallocated.total.amount:
+            measures.insert(4, f"unallocated_seat={_report_amount(row.seat_unallocated)}")
+        if row.leverage is not None:
+            measures.append(f"leverage={format_decimal_plain(row.leverage)}x")
+    if row.unpriced_entries:
+        measures.append(f"unpriced={row.unpriced_entries}")
+    return f"{head}: " + " ".join(measures)
+
+
+async def _ai_usage_report(
+    session: AsyncSession,
+    user: User,
+    *,
+    project_key: str | None,
+    date_from: str | None,
+    date_to: str | None,
+    preset: str | None,
+    group_by: str | None,
+    period: str | None,
+    currency: str | None,
+    rate_policy: str | None,
+    include_seat_cost: bool,
+    user_login: str | None,
+    tool: str | None,
+    model: str | None,
+    cost_type: str | None,
+    sort: str,
+) -> str:
+    """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
+    from specivo.services.ai_spend_report_service import (
+        PRESETS,
+        AiSpendReportService,
+        ReportFilters,
+        default_range,
+        parse_group_by,
+    )
+
+    if preset and preset not in PRESETS[:-1]:
+        raise ValidationError(message=f"preset must be one of {', '.join(PRESETS[:-1])}", field="preset")
+    first, last = default_range(preset)
+    project = await _project(session, user, project_key) if project_key and project_key.strip() else None
+    user_id: int | None = None
+    if user_login and user_login.strip():
+        # Like listing: an unknown login matches nothing rather than saying it does not exist.
+        found = await _usage.user_by_login(session, user_login)
+        user_id = found.id if found is not None else -1
+    report = await AiSpendReportService().report(
+        session,
+        user,
+        project=project,
+        date_from=_parse_date(date_from, "date_from") or first,
+        date_to=_parse_date(date_to, "date_to") or last,
+        group_by=parse_group_by(group_by if group_by is not None else "user"),
+        period=period or None,
+        currency=currency or None,
+        rate_policy=rate_policy or None,
+        include_seat_cost=include_seat_cost,
+        filters=ReportFilters(user_id=user_id, tool=tool or None, model=model or None, cost_type=cost_type or None),
+        sort=sort or "key",
+    )
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "ai_usage",
+        {"op": "report", "project_key": project.key if project is not None else None},
+        project_id=project.id if project is not None else None,
+    )
+    scope = f"project {project.key}" if project is not None else "the whole instance"
+    lines = [
+        f"AI spend report for {scope}, {report.date_from} to {report.date_to} (UTC days), "
+        f"amounts in {report.currency}, rate policy {report.rate_policy}.",
+        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
+        "api_equivalent = the same tokens at pay-per-use prices, not a bill.",
+    ]
+    if report.seat_cost_hidden:
+        lines.append("Seat cost is left out: you do not read every entry of this project in the period.")
+    elif not report.include_seat_cost:
+        lines.append("Seat cost is left out (include_seat_cost=false).")
+    if report.rate_dates:
+        lines.append("Exchange rates used from: " + ", ".join(d.isoformat() for d in report.rate_dates))
+    lines.append(f"Rows ({len(report.rows)}):")
+    if not report.rows:
+        lines.append("  (none)")
+    for row in report.rows[:REPORT_MAX_ROWS]:
+        lines.append(f"  {_report_line(row, report)}")
+    if len(report.rows) > REPORT_MAX_ROWS:
+        lines.append(f"  ... and {len(report.rows) - REPORT_MAX_ROWS} more rows; narrow the period or the grouping")
+    lines.append(f"Total: {_report_line(report.totals, report).split(': ', 1)[1]}")
+    return "\n".join(lines)

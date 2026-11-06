@@ -92,7 +92,7 @@ async def test_descriptions_say_agents_cannot_count_their_tokens() -> None:
     for name in ("specivo_log_ai_usage", "specivo_ai_usage"):
         assert "cannot see your own token counters" in (tools[name].description or "")
         assert "/cost" in (tools[name].description or "")
-    assert "specivo_ai_usage_report" not in tools
+    assert "specivo_ai_usage_report" in tools
 
 
 async def test_log_writes_an_mcp_entry(db_session: AsyncSession, w: World) -> None:

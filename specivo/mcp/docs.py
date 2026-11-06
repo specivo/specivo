@@ -67,6 +67,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
         "Log AI tokens an AI tool used (from a hook, the reporter or /cost output -- never estimated)"
     ),
     "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
+    "specivo_ai_usage_report": (
+        "AI spend report: usage grouped by user, model, tool, project, issue, cost type, branch and period, "
+        "in one currency"
+    ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -198,6 +202,10 @@ and corrections.
 3. `specivo_ai_usage(op="update", entry_id=N, issue_ref="ACME-12")` -- attribute or correct an entry;
    entries from the reporter only take a project, issue and comments
 4. `specivo_ai_usage(op="exclude", entry_id=N)` -- leave an entry out of reports (`include` undoes it)
+5. `specivo_ai_usage_report(project_key="ACME", group_by="user,model", preset="last_month")` -- spend and
+   API-equivalent value per group in the reporting currency; `period="week"` adds buckets, no
+   `project_key` reports the whole instance (administrators). Spend includes seat cost (subscription
+   fees spread over the entries that used them) when you read every entry of the project
 
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
@@ -304,6 +312,9 @@ the security audit log. Notable cases:
   target, and gives the same refusal for every login otherwise. `specivo_ai_usage` changes entries
   logged in your name, or any with **`manage_ai_usage`**. Everyone reads what is logged in their
   name; others' entries need **`view_ai_usage`** with visibility `all`.
+- `specivo_ai_usage_report` reads only the entries you may read; the instance report (no
+  `project_key`) is for administrators. Seat cost shows to administrators and to whoever reads every
+  entry of the project in the period; plan names never appear.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 

@@ -58,6 +58,8 @@ _issues = IssueService()
 _tools = AiToolService()
 
 MY_URL = "/my/ai-usage/"
+#: Filter value for "none": entries without an issue, a branch or a project.
+NONE_VALUE = "-"
 
 _NOTICES = frozenset({"logged", "saved", "excluded", "included", "deleted", "reassigned"})
 #: Error codes a redirect may carry back to a list (bulk reassignment, row actions).
@@ -149,6 +151,8 @@ class Filters:
     to_date: str = ""
     status: str = ""
     project: str = ""
+    provider: str = ""
+    branch: str = ""
     errors: list[str] = field(default_factory=list)
 
     def query(self) -> str:
@@ -163,12 +167,22 @@ class Filters:
             "to_date": self.to_date,
             "status": self.status,
             "project": self.project,
+            "provider": self.provider,
+            "branch": self.branch,
         }
         return urlencode({k: v for k, v in values.items() if v})
 
     @property
     def excluded(self) -> bool | None:
         return {"counted": False, "excluded": True}.get(self.status)
+
+    def extra(self) -> dict[str, Any]:
+        """The provider and branch filters as ``list_entries`` takes them ("-": entries without a branch)."""
+        return {
+            "provider": self.provider or None,
+            "branch": self.branch if self.branch and self.branch != NONE_VALUE else None,
+            "without_branch": self.branch == NONE_VALUE,
+        }
 
 
 def _filters(
@@ -182,6 +196,8 @@ def _filters(
     to_date: str = "",
     status: str = "",
     project: str = "",
+    provider: str = "",
+    branch: str = "",
 ) -> Filters:
     return Filters(
         user_id=user_id.strip() if user_id.strip().isdigit() else "",
@@ -193,12 +209,17 @@ def _filters(
         to_date=to_date if _parse_date(to_date) else "",
         status=status if status in ("counted", "excluded") else "",
         project=project.strip().upper()[:50],
+        provider=provider.strip().lower()[:50],
+        branch=branch.strip()[:255],
     )
 
 
 async def _issue_filter(db: AsyncSession, user: User, key: str, project: Project | None) -> int | None:
-    """The id of the issue *key* the reader may see (in *project* when given); -1 for none, so nothing matches."""
-    if not key:
+    """The id of the issue *key* the reader may see (in *project* when given); -1 for none, so nothing matches.
+
+    ``"-"`` (entries without an issue) is handled by the caller (``without_issue``).
+    """
+    if not key or key == NONE_VALUE:
         return None
     try:
         issue = await _issues.get_by_display_key(db, key, user=user)
@@ -339,12 +360,18 @@ async def project_ai_usage(
     from_date: str = Query(""),
     to_date: str = Query(""),
     status: str = Query(""),
+    provider: str = Query(""),
+    branch: str = Query(""),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     notice: str = Query(""),
     error: str = Query(""),
 ) -> Response:
-    """The project's AI usage the reader may see, with filters and totals in its reporting currency."""
+    """The project's AI usage the reader may see, with filters and totals in its reporting currency.
+
+    ``provider`` and ``branch`` (``-``: none) and ``issue=-`` (no issue) come
+    from the spend report's drill-through.
+    """
     project = await _project_for(db, user, project_key)
     filters = _filters(
         user_id=user_id,
@@ -355,9 +382,13 @@ async def project_ai_usage(
         from_date=from_date,
         to_date=to_date,
         status=status,
+        provider=provider,
+        branch=branch,
     )
     issue_id = await _issue_filter(db, user, filters.issue, project)
     common: dict[str, Any] = {
+        **filters.extra(),
+        "without_issue": filters.issue == NONE_VALUE,
         "project": project,
         "user_id": _parse_int(filters.user_id),
         "date_from": _parse_date(filters.from_date),
