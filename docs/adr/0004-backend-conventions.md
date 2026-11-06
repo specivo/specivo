@@ -365,6 +365,13 @@ user's name needs `log_ai_usage_for_others` in the project and the target must b
 entries for someone else are for admins only (`require_can_log`). Moving an entry to another project (or making it
 unassigned) runs the same `require_can_log` in the destination in the entry's user's name, so someone else's entry needs
 `log_ai_usage_for_others` there.
+**`on_behalf_of` never enumerates logins.** Whoever may not log for others in the project at hand (an admin, or
+`log_ai_usage_for_others` there; unassigned: admins only) gets one refusal (`on_behalf_refused()`, 403
+`ON_BEHALF_REFUSED`, field `on_behalf_of`) for every login but their own: unknown, inactive, non-member and permitted
+targets alike. `require_can_log` checks the on-behalf permission before the target's validity and membership, and
+REST and MCP resolve the login with `AiUsageService.resolve_target`, which looks the login up only after that check.
+The ingest also folds a key conflict and its attribution warnings into the refusal, validates record content before the
+target, and refuses a sender without the right in any project before looking anything up.
 The per-project form of both entry kinds' cross-project visibility is read once by
 `permission_service.entry_visibility_projects(session, user, permission, visibility_attribute)`; use it rather than
 another membership query.

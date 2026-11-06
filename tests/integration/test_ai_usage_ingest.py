@@ -639,9 +639,10 @@ async def test_on_behalf_refused(client: AsyncClient, w: World) -> None:
         "bot",
         record("k-obr1", on_behalf_of="ingx-outsider", attribution={"project_key": "INGX"}),
         record("k-obr2", on_behalf_of="ingx-teammate"),  # unassigned for someone else: administrators only
-        record("k-obr3", on_behalf_of="no-such-login"),
+        record("k-obr3", on_behalf_of="no-such-login"),  # no project: told apart for administrators only
+        record("k-obr6", on_behalf_of="no-such-login", attribution={"project_key": "INGX"}),
     )
-    assert [r["error"]["code"] for r in results] == ["target_not_member", "forbidden", "target_unknown"]
+    assert [r["error"]["code"] for r in results] == ["target_not_member", "forbidden", "forbidden", "target_unknown"]
 
     [teammate] = await post(
         client, w, "teammate", record("k-obr4", on_behalf_of="ingx-reader", attribution={"project_key": "INGX"})
@@ -650,6 +651,79 @@ async def test_on_behalf_refused(client: AsyncClient, w: World) -> None:
 
     [reader] = await post(client, w, "reader", record("k-obr5", attribution={"project_key": "INGX"}))
     assert reader["error"]["code"] == "forbidden"
+
+
+def _rejection(result: dict[str, Any]) -> tuple[str, Any, Any]:
+    """What a rejected record tells: status, error and warnings (the key aside)."""
+    return result["status"], result["error"], result["warnings"]
+
+
+async def test_on_behalf_without_rights_hides_which_logins_exist(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """A sender who may not log for others gets one answer for existing and unknown logins alike."""
+    inactive = UserFactory.build(login="ingx-gone", status="deactivated")
+    db_session.add(inactive)
+    await db_session.commit()
+    logins = ["ingx-reader", "ingx-outsider", "ingx-gone", "ingx-bot", "no-such-login"]
+    for attribution in ({"project_key": "INGX"}, {"issue_ref": "INGX-3"}, None):
+        extra = {"attribution": attribution} if attribution else {}
+        results = await post(
+            client,
+            w,
+            "teammate",
+            *[record(f"k-enum-{i}", on_behalf_of=login, **extra) for i, login in enumerate(logins)],
+        )
+        answers = {json.dumps(_rejection(r), sort_keys=True) for r in results}
+        assert len(answers) == 1, results
+        assert results[0]["error"] == {
+            "code": "forbidden",
+            "message": "You cannot log AI usage for this user here",
+            "field": "on_behalf_of",
+        }
+    # Content errors come first, the same for both.
+    bad = {"usage_date": "2020-01-01"}
+    known, unknown = await post(
+        client,
+        w,
+        "teammate",
+        record("k-enum-bad1", on_behalf_of="ingx-reader", **bad),
+        record("k-enum-bad2", on_behalf_of="no-such-login", **bad),
+    )
+    assert _rejection(known) == _rejection(unknown)
+    assert known["error"]["code"] == "invalid_record"
+
+
+async def test_on_behalf_outside_the_senders_projects_hides_which_logins_exist(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """The bot may log for others in INGX only: in INGY and unassigned, targets are not told apart."""
+    inactive = UserFactory.build(login="ingx-gone2", status="deactivated")
+    db_session.add(inactive)
+    await db_session.commit()
+    logins = ["ingx-bot2", "ingx-teammate", "ingx-outsider", "ingx-gone2", "no-such-login"]
+    for attribution in ({"project_key": "INGY"}, {"issue_ref": "INGY-1"}, None):
+        extra = {"attribution": attribution} if attribution else {}
+        results = await post(
+            client,
+            w,
+            "bot",
+            *[record(f"k-enum2-{i}", on_behalf_of=login, **extra) for i, login in enumerate(logins)],
+        )
+        answers = {json.dumps(_rejection(r), sort_keys=True) for r in results}
+        assert len(answers) == 1, (attribution, results)
+        assert results[0]["error"]["code"] == "forbidden"
+    # In INGX the bot may: the codes differ there.
+    results = await post(
+        client,
+        w,
+        "bot",
+        *[
+            record(f"k-enum3-{i}", on_behalf_of=login, attribution={"project_key": "INGX"})
+            for i, login in enumerate(["ingx-outsider", "ingx-gone2", "no-such-login"])
+        ],
+    )
+    assert [r["error"]["code"] for r in results] == ["target_not_member", "target_invalid", "target_unknown"]
 
 
 async def test_project_limited_key(client: AsyncClient, w: World) -> None:

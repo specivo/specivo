@@ -167,6 +167,17 @@ def _invalid(message: str, field_name: str, code: str = "ai_usage_invalid") -> A
     return AppError(code=code, message=message, status_code=422, field=field_name)
 
 
+#: The one answer to a refused "on behalf of" request. Whoever may not log
+#: for others gets it for every target, existing or not, active or not, member
+#: or not, so the answer never tells which logins exist.
+ON_BEHALF_REFUSED = "You cannot log AI usage for this user here"
+
+
+def on_behalf_refused() -> PermissionDeniedError:
+    """The 403 of a refused "on behalf of" request (see ``ON_BEHALF_REFUSED``)."""
+    return PermissionDeniedError(ON_BEHALF_REFUSED, field="on_behalf_of")
+
+
 # ---------------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------------
@@ -449,18 +460,28 @@ class AiUsageService:
 
         if actor.is_anonymous:
             raise PermissionDeniedError("Sign in to log AI usage")
-        self.require_valid_target(target)
         on_behalf = target.id != actor.id
+        if not on_behalf:
+            self.require_valid_target(target)
         if project is None:
             if issue_id is not None:
                 raise ValidationError(message="An issue needs its project", field="issue_id")
-            if on_behalf and not is_global_admin(actor):
-                raise PermissionDeniedError("Only administrators may log unassigned AI usage for another user")
+            if on_behalf:
+                if not is_global_admin(actor):
+                    raise on_behalf_refused()
+                self.require_valid_target(target)
             return
         await ProjectService().require_project_access(session, project, actor)
         permission = Permission.LOG_AI_USAGE_FOR_OTHERS if on_behalf else Permission.LOG_AI_USAGE
         if not await check_permission(actor, project.id, permission, session, request=request):
-            raise PermissionDeniedError(f"Permission '{permission}' denied for this project")
+            # On behalf: the same refusal whatever the target, before anything about it is checked.
+            raise (
+                on_behalf_refused()
+                if on_behalf
+                else PermissionDeniedError(f"Permission '{permission}' denied for this project")
+            )
+        if on_behalf:
+            self.require_valid_target(target)
         if on_behalf and not await self.is_active_member(session, target, project):
             raise _invalid(
                 "The user is not an active member of this project",
@@ -471,6 +492,68 @@ class AiUsageService:
             issue = await IssueService().get_by_id(session, issue_id, user=actor)
             if issue.project_id != project.id:
                 raise ValidationError(message="The issue belongs to another project", field="issue_id")
+
+    async def may_log_for_others(self, session: AsyncSession, actor: User, project: Project | None) -> bool:
+        """Whether *actor* may log someone else's usage in *project* (None: unassigned, administrators only)."""
+        from specivo.services.permission_service import Permission, check_permission
+
+        if actor.is_anonymous:
+            return False
+        if project is None:
+            return is_global_admin(actor)
+        return await check_permission(actor, project.id, Permission.LOG_AI_USAGE_FOR_OTHERS, session)
+
+    async def may_log_for_others_anywhere(self, session: AsyncSession, actor: User) -> bool:
+        """Whether *actor* may log someone else's usage in at least one project (or unassigned, as an admin).
+
+        Narrowed to the authenticating API key's project limit, like
+        ``check_permission``.
+        """
+        from specivo.services.permission_service import (
+            Permission,
+            member_principal_clause,
+            projects_granting,
+        )
+
+        if actor.is_anonymous:
+            return False
+        if is_global_admin(actor):
+            return True
+        stmt = select(Project)
+        if not actor.is_admin:
+            stmt = stmt.where(Project.id.in_(select(Member.project_id).where(member_principal_clause(actor.id))))
+        projects = (await session.execute(stmt)).scalars().all()
+        return bool(await projects_granting(session, actor, projects, Permission.LOG_AI_USAGE_FOR_OTHERS))
+
+    async def resolve_target(
+        self, session: AsyncSession, actor: User, login: str | None, project: Project | None
+    ) -> User:
+        """The user named by *login* (``on_behalf_of``) for usage logged in *project*; the actor when empty.
+
+        Login enumeration: whoever may not log for others in *project*
+        (``may_log_for_others``) gets the one refusal of
+        :func:`on_behalf_refused` for every login but their own, whether it
+        exists, is inactive, is not a member or is fine. Only those who may
+        learn the difference get ``ai_usage_target_unknown``; the target's
+        validity and membership are checked by ``require_can_log``.
+        """
+        name = (login or "").strip()
+        if not name:
+            return actor
+        if name.lower() == actor.login.lower():
+            return actor
+        if not await self.may_log_for_others(session, actor, project):
+            raise on_behalf_refused()
+        user = await self.user_by_login(session, name)
+        if user is None:
+            raise _invalid(f"No user with the login '{name}'", "on_behalf_of", "ai_usage_target_unknown")
+        return user
+
+    @staticmethod
+    async def user_by_login(session: AsyncSession, login: str) -> User | None:
+        """The user with *login* (any case), or None."""
+        stmt = select(User).where(func.lower(User.login) == login.strip().lower())
+        return (await session.execute(stmt)).scalar_one_or_none()
 
     async def can_edit(self, session: AsyncSession, actor: User, entry: AiUsageEntry) -> bool:
         """Whether *actor* may change, exclude or include *entry*: its user, ``manage_ai_usage`` or an admin."""
@@ -496,6 +579,10 @@ class AiUsageService:
         return admin_reaches(actor, entry.project_id)
 
     # -- validation ---------------------------------------------------------------
+
+    async def validate(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> None:
+        """Raise the 422 the content of *data* would get (tool, model, dates, tokens, cost, texts); no authorization."""
+        await self._validated(session, data, source=source)
 
     async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
         from specivo.services.ai_subscription_service import AiToolService
