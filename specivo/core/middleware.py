@@ -32,7 +32,6 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
     (b"x-xss-protection", b"1; mode=block"),
     (b"referrer-policy", b"strict-origin-when-cross-origin"),
     (b"permissions-policy", b"geolocation=(), microphone=(), camera=()"),
-    (b"x-robots-tag", b"noindex, nofollow, noarchive"),
     # CSP: 'unsafe-eval' required by Alpine.js (standard build) for inline
     # x-data/x-on/x-bind expressions.  The CSP build was evaluated but is too
     # restrictive for real-world templates (no :class objects, no inline
@@ -402,8 +401,9 @@ class AnonymousResponseHeadersMiddleware:
     ``Cache-Control: no-store`` and a ``Vary`` naming the headers that decide
     who the caller is.
 
-    ``X-Robots-Tag`` is not set here: ``RequestIDMiddleware`` already sends
-    ``noindex, nofollow, noarchive`` on every response.
+    ``X-Robots-Tag`` is not set here: ``RequestIDMiddleware`` decides it for
+    every response with :func:`robots_tag_for`. ``no-store`` and ``Vary`` do
+    not keep a page out of search engines; only that header does.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -422,6 +422,45 @@ class AnonymousResponseHeadersMiddleware:
         await self.app(scope, receive, send_with_anonymous_headers)
 
 
+# ---------------------------------------------------------------------------
+# Search engine directives (X-Robots-Tag)
+# ---------------------------------------------------------------------------
+
+# The scope-state key where ``specivo.web.deps.get_web_reader`` leaves the
+# robots directive for a page it served to the anonymous principal while
+# search engine indexing applies. Nothing else sets it.
+ROBOTS_STATE_KEY = "robots_tag"
+
+# Every response that is not an indexable public page: sign-in, errors,
+# redirects, admin, the API, MCP, anything served to a signed-in user, and any
+# project that is not open to anonymous visitors.
+ROBOTS_NOINDEX = "noindex, nofollow, noarchive"
+# A page anonymous visitors can read, with indexing on. ``noarchive`` stays:
+# a cached copy would outlive the page being made private.
+ROBOTS_INDEX = "noarchive"
+# A readable page with an open-ended URL space (search results, any page with
+# a query string): not indexed, but its links may be followed.
+ROBOTS_NOINDEX_FOLLOW = "noindex, follow, noarchive"
+
+_RELAXED_ROBOTS = frozenset({ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW})
+
+
+def robots_tag_for(scope: Scope, status: int) -> bytes:
+    """Return the ``X-Robots-Tag`` value for a response with *status* to the request in *scope*.
+
+    ``noindex, nofollow, noarchive`` unless all of these hold: the request was
+    served to the anonymous principal (``ANONYMOUS_READER_STATE_KEY``), the
+    page marked itself for search engines (``ROBOTS_STATE_KEY``), and the
+    response is a 200. A refusal, a redirect or an error is never indexable,
+    whatever was marked before it was produced.
+    """
+    state = scope.get("state") or {}
+    tag = state.get(ROBOTS_STATE_KEY)
+    if status == 200 and tag in _RELAXED_ROBOTS and state.get(ANONYMOUS_READER_STATE_KEY) is True:
+        return str(tag).encode("latin-1")
+    return ROBOTS_NOINDEX.encode("latin-1")
+
+
 class RequestIDMiddleware:
     """Attach a unique request ID and security headers to every HTTP response.
 
@@ -431,7 +470,8 @@ class RequestIDMiddleware:
 
     Security headers (``X-Content-Type-Options``, ``X-Frame-Options``, etc.)
     are appended to every response to harden the API against common web
-    vulnerabilities.
+    vulnerabilities, and so is ``X-Robots-Tag``, decided per response by
+    :func:`robots_tag_for`.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -455,6 +495,7 @@ class RequestIDMiddleware:
                 resp_headers = list(message.get("headers", []))
                 resp_headers.append((b"x-request-id", request_id.encode()))
                 resp_headers.extend(_SECURITY_HEADERS)
+                resp_headers.append((b"x-robots-tag", robots_tag_for(scope, int(message.get("status", 200)))))
                 message["headers"] = resp_headers
             await send(message)
 

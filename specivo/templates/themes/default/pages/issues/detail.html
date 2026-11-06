@@ -4,6 +4,12 @@
 
 {% block title %}{{ issue.display_key }} - {{ issue.subject }} - {{ brand_name }}{% endblock %}
 
+{% block head %}
+{% if canonical_url %}{% set _description = issue.description | meta_description %}{% if _description %}
+<meta name="description" content="{{ _description }}">
+{% endif %}{% endif %}
+{% endblock %}
+
 {% block content %}
 {{ breadcrumbs([
   {"label": "Home", "url": "/"},

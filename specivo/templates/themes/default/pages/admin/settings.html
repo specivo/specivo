@@ -92,6 +92,17 @@
     <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Turn on{% endtrans %}</button>
     {% endif %}
   </form>
+  <form method="post" action="/admin/settings/search-engines/" style="margin-top: var(--sp-space-lg);" data-testid="search-engine-indexing-form">
+    <div class="form-group">
+      <input type="hidden" name="search_engine_indexing" value="false">
+      <label class="checkbox-row" for="search_engine_indexing">
+        <input type="checkbox" name="search_engine_indexing" id="search_engine_indexing" value="true"{{ ' checked' if search_engine_indexing }} class="sp-checkbox-accent-pointer">
+        {% trans %}Let search engines index public pages{% endtrans %}
+      </label>
+      <div class="form-hint">{% trans %}Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting.{% endtrans %}</div>
+    </div>
+    <button type="submit" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Save{% endtrans %}</button>
+  </form>
 </div>
 
 <div class="card" id="authentication" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;">

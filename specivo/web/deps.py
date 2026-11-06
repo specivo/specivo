@@ -16,7 +16,12 @@ from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
-from specivo.core.middleware import ANONYMOUS_READER_STATE_KEY
+from specivo.core.middleware import (
+    ANONYMOUS_READER_STATE_KEY,
+    ROBOTS_INDEX,
+    ROBOTS_NOINDEX_FOLLOW,
+    ROBOTS_STATE_KEY,
+)
 from specivo.models.user import User
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "themes"
@@ -293,7 +298,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 
     templates = Jinja2Templates(
         directory=str(TEMPLATES_DIR / "default"),
-        context_processors=[_active_timer_context],
+        context_processors=[_active_timer_context, _search_engine_context],
     )
     templates.env.loader = ChoiceLoader(loaders)
 
@@ -425,6 +430,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
         return diffs
 
     templates.env.filters["metadata_diff"] = _format_metadata_diff
+
+    from specivo.services.search_engine_service import meta_description
+
+    templates.env.filters["meta_description"] = meta_description
     templates.env.globals["metadata_diff"] = _format_metadata_diff
 
     # Where the "Sign in" action on an anonymous page points. A context
@@ -755,6 +764,7 @@ def refuse_anonymous_web(request: Request) -> Response:
 
     response = RedirectResponse(login_url_for(_current_path(request)), status_code=302)
     setattr(request.state, ANONYMOUS_READER_STATE_KEY, False)
+    setattr(request.state, ROBOTS_STATE_KEY, None)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Vary"] = "Cookie, Authorization"
     return response
@@ -816,5 +826,51 @@ async def get_web_reader(
         yield None
         return
 
+    await _mark_for_search_engines(request, db)
     async with anonymous_read_scope(request, response, db):
         yield anonymous
+
+
+# The page whose results are never indexed, however public: its URL space is
+# every query anyone can type.
+_SEARCH_PAGE_PATH = "/search/"
+
+
+async def _mark_for_search_engines(request: Request, db: AsyncSession) -> None:
+    """Let search engines index this anonymous page, when the instance allows it.
+
+    Called only for a request already resolved to the anonymous principal,
+    so the page can only ever be one of ``ANONYMOUS_WEB_ROUTES``. The mark is
+    a request, not a decision: ``robots_tag_for`` honours it only for a 200
+    that is still flagged anonymous, so every refusal on the way (a private
+    issue, a project not opted in, a wiki in an issues-only project) keeps
+    ``noindex``.
+
+    The search page, and any page reached with a query string (filters,
+    sorting, paging), may be followed but is not indexed, so crawlers do not
+    index an endless set of URLs for the same content.
+    """
+    from specivo.services.search_engine_service import is_indexing_enabled
+
+    try:
+        enabled = await is_indexing_enabled(db)
+    except Exception:
+        logger.warning("Could not read the search engine indexing setting; keeping noindex", exc_info=True)
+        return
+    if not enabled:
+        return
+    follow_only = bool(request.url.query) or request.url.path == _SEARCH_PAGE_PATH
+    setattr(request.state, ROBOTS_STATE_KEY, ROBOTS_NOINDEX_FOLLOW if follow_only else ROBOTS_INDEX)
+
+
+def _search_engine_context(request: Request) -> dict[str, object]:
+    """Template context processor: ``canonical_url`` for a page search engines may index (None otherwise)."""
+    state = request.state
+    if (
+        getattr(state, ROBOTS_STATE_KEY, None) != ROBOTS_INDEX
+        or getattr(state, ANONYMOUS_READER_STATE_KEY, None) is not True
+    ):
+        return {"canonical_url": None}
+    from specivo.core.config import get_settings
+
+    return {"canonical_url": f"{get_settings().app_url.rstrip('/')}{request.url.path}"}

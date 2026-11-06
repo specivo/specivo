@@ -57,6 +57,8 @@ docker compose up -d
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
 | `CAPTCHA_ENABLED` | Captcha on the registration form. |
+| `SEARCH_ENGINE_INDEXING` | Let search engines index the pages anyone can read without an account. Default `false`. The **Administration → Settings → Anonymous access** checkbox overrides it. See [Search engines](#search-engines). |
+| `ROBOTS_TXT` | A fixed `robots.txt`, replacing the one Specivo serves. Unset by default. The admin setting `robots_txt` overrides it. See [Search engines](#search-engines). |
 | `CORS_ORIGINS` | Allowed browser origins, e.g. `["https://specivo.example.com"]`. |
 | `AUDIT_LOG_RETENTION_MONTHS` | Whole months of the [security audit log](audit-log.md) kept before the current month; older months are dropped daily. Default `12`. `0` keeps everything. |
 | `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
@@ -183,6 +185,69 @@ loopback address, `::1`, `0.0.0.0`):
 When `APP_URL` is a real address but you opened the page under another host name, the same pages
 say so: the URLs you copy carry the `APP_URL` host, which may not be the one that reaches this
 instance.
+
+## Search engines
+
+Search engines index nothing by default. Every response carries
+`X-Robots-Tag: noindex, nofollow, noarchive`, `/robots.txt` is `Disallow: /`, and
+`/sitemap.xml` answers 404.
+
+Indexing is opt-in, and it only ever covers pages a visitor without an account can already read.
+A page becomes indexable when all of these hold:
+
+1. **Search engine indexing is on**: the checkbox **Let search engines index public pages** in
+   **Administration → Settings → Anonymous access**, or `SEARCH_ENGINE_INDEXING=true`. The
+   checkbox wins over the variable.
+2. **Anonymous access is on** (the switch in the same card).
+3. **The project is public, active and opted in** to anonymous access for issues, wiki or both.
+4. **The page is served without an account**: the project list, the project page, its issue list,
+   issue pages and wiki pages.
+
+What stays `noindex` whatever the setting: private projects, projects not opted in, archived
+projects, private issues and comments, anything a signed-in visitor sees, sign-in and password
+pages, error pages and redirects, administration, the JSON API and MCP. Search result pages, and
+any public page opened with a query string (filters, sorting, paging), are sent with
+`noindex, follow`: crawlers may follow their links but do not index them. Indexable pages keep
+`noarchive` and `Cache-Control: no-store`, and carry a `<link rel="canonical">` built from
+[`APP_URL`](#public-address-app_url); issue and wiki pages also get a short
+`<meta name="description">` from their text.
+
+While indexing applies and at least one project is readable:
+
+- **`/robots.txt`** allows `/projects/`, the readable projects' pages (`/projects/KEY/`) and
+  issues (`/issue/KEY-`), disallows everything else and names the sitemap.
+- **`/sitemap.xml`** is a sitemap index. It points at `/sitemaps/projects.xml` (the project list,
+  project pages and issue lists) and at per-project sitemaps of issues and wiki pages, at most 5,000
+  URLs each (`/sitemaps/KEY/issues-N.xml`, `/sitemaps/KEY/wiki-N.xml`). They list only the issues and
+  wiki pages a visitor without an account can open, with their last change. Links are built from
+  `APP_URL`, so set it to the public address first.
+
+Changes apply on the next request: turning anonymous access or indexing off, or opting a project
+out, removes it from `robots.txt` and the sitemap and restores `noindex` at once. Search engines
+drop pages they already indexed on their own schedule.
+
+An instance with a `STEALTH_PREFIX` is never indexed: `robots.txt` and the sitemap are served at
+the root and would reveal the prefix.
+
+**Keeping one public project out of search engines.** Indexing is instance-wide. To exclude a
+project while leaving it readable without an account, write your own `robots.txt` in the admin
+setting `robots_txt` (or `ROBOTS_TXT`), which replaces the generated one, for example:
+
+```text
+User-agent: *
+Allow: /projects/$
+Allow: /projects/ACME/
+Allow: /issue/ACME-
+Disallow: /
+
+Sitemap: https://specivo.example.com/sitemap.xml
+```
+
+The sitemap still lists every readable project; leave the `Sitemap:` line out if that matters.
+
+**Repository activity.** Issue pages of a public project can show repository activity: commit
+messages, branch names and pull request titles. Once the project is indexable, search engines can
+pick that text up too. Decide before making a project public and turning indexing on.
 
 ## Client addresses behind a proxy
 

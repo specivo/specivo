@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -288,22 +288,11 @@ def create_app() -> FastAPI:
     application.add_exception_handler(HTTPException, http_exception_handler)
     application.add_exception_handler(Exception, unhandled_exception_handler)
 
-    # robots.txt — always at root, not behind stealth prefix.
-    # Overridable: admin settings key "robots_txt" > env ROBOTS_TXT > default (disallow all).
-    @application.get("/robots.txt", response_class=PlainTextResponse, include_in_schema=False)
-    async def robots_txt():
-        from specivo.core.database import get_db
-        from specivo.services.settings_service import SettingsService
+    # robots.txt and the sitemap — always at the root, not behind the stealth
+    # prefix. See specivo.web.search_engines.
+    from specivo.web.search_engines import router as search_engines_router
 
-        try:
-            async for db in get_db():
-                all_settings = await SettingsService().get_all(db)
-                custom = all_settings.get("robots_txt")
-                if custom:
-                    return custom
-        except Exception:
-            pass
-        return settings.robots_txt
+    application.include_router(search_engines_router)
 
     # PWA manifest — dynamic so it reflects the current brand_name setting.
     @application.get("/manifest.json", include_in_schema=False)
