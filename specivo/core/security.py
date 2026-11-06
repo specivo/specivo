@@ -641,27 +641,25 @@ ANONYMOUS_READ_ROUTES: frozenset[str] = frozenset(
     }
 )
 
-# Per-IP budgets for anonymous traffic, kept in their own Redis buckets so a
-# crawler cannot spend a signed-in user's allowance or vice versa.
+# Per-IP budget for anonymous reads, kept in its own Redis bucket so a
+# crawler cannot spend a signed-in user's allowance or vice versa. Searches
+# are metered separately, for everyone (specivo.core.search_limits).
 ANONYMOUS_READ_RATE_LIMIT = (120, 60)
-ANONYMOUS_SEARCH_RATE_LIMIT = (10, 60)
 
 # How long a single statement may run for an anonymous visitor. Every query on
 # the allowlisted routes is an indexed read that finishes far inside this; the
 # limit is here so a crafted search cannot hold a connection open.
 ANONYMOUS_STATEMENT_TIMEOUT_MS = 2000
 
-# What a visitor without an account may ask of search. Keyword only: semantic
-# and hybrid both run an embedding model, and that is cost a stranger must not
-# be able to spend. The page is short and close to the surface so the result
-# set cannot be walked wholesale.
+# How far a visitor without an account may page through search results. The
+# page is short and close to the surface so the result set cannot be walked
+# wholesale. Every mode is served (keyword, semantic, hybrid); what bounds the
+# embedding model's cost is the per-IP search budget, not the mode.
 #
 # Declared here rather than beside either caller because both enforce them and
 # they must not drift: the JSON API refuses a request outside these bounds,
-# while the search *page* narrows one to them — a browser arrives with whatever
-# the form put in the URL, and refusing the default mode would turn the page
-# into a refusal for everyone.
-ANONYMOUS_SEARCH_MODE = "keyword"
+# while the search *page* narrows one to them, since a browser arrives with
+# whatever the form put in the URL.
 ANONYMOUS_SEARCH_MAX_LIMIT = 25
 ANONYMOUS_SEARCH_MAX_OFFSET = 500
 

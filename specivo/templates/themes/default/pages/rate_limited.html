@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{# The 429 page for a person: rendered by app_error_handler (specivo.core.exceptions)
+   whenever a web page is over a rate limit. The response keeps Retry-After and
+   the X-RateLimit-* headers; this page says the same thing in words. #}
+
+{% block title %}{% if is_search %}{% trans %}Searching is paused{% endtrans %}{% else %}{% trans %}Too many requests{% endtrans %}{% endif %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="error-content">
+  <div class="error-card sp-rate-limit" role="status">
+    <div class="sp-rate-limit-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    </div>
+    <h1 class="error-title">
+      {% if is_search %}{% trans %}Searching is paused{% endtrans %}{% else %}{% trans %}Too many requests{% endtrans %}{% endif %}
+    </h1>
+    <p class="error-message">
+      {% if is_search %}
+      {% trans %}You have searched a lot in a short time. Searching is paused for a moment so the site stays fast for everyone.{% endtrans %}
+      {% else %}
+      {% trans %}You have sent a lot of requests in a short time. Please wait a moment before trying again.{% endtrans %}
+      {% endif %}
+    </p>
+    <p class="sp-rate-limit-retry">
+      {% trans num=retry_after %}You can try again in %(num)s second.{% pluralize %}You can try again in %(num)s seconds.{% endtrans %}
+    </p>
+    <div class="error-actions">
+      <a href="{{ retry_url }}" class="sp-btn sp-btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+        {% trans %}Try again{% endtrans %}
+      </a>
+      {% if is_search %}
+      <a href="/search/" class="sp-btn sp-btn-ghost">{% trans %}Back to search{% endtrans %}</a>
+      {% else %}
+      <a href="/" class="sp-btn sp-btn-ghost">{% trans %}Home{% endtrans %}</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

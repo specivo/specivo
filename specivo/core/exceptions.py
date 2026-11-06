@@ -201,7 +201,67 @@ def _render_error_html(
         )
 
 
+# Paths that are not web pages: their callers are programs and always get the
+# JSON error, whatever their Accept header says. Listed without the stealth
+# prefix.
+_NON_PAGE_PREFIXES = ("/api/", "/mcp", "/scim/", "/hooks/", "/health")
+
+
+def _is_page_request(request: Request) -> bool:
+    """Whether *request* is for a web page (or an htmx partial of one), not the API."""
+    from specivo.core.config import get_settings
+
+    path = request.url.path
+    stealth = get_settings().stealth_prefix.rstrip("/")
+    if stealth and path.startswith(stealth + "/"):
+        path = path[len(stealth) :]
+    if path.startswith(_NON_PAGE_PREFIXES):
+        return False
+    return request.headers.get("hx-request") == "true" or _wants_html(request)
+
+
+def _render_rate_limited(request: Request, exc: AppError) -> HTMLResponse:
+    """The 429 a person sees: a page in the app's layout, or a fragment for htmx.
+
+    Keeps every header the limiter set (``Retry-After``, ``X-RateLimit-*``)
+    and is never cached. When the refusing limit is a search budget the page
+    says that searching is paused; any other limit gets the general wording.
+    """
+    from specivo.core.middleware import ANONYMOUS_READER_STATE_KEY
+    from specivo.core.search_limits import SEARCH_BUCKETS
+
+    headers = dict(exc.headers or {})
+    headers["Cache-Control"] = "no-store"
+    try:
+        retry_after = max(1, int(headers.get("Retry-After") or (exc.details or {}).get("retry_after") or 60))
+    except (TypeError, ValueError):
+        retry_after = 60
+    headers["Retry-After"] = str(retry_after)
+    htmx = request.headers.get("hx-request") == "true"
+    context = {
+        "status_code": 429,
+        "retry_after": retry_after,
+        "is_search": getattr(request.state, "rate_limit_bucket", None) in SEARCH_BUCKETS,
+        "retry_url": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
+        "anonymous": bool(getattr(request.state, ANONYMOUS_READER_STATE_KEY, False)),
+    }
+    template = "pages/_rate_limited_inline.html" if htmx else "pages/rate_limited.html"
+    try:
+        from specivo.web.deps import get_templates
+
+        return get_templates().TemplateResponse(request, template, context, status_code=429, headers=headers)
+    except Exception:
+        logger.exception("Failed to render the rate limit page")
+        return HTMLResponse(
+            content=f"<h1>429 - {_ERROR_TITLES[429]}</h1><p>Retry-After: {retry_after}</p>",
+            status_code=429,
+            headers=headers,
+        )
+
+
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse | HTMLResponse:
+    if exc.status_code == 429 and _is_page_request(request):
+        return _render_rate_limited(request, exc)
     if _wants_html(request) and exc.status_code in (403, 404, 500):
         return _render_error_html(
             request,

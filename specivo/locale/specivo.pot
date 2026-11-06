@@ -11346,3 +11346,37 @@ msgstr ""
 #: specivo/templates/themes/default/pages/auth/api_keys.html
 msgid "None: its projects were deleted"
 msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+msgid "Searching is paused"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+msgid "Too many requests"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "You have searched a lot in a short time. Searching is paused for a moment so the site stays fast for everyone."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "You have sent a lot of requests in a short time. Please wait a moment before trying again."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "Try again"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "Back to search"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+#, python-format
+msgid "You can try again in %(num)s second."
+msgid_plural "You can try again in %(num)s seconds."
+msgstr[0] ""
+msgstr[1] ""

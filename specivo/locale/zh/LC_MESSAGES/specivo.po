@@ -11383,3 +11383,36 @@ msgstr "仅限：%(projects)s"
 #: specivo/templates/themes/default/pages/auth/api_keys.html
 msgid "None: its projects were deleted"
 msgstr "无：其项目已被删除"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+msgid "Searching is paused"
+msgstr "搜索已暂停"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+msgid "Too many requests"
+msgstr "请求过多"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "You have searched a lot in a short time. Searching is paused for a moment so the site stays fast for everyone."
+msgstr "你在短时间内进行了大量搜索。搜索已暂停片刻，以便网站对所有人保持流畅。"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "You have sent a lot of requests in a short time. Please wait a moment before trying again."
+msgstr "你在短时间内发送了大量请求。请稍等片刻再试。"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "Try again"
+msgstr "重试"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "Back to search"
+msgstr "返回搜索"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+#, python-format
+msgid "You can try again in %(num)s second."
+msgid_plural "You can try again in %(num)s seconds."
+msgstr[0] "你可以在 %(num)s 秒后重试。"

@@ -12148,3 +12148,37 @@ msgstr "Limitée à : %(projects)s"
 #: specivo/templates/themes/default/pages/auth/api_keys.html
 msgid "None: its projects were deleted"
 msgstr "Aucun : ses projets ont été supprimés"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+msgid "Searching is paused"
+msgstr "La recherche est en pause"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+msgid "Too many requests"
+msgstr "Trop de requêtes"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "You have searched a lot in a short time. Searching is paused for a moment so the site stays fast for everyone."
+msgstr "Vous avez effectué beaucoup de recherches en peu de temps. La recherche est mise en pause un instant pour que le site reste rapide pour tout le monde."
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "You have sent a lot of requests in a short time. Please wait a moment before trying again."
+msgstr "Vous avez envoyé beaucoup de requêtes en peu de temps. Patientez un instant avant de réessayer."
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "Try again"
+msgstr "Réessayer"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+msgid "Back to search"
+msgstr "Retour à la recherche"
+
+#: specivo/templates/themes/default/pages/rate_limited.html
+#: specivo/templates/themes/default/pages/_rate_limited_inline.html
+#, python-format
+msgid "You can try again in %(num)s second."
+msgid_plural "You can try again in %(num)s seconds."
+msgstr[0] "Vous pourrez réessayer dans %(num)s seconde."
+msgstr[1] "Vous pourrez réessayer dans %(num)s secondes."

@@ -33,8 +33,9 @@ model.
 
 Where each mode is offered:
 
-- The **web search page** offers *Hybrid* (the default) and *Keyword*. People without an account get
-  keyword search only, because embedding a query costs CPU.
+- The **web search page** offers *Hybrid* (the default) and *Keyword*, to people without an account
+  too, over the public projects they may read. Embedding a query costs CPU, so searches are limited
+  per client address instead; see [Search rate limits](configuration.md#search-rate-limits).
 - The **REST API** (`GET /api/v1/search/`) takes `mode=keyword` (the default), `semantic` or `hybrid`.
 - **AI agents** over MCP use `hybrid` unless they ask for another mode. See
   [What agents can do](../ai-agents/capabilities.md).
