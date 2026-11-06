@@ -19,6 +19,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded exchange rates and the conversion contract (§4), and the exchange rate and development link detach/move audit events (§18).
 **Revised:** 2026-11-06 — recorded AI tools and personal AI subscriptions, their coverage and proration rules (§4), and the AI subscription audit events (§18).
 **Revised:** 2026-11-06 — recorded AI spend reports: grouping, conversion, seat allocation and who sees seat cost (§4), and the route order of `/ai-usage/report/` (§4).
+**Revised:** 2026-11-06 — recorded that notifications and mail are rendered per recipient, in their language and timezone, with links built from `APP_URL` (§6).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -441,6 +442,20 @@ traps existing data:
   `IssueService.create(..., validate_metadata=False)`: the importer (history is kept, and mismatches
   are reported as warnings) and recurring generation (the template was validated when the pattern was
   saved). Moving an issue and changing its tracker re-validate nothing.
+
+**Writing to someone else.** Text addressed to another person (notifications, mail) is rendered for
+that person, never in the locale of the request that caused it. Wrap the rendering in
+`recipient_locale(user.language)` (`specivo.core.i18n`): their language if the instance offers it,
+else the instance default (the admin override, then `DEFAULT_LANGUAGE`), and the request's locale
+is restored afterwards. Show times with `format_datetime_for(value, user.timezone)`. Build links
+with `public_url(path)` (`specivo.core.app_url`): `APP_URL` + `STEALTH_PREFIX` + path, `None` when
+`APP_URL` has no host (leave the link out); never from the request's `Host`. `NotificationService`
+builds one payload per recipient, after `IssueService.users_who_can_view` has dropped everyone who
+cannot see the issue, so the subject of a private issue reaches nobody else. HTML mail goes through
+the autoescaping templates in `templates/_shared/email/` (`select_autoescape`), with a `.txt`
+template for the text part. A comment notifies the people it mentions first
+(`NotificationService.notify_comment(..., mentioned_user_ids=...)`), and the comment notification
+skips, per user, the channels their mention already used.
 
 ### 7. Authentication and Authorization
 

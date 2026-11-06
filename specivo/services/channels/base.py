@@ -10,8 +10,9 @@ from typing import Protocol, runtime_checkable
 class NotificationPayload:
     """Channel-agnostic notification content.
 
-    Built once by NotificationService, consumed by every channel.
-    Each channel formats this into its own wire format.
+    Built by NotificationService once per recipient, in the recipient's
+    language and timezone, and consumed by every channel. Each channel formats
+    this into its own wire format.
     """
 
     event_type: str
@@ -31,6 +32,9 @@ class NotificationPayload:
     # One translated line saying what happened ("Alice commented"); email puts
     # it first in the body, since the subject stays the same for an issue.
     event_text: str | None = None
+    # The whole plain-text part of the mail, rendered next to body_html; when
+    # missing, the email channel puts one together from the fields above.
+    body_text: str | None = None
 
 
 @runtime_checkable

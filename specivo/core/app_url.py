@@ -138,3 +138,19 @@ def log_app_url_warning(settings: Settings, *, component: str = "app") -> bool:
         APP_URL_GUIDE_URL,
     )
     return True
+
+
+def public_url(path: str) -> str | None:
+    """``APP_URL`` + ``STEALTH_PREFIX`` + *path*, the address of a page for someone outside.
+
+    ``None`` when ``APP_URL`` has no host: a link without one cannot be
+    followed from a mail client. A local ``APP_URL`` still gives a link (a
+    development instance works with it); :func:`log_app_url_warning` already
+    reported it at start-up.
+    """
+    from specivo.core.config import get_settings
+
+    settings = get_settings()
+    if app_url_problem(settings.app_url) == "unset":
+        return None
+    return f"{settings.app_url.strip().rstrip('/')}{settings.stealth_prefix.rstrip('/')}{path}"

@@ -897,20 +897,21 @@ async def add_comment(
     )
     journal = result.scalar_one()
 
-    # Notify watchers about the new comment
+    # Record the @mentions, then notify the mentioned people, the assignee and
+    # the watchers in one pass, so nobody hears about this comment twice.
+    mentions = await _mention_service.process_mentions(
+        session=db,
+        journal=journal,
+        text=data.notes,
+        actor=current_user,
+        notify=False,
+    )
     await _notification_service.notify_comment(
         session=db,
         issue=issue,
         journal=journal,
         actor=current_user,
-    )
-
-    # Process @mentions in the comment text
-    await _mention_service.process_mentions(
-        session=db,
-        journal=journal,
-        text=data.notes,
-        actor=current_user,
+        mentioned_user_ids=[mention.user_id for mention in mentions],
     )
 
     await db.commit()  # commit before response to avoid reload race condition

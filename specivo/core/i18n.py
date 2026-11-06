@@ -22,10 +22,13 @@ from __future__ import annotations
 
 import gettext as gettext_module
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import date, datetime
+from datetime import UTC, date, datetime, tzinfo
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from babel.support import Translations
 
@@ -231,3 +234,72 @@ class LazyString:
 def gettext_lazy(message: str) -> LazyString:
     """Return a ``LazyString`` that will be translated on evaluation."""
     return LazyString(message)
+
+
+# ---------------------------------------------------------------------------
+# Someone else's language and timezone (mail, notifications)
+# ---------------------------------------------------------------------------
+
+
+def instance_language() -> str:
+    """The instance default language: the admin override, else ``DEFAULT_LANGUAGE``.
+
+    Falls back to ``en`` when that language is not one the instance offers.
+    """
+    from specivo.core.config import get_settings
+    from specivo.core.runtime_settings import get_default_language_override
+
+    settings = get_settings()
+    default = get_default_language_override() or settings.default_language
+    return default if default in settings.available_languages else "en"
+
+
+def recipient_language(language: object) -> str:
+    """The language to write to someone in: their preference, else the instance default.
+
+    A preference the instance does not offer (a removed catalog, a value from
+    an import) falls back too, so a message is never rendered in a language
+    without a catalog.
+    """
+    from specivo.core.config import get_settings
+
+    if isinstance(language, str) and language in get_settings().available_languages:
+        return language
+    return instance_language()
+
+
+@contextmanager
+def recipient_locale(language: object) -> Iterator[str]:
+    """Translate in the recipient's language (see ``recipient_language``) inside the block.
+
+    Restores the locale that was active before, normally the request's, on
+    the way out. Yields the language used.
+    """
+    previous = get_locale()
+    chosen = recipient_language(language)
+    activate(chosen)
+    try:
+        yield chosen
+    finally:
+        activate(previous)
+
+
+def recipient_timezone(name: object) -> tzinfo:
+    """The IANA timezone *name*, or UTC when it is missing or unknown."""
+    if isinstance(name, str) and name:
+        try:
+            return ZoneInfo(name)
+        except (ValueError, KeyError, OSError):
+            logger.debug("Unknown timezone %r, using UTC", name)
+    return UTC
+
+
+def format_datetime_for(value: datetime, timezone: object, locale: str | None = None) -> str:
+    """*value* as ``format_datetime`` shows it, in *timezone*, followed by the zone's name.
+
+    ``"Nov 6, 2026, 21:05 (Asia/Bangkok)"``; a naive *value* is taken as UTC.
+    """
+    zone = recipient_timezone(timezone)
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    local = aware.astimezone(zone)
+    return f"{format_datetime(local, locale)} ({getattr(zone, 'key', 'UTC')})"
