@@ -115,7 +115,11 @@ PLAN_PRESETS: tuple[PlanPreset, ...] = (
     PlanPreset("cursor-pro", "Cursor Pro", "cursor", Decimal("20"), "USD", tool_slugs=("cursor",)),
     PlanPreset("copilot-pro", "GitHub Copilot Pro", "github", Decimal("10"), "USD", tool_slugs=("copilot",)),
     PlanPreset("copilot-pro-plus", "GitHub Copilot Pro+", "github", Decimal("39"), "USD", tool_slugs=("copilot",)),
+    PlanPreset("copilot-max", "GitHub Copilot Max", "github", Decimal("100"), "USD", tool_slugs=("copilot",)),
     PlanPreset("google-ai-pro", "Google AI Pro", "gemini", Decimal("19.99"), "USD"),
+    PlanPreset("google-ai-ultra-5x", "Google AI Ultra 5x", "gemini", Decimal("99.99"), "USD"),
+    PlanPreset("google-ai-ultra-20x", "Google AI Ultra 20x", "gemini", Decimal("199.99"), "USD"),
+    PlanPreset("supergrok", "SuperGrok", "xai", Decimal("30"), "USD"),
 )
 
 _PRESETS_BY_KEY: dict[str, PlanPreset] = {p.key: p for p in PLAN_PRESETS}
