@@ -570,11 +570,13 @@ async def issue_detail(
 
     # Branch name and development activity. Neither is shown to a visitor
     # without an account: commit authors and forge logins are not theirs to read.
+    from specivo.web.issue_development import can_edit_development, development_context, load_development
+
     branch_name = None
     development = None
+    can_edit_dev = False
     if not anonymous:
         from specivo.services.branch_name import BranchNameSettings, make_branch_name
-        from specivo.services.repository_service import development_for_issue
 
         branch_name = make_branch_name(
             BranchNameSettings.from_project_settings(project.settings),
@@ -582,7 +584,8 @@ async def issue_detail(
             display_key=issue.display_key,
             subject=issue.subject,
         )
-        development = await development_for_issue(db, issue.id)
+        development = await load_development(db, issue)
+        can_edit_dev = await can_edit_development(db, user, project.id)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -606,7 +609,7 @@ async def issue_detail(
             **tab_ctx,
             "relation_count": relation_count,
             "branch_name": branch_name,
-            "development": development,
+            **development_context(development, can_edit=can_edit_dev),
             "current_sprint": current_sprint,
             "relations": relations,
             "can_manage_relations": can_manage_relations,

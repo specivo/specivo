@@ -1,62 +1,67 @@
-{# Body of the issue's Development tab: the pull requests and commits linked
-   to the issue by a connected repository. detail.html includes it only when
-   there is one of either, and never for a visitor without an account
-   (``development`` is None). A commit's branch is linked to the forge from
-   its meta line; ``development.branches`` stays in the API output only. #}
+{# Body of the issue's Development tab: a summary of the work linked to the
+   issue, then all of it as one timeline. detail.html includes it only when
+   a pull request or commit is linked, and never for a visitor without an
+   account (``development`` is None); the partial
+   /partials/issues/<key>/development/ renders it again after a detach or a
+   move, with the tab's count (``dev_count_oob``). Empty summary parts are
+   left out. #}
+{% from "pages/issues/_development_macros.html" import kind_count, state_badge, environment_label, when, forge_link %}
 {% set dev = development %}
-{% set web_url = ('http://', 'https://') %}
-{% set pr_states = {"open": _("Open"), "draft": _("Draft"), "merged": _("Merged"), "closed": _("Closed")} %}
-<section class="sp-dev-panel" aria-label="{{ _('Development') }}" data-testid="development-panel" x-data="{ allCommits: false }">
-  {% if dev.pull_requests %}
-  <div class="sp-dev-section">
-    <h3 class="sp-dev-heading">{% trans %}Pull requests{% endtrans %} <span class="sp-dev-count">{{ dev.pull_requests | length }}</span></h3>
-    <ul class="sp-dev-list">
-      {% for pr in dev.pull_requests %}
-      {% set number = ("!" if pr.provider == "gitlab" else "#") ~ pr.number %}
-      <li class="sp-dev-item">
-        <span class="sp-dev-state sp-dev-state-{{ pr.state }}">{{ pr_states.get(pr.state, pr.state) }}</span>
-        <span class="sp-dev-main">
-          {% if pr.url.startswith(web_url) %}
-          <a class="sp-dev-ref" href="{{ pr.url }}" target="_blank" rel="noopener noreferrer">{{ number }}</a>
-          {% else %}
-          <span class="sp-dev-ref">{{ number }}</span>
-          {% endif %}
-          <span class="sp-dev-text">{{ pr.title }}</span>
-          {% if pr.closing %}<span class="sp-dev-closing" title="{% trans %}Says it fixes this issue{% endtrans %}">{% trans %}fixes{% endtrans %}</span>{% endif %}
-        </span>
-        <span class="sp-dev-meta">{{ pr.repository }}{% if pr.source_branch %} · <code>{{ pr.source_branch }}</code>{% endif %}{% if pr.author_login %} · {{ pr.author_login }}{% endif %}</span>
+{% set summary = dev.summary if dev else None %}
+{% set counts = summary.counts if summary else {} %}
+<section class="sp-dev-panel" aria-label="{{ _('Development') }}" data-testid="development-panel">
+  {% if summary and dev_present_kinds %}
+  <div class="sp-dev-summary" data-testid="development-summary">
+    <ul class="sp-dev-stats">
+      {% for kind, status in [("pull_request", summary.pull_requests), ("review", summary.reviews), ("ci", summary.ci), ("deployment", None), ("commit", None)] if counts.get(kind) %}
+      <li class="sp-dev-stat" data-testid="development-stat-{{ kind }}">
+        <span class="sp-dev-stat-count">{{ kind_count(kind, counts[kind]) }}</span>
+        {% if status %}{{ state_badge(status) }}{% endif %}
       </li>
       {% endfor %}
     </ul>
-  </div>
-  {% endif %}
 
-  {% if dev.commits %}
-  <div class="sp-dev-section">
-    <h3 class="sp-dev-heading">{% trans %}Commits{% endtrans %} <span class="sp-dev-count">{{ dev.commit_count }}</span></h3>
-    <ul class="sp-dev-list">
-      {% for c in dev.commits %}
-      <li class="sp-dev-item"{% if loop.index > 5 %} x-show="allCommits" x-cloak{% endif %}>
-        <span class="sp-dev-main">
-          {% if c.url.startswith(web_url) %}
-          <a class="sp-dev-sha" href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.short_sha }}</a>
-          {% else %}
-          <code class="sp-dev-sha">{{ c.short_sha }}</code>
-          {% endif %}
-          <span class="sp-dev-text">{{ c.first_line }}</span>
-        </span>
-        <span class="sp-dev-meta">{{ c.author_name }}
-          {%- if c.branch %} · {% if c.branch_url %}<a class="sp-dev-branch" href="{{ c.branch_url }}" target="_blank" rel="noopener noreferrer"><code>{{ c.branch }}</code></a>{% else %}<code>{{ c.branch }}</code>{% endif %}{% endif %}
-          {%- if c.committed_at %} · {{ c.committed_at | timeago(user.timezone) }}{% endif %}</span>
+    {% if summary.deployments or summary.released_in %}
+    <ul class="sp-dev-facts">
+      {% for env in summary.deployments %}
+      <li class="sp-dev-fact" data-testid="development-deployed" data-environment-type="{{ env.environment_type or '' }}">
+        <svg class="sp-dev-fact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/><path d="M5 21h14"/></svg>
+        <span>{% trans environment=environment_label(env.environment_type, env.environment), ago=when(env.deployed_at, user.timezone, "relative") %}Deployed to %(environment)s %(ago)s{% endtrans %}
+          {%- if env.environment_type and env.environment | lower != env.environment_type %} · {{ forge_link(env.url, env.environment, "sp-dev-env") }}{% endif %}</span>
       </li>
       {% endfor %}
+      {% if summary.released_in %}
+      <li class="sp-dev-fact" data-testid="development-released">
+        <svg class="sp-dev-fact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><circle cx="7" cy="7" r="1.5"/></svg>
+        <span>{% trans %}Released in{% endtrans %}
+          {% for r in summary.released_in -%}
+          {%- if r.version_id and project is defined and project -%}
+          <a class="sp-dev-version" href="/projects/{{ project.key }}/versions/{{ r.version_id }}/" data-testid="development-release-version">{{ r.version_name }}</a> <span class="sp-dev-muted">({{ forge_link(r.url, r.tag_name) }})</span>
+          {%- else -%}
+          {{ forge_link(r.url, r.tag_name, "sp-dev-version") }}
+          {%- endif -%}
+          {%- if not loop.last %}, {% endif %}
+          {%- endfor %}</span>
+      </li>
+      {% endif %}
     </ul>
-    {% if dev.commits | length > 5 %}
-    <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost sp-dev-more" x-show="!allCommits" @click="allCommits = true">{% trans count=dev.commits | length - 5 %}Show %(count)s more{% endtrans %}</button>
     {% endif %}
-    {% if dev.commit_count > dev.commits | length %}
-    <p class="sp-dev-note">{% trans shown=dev.commits | length, total=dev.commit_count %}The newest %(shown)s of %(total)s commits.{% endtrans %}</p>
+
+    {% if summary.repositories %}
+    <p class="sp-dev-repos" data-testid="development-repositories">
+      <span class="sp-dev-muted">{% trans count=summary.repositories | length %}Repository:{% pluralize %}Repositories:{% endtrans %}</span>
+      {% for repo in summary.repositories -%}
+      {{ forge_link(repo.url, repo.name, "sp-dev-repo") }}{% if not loop.last %}, {% endif %}
+      {%- endfor %}
+    </p>
     {% endif %}
   </div>
+
+  {% include "pages/issues/_development_timeline.html" %}
+  {% else %}
+  <p class="sp-dev-empty" data-testid="development-empty">{% trans %}No commits or pull requests are linked to this issue.{% endtrans %}</p>
   {% endif %}
 </section>
+{% if dev_count_oob is defined and dev_count_oob %}
+<span class="tab-count" id="development-tab-count" hx-swap-oob="true">{{ (dev.pull_requests | length) + dev.commit_count if dev else 0 }}</span>
+{% endif %}

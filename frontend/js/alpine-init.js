@@ -40,6 +40,7 @@ import { projectWebhooks } from './components/project-webhooks';
 import { projectRepositories } from './components/project-repositories';
 import { copyBranchName } from './components/copy-branch-name';
 import { issueTabs } from './components/issue-tabs';
+import { issueDevelopment } from './components/issue-development';
 import { projectBranchName } from './components/project-branch-name';
 import { entityAutocomplete } from './components/entity-autocomplete';
 import { projectCreateModal } from './components/project-create-modal';
@@ -106,6 +107,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('projectRepositories', projectRepositories);
   Alpine.data('copyBranchName', copyBranchName);
   Alpine.data('issueTabs', issueTabs);
+  Alpine.data('issueDevelopment', issueDevelopment);
   Alpine.data('projectBranchName', projectBranchName);
   Alpine.data('entityAutocomplete', entityAutocomplete);
   Alpine.data('projectCreateModal', projectCreateModal);

@@ -42,7 +42,8 @@ must agree:
 
 The other options, under **Changes to issues**, are described in
 [Commit commands](#commit-commands), [Merge automation](#merge-automation) and
-[Pull requests from forks](#pull-requests-from-forks-and-outsiders).
+[Pull requests from forks](#pull-requests-from-forks-and-outsiders). **Environment types** is
+described in [Environment types](#environment-types).
 
 ### Filling the form from the URL
 
@@ -264,13 +265,31 @@ author emails are never displayed.
 
 When an issue has linked pull requests or commits, its page has a **Development** tab next to
 Activity (Activity · Development · Time · Relations · Attachments). The tab's count is the number
-of pull requests plus the number of commits. It shows:
+of pull requests plus the number of commits.
 
-- **Pull requests**, open and draft ones first, with their state (*Open*, *Draft*, *Merged*,
-  *Closed*), number, title, *fixes* for a closing link, repository, source branch and author.
-- **Commits**, newest first: short SHA, first line, author name, branch and time. The branch links
-  to its page on the forge when the repository URL is a web address. Five commits are shown, with
-  **Show N more** for the rest of the newest 50; the heading counts all of them.
+At the top, a **summary** sums up the work:
+
+- the number of **pull requests**, **reviews**, **builds** (CI runs), **deployments** and
+  **commits**, each kind with one combined status where it has one: pull requests *Open*, *Merged*
+  or *Closed*; reviews *Changes requested*, *Approved* or *Commented*; builds *Failing*, *Running*,
+  *Passing* or *Neutral* (see [Builds, deployments and releases](#builds-deployments-and-releases)
+  for how they are combined);
+- the latest successful deployment to each [environment type](#environment-types): "Deployed to
+  production 2 hrs ago". Hover the time to see the date and time; the environment's own name, when
+  it is not just the type, links to it on the forge;
+- **Released in**: the releases and tags the issue is in. When the project has a version of the
+  same name, the version links to its page, with the tag beside it;
+- the repositories, linked to the forge.
+
+A kind with nothing in it is left out of the summary.
+
+Below it, the **timeline** lists everything, newest first: commits (short SHA, first line, author,
+branch and repository), pull requests (state, number, title, *fixes* for a closing link, author and
+source branch), reviews, builds, deployments and releases. Numbers, SHAs, names and branches link
+to the forge when the repository URL is a web address. When there is more than one kind, buttons
+above the timeline filter it: pick **Builds** to see only builds, add **Deployments** to see both,
+and **All** to see everything again. The timeline shows 20 entries at a time; **Show N more** loads
+the next ones.
 
 ![The Development tab on an issue](../../assets/img/issue-development.webp)
 
@@ -330,7 +349,7 @@ GitHub deployments and deployment statuses and GitLab deployment events are reco
 environment and status. A deployment belongs to an issue when it deployed a linked commit or a
 linked pull request's merge commit, or a branch as above. Only an exact commit counts: Specivo does
 not know which earlier commits a deployed commit contains. The summary shows the latest successful
-deployment per environment type: "deployed to production at …".
+deployment per environment type: "Deployed to production 2 hrs ago".
 
 ### Environment types
 
@@ -344,8 +363,13 @@ Each environment is given a type from its name:
 | development | `dev`, `develop`, `development`, `review` (`review/feat-x`), `local`, `sandbox`, `preview` |
 
 A name that matches none is left unclassified (`environment_type` is `null`). To override the
-guess, set `environment_types` in the repository's settings, for now through the API (the form does
-not show it yet):
+guess, open the repository in **Settings → Repositories**, choose **Edit**, and list the
+environments under **Environment types**: **Add an environment**, enter its name (or a prefix
+ending in `*`, such as `review/*`) and choose its type. The form says on the row what is wrong (a
+missing name or type, a name listed twice) and saves nothing until it is fixed. Remove a row to go
+back to the guess for that environment.
+
+Through the API, set `environment_types` in the repository's settings:
 
 ```text
 PATCH /api/v1/projects/ACME/repositories/{id}/
@@ -401,8 +425,17 @@ A pull request keeps at most 50 reviewers.
 
 ## Correcting links: detach and move
 
-A commit or pull request linked to the wrong issue can be detached, or moved to the right one. For
-now this is done through the API (the Development tab does not offer it yet), with the `id` from
+A commit or pull request linked to the wrong issue can be detached, or moved to the right one. In
+the Development tab, each commit and pull request in the timeline has a **⋯** menu:
+
+- **Detach from this issue** asks you to confirm, then removes the link.
+- **Move to another issue…** asks for the issue: type its key, or part of its subject and pick it
+  from the suggestions, then choose **Move**. When the move is refused (no permission on the
+  target, or a target outside the repository's scope) the reason is shown under the field and
+  nothing changes.
+
+The tab reloads after each change, with its count. People who cannot edit the issue do not see the
+menu. The same is available through the API, with the `id` from
 `GET /api/v1/issues/{key}/development/`:
 
 ```text

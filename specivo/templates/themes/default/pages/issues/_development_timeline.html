@@ -1,0 +1,29 @@
+{# The Development tab's timeline: all linked activity, newest first, with a
+   filter by kind and "Show more". Rendered inside _development.html and on
+   its own by /partials/issues/<key>/development/timeline/ when the filter
+   changes (it replaces itself). A chip toggles its kind in the selection;
+   no selection, or "All", shows every kind. #}
+{% from "pages/issues/_development_macros.html" import kind_label %}
+{% set base = "/partials/issues/" ~ issue.display_key ~ "/development/timeline/" %}
+<div class="sp-dev-timeline" id="issue-dev-timeline" data-testid="development-timeline">
+  <div class="sp-dev-timeline-head">
+    <h3 class="sp-dev-heading">{% trans %}Timeline{% endtrans %}</h3>
+    {% if dev_present_kinds | length > 1 %}
+    <div class="sp-dev-filters" role="group" aria-label="{{ _('Show only') }}" data-testid="development-filters">
+      <button type="button" class="sp-dev-chip{% if not dev_kinds %} active{% endif %}" aria-pressed="{{ 'false' if dev_kinds else 'true' }}"
+              hx-get="{{ base }}" hx-target="#issue-dev-timeline" hx-swap="outerHTML" data-kind="">{% trans %}All{% endtrans %}</button>
+      {% for kind in dev_present_kinds %}
+      {% set on = kind in dev_kinds %}
+      {% set next = (dev_kinds | reject("equalto", kind) | list) if on else (dev_kinds + [kind]) %}
+      {% set next = [] if next | length == dev_present_kinds | length else next %}
+      <button type="button" class="sp-dev-chip{% if on %} active{% endif %}" aria-pressed="{{ 'true' if on else 'false' }}"
+              hx-get="{{ base }}{% if next %}?{% for k in next %}kinds={{ k }}{% if not loop.last %}&amp;{% endif %}{% endfor %}{% endif %}"
+              hx-target="#issue-dev-timeline" hx-swap="outerHTML" data-kind="{{ kind }}">{{ kind_label(kind) }} <span class="sp-dev-chip-count">{{ development.summary.counts[kind] }}</span></button>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <ol class="sp-dev-list" data-testid="development-timeline-list">
+    {% include "pages/issues/_development_items.html" %}
+  </ol>
+</div>

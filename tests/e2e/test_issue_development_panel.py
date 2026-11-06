@@ -1,4 +1,4 @@
-"""E2E: the Development tab on the issue page shows linked pull requests and commits.
+"""E2E: the Development tab on the issue page shows linked pull requests and commits in its timeline.
 
 No Celery worker runs in the E2E environment, so the commits and the pull
 request are written to the database directly, as processing would store them.
@@ -116,11 +116,10 @@ def test_tab_shows_linked_work(admin_page: Page, issue_with_development: dict) -
         "href", f"https://github.example.com/{_REPO}/tree/feat/login-form"
     )
 
-    # Five commits first, the rest behind "Show 2 more".
+    # Commits are timeline entries now: all seven fit on the first page, newest first.
     expect(panel.get_by_text("Step 0 of the login form")).to_be_visible()
-    expect(panel.get_by_text("Step 6 of the login form")).to_be_hidden()
-    panel.get_by_role("button", name="Show 2 more").click()
     expect(panel.get_by_text("Step 6 of the login form")).to_be_visible()
+    expect(panel.get_by_test_id("development-more")).to_have_count(0)
     expect(panel).not_to_contain_text("alex@example.com")
     tracker.assert_no_errors()
 
@@ -158,6 +157,10 @@ def test_tab_bar_fits_the_viewport(admin_page: Page, issue_with_development: dic
     expect(admin_page.locator("#issue-attachments-tab")).to_be_visible()
     overflow = admin_page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
     assert overflow <= 0, f"horizontal overflow of {overflow}px at {width}px"
+    inner = admin_page.evaluate(
+        "(() => { const m = document.querySelector('main.main-content'); return m.scrollWidth - m.clientWidth; })()"
+    )
+    assert inner <= 0, f"main content scrolls sideways by {inner}px at {width}px"
 
 
 _GIT_JOURNAL = """
