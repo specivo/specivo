@@ -23,7 +23,7 @@ The viewer groups event types into categories:
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
-| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off, AI model prices added, changed or deleted, and bundled prices loaded. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
+| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off, AI model prices added, changed or deleted, bundled prices loaded, other people's AI subscriptions added, changed or deleted by an administrator, and AI subscription self-service switched on or off. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
 | Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
 | Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
@@ -159,6 +159,19 @@ not an audit event; its last outcome is shown on the admin page. See [Exchange r
 Saving unchanged values and loading a bundled list that changes nothing write nothing. The
 installation's first load runs in the database migration and is not audited. See
 [AI model prices](ai-model-prices.md).
+
+### AI subscriptions
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_subscription_created` | the administrator | `subscription_id`, `target_user_id`, `target_login` (the person who holds it), `provider`, `plan_key`, `plan_name`, `tool_slugs`, `amount`, `currency`, `billing_period`, `starts_on`, `ends_on` |
+| `ai_subscription_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new`; a changed note shows only as `notes: {"changed": true}` |
+| `ai_subscription_deleted` | the administrator | the deleted subscription, as for `ai_subscription_created` |
+| `ai_subscriptions_self_service_toggled` | the administrator | `enabled` |
+
+Only an administrator's change to **somebody else's** subscription is recorded. People's changes
+to their own subscriptions, and an administrator's to their own, are not audit events. Notes are
+never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 
 ## Personal data
 

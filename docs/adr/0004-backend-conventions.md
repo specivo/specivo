@@ -16,6 +16,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
 **Revised:** 2026-11-06 — recorded the money convention (§4), the currency audit events and the repository provider change audit event (§18).
 **Revised:** 2026-11-06 — recorded exchange rates and the conversion contract (§4), and the exchange rate and development link detach/move audit events (§18).
+**Revised:** 2026-11-06 — recorded AI tools and personal AI subscriptions, their coverage and proration rules (§4), and the AI subscription audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -228,6 +229,24 @@ instant compared in UTC; no match is `None` (unpriced), never zero and never the
 with the pure `specivo.core.ai_pricing.price_usage(tokens, long_context_tokens, price)` (exact `Decimal`, partial
 when a class with tokens has no price). A table that prices with these rows registers a `PriceReference` so
 referenced rows cannot be deleted or ended before their entries.
+
+**AI tools and subscriptions.** `ai_tools` is a lookup keyed by slug (`^[a-z0-9][a-z0-9-]{1,49}$`), seeded with the
+common coding agents; a slug a reporter sends that is not listed is created on first use, inactive, only through
+`AiToolService.ensure`. Tools are never deleted. `ai_subscriptions` holds personal flat-rate plans: `amount` +
+`currency_code` (`NUMERIC(20, 8)`, typed, so validated positive and to the currency's minor units; a new or changed
+currency must be enabled), `billing_period` `month` or `year`, and `starts_on` / `ends_on` as **UTC days, both
+inclusive** (`ends_on` `NULL` = open): a subscription covers `[starts_on 00:00Z, ends_on + 1 day 00:00Z)`, and an
+instant is matched by its UTC date, the rule `priced_at` and the UTC-day usage buckets follow. `tool_slugs` lists the
+tools a plan covers; empty means the tools whose `default_provider` is the plan's provider. Resolve coverage only
+through `AiSubscriptionService.subscription_for(user_id, tool, provider, at)`: a plan listing the tool first, then a
+provider plan when the usage's provider (or the tool's default) is the plan's and the tool belongs to that provider;
+within a step the latest start, then the newest row. Seat cost goes through the pure
+`specivo.core.ai_subscriptions.prorated_fee` / `subscription_charges` (a yearly fee divided by 12, then
+`fee x covered days / days in the month`, exact `Decimal`, one division) and `AiSubscriptionService.seat_cost` /
+`seat_charges_between`; amounts stay in each plan's currency. People manage their own subscriptions while the setting
+`ai_subscriptions_self_service` is on (default); administrators manage everyone's; nobody else sees one; service and
+system accounts hold none; the `/my/` routes are account-wide (`get_account_user`). Plan presets
+(`PLAN_PRESETS`) are suggestions only.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
@@ -625,6 +644,14 @@ period adds `closed_price_id`, an update adds `changes`) and `AI_MODEL_PRICES_SE
 `history_inserted`, `aliases_updated`, `unchanged`, `skipped`; only when a load changed something, user none at
 worker start) are written by `AiModelPriceService` in the transaction of the change (category Administration,
 `resource_type` `ai_model_price`). The first seed in the migration writes none.
+
+**AI subscription events.** `AI_SUBSCRIPTION_CREATED` / `_UPDATED` / `_DELETED` (details: `subscription_id`,
+`target_user_id`, `target_login`, `provider`, `plan_key`, `plan_name`, `tool_slugs`, `amount` and `currency` at the
+currency's minor units, `billing_period`, `starts_on`, `ends_on`; an update adds `changes`, where the notes appear
+only as `{"changed": true}`) are written by `AiSubscriptionService` in the transaction of the change, only when the
+actor is not the holder (an administrator changing somebody else's). `AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED`
+(`enabled`) is written when the setting changes. Category Administration; `resource_type` `ai_subscription` or
+`setting`. Notes are free text and never logged.
 
 **Repository provider change.** `REPOSITORY_PROVIDER_CHANGED` (category Administration) is written by
 `RepositoryIntegrationService.update` when an integration moves to another forge, which also moves its

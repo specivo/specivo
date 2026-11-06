@@ -1,0 +1,67 @@
+{# The subscription form. Context: form, form_action, presets, tools, currencies; people (admin add form only); submit_label. #}
+<form method="post" action="{{ form_action }}" class="sp-sub-form" data-testid="subscription-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if people is defined and people %}
+  <div class="sp-sub-field sp-sub-wide">
+    <label class="form-label" for="sub-user">{% trans %}Person{% endtrans %}</label>
+    <select id="sub-user" name="user_id" class="form-input" required>
+      <option value="">{% trans %}Choose a person{% endtrans %}</option>
+      {% for p in people %}<option value="{{ p.id }}" {{ 'selected' if p.id == form.user_id else '' }}>{{ p.name }} ({{ p.login }})</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-plan">{% trans %}Plan{% endtrans %}</label>
+    <select id="sub-plan" name="plan_key" class="form-input">
+      {% for p in presets %}<option value="{{ p.key }}" {{ 'selected' if p.key == form.plan_key else '' }}>{{ p.name }}</option>{% endfor %}
+      <option value="custom" {{ 'selected' if form.plan_key == 'custom' else '' }}>{% trans %}Custom{% endtrans %}</option>
+    </select>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-name">{% trans %}Plan name{% endtrans %}</label>
+    <input id="sub-name" type="text" name="plan_name" class="form-input" maxlength="100" value="{{ form.plan_name }}" placeholder="Claude Max 5x">
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-provider">{% trans %}Provider{% endtrans %}</label>
+    <input id="sub-provider" type="text" name="provider" class="form-input" maxlength="50" value="{{ form.provider }}" placeholder="anthropic">
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-amount">{% trans %}Fee{% endtrans %}</label>
+    <input id="sub-amount" type="text" inputmode="decimal" name="amount" class="form-input" value="{{ form.amount }}" placeholder="20.00" required>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-currency">{% trans %}Currency{% endtrans %}</label>
+    <select id="sub-currency" name="currency" class="form-input">
+      {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == form.currency else '' }}>{{ c.code }} · {{ c.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-period">{% trans %}Billed{% endtrans %}</label>
+    <select id="sub-period" name="billing_period" class="form-input">
+      <option value="month" {{ 'selected' if form.billing_period == 'month' else '' }}>{% trans %}Monthly{% endtrans %}</option>
+      <option value="year" {{ 'selected' if form.billing_period == 'year' else '' }}>{% trans %}Yearly{% endtrans %}</option>
+    </select>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-start">{% trans %}First day{% endtrans %}</label>
+    <input id="sub-start" type="date" name="starts_on" class="form-input" value="{{ form.starts_on }}" required>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-end">{% trans %}Last day (optional){% endtrans %}</label>
+    <input id="sub-end" type="date" name="ends_on" class="form-input" value="{{ form.ends_on }}">
+  </div>
+  <fieldset class="sp-sub-tools sp-sub-wide">
+    <legend class="form-label">{% trans %}Tools it covers{% endtrans %}</legend>
+    {% for t in tools %}
+    <label class="sp-sub-check"><input type="checkbox" name="tool_slugs" value="{{ t.slug }}" {{ 'checked' if t.slug in (form.tool_slugs or []) else '' }}> {{ t.name }}</label>
+    {% endfor %}
+    <p class="sp-text-muted-xs">{% trans %}Leave all unticked for a plan that covers every tool of its provider, such as Claude Code for an Anthropic plan.{% endtrans %}</p>
+  </fieldset>
+  <div class="sp-sub-field sp-sub-wide">
+    <label class="form-label" for="sub-notes">{% trans %}Notes{% endtrans %}</label>
+    <textarea id="sub-notes" name="notes" class="form-input" rows="2" maxlength="2000">{{ form.notes }}</textarea>
+  </div>
+  <div class="sp-sub-actions sp-sub-wide">
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{{ submit_label }}</button>
+  </div>
+</form>

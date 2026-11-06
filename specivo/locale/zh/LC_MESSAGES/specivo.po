@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 09:34+0100\n"
+"POT-Creation-Date: 2026-11-06 10:08+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -187,7 +187,7 @@ msgid "This account cannot change its email address here."
 msgstr ""
 
 #: specivo/services/email_change_service.py:178
-#: specivo/templates/themes/default/pages/auth/profile.html:135
+#: specivo/templates/themes/default/pages/auth/profile.html:145
 msgid ""
 "Your email address is managed by your identity provider. Change it at "
 "your identity provider."
@@ -708,6 +708,7 @@ msgid "View all notifications"
 msgstr "查看所有通知"
 
 #: specivo/templates/themes/default/components/header.html:164
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:10
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -733,7 +734,18 @@ msgstr "偏好设置"
 msgid "API Keys"
 msgstr "API 密钥"
 
-#: specivo/templates/themes/default/components/header.html:179
+#: specivo/templates/themes/default/components/header.html:177
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:5
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:13
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:16
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:12
+#: specivo/templates/themes/default/pages/admin/dashboard.html:169
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:4
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:13
+msgid "AI subscriptions"
+msgstr "AI 订阅"
+
+#: specivo/templates/themes/default/components/header.html:185
 #: specivo/templates/themes/default/pages/auth/change_password.html:59
 #: specivo/templates/themes/default/pages/auth/login.html:49
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:11
@@ -912,7 +924,7 @@ msgstr "重复任务"
 
 #: specivo/templates/themes/default/components/sidebar.html:79
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
-#: specivo/templates/themes/default/pages/admin/dashboard.html:179
+#: specivo/templates/themes/default/pages/admin/dashboard.html:189
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
@@ -951,6 +963,10 @@ msgstr "管理"
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:5
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:11
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:34
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:5
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:11
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:4
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:10
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:3
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:9
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
@@ -992,6 +1008,7 @@ msgstr "管理"
 #: specivo/templates/themes/default/pages/admin/versions.html:9
 #: specivo/templates/themes/default/pages/admin/workflows.html:3
 #: specivo/templates/themes/default/pages/admin/workflows.html:9
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:11
 msgid "Admin"
 msgstr "管理员"
 
@@ -1027,6 +1044,8 @@ msgstr "正在重建索引……"
 
 #: specivo/templates/themes/default/pages/_fts_card.html:19
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:72
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:95
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:49
 #: specivo/templates/themes/default/pages/admin/currencies.html:32
 #: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:44
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:233
@@ -1038,6 +1057,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/admin/settings.html:140
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:27
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
@@ -1442,12 +1462,14 @@ msgstr "主题"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:33
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:37
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:48
 #: specivo/templates/themes/default/pages/admin/currencies.html:59
 #: specivo/templates/themes/default/pages/admin/projects.html:43
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:31
 #: specivo/templates/themes/default/pages/admin/user_detail.html:225
 #: specivo/templates/themes/default/pages/admin/users.html:47
 #: specivo/templates/themes/default/pages/admin/versions.html:82
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:37
 #: specivo/templates/themes/default/pages/auth/api_keys.html:96
 #: specivo/templates/themes/default/pages/auth/profile.html:70
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:17
@@ -1498,6 +1520,7 @@ msgstr "没有指派给你的待处理工作项。"
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:10
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:27
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:25
 #: specivo/templates/themes/default/pages/projects/settings.html:1522
 msgid "Provider"
 msgstr "提供商"
@@ -1511,6 +1534,7 @@ msgstr "模型"
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
 msgid "Currency"
 msgstr "货币"
 
@@ -1657,6 +1681,7 @@ msgstr "该货币已停用。请先在“货币”页面启用它。"
 #: specivo/templates/themes/default/pages/admin/currencies.html:19
 #: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:21
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:8
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:7
 msgid "Unknown currency code."
 msgstr "未知的货币代码。"
 
@@ -1712,7 +1737,7 @@ msgid "johndoe"
 msgstr "johndoe"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:26
-#: specivo/templates/themes/default/pages/admin/dashboard.html:189
+#: specivo/templates/themes/default/pages/admin/dashboard.html:199
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
@@ -1789,8 +1814,11 @@ msgstr "创建中……"
 
 #: specivo/templates/themes/default/pages/admin/_user_i18n.html:7
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:38
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:34
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:48
 #: specivo/templates/themes/default/pages/admin/projects.html:18
 #: specivo/templates/themes/default/pages/admin/user_detail.html:37
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:31
 #: specivo/templates/themes/default/pages/auth/api_keys.html:20
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:126
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:64
@@ -1823,7 +1851,7 @@ msgstr "已停用"
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:3
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:12
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:16
-#: specivo/templates/themes/default/pages/admin/dashboard.html:210
+#: specivo/templates/themes/default/pages/admin/dashboard.html:220
 msgid "Agent Groups"
 msgstr "代理组"
 
@@ -1842,8 +1870,9 @@ msgstr "代理组"
 #: specivo/templates/themes/default/pages/admin/dashboard.html:171
 #: specivo/templates/themes/default/pages/admin/dashboard.html:181
 #: specivo/templates/themes/default/pages/admin/dashboard.html:191
-#: specivo/templates/themes/default/pages/admin/dashboard.html:212
-#: specivo/templates/themes/default/pages/admin/dashboard.html:224
+#: specivo/templates/themes/default/pages/admin/dashboard.html:201
+#: specivo/templates/themes/default/pages/admin/dashboard.html:222
+#: specivo/templates/themes/default/pages/admin/dashboard.html:234
 msgid "Manage"
 msgstr "管理"
 
@@ -1994,6 +2023,7 @@ msgstr "启用"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:453
 #: specivo/templates/themes/default/pages/admin/versions.html:128
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:36
 #: specivo/templates/themes/default/pages/auth/api_keys.html:132
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:96
@@ -2057,6 +2087,7 @@ msgid "All sources"
 msgstr "所有来源"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:42
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:33
 msgid "Period"
 msgstr "时间段"
 
@@ -2069,6 +2100,7 @@ msgid "All periods"
 msgstr "所有时间段"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:46
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:37
 #: specivo/templates/themes/default/pages/admin/audit_log.html:63
 #: specivo/templates/themes/default/pages/admin/currencies.html:47
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:127
@@ -2129,6 +2161,241 @@ msgstr ""
 "内置价格来源：LiteLLM 的模型价格列表（MIT 许可证，Copyright (c) 2023 Berri "
 "AI）。这些是仅供参考的标价，请以您的提供商账单为准。"
 
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:17
+msgid ""
+"The flat-rate AI plans people pay for. Usage from the tools a plan covers"
+" counts as covered by it, and spend reports spread the fee over that "
+"usage. Your changes to other people's subscriptions are recorded in the "
+"audit log."
+msgstr ""
+"成员付费的固定费用 AI "
+"套餐。套餐所覆盖工具的使用量计为由该套餐覆盖，支出报告会把套餐费用分摊到这些使用量上。你对他人订阅的修改会记录在审计日志中。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:17
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:4
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:14
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:17
+msgid "AI tools"
+msgstr "AI 工具"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:19
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:18
+msgid "Subscription added."
+msgstr "订阅已添加。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:20
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:19
+msgid "Subscription saved."
+msgstr "订阅已保存。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:21
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:20
+msgid "Subscription deleted."
+msgstr "订阅已删除。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:22
+msgid "People can now manage their own subscriptions."
+msgstr "现在成员可以管理自己的订阅。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:23
+msgid "Only administrators can now change subscriptions."
+msgstr "现在只有管理员可以修改订阅。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:29
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:43
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:6
+msgid "Person"
+msgstr "成员"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:30
+msgid "Everyone"
+msgstr "所有人"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:35
+msgid "Running today"
+msgstr "今天有效"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:44
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:14
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:33
+msgid "Plan"
+msgstr "套餐"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:45
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:34
+msgid "Covers"
+msgstr "覆盖"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:46
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:29
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:35
+msgid "Fee"
+msgstr "费用"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:47
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:36
+msgid "Days"
+msgstr "日期"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:61
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:146
+#: specivo/templates/themes/default/pages/admin/groups.html:71
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:92
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:145
+#: specivo/templates/themes/default/pages/admin/projects.html:81
+#: specivo/templates/themes/default/pages/admin/settings.html:165
+#: specivo/templates/themes/default/pages/admin/versions.html:125
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:49
+#: specivo/templates/themes/default/pages/issues/detail.html:76
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:86
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
+#: specivo/templates/themes/default/pages/projects/settings.html:426
+#: specivo/templates/themes/default/pages/projects/settings.html:577
+#: specivo/templates/themes/default/pages/projects/settings.html:754
+#: specivo/templates/themes/default/pages/projects/settings.html:975
+#: specivo/templates/themes/default/pages/projects/settings.html:1138
+#: specivo/templates/themes/default/pages/projects/settings.html:1432
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:43
+#: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:118
+#: specivo/templates/themes/default/pages/projects/version_detail.html:44
+#: specivo/templates/themes/default/pages/time/list.html:86
+#: specivo/templates/themes/default/pages/wiki/edit.html:14
+#: specivo/templates/themes/default/pages/wiki/show.html:35
+msgid "Edit"
+msgstr "编辑"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:64
+msgid "No subscriptions match."
+msgstr "没有符合条件的订阅。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:74
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:61
+msgid "Add a subscription"
+msgstr "添加订阅"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:77
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:63
+msgid "Start from a plan"
+msgstr "从套餐开始"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:80
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:17
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:66
+msgid "Custom"
+msgstr "自定义"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:82
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:68
+msgid "Fill in"
+msgstr "填入"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:84
+msgid ""
+"Plan prices are suggestions from the providers' published list prices and"
+" may be out of date. Enter what is actually paid, in the currency it is "
+"paid in."
+msgstr "套餐价格是根据提供商公布的标价给出的建议，可能已经过时。请按实际支付的币种填写实际支付的金额。"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:85
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:71
+msgid "Add subscription"
+msgstr "添加订阅"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:90
+msgid "Who can change subscriptions"
+msgstr "谁可以修改订阅"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:93
+msgid "People can add and change their own subscriptions"
+msgstr "成员可以添加和修改自己的订阅"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:94
+msgid ""
+"When this is off, only administrators change subscriptions. People still "
+"see their own."
+msgstr "关闭后，只有管理员可以修改订阅。成员仍可查看自己的订阅。"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:18
+msgid ""
+"The tools that report AI usage. A tool a reporter sends for the first "
+"time is added here inactive; activate it to offer it in pickers. The "
+"default provider is the model provider assumed for the tool's usage, and "
+"plans of that provider that list no tools cover it. Tools are never "
+"deleted."
+msgstr ""
+"上报 AI "
+"使用量的工具。上报程序首次发送的工具会以未启用状态添加到这里；启用后才会出现在选择列表中。默认提供商是该工具使用量所假定的模型提供商，该提供商下未列出工具的套餐会覆盖此工具。工具永远不会被删除。"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:20
+msgid "Tool saved."
+msgstr "工具已保存。"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:21
+msgid "Tool added."
+msgstr "工具已添加。"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:30
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:64
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:30
+msgid "Slug"
+msgstr "标识串"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:31
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:45
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:68
+#: specivo/templates/themes/default/pages/admin/currencies.html:55
+#: specivo/templates/themes/default/pages/admin/groups.html:87
+#: specivo/templates/themes/default/pages/admin/groups.html:113
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
+#: specivo/templates/themes/default/pages/admin/user_detail.html:221
+#: specivo/templates/themes/default/pages/auth/api_keys.html:92
+#: specivo/templates/themes/default/pages/projects/detail.html:174
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:60
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:69
+#: specivo/templates/themes/default/pages/projects/settings.html:43
+#: specivo/templates/themes/default/pages/projects/settings.html:452
+#: specivo/templates/themes/default/pages/projects/settings.html:555
+#: specivo/templates/themes/default/pages/projects/settings.html:708
+#: specivo/templates/themes/default/pages/projects/settings.html:790
+#: specivo/templates/themes/default/pages/projects/settings.html:1004
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:29
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:62
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:196
+msgid "Name"
+msgstr "名称"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:32
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:46
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:72
+msgid "Default provider"
+msgstr "默认提供商"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:33
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:47
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:76
+msgid "Position"
+msgstr "排序"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:46
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:73
+msgid "none"
+msgstr "无"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:60
+msgid "Add a tool"
+msgstr "添加工具"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:80
+msgid "Add tool"
+msgstr "添加工具"
+
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:3
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:13
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:16
@@ -2162,7 +2429,7 @@ msgstr "尚无项目选择加入匿名阅读。"
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
 #: specivo/templates/themes/default/pages/admin/audit_log.html:10
 #: specivo/templates/themes/default/pages/admin/audit_log.html:14
-#: specivo/templates/themes/default/pages/admin/dashboard.html:199
+#: specivo/templates/themes/default/pages/admin/dashboard.html:209
 msgid "Audit log"
 msgstr ""
 
@@ -2348,32 +2615,11 @@ msgstr "已启用"
 #: specivo/templates/themes/default/pages/admin/email.html:52
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:44
 #: specivo/templates/themes/default/pages/admin/user_detail.html:159
-#: specivo/templates/themes/default/pages/auth/profile.html:216
+#: specivo/templates/themes/default/pages/auth/profile.html:226
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:26
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:33
 msgid "Disabled"
 msgstr "已禁用"
-
-#: specivo/templates/themes/default/pages/admin/currencies.html:55
-#: specivo/templates/themes/default/pages/admin/groups.html:87
-#: specivo/templates/themes/default/pages/admin/groups.html:113
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
-#: specivo/templates/themes/default/pages/admin/user_detail.html:221
-#: specivo/templates/themes/default/pages/auth/api_keys.html:92
-#: specivo/templates/themes/default/pages/projects/detail.html:174
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:60
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:69
-#: specivo/templates/themes/default/pages/projects/settings.html:43
-#: specivo/templates/themes/default/pages/projects/settings.html:452
-#: specivo/templates/themes/default/pages/projects/settings.html:555
-#: specivo/templates/themes/default/pages/projects/settings.html:708
-#: specivo/templates/themes/default/pages/projects/settings.html:790
-#: specivo/templates/themes/default/pages/projects/settings.html:1004
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:29
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:62
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:196
-msgid "Name"
-msgstr "名称"
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:56
 msgid "Symbol"
@@ -2550,47 +2796,51 @@ msgstr "录入、导入或获取报表换算所用的每日汇率。"
 msgid "Prices per token that value AI usage, with their history."
 msgstr "用于估算 AI 用量价值的每 token 价格及其历史。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:169
+#: specivo/templates/themes/default/pages/admin/dashboard.html:170
+msgid "Flat-rate AI plans people pay for, and the AI tools list."
+msgstr "成员付费的固定费用 AI 套餐，以及 AI 工具列表。"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:179
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:4
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:10
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:35
 msgid "Metadata Presets"
 msgstr "元数据预设"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:170
+#: specivo/templates/themes/default/pages/admin/dashboard.html:180
 msgid "Manage reusable metadata field schemas for projects."
 msgstr "管理可复用的项目元数据字段架构。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:180
+#: specivo/templates/themes/default/pages/admin/dashboard.html:190
 msgid "Global application settings and configuration."
 msgstr "全局应用设置与配置。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:190
+#: specivo/templates/themes/default/pages/admin/dashboard.html:200
 msgid "SMTP configuration and test email delivery."
 msgstr "SMTP 配置与测试邮件发送。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:200
+#: specivo/templates/themes/default/pages/admin/dashboard.html:210
 msgid "Sign-ins, access and administration changes, and everything agents do."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:201
+#: specivo/templates/themes/default/pages/admin/dashboard.html:211
 #: specivo/templates/themes/default/pages/issues/description_diff.html:106
 #: specivo/templates/themes/default/pages/wiki/history.html:59
 msgid "View"
 msgstr "查看"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:211
+#: specivo/templates/themes/default/pages/admin/dashboard.html:221
 msgid "Manage agent groups, members, and access policies."
 msgstr "管理智能体分组、成员和访问策略。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:222
+#: specivo/templates/themes/default/pages/admin/dashboard.html:232
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:3
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:12
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:15
 msgid "Kill Switch"
 msgstr "紧急停止开关"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:223
+#: specivo/templates/themes/default/pages/admin/dashboard.html:233
 msgid "Emergency agent access revocation and event log."
 msgstr "紧急撤销智能体访问权限及事件日志。"
 
@@ -2914,35 +3164,6 @@ msgstr "报表会把这类金额单独列为未换算金额，绝不会计为零
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:115
 msgid "Rates"
 msgstr "汇率列表"
-
-#: specivo/templates/themes/default/pages/admin/exchange_rates.html:146
-#: specivo/templates/themes/default/pages/admin/groups.html:71
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:92
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:145
-#: specivo/templates/themes/default/pages/admin/projects.html:81
-#: specivo/templates/themes/default/pages/admin/settings.html:165
-#: specivo/templates/themes/default/pages/admin/versions.html:125
-#: specivo/templates/themes/default/pages/issues/detail.html:76
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:86
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
-#: specivo/templates/themes/default/pages/projects/settings.html:426
-#: specivo/templates/themes/default/pages/projects/settings.html:577
-#: specivo/templates/themes/default/pages/projects/settings.html:754
-#: specivo/templates/themes/default/pages/projects/settings.html:975
-#: specivo/templates/themes/default/pages/projects/settings.html:1138
-#: specivo/templates/themes/default/pages/projects/settings.html:1432
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:43
-#: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:118
-#: specivo/templates/themes/default/pages/projects/version_detail.html:44
-#: specivo/templates/themes/default/pages/time/list.html:86
-#: specivo/templates/themes/default/pages/wiki/edit.html:14
-#: specivo/templates/themes/default/pages/wiki/show.html:35
-msgid "Edit"
-msgstr "编辑"
 
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:153
 msgid ""
@@ -3423,10 +3644,6 @@ msgstr "预设总数"
 msgid "Built-in"
 msgstr "内置"
 
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
-msgid "Custom"
-msgstr "自定义"
-
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:59
 msgid "Built-in Presets"
 msgstr "内置预设"
@@ -3452,12 +3669,6 @@ msgstr "创建自定义元数据预设，以定义任何项目都可启用的可
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:114
 msgid "Create first preset"
 msgstr "创建第一个预设"
-
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:30
-msgid "Slug"
-msgstr "标识串"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:165
 msgid "e.g. my-custom-fields"
@@ -3865,7 +4076,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/user_detail.html:21
 #: specivo/templates/themes/default/pages/admin/user_detail.html:165
 #: specivo/templates/themes/default/pages/admin/users.html:25
-#: specivo/templates/themes/default/pages/auth/profile.html:221
+#: specivo/templates/themes/default/pages/auth/profile.html:231
 msgid "Never"
 msgstr "从未"
 
@@ -4763,7 +4974,7 @@ msgid "Change email address"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:90
-#: specivo/templates/themes/default/pages/auth/profile.html:189
+#: specivo/templates/themes/default/pages/auth/profile.html:199
 msgid "Change email"
 msgstr ""
 
@@ -4805,7 +5016,7 @@ msgid "Deactivate account"
 msgstr "停用账户"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:150
-#: specivo/templates/themes/default/pages/auth/profile.html:199
+#: specivo/templates/themes/default/pages/auth/profile.html:209
 msgid "Connected accounts"
 msgstr "已关联的账户"
 
@@ -4820,17 +5031,17 @@ msgid "Linked by"
 msgstr "关联方式"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:164
-#: specivo/templates/themes/default/pages/auth/profile.html:220
+#: specivo/templates/themes/default/pages/auth/profile.html:230
 msgid "Connected"
 msgstr "关联时间"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:165
-#: specivo/templates/themes/default/pages/auth/profile.html:221
+#: specivo/templates/themes/default/pages/auth/profile.html:231
 msgid "Last sign-in"
 msgstr "上次登录"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
-#: specivo/templates/themes/default/pages/auth/profile.html:226
+#: specivo/templates/themes/default/pages/auth/profile.html:236
 #: specivo/templates/themes/default/pages/projects/settings.html:1672
 msgid "Disconnect"
 msgstr "断开关联"
@@ -5137,6 +5348,150 @@ msgstr "从 \\ 到"
 msgid "Select a tracker and role to manage workflow transitions."
 msgstr "选择追踪器和角色以管理工作流状态流转。"
 
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:8
+msgid "Choose a person"
+msgstr "选择成员"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:21
+msgid "Plan name"
+msgstr "套餐名称"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:39
+msgid "Billed"
+msgstr "计费周期"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:41
+#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:9
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:88
+msgid "Monthly"
+msgstr "每月"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:42
+#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:10
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:89
+msgid "Yearly"
+msgstr "每年"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:46
+msgid "First day"
+msgstr "首日"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:50
+msgid "Last day (optional)"
+msgstr "末日（可选）"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:54
+msgid "Tools it covers"
+msgstr "覆盖的工具"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:58
+msgid ""
+"Leave all unticked for a plan that covers every tool of its provider, "
+"such as Claude Code for an Anthropic plan."
+msgstr "若套餐覆盖其提供商的所有工具（例如 Anthropic 套餐覆盖 Claude Code），请全部不勾选。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:61
+msgid "Notes"
+msgstr "备注"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:3
+msgid ""
+"An administrator manages AI subscriptions on this instance. Ask one to "
+"change yours."
+msgstr "此实例的 AI 订阅由管理员管理。请联系管理员修改你的订阅。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:4
+msgid "Service accounts do not hold AI subscriptions."
+msgstr "服务账户没有 AI 订阅。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:5
+msgid "One of the tools no longer exists. Choose the tools again."
+msgstr "其中一个工具已不存在。请重新选择工具。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:6
+msgid "That currency is disabled on this instance. Choose another one."
+msgstr "此实例已停用该货币。请选择其他货币。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:8
+msgid "Enter dates as YYYY-MM-DD."
+msgstr "日期格式为 YYYY-MM-DD。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:9
+msgid "Choose the person who holds the subscription."
+msgstr "选择订阅的持有人。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:10
+msgid "A tool with this slug exists."
+msgstr "已存在使用此标识串的工具。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:11
+msgid ""
+"Check the tool: the slug is 2 to 50 lower case letters, digits and "
+"dashes, the name is required, and the provider and position must be "
+"valid."
+msgstr "请检查工具：标识串为 2 到 50 个小写字母、数字和连字符，名称为必填，提供商和排序必须有效。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:13
+msgid "Enter a fee above zero, with no more decimal places than the currency has."
+msgstr "请输入大于零的费用，小数位数不能超过该货币的位数。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:14
+msgid "Enter the provider, for example anthropic or openai."
+msgstr "请输入提供商，例如 anthropic 或 openai。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:15
+msgid "Enter the plan name."
+msgstr "请输入套餐名称。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:16
+msgid "Choose a plan from the list, or Custom."
+msgstr "请从列表中选择套餐，或选择自定义。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:17
+msgid "The fee is per month or per year."
+msgstr "费用按月或按年计。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:18
+msgid "Enter the first day of the subscription."
+msgstr "请输入订阅的首日。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:19
+msgid "The last day cannot be before the first day."
+msgstr "末日不能早于首日。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:20
+msgid "The notes are too long."
+msgstr "备注过长。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:21
+msgid "Check the subscription and try again."
+msgstr "请检查订阅后重试。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:22
+msgid "The change could not be saved."
+msgstr "无法保存此修改。"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:27
+msgid "per year"
+msgstr "每年"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:27
+msgid "per month"
+msgstr "每月"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:32
+msgid "Starts later"
+msgstr "稍后开始"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:33
+msgid "Ended"
+msgstr "已结束"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:37
+#, python-format
+msgid "All %(provider)s tools"
+msgstr "%(provider)s 的所有工具"
+
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:22
 #: specivo/templates/themes/default/pages/auth/reset_password.html:51
 msgid "Passwords do not match"
@@ -5163,7 +5518,7 @@ msgid "Change password"
 msgstr "修改密码"
 
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:34
-#: specivo/templates/themes/default/pages/auth/profile.html:185
+#: specivo/templates/themes/default/pages/auth/profile.html:195
 msgid "Current password"
 msgstr "当前密码"
 
@@ -5188,6 +5543,62 @@ msgid ""
 "has no password, so there is none to change here. Manage your password at"
 " your identity provider."
 msgstr "您通过身份提供商（%(providers)s）登录。此账户没有密码，因此这里没有可更改的内容。请在您的身份提供商处管理密码。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:15
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:4
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:12
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:15
+#: specivo/templates/themes/default/pages/auth/profile.html:119
+msgid "My AI subscriptions"
+msgstr "我的 AI 订阅"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:22
+#, python-format
+msgid "Held by %(name)s (%(login)s). Your changes are recorded in the audit log."
+msgstr "持有人：%(name)s（%(login)s）。你的修改会记录在审计日志中。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:32
+msgid "Delete this subscription"
+msgstr "删除此订阅"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:33
+msgid ""
+"To record that a plan ended, set its last day instead: deleting removes "
+"it from past spend reports too."
+msgstr "如需记录套餐已结束，请设置其末日而不是删除：删除会把它从过去的支出报告中一并移除。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:16
+msgid ""
+"The flat-rate AI plans you pay for, such as Claude Max or ChatGPT Plus. "
+"AI usage from the tools a plan covers is counted as covered by the plan, "
+"and spend reports spread the fee over that usage. Only you and "
+"administrators see this page."
+msgstr ""
+"你付费的固定费用 AI 套餐，例如 Claude Max 或 ChatGPT Plus。套餐所覆盖工具的 AI "
+"使用量计为由该套餐覆盖，支出报告会把套餐费用分摊到这些使用量上。只有你和管理员能看到此页面。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:25
+msgid ""
+"Service accounts do not hold AI subscriptions. Usage they report on "
+"behalf of people is matched to those people's subscriptions."
+msgstr "服务账户没有 AI 订阅。它们代表成员上报的使用量会匹配到这些成员的订阅。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:52
+msgid "You have not added any AI subscriptions."
+msgstr "你还没有添加任何 AI 订阅。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:70
+msgid ""
+"Plan prices are suggestions from the providers' published list prices and"
+" may be out of date. Enter what you actually pay, in the currency you pay"
+" in."
+msgstr "套餐价格是根据提供商公布的标价给出的建议，可能已经过时。请按你实际支付的币种填写实际支付的金额。"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:75
+msgid ""
+"An administrator manages AI subscriptions on this instance. Ask one to "
+"add or change yours."
+msgstr "此实例的 AI 订阅由管理员管理。请联系管理员添加或修改你的订阅。"
 
 #: specivo/templates/themes/default/pages/auth/api_keys.html:15
 msgid "Are you sure you want to permanently delete this API key?"
@@ -5318,7 +5729,7 @@ msgid ""
 msgstr "请输入与你账户关联的电子邮件地址，我们将向你发送重置密码的链接。"
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:60
-#: specivo/templates/themes/default/pages/auth/profile.html:120
+#: specivo/templates/themes/default/pages/auth/profile.html:130
 msgid "Email address"
 msgstr "电子邮件地址"
 
@@ -5484,70 +5895,74 @@ msgstr "语言、时区、通知设置"
 msgid "Manage keys for API and MCP access"
 msgstr "管理用于 API 和 MCP 访问的密钥"
 
-#: specivo/templates/themes/default/pages/auth/profile.html:130
+#: specivo/templates/themes/default/pages/auth/profile.html:121
+msgid "Flat-rate AI plans you pay for"
+msgstr "你付费的固定费用 AI 套餐"
+
+#: specivo/templates/themes/default/pages/auth/profile.html:140
 msgid "Current address"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:141
+#: specivo/templates/themes/default/pages/auth/profile.html:151
 #, python-format
 msgid "Change to %(address)s pending."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:143
+#: specivo/templates/themes/default/pages/auth/profile.html:153
 msgid "The link has expired: send a new one."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:145
+#: specivo/templates/themes/default/pages/auth/profile.html:155
 msgid "Open the link we sent to that address to confirm it."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:151
+#: specivo/templates/themes/default/pages/auth/profile.html:161
 msgid "Resend link"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:155
+#: specivo/templates/themes/default/pages/auth/profile.html:165
 msgid "Cancel change"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:162
+#: specivo/templates/themes/default/pages/auth/profile.html:172
 msgid ""
 "Your account has no password. To change your email address, first sign in"
 " again with your identity provider. You then have five minutes to request"
 " the change."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:168
+#: specivo/templates/themes/default/pages/auth/profile.html:178
 #, python-format
 msgid "Sign in again with %(name)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:173
+#: specivo/templates/themes/default/pages/auth/profile.html:183
 msgid ""
 "None of your identity providers is enabled. Ask an administrator to "
 "change your address."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:176
+#: specivo/templates/themes/default/pages/auth/profile.html:186
 msgid ""
 "We send a link to the new address. Your current address stays in use "
 "until you open it."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:180
+#: specivo/templates/themes/default/pages/auth/profile.html:190
 msgid "New email address"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:200
+#: specivo/templates/themes/default/pages/auth/profile.html:210
 msgid ""
 "Sign in with an account at your organisation's identity provider. Connect"
 " it here once, while signed in."
 msgstr "使用贵组织身份提供商的账户登录。在登录状态下于此处关联一次即可。"
 
-#: specivo/templates/themes/default/pages/auth/profile.html:232
+#: specivo/templates/themes/default/pages/auth/profile.html:242
 msgid "No accounts are connected yet."
 msgstr "尚未关联任何账户。"
 
-#: specivo/templates/themes/default/pages/auth/profile.html:240
+#: specivo/templates/themes/default/pages/auth/profile.html:250
 #, python-format
 msgid "Connect %(name)s"
 msgstr "关联 %(name)s"
@@ -5740,6 +6155,8 @@ msgstr "持续时间"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:46
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:67
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:59
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:47
 #: specivo/templates/themes/default/pages/dashboard.html:241
 #: specivo/templates/themes/default/pages/projects/list.html:174
 #: specivo/templates/themes/default/pages/projects/version_detail.html:58
@@ -6927,6 +7344,8 @@ msgstr "创建第一个工作项以开始使用。"
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:8
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:8
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:9
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:9
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:8
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:7
 #: specivo/templates/themes/default/pages/admin/audit_log.html:8
 #: specivo/templates/themes/default/pages/admin/currencies.html:7
@@ -6948,6 +7367,8 @@ msgstr "创建第一个工作项以开始使用。"
 #: specivo/templates/themes/default/pages/admin/users.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:7
 #: specivo/templates/themes/default/pages/admin/workflows.html:7
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
 #: specivo/templates/themes/default/pages/auth/api_keys.html:7
 #: specivo/templates/themes/default/pages/auth/preferences.html:7
 #: specivo/templates/themes/default/pages/auth/profile.html:7
@@ -7012,16 +7433,6 @@ msgstr "每天"
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:87
 msgid "Weekly"
 msgstr "每周"
-
-#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:9
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:88
-msgid "Monthly"
-msgstr "每月"
-
-#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:10
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:89
-msgid "Yearly"
-msgstr "每年"
 
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:11
 #, python-format
@@ -9426,6 +9837,7 @@ msgid "Keyword"
 msgstr "关键词"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
 #: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/list.html:44
 #: specivo/templates/themes/default/pages/projects/version_detail.html:83

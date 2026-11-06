@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 09:34+0100\n"
+"POT-Creation-Date: 2026-11-06 10:08+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -198,7 +198,7 @@ msgid "This account cannot change its email address here."
 msgstr ""
 
 #: specivo/services/email_change_service.py:178
-#: specivo/templates/themes/default/pages/auth/profile.html:135
+#: specivo/templates/themes/default/pages/auth/profile.html:145
 msgid ""
 "Your email address is managed by your identity provider. Change it at "
 "your identity provider."
@@ -731,6 +731,7 @@ msgid "View all notifications"
 msgstr "Показать все уведомления"
 
 #: specivo/templates/themes/default/components/header.html:164
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:10
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -756,7 +757,18 @@ msgstr "Настройки"
 msgid "API Keys"
 msgstr "API-ключи"
 
-#: specivo/templates/themes/default/components/header.html:179
+#: specivo/templates/themes/default/components/header.html:177
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:5
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:13
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:16
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:12
+#: specivo/templates/themes/default/pages/admin/dashboard.html:169
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:4
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:13
+msgid "AI subscriptions"
+msgstr "Подписки на ИИ"
+
+#: specivo/templates/themes/default/components/header.html:185
 #: specivo/templates/themes/default/pages/auth/change_password.html:59
 #: specivo/templates/themes/default/pages/auth/login.html:49
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:11
@@ -935,7 +947,7 @@ msgstr "Регулярные задачи"
 
 #: specivo/templates/themes/default/components/sidebar.html:79
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
-#: specivo/templates/themes/default/pages/admin/dashboard.html:179
+#: specivo/templates/themes/default/pages/admin/dashboard.html:189
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
@@ -974,6 +986,10 @@ msgstr "Администрирование"
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:5
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:11
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:34
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:5
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:11
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:4
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:10
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:3
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:9
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
@@ -1015,6 +1031,7 @@ msgstr "Администрирование"
 #: specivo/templates/themes/default/pages/admin/versions.html:9
 #: specivo/templates/themes/default/pages/admin/workflows.html:3
 #: specivo/templates/themes/default/pages/admin/workflows.html:9
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:11
 msgid "Admin"
 msgstr "Администратор"
 
@@ -1050,6 +1067,8 @@ msgstr "Переиндексация..."
 
 #: specivo/templates/themes/default/pages/_fts_card.html:19
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:72
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:95
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:49
 #: specivo/templates/themes/default/pages/admin/currencies.html:32
 #: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:44
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:233
@@ -1061,6 +1080,7 @@ msgstr "Переиндексация..."
 #: specivo/templates/themes/default/pages/admin/settings.html:140
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:27
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
@@ -1472,12 +1492,14 @@ msgstr "Тема"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:33
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:37
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:48
 #: specivo/templates/themes/default/pages/admin/currencies.html:59
 #: specivo/templates/themes/default/pages/admin/projects.html:43
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:31
 #: specivo/templates/themes/default/pages/admin/user_detail.html:225
 #: specivo/templates/themes/default/pages/admin/users.html:47
 #: specivo/templates/themes/default/pages/admin/versions.html:82
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:37
 #: specivo/templates/themes/default/pages/auth/api_keys.html:96
 #: specivo/templates/themes/default/pages/auth/profile.html:70
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:17
@@ -1528,6 +1550,7 @@ msgstr "На вас не назначено открытых задач."
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:10
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:27
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:25
 #: specivo/templates/themes/default/pages/projects/settings.html:1522
 msgid "Provider"
 msgstr "Провайдер"
@@ -1541,6 +1564,7 @@ msgstr "Модель"
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
 msgid "Currency"
 msgstr "Валюта"
 
@@ -1703,6 +1727,7 @@ msgstr "Эта валюта отключена. Сначала включите 
 #: specivo/templates/themes/default/pages/admin/currencies.html:19
 #: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:21
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:8
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:7
 msgid "Unknown currency code."
 msgstr "Неизвестный код валюты."
 
@@ -1758,7 +1783,7 @@ msgid "johndoe"
 msgstr "ivanov"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:26
-#: specivo/templates/themes/default/pages/admin/dashboard.html:189
+#: specivo/templates/themes/default/pages/admin/dashboard.html:199
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
@@ -1839,8 +1864,11 @@ msgstr "Создание..."
 
 #: specivo/templates/themes/default/pages/admin/_user_i18n.html:7
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:38
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:34
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:48
 #: specivo/templates/themes/default/pages/admin/projects.html:18
 #: specivo/templates/themes/default/pages/admin/user_detail.html:37
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:31
 #: specivo/templates/themes/default/pages/auth/api_keys.html:20
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:126
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:64
@@ -1873,7 +1901,7 @@ msgstr "Деактивирована"
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:3
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:12
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:16
-#: specivo/templates/themes/default/pages/admin/dashboard.html:210
+#: specivo/templates/themes/default/pages/admin/dashboard.html:220
 msgid "Agent Groups"
 msgstr "Группы агентов"
 
@@ -1892,8 +1920,9 @@ msgstr "Группы агентов"
 #: specivo/templates/themes/default/pages/admin/dashboard.html:171
 #: specivo/templates/themes/default/pages/admin/dashboard.html:181
 #: specivo/templates/themes/default/pages/admin/dashboard.html:191
-#: specivo/templates/themes/default/pages/admin/dashboard.html:212
-#: specivo/templates/themes/default/pages/admin/dashboard.html:224
+#: specivo/templates/themes/default/pages/admin/dashboard.html:201
+#: specivo/templates/themes/default/pages/admin/dashboard.html:222
+#: specivo/templates/themes/default/pages/admin/dashboard.html:234
 msgid "Manage"
 msgstr "Управление"
 
@@ -2054,6 +2083,7 @@ msgstr "Активировать"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:453
 #: specivo/templates/themes/default/pages/admin/versions.html:128
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:36
 #: specivo/templates/themes/default/pages/auth/api_keys.html:132
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:96
@@ -2126,6 +2156,7 @@ msgid "All sources"
 msgstr "Все источники"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:42
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:33
 msgid "Period"
 msgstr "Период"
 
@@ -2138,6 +2169,7 @@ msgid "All periods"
 msgstr "Все периоды"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:46
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:37
 #: specivo/templates/themes/default/pages/admin/audit_log.html:63
 #: specivo/templates/themes/default/pages/admin/currencies.html:47
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:127
@@ -2205,6 +2237,251 @@ msgstr ""
 "Copyright (c) 2023 Berri AI). Это прейскурантные цены для справки; "
 "сверяйте их со счётом вашего провайдера."
 
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:17
+msgid ""
+"The flat-rate AI plans people pay for. Usage from the tools a plan covers"
+" counts as covered by it, and spend reports spread the fee over that "
+"usage. Your changes to other people's subscriptions are recorded in the "
+"audit log."
+msgstr ""
+"Тарифы ИИ с фиксированной платой, которые оплачивают сотрудники. "
+"Использование инструментов, входящих в тариф, считается покрытым им, а "
+"отчёты о расходах распределяют плату по этому использованию. Ваши "
+"изменения чужих подписок записываются в журнал аудита."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:17
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:4
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:14
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:17
+msgid "AI tools"
+msgstr "Инструменты ИИ"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:19
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:18
+msgid "Subscription added."
+msgstr "Подписка добавлена."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:20
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:19
+msgid "Subscription saved."
+msgstr "Подписка сохранена."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:21
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:20
+msgid "Subscription deleted."
+msgstr "Подписка удалена."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:22
+msgid "People can now manage their own subscriptions."
+msgstr "Теперь каждый может управлять своими подписками."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:23
+msgid "Only administrators can now change subscriptions."
+msgstr "Теперь подписки могут менять только администраторы."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:29
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:43
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:6
+msgid "Person"
+msgstr "Сотрудник"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:30
+msgid "Everyone"
+msgstr "Все"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:35
+msgid "Running today"
+msgstr "Действуют сегодня"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:44
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:14
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:33
+msgid "Plan"
+msgstr "Тариф"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:45
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:34
+msgid "Covers"
+msgstr "Покрывает"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:46
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:29
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:35
+msgid "Fee"
+msgstr "Плата"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:47
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:36
+msgid "Days"
+msgstr "Дни"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:61
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:146
+#: specivo/templates/themes/default/pages/admin/groups.html:71
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:92
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:145
+#: specivo/templates/themes/default/pages/admin/projects.html:81
+#: specivo/templates/themes/default/pages/admin/settings.html:165
+#: specivo/templates/themes/default/pages/admin/versions.html:125
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:49
+#: specivo/templates/themes/default/pages/issues/detail.html:76
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:86
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
+#: specivo/templates/themes/default/pages/projects/settings.html:426
+#: specivo/templates/themes/default/pages/projects/settings.html:577
+#: specivo/templates/themes/default/pages/projects/settings.html:754
+#: specivo/templates/themes/default/pages/projects/settings.html:975
+#: specivo/templates/themes/default/pages/projects/settings.html:1138
+#: specivo/templates/themes/default/pages/projects/settings.html:1432
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:43
+#: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:118
+#: specivo/templates/themes/default/pages/projects/version_detail.html:44
+#: specivo/templates/themes/default/pages/time/list.html:86
+#: specivo/templates/themes/default/pages/wiki/edit.html:14
+#: specivo/templates/themes/default/pages/wiki/show.html:35
+msgid "Edit"
+msgstr "Изменить"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:64
+msgid "No subscriptions match."
+msgstr "Подходящих подписок нет."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:74
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:61
+msgid "Add a subscription"
+msgstr "Добавить подписку"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:77
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:63
+msgid "Start from a plan"
+msgstr "Взять за основу тариф"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:80
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:17
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:66
+msgid "Custom"
+msgstr "Пользовательский"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:82
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:68
+msgid "Fill in"
+msgstr "Заполнить"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:84
+msgid ""
+"Plan prices are suggestions from the providers' published list prices and"
+" may be out of date. Enter what is actually paid, in the currency it is "
+"paid in."
+msgstr ""
+"Цены тарифов — подсказки на основе опубликованных цен провайдеров, они "
+"могут устареть. Укажите фактическую плату в валюте оплаты."
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:85
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:71
+msgid "Add subscription"
+msgstr "Добавить подписку"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:90
+msgid "Who can change subscriptions"
+msgstr "Кто может менять подписки"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:93
+msgid "People can add and change their own subscriptions"
+msgstr "Сотрудники могут добавлять и менять свои подписки"
+
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:94
+msgid ""
+"When this is off, only administrators change subscriptions. People still "
+"see their own."
+msgstr ""
+"Если выключено, подписки меняют только администраторы. Свои подписки "
+"сотрудники по-прежнему видят."
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:18
+msgid ""
+"The tools that report AI usage. A tool a reporter sends for the first "
+"time is added here inactive; activate it to offer it in pickers. The "
+"default provider is the model provider assumed for the tool's usage, and "
+"plans of that provider that list no tools cover it. Tools are never "
+"deleted."
+msgstr ""
+"Инструменты, которые сообщают об использовании ИИ. Инструмент, впервые "
+"присланный репортёром, добавляется сюда неактивным; активируйте его, "
+"чтобы он появился в списках выбора. Провайдер по умолчанию — провайдер "
+"моделей, который предполагается для использования инструмента; тарифы "
+"этого провайдера без списка инструментов его покрывают. Инструменты "
+"никогда не удаляются."
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:20
+msgid "Tool saved."
+msgstr "Инструмент сохранён."
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:21
+msgid "Tool added."
+msgstr "Инструмент добавлен."
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:30
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:64
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:30
+msgid "Slug"
+msgstr "Идентификатор"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:31
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:45
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:68
+#: specivo/templates/themes/default/pages/admin/currencies.html:55
+#: specivo/templates/themes/default/pages/admin/groups.html:87
+#: specivo/templates/themes/default/pages/admin/groups.html:113
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
+#: specivo/templates/themes/default/pages/admin/user_detail.html:221
+#: specivo/templates/themes/default/pages/auth/api_keys.html:92
+#: specivo/templates/themes/default/pages/projects/detail.html:174
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:60
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:69
+#: specivo/templates/themes/default/pages/projects/settings.html:43
+#: specivo/templates/themes/default/pages/projects/settings.html:452
+#: specivo/templates/themes/default/pages/projects/settings.html:555
+#: specivo/templates/themes/default/pages/projects/settings.html:708
+#: specivo/templates/themes/default/pages/projects/settings.html:790
+#: specivo/templates/themes/default/pages/projects/settings.html:1004
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:29
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:62
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:196
+msgid "Name"
+msgstr "Имя"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:32
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:46
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:72
+msgid "Default provider"
+msgstr "Провайдер по умолчанию"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:33
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:47
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:76
+msgid "Position"
+msgstr "Позиция"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:46
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:73
+msgid "none"
+msgstr "нет"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:60
+msgid "Add a tool"
+msgstr "Добавить инструмент"
+
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:80
+msgid "Add tool"
+msgstr "Добавить инструмент"
+
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:3
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:13
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:16
@@ -2245,7 +2522,7 @@ msgstr "Ни один проект пока не подключён к анон�
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
 #: specivo/templates/themes/default/pages/admin/audit_log.html:10
 #: specivo/templates/themes/default/pages/admin/audit_log.html:14
-#: specivo/templates/themes/default/pages/admin/dashboard.html:199
+#: specivo/templates/themes/default/pages/admin/dashboard.html:209
 msgid "Audit log"
 msgstr ""
 
@@ -2436,32 +2713,11 @@ msgstr "Включено"
 #: specivo/templates/themes/default/pages/admin/email.html:52
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:44
 #: specivo/templates/themes/default/pages/admin/user_detail.html:159
-#: specivo/templates/themes/default/pages/auth/profile.html:216
+#: specivo/templates/themes/default/pages/auth/profile.html:226
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:26
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:33
 msgid "Disabled"
 msgstr "Отключено"
-
-#: specivo/templates/themes/default/pages/admin/currencies.html:55
-#: specivo/templates/themes/default/pages/admin/groups.html:87
-#: specivo/templates/themes/default/pages/admin/groups.html:113
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
-#: specivo/templates/themes/default/pages/admin/user_detail.html:221
-#: specivo/templates/themes/default/pages/auth/api_keys.html:92
-#: specivo/templates/themes/default/pages/projects/detail.html:174
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:60
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:69
-#: specivo/templates/themes/default/pages/projects/settings.html:43
-#: specivo/templates/themes/default/pages/projects/settings.html:452
-#: specivo/templates/themes/default/pages/projects/settings.html:555
-#: specivo/templates/themes/default/pages/projects/settings.html:708
-#: specivo/templates/themes/default/pages/projects/settings.html:790
-#: specivo/templates/themes/default/pages/projects/settings.html:1004
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:29
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:62
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:196
-msgid "Name"
-msgstr "Имя"
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:56
 msgid "Symbol"
@@ -2644,47 +2900,51 @@ msgstr ""
 msgid "Prices per token that value AI usage, with their history."
 msgstr "Цены за токен для оценки использования ИИ, с историей."
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:169
+#: specivo/templates/themes/default/pages/admin/dashboard.html:170
+msgid "Flat-rate AI plans people pay for, and the AI tools list."
+msgstr "Тарифы ИИ с фиксированной платой и список инструментов ИИ."
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:179
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:4
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:10
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:35
 msgid "Metadata Presets"
 msgstr "Шаблоны метаданных"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:170
+#: specivo/templates/themes/default/pages/admin/dashboard.html:180
 msgid "Manage reusable metadata field schemas for projects."
 msgstr "Управление переиспользуемыми схемами полей метаданных для проектов."
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:180
+#: specivo/templates/themes/default/pages/admin/dashboard.html:190
 msgid "Global application settings and configuration."
 msgstr "Глобальные настройки и конфигурация приложения."
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:190
+#: specivo/templates/themes/default/pages/admin/dashboard.html:200
 msgid "SMTP configuration and test email delivery."
 msgstr "Настройка SMTP и проверка отправки писем."
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:200
+#: specivo/templates/themes/default/pages/admin/dashboard.html:210
 msgid "Sign-ins, access and administration changes, and everything agents do."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:201
+#: specivo/templates/themes/default/pages/admin/dashboard.html:211
 #: specivo/templates/themes/default/pages/issues/description_diff.html:106
 #: specivo/templates/themes/default/pages/wiki/history.html:59
 msgid "View"
 msgstr "Просмотр"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:211
+#: specivo/templates/themes/default/pages/admin/dashboard.html:221
 msgid "Manage agent groups, members, and access policies."
 msgstr "Управление группами агентов, участниками и политиками доступа."
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:222
+#: specivo/templates/themes/default/pages/admin/dashboard.html:232
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:3
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:12
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:15
 msgid "Kill Switch"
 msgstr "Аварийное отключение"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:223
+#: specivo/templates/themes/default/pages/admin/dashboard.html:233
 msgid "Emergency agent access revocation and event log."
 msgstr "Экстренный отзыв доступа агентов и журнал событий."
 
@@ -3022,35 +3282,6 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:115
 msgid "Rates"
 msgstr "Курсы"
-
-#: specivo/templates/themes/default/pages/admin/exchange_rates.html:146
-#: specivo/templates/themes/default/pages/admin/groups.html:71
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:92
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:145
-#: specivo/templates/themes/default/pages/admin/projects.html:81
-#: specivo/templates/themes/default/pages/admin/settings.html:165
-#: specivo/templates/themes/default/pages/admin/versions.html:125
-#: specivo/templates/themes/default/pages/issues/detail.html:76
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:86
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
-#: specivo/templates/themes/default/pages/projects/settings.html:426
-#: specivo/templates/themes/default/pages/projects/settings.html:577
-#: specivo/templates/themes/default/pages/projects/settings.html:754
-#: specivo/templates/themes/default/pages/projects/settings.html:975
-#: specivo/templates/themes/default/pages/projects/settings.html:1138
-#: specivo/templates/themes/default/pages/projects/settings.html:1432
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:43
-#: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:118
-#: specivo/templates/themes/default/pages/projects/version_detail.html:44
-#: specivo/templates/themes/default/pages/time/list.html:86
-#: specivo/templates/themes/default/pages/wiki/edit.html:14
-#: specivo/templates/themes/default/pages/wiki/show.html:35
-msgid "Edit"
-msgstr "Изменить"
 
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:153
 msgid ""
@@ -3567,10 +3798,6 @@ msgstr "Всего пресетов"
 msgid "Built-in"
 msgstr "Встроенный"
 
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
-msgid "Custom"
-msgstr "Пользовательский"
-
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:59
 msgid "Built-in Presets"
 msgstr "Встроенные шаблоны"
@@ -3598,12 +3825,6 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:114
 msgid "Create first preset"
 msgstr "Создать первый пресет"
-
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:30
-msgid "Slug"
-msgstr "Идентификатор"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:165
 msgid "e.g. my-custom-fields"
@@ -4042,7 +4263,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/user_detail.html:21
 #: specivo/templates/themes/default/pages/admin/user_detail.html:165
 #: specivo/templates/themes/default/pages/admin/users.html:25
-#: specivo/templates/themes/default/pages/auth/profile.html:221
+#: specivo/templates/themes/default/pages/auth/profile.html:231
 msgid "Never"
 msgstr "Никогда"
 
@@ -4991,7 +5212,7 @@ msgid "Change email address"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:90
-#: specivo/templates/themes/default/pages/auth/profile.html:189
+#: specivo/templates/themes/default/pages/auth/profile.html:199
 msgid "Change email"
 msgstr ""
 
@@ -5039,7 +5260,7 @@ msgid "Deactivate account"
 msgstr "Деактивировать"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:150
-#: specivo/templates/themes/default/pages/auth/profile.html:199
+#: specivo/templates/themes/default/pages/auth/profile.html:209
 msgid "Connected accounts"
 msgstr "Подключённые учётные записи"
 
@@ -5057,17 +5278,17 @@ msgid "Linked by"
 msgstr "Способ подключения"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:164
-#: specivo/templates/themes/default/pages/auth/profile.html:220
+#: specivo/templates/themes/default/pages/auth/profile.html:230
 msgid "Connected"
 msgstr "Подключено"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:165
-#: specivo/templates/themes/default/pages/auth/profile.html:221
+#: specivo/templates/themes/default/pages/auth/profile.html:231
 msgid "Last sign-in"
 msgstr "Последний вход"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
-#: specivo/templates/themes/default/pages/auth/profile.html:226
+#: specivo/templates/themes/default/pages/auth/profile.html:236
 #: specivo/templates/themes/default/pages/projects/settings.html:1672
 msgid "Disconnect"
 msgstr "Отключить"
@@ -5384,6 +5605,159 @@ msgstr "Из \\ В"
 msgid "Select a tracker and role to manage workflow transitions."
 msgstr "Выберите трекер и роль, чтобы управлять переходами рабочего процесса."
 
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:8
+msgid "Choose a person"
+msgstr "Выберите сотрудника"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:21
+msgid "Plan name"
+msgstr "Название тарифа"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:39
+msgid "Billed"
+msgstr "Оплата"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:41
+#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:9
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:88
+msgid "Monthly"
+msgstr "Ежемесячно"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:42
+#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:10
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:89
+msgid "Yearly"
+msgstr "Ежегодно"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:46
+msgid "First day"
+msgstr "Первый день"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:50
+msgid "Last day (optional)"
+msgstr "Последний день (необязательно)"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:54
+msgid "Tools it covers"
+msgstr "Покрываемые инструменты"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:58
+msgid ""
+"Leave all unticked for a plan that covers every tool of its provider, "
+"such as Claude Code for an Anthropic plan."
+msgstr ""
+"Не отмечайте ничего, если тариф покрывает все инструменты своего "
+"провайдера, например Claude Code для тарифа Anthropic."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:61
+msgid "Notes"
+msgstr "Заметки"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:3
+msgid ""
+"An administrator manages AI subscriptions on this instance. Ask one to "
+"change yours."
+msgstr ""
+"На этом экземпляре подписками на ИИ управляет администратор. Попросите "
+"его изменить вашу."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:4
+msgid "Service accounts do not hold AI subscriptions."
+msgstr "У сервисных учётных записей нет подписок на ИИ."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:5
+msgid "One of the tools no longer exists. Choose the tools again."
+msgstr "Одного из инструментов больше нет. Выберите инструменты заново."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:6
+msgid "That currency is disabled on this instance. Choose another one."
+msgstr "Эта валюта отключена на этом экземпляре. Выберите другую."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:8
+msgid "Enter dates as YYYY-MM-DD."
+msgstr "Вводите даты в формате ГГГГ-ММ-ДД."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:9
+msgid "Choose the person who holds the subscription."
+msgstr "Выберите владельца подписки."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:10
+msgid "A tool with this slug exists."
+msgstr "Инструмент с таким идентификатором уже есть."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:11
+msgid ""
+"Check the tool: the slug is 2 to 50 lower case letters, digits and "
+"dashes, the name is required, and the provider and position must be "
+"valid."
+msgstr ""
+"Проверьте инструмент: идентификатор — от 2 до 50 строчных букв, цифр и "
+"дефисов, название обязательно, провайдер и позиция должны быть "
+"корректными."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:13
+msgid "Enter a fee above zero, with no more decimal places than the currency has."
+msgstr ""
+"Укажите плату больше нуля, не более чем с тем числом знаков после "
+"запятой, которое есть у валюты."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:14
+msgid "Enter the provider, for example anthropic or openai."
+msgstr "Укажите провайдера, например anthropic или openai."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:15
+msgid "Enter the plan name."
+msgstr "Укажите название тарифа."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:16
+msgid "Choose a plan from the list, or Custom."
+msgstr "Выберите тариф из списка или «Пользовательский»."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:17
+msgid "The fee is per month or per year."
+msgstr "Плата вносится за месяц или за год."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:18
+msgid "Enter the first day of the subscription."
+msgstr "Укажите первый день подписки."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:19
+msgid "The last day cannot be before the first day."
+msgstr "Последний день не может быть раньше первого."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:20
+msgid "The notes are too long."
+msgstr "Заметки слишком длинные."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:21
+msgid "Check the subscription and try again."
+msgstr "Проверьте подписку и попробуйте ещё раз."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:22
+msgid "The change could not be saved."
+msgstr "Не удалось сохранить изменение."
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:27
+msgid "per year"
+msgstr "в год"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:27
+msgid "per month"
+msgstr "в месяц"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:32
+msgid "Starts later"
+msgstr "Начнётся позже"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:33
+msgid "Ended"
+msgstr "Завершена"
+
+#: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:37
+#, python-format
+msgid "All %(provider)s tools"
+msgstr "Все инструменты %(provider)s"
+
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:22
 #: specivo/templates/themes/default/pages/auth/reset_password.html:51
 msgid "Passwords do not match"
@@ -5410,7 +5784,7 @@ msgid "Change password"
 msgstr "Сменить пароль"
 
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:34
-#: specivo/templates/themes/default/pages/auth/profile.html:185
+#: specivo/templates/themes/default/pages/auth/profile.html:195
 msgid "Current password"
 msgstr "Текущий пароль"
 
@@ -5438,6 +5812,75 @@ msgstr ""
 "Вы входите через своего поставщика удостоверений (%(providers)s). У этой "
 "учётной записи нет пароля, поэтому менять здесь нечего. Управляйте "
 "паролем у своего поставщика удостоверений."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:15
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:4
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:12
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:15
+#: specivo/templates/themes/default/pages/auth/profile.html:119
+msgid "My AI subscriptions"
+msgstr "Мои подписки на ИИ"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:22
+#, python-format
+msgid "Held by %(name)s (%(login)s). Your changes are recorded in the audit log."
+msgstr ""
+"Владелец: %(name)s (%(login)s). Ваши изменения записываются в журнал "
+"аудита."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:32
+msgid "Delete this subscription"
+msgstr "Удалить подписку"
+
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:33
+msgid ""
+"To record that a plan ended, set its last day instead: deleting removes "
+"it from past spend reports too."
+msgstr ""
+"Чтобы отметить окончание тарифа, укажите его последний день, а не "
+"удаляйте его: удаление убирает тариф и из прошлых отчётов о расходах."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:16
+msgid ""
+"The flat-rate AI plans you pay for, such as Claude Max or ChatGPT Plus. "
+"AI usage from the tools a plan covers is counted as covered by the plan, "
+"and spend reports spread the fee over that usage. Only you and "
+"administrators see this page."
+msgstr ""
+"Тарифы ИИ с фиксированной платой, которые вы оплачиваете, например Claude"
+" Max или ChatGPT Plus. Использование ИИ в инструментах, входящих в тариф,"
+" считается покрытым им, а отчёты о расходах распределяют плату по этому "
+"использованию. Эту страницу видите только вы и администраторы."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:25
+msgid ""
+"Service accounts do not hold AI subscriptions. Usage they report on "
+"behalf of people is matched to those people's subscriptions."
+msgstr ""
+"У сервисных учётных записей нет подписок на ИИ. Использование, о котором "
+"они сообщают от имени сотрудников, сопоставляется с подписками этих "
+"сотрудников."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:52
+msgid "You have not added any AI subscriptions."
+msgstr "Вы ещё не добавили подписок на ИИ."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:70
+msgid ""
+"Plan prices are suggestions from the providers' published list prices and"
+" may be out of date. Enter what you actually pay, in the currency you pay"
+" in."
+msgstr ""
+"Цены тарифов — подсказки на основе опубликованных цен провайдеров, они "
+"могут устареть. Укажите, сколько вы фактически платите, в валюте оплаты."
+
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:75
+msgid ""
+"An administrator manages AI subscriptions on this instance. Ask one to "
+"add or change yours."
+msgstr ""
+"На этом экземпляре подписками на ИИ управляет администратор. Попросите "
+"его добавить или изменить вашу."
 
 #: specivo/templates/themes/default/pages/auth/api_keys.html:15
 msgid "Are you sure you want to permanently delete this API key?"
@@ -5578,7 +6021,7 @@ msgstr ""
 " отправим вам ссылку для сброса пароля."
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:60
-#: specivo/templates/themes/default/pages/auth/profile.html:120
+#: specivo/templates/themes/default/pages/auth/profile.html:130
 msgid "Email address"
 msgstr "Адрес электронной почты"
 
@@ -5746,60 +6189,64 @@ msgstr "Язык, часовой пояс, настройки уведомлен
 msgid "Manage keys for API and MCP access"
 msgstr "Управление ключами для доступа к API и MCP"
 
-#: specivo/templates/themes/default/pages/auth/profile.html:130
+#: specivo/templates/themes/default/pages/auth/profile.html:121
+msgid "Flat-rate AI plans you pay for"
+msgstr "Тарифы ИИ с фиксированной платой, которые вы оплачиваете"
+
+#: specivo/templates/themes/default/pages/auth/profile.html:140
 msgid "Current address"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:141
+#: specivo/templates/themes/default/pages/auth/profile.html:151
 #, python-format
 msgid "Change to %(address)s pending."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:143
+#: specivo/templates/themes/default/pages/auth/profile.html:153
 msgid "The link has expired: send a new one."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:145
+#: specivo/templates/themes/default/pages/auth/profile.html:155
 msgid "Open the link we sent to that address to confirm it."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:151
+#: specivo/templates/themes/default/pages/auth/profile.html:161
 msgid "Resend link"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:155
+#: specivo/templates/themes/default/pages/auth/profile.html:165
 msgid "Cancel change"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:162
+#: specivo/templates/themes/default/pages/auth/profile.html:172
 msgid ""
 "Your account has no password. To change your email address, first sign in"
 " again with your identity provider. You then have five minutes to request"
 " the change."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:168
+#: specivo/templates/themes/default/pages/auth/profile.html:178
 #, python-format
 msgid "Sign in again with %(name)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:173
+#: specivo/templates/themes/default/pages/auth/profile.html:183
 msgid ""
 "None of your identity providers is enabled. Ask an administrator to "
 "change your address."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:176
+#: specivo/templates/themes/default/pages/auth/profile.html:186
 msgid ""
 "We send a link to the new address. Your current address stays in use "
 "until you open it."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:180
+#: specivo/templates/themes/default/pages/auth/profile.html:190
 msgid "New email address"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/auth/profile.html:200
+#: specivo/templates/themes/default/pages/auth/profile.html:210
 msgid ""
 "Sign in with an account at your organisation's identity provider. Connect"
 " it here once, while signed in."
@@ -5807,11 +6254,11 @@ msgstr ""
 "Входите с учётной записью поставщика удостоверений вашей организации. "
 "Подключите её здесь один раз, пока вы вошли в систему."
 
-#: specivo/templates/themes/default/pages/auth/profile.html:232
+#: specivo/templates/themes/default/pages/auth/profile.html:242
 msgid "No accounts are connected yet."
 msgstr "Подключённых учётных записей пока нет."
 
-#: specivo/templates/themes/default/pages/auth/profile.html:240
+#: specivo/templates/themes/default/pages/auth/profile.html:250
 #, python-format
 msgid "Connect %(name)s"
 msgstr "Подключить %(name)s"
@@ -6004,6 +6451,8 @@ msgstr "Длительность"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:46
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:67
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:59
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:47
 #: specivo/templates/themes/default/pages/dashboard.html:241
 #: specivo/templates/themes/default/pages/projects/list.html:174
 #: specivo/templates/themes/default/pages/projects/version_detail.html:58
@@ -7221,6 +7670,8 @@ msgstr "Создайте первую задачу, чтобы начать."
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:8
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:8
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:9
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:9
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:8
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:7
 #: specivo/templates/themes/default/pages/admin/audit_log.html:8
 #: specivo/templates/themes/default/pages/admin/currencies.html:7
@@ -7242,6 +7693,8 @@ msgstr "Создайте первую задачу, чтобы начать."
 #: specivo/templates/themes/default/pages/admin/users.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:7
 #: specivo/templates/themes/default/pages/admin/workflows.html:7
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
 #: specivo/templates/themes/default/pages/auth/api_keys.html:7
 #: specivo/templates/themes/default/pages/auth/preferences.html:7
 #: specivo/templates/themes/default/pages/auth/profile.html:7
@@ -7306,16 +7759,6 @@ msgstr "Ежедневно"
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:87
 msgid "Weekly"
 msgstr "Еженедельно"
-
-#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:9
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:88
-msgid "Monthly"
-msgstr "Ежемесячно"
-
-#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:10
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:89
-msgid "Yearly"
-msgstr "Ежегодно"
 
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:11
 #, python-format
@@ -9845,6 +10288,7 @@ msgid "Keyword"
 msgstr "Ключевое слово"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
 #: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/list.html:44
 #: specivo/templates/themes/default/pages/projects/version_detail.html:83

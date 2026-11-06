@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_subscription_macros.html" import error_text with context %}
+
+{% block title %}{{ subscription.plan_name }} - {% trans %}AI subscriptions{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  {% if admin_mode %}
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ back_url }}">{% trans %}AI subscriptions{% endtrans %}</a>
+  {% else %}
+  <a href="/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %}</a>
+  {% endif %}
+  <span class="sep">/</span>
+  <span class="current">{{ subscription.plan_name }}</span>
+</div>
+
+<h1 class="sp-page-h1">{{ subscription.plan_name }}</h1>
+{% if admin_mode %}<p class="sp-text-muted sp-mb-md">{% trans name=subscription.owner_name, login=subscription.owner_login %}Held by {{ name }} ({{ login }}). Your changes are recorded in the audit log.{% endtrans %}</p>{% endif %}
+
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="subscription-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="edit-subscription-card">
+  {% set submit_label = _("Save") %}
+  {% include "pages/auth/_ai_subscription_form.html" %}
+</div>
+
+<div class="card sp-card-pad" data-testid="delete-subscription-card">
+  <h3 class="sp-card-h3">{% trans %}Delete this subscription{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}To record that a plan ended, set its last day instead: deleting removes it from past spend reports too.{% endtrans %}</p>
+  <form method="post" action="{{ delete_action }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="sp-btn-sm sp-btn-danger">{% trans %}Delete{% endtrans %}</button>
+  </form>
+</div>
+{% endblock %}

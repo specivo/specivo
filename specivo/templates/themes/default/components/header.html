@@ -171,6 +171,12 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           {% trans %}API Keys{% endtrans %}
         </a>
+        {% if not user.is_service_account %}
+        <a class="user-dropdown-item" href="/my/ai-subscriptions/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          {% trans %}AI subscriptions{% endtrans %}
+        </a>
+        {% endif %}
         <div class="user-dropdown-divider"></div>
         <form class="sp-signout-form" method="post" action="/logout/">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
