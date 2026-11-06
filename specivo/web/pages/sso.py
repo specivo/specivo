@@ -211,7 +211,7 @@ async def sso_login_start(
     settings = get_settings()
     provider = await _provider_or_404(db, slug)
     try:
-        authorization = await _service.start(provider, next_path=next_url)
+        authorization = await _service.start(db, provider, next_path=next_url)
     except SsoError as exc:
         logger.warning("sso.login.start_failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
         return _refuse(exc.code, settings)

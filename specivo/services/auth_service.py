@@ -353,7 +353,7 @@ class AuthService:
         ``auth_method="sso"``, the identity, the IdP session id (``sid``
         claim, for back-channel logout) and the ID token encrypted for
         ``id_token_hint``, and the IdP's refresh token as
-        :func:`specivo.services.sso.session_check.seal_sign_in_refresh_token`
+        :func:`specivo.services.sso.session_check.probe_sign_in_refresh_token`
         sealed it (``None``: the session is not re-checked at the IdP).
         ``absolute_expires_at`` caps the session at
         ``provider.session_max_age_hours`` (at most
