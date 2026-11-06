@@ -1,4 +1,7 @@
-"""KillSwitchService — graduated agent access revocation."""
+"""KillSwitchService — graduated agent access revocation.
+
+Its API is not mounted; not yet tested for release.
+"""
 
 from __future__ import annotations
 

@@ -13,8 +13,8 @@ class ServiceRegistry:
     """Registry mapping service names to implementation classes.
 
     Services are registered by name and can be retrieved as classes
-    or instantiated on demand.  ``override()`` allows higher-tier plugins
-    to replace lower-tier implementations.
+    or instantiated on demand.  ``override()`` lets a plugin
+    replace a core implementation.
     """
 
     def __init__(self) -> None:

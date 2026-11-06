@@ -76,11 +76,11 @@ tests/e2e/pages/
 Shared fixtures live in `specivo/testing/e2e_base.py` (mirrors `conftest_base.py`). Plugin repos import them:
 
 ```python
-# specivo-pro/tests/e2e/conftest.py
+# <plugin repo>/tests/e2e/conftest.py
 from specivo.testing.e2e_base import *  # noqa: F401, F403
 ```
 
-Pro/enterprise tests use existing markers: `pytestmark = [pytest.mark.e2e, pytest.mark.pro]`
+A plugin's E2E tests use the same marker: `pytestmark = pytest.mark.e2e`
 
 ### CI integration
 

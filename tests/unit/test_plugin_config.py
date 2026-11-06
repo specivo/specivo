@@ -1,7 +1,7 @@
 """Unit tests for PluginConfig protocol and BasePluginConfig.
 
 RED phase — these tests define the expected behavior of:
-- ``PluginConfig``: a runtime-checkable Protocol requiring name, tier, version.
+- ``PluginConfig``: a runtime-checkable Protocol requiring name and version.
 - ``BasePluginConfig``: convenience base class with no-op defaults.
 - ``PLUGIN_API_VERSION``: module-level constant for compatibility checks.
 
@@ -30,10 +30,6 @@ def _make_minimal_plugin():
         @property
         def name(self) -> str:
             return "test.minimal"
-
-        @property
-        def tier(self) -> str:
-            return "core"
 
     return MinimalPlugin()
 
@@ -64,10 +60,6 @@ class TestBasePluginConfigDefaults:
         # Pass a dummy object; no-op should not raise.
         plugin.get_services(object())
 
-    def test_get_features_returns_empty_list(self):
-        plugin = _make_minimal_plugin()
-        assert plugin.get_features() == []
-
     def test_get_celery_tasks_is_noop(self):
         plugin = _make_minimal_plugin()
         plugin.get_celery_tasks(object())  # should not raise
@@ -93,35 +85,24 @@ class TestBasePluginConfigDefaults:
 class TestPluginConfigProtocol:
     """PluginConfig is a runtime-checkable Protocol."""
 
+    def test_contract_has_no_tier_or_features(self):
+        """Plugins load in the configured order; there is no tier or feature flag hook."""
+        from specivo.core.plugin import BasePluginConfig, PluginConfig
+
+        for attr in ("tier", "get_features"):
+            assert not hasattr(PluginConfig, attr)
+            assert not hasattr(BasePluginConfig, attr)
+
     def test_protocol_requires_name(self):
         """A class without ``name`` must not satisfy the protocol."""
         from specivo.core.plugin import PluginConfig
 
         class MissingName:
             @property
-            def tier(self) -> str:
-                return "core"
-
-            @property
             def version(self) -> str:
                 return "1.0.0"
 
         assert not isinstance(MissingName(), PluginConfig)
-
-    def test_protocol_requires_tier(self):
-        """A class without ``tier`` must not satisfy the protocol."""
-        from specivo.core.plugin import PluginConfig
-
-        class MissingTier:
-            @property
-            def name(self) -> str:
-                return "x"
-
-            @property
-            def version(self) -> str:
-                return "1.0.0"
-
-        assert not isinstance(MissingTier(), PluginConfig)
 
     def test_protocol_requires_version(self):
         """A class without ``version`` must not satisfy the protocol."""
@@ -132,14 +113,10 @@ class TestPluginConfigProtocol:
             def name(self) -> str:
                 return "x"
 
-            @property
-            def tier(self) -> str:
-                return "core"
-
         assert not isinstance(MissingVersion(), PluginConfig)
 
     def test_base_plugin_config_satisfies_protocol(self):
-        """BasePluginConfig subclass with name + tier must satisfy PluginConfig."""
+        """A BasePluginConfig subclass with a name satisfies PluginConfig."""
         from specivo.core.plugin import PluginConfig
 
         plugin = _make_minimal_plugin()
@@ -162,10 +139,6 @@ class TestPluginConfigHookReturnTypes:
             def name(self) -> str:
                 return "test.models"
 
-            @property
-            def tier(self) -> str:
-                return "core"
-
             def get_models(self) -> list:
                 return [object, int]  # stand-in for model classes
 
@@ -182,10 +155,6 @@ class TestPluginConfigHookReturnTypes:
             def name(self) -> str:
                 return "test.routers"
 
-            @property
-            def tier(self) -> str:
-                return "core"
-
             def get_routers(self, prefix: str) -> list:
                 fake_router = object()
                 return [(fake_router, {"prefix": f"{prefix}/api/v1", "tags": ["test"]})]
@@ -198,25 +167,6 @@ class TestPluginConfigHookReturnTypes:
         assert "prefix" in kwargs
         assert kwargs["prefix"] == "/sp/api/v1"
 
-    def test_get_features_returns_list_of_strings(self):
-        from specivo.core.plugin import BasePluginConfig
-
-        class WithFeatures(BasePluginConfig):
-            @property
-            def name(self) -> str:
-                return "test.features"
-
-            @property
-            def tier(self) -> str:
-                return "pro"
-
-            def get_features(self) -> list[str]:
-                return ["threaded_comments", "reactions"]
-
-        plugin = WithFeatures()
-        result = plugin.get_features()
-        assert result == ["threaded_comments", "reactions"]
-
     def test_get_migration_path_returns_path_or_none(self):
         from specivo.core.plugin import BasePluginConfig
 
@@ -224,10 +174,6 @@ class TestPluginConfigHookReturnTypes:
             @property
             def name(self) -> str:
                 return "test.migrations"
-
-            @property
-            def tier(self) -> str:
-                return "core"
 
             def get_migration_path(self) -> Path | None:
                 return Path("/fake/migrations/versions")

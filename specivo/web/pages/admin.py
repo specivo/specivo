@@ -1,4 +1,4 @@
-"""Web admin pages: dashboard, workflows, roles, trackers, settings, email, agent groups, kill switch, presets."""
+"""Web admin pages: dashboard, workflows, roles, trackers, settings, email, presets."""
 
 from __future__ import annotations
 
@@ -1047,52 +1047,6 @@ async def admin_email(
             "active_page": "admin",
             "smtp": smtp_info,
         },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Agent Groups (enterprise)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/admin/agent-groups/", response_class=HTMLResponse)
-async def admin_agent_groups(
-    request: Request,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """Render the agent groups management page."""
-    from specivo.services.group_policy_service import GroupPolicyService
-
-    groups = await GroupPolicyService().list_groups(db)
-    templates = get_templates()
-    return templates.TemplateResponse(
-        request,
-        "pages/admin/agent_groups.html",
-        context={"user": user, "active_page": "admin", "groups": groups},
-    )
-
-
-# ---------------------------------------------------------------------------
-# Kill Switch (enterprise)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/admin/kill-switch/", response_class=HTMLResponse)
-async def admin_kill_switch(
-    request: Request,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """Render the kill switch page."""
-    from specivo.services.kill_switch_service import KillSwitchService
-
-    events = await KillSwitchService().list_kill_events(db)
-    templates = get_templates()
-    return templates.TemplateResponse(
-        request,
-        "pages/admin/kill_switch.html",
-        context={"user": user, "active_page": "admin", "events": events},
     )
 
 

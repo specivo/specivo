@@ -35,28 +35,6 @@
   {# Left column #}
   <div style="display:flex; flex-direction:column; gap:var(--sp-space-xl);">
 
-    {# Active Agents — gated on agent_groups feature #}
-    {% if has_feature("agent_groups") %}
-    <div class="card accent-teal animate-in">
-      <div class="card-header">
-        <h2>{% trans %}Active Agents{% endtrans %}</h2>
-      </div>
-      {% if agents is defined and agents %}
-        {% for agent in agents %}
-        <div class="agent-row">
-          <span class="agent-dot {{ 'green' if agent.status == 'active' else ('red' if agent.status == 'killed' else 'amber') }}"></span>
-          <span class="agent-name">{{ agent.name }}</span>
-          <span class="agent-info">{{ agent.info }}</span>
-          {% if agent.model %}<span class="agent-model">{{ agent.model }}</span>{% endif %}
-          {% if agent.elapsed %}<span class="agent-elapsed">{{ agent.elapsed }}</span>{% endif %}
-        </div>
-        {% endfor %}
-      {% else %}
-        <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No active agents.{% endtrans %}</div>
-      {% endif %}
-    </div>
-    {% endif %}
-
     {# My Open Issues #}
     <div class="card accent-gold animate-in">
       <div class="card-header">
@@ -143,14 +121,6 @@
 
   {# Right column #}
   <div style="display:flex; flex-direction:column; gap:var(--sp-space-xl);">
-
-    {# Today's AI Spend — Pro feature #}
-    {% if has_feature("agent_cost_tracking") %}
-    <div class="card accent-amber animate-in" style="padding:var(--sp-space-lg);">
-      <div style="font-size:var(--sp-font-size-sm);font-weight:600;color:var(--sp-text-primary);margin-bottom:var(--sp-space-sm);">{% trans %}Today's AI Spend{% endtrans %}</div>
-      <div class="spend-big">${{ ai_spend_today if ai_spend_today is defined else '0.00' }}</div>
-    </div>
-    {% endif %}
 
     {# Release Tracking #}
     <div class="card accent-violet animate-in">
@@ -268,6 +238,6 @@
   </div>
 </div>
 
-{# Pro/Enterprise dashboard widgets #}
+{# Plugin dashboard widgets #}
 {% block dashboard_plugins %}{% endblock %}
 {% endblock %}

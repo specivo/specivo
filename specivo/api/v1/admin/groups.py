@@ -1,4 +1,7 @@
-"""Admin agent groups API — CRUD for groups, memberships, and policies."""
+"""Admin agent groups API — CRUD for groups, memberships, and policies.
+
+Not mounted; not yet tested for release.
+"""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 Served at ``/api/v1/admin/groups/``: "groups" is what the concept is called
 to a user.  The module is named ``user_groups`` to keep it apart from
-``admin/groups.py``, which is the enterprise **agent** group API
+``admin/groups.py``, which is the unmounted **agent** group API
 (``/admin/agent-groups/``) and is a different thing entirely.
 
 Every route is admin-only.  Group membership is an access grant — putting a

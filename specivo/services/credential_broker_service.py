@@ -1,4 +1,7 @@
-"""CredentialBrokerService — manage external systems, issue/revoke credentials, audit."""
+"""CredentialBrokerService — manage external systems, issue/revoke credentials, audit.
+
+Its API is not mounted; not yet tested for release.
+"""
 
 from __future__ import annotations
 

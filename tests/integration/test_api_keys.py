@@ -412,3 +412,47 @@ class TestDeleteApiKey:
     async def test_delete_requires_auth(self, client: AsyncClient, db_session: AsyncSession):
         resp = await client.delete("/api/v1/my/api-keys/1/")
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Key limit
+# ---------------------------------------------------------------------------
+
+
+class TestApiKeyLimit:
+    async def test_twenty_first_key_is_allowed(self, db_session: AsyncSession):
+        """There is no small per-user cap: a 21st key is created like the first."""
+        user = await _create_user(db_session, login="many_keys")
+        service = ApiKeyService()
+        for i in range(21):
+            await service.create_key(session=db_session, user_id=user.id, name=f"key-{i + 1:02d}")
+        await db_session.flush()
+        assert len(await service.list_keys(db_session, user.id)) == 21
+
+    @pytest.mark.parametrize("locale", ["en", "th"])
+    async def test_key_limit_message_names_no_product(
+        self, client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, locale: str
+    ):
+        """At the bound the key is refused (422 api_key_limit) without naming any product or edition."""
+        monkeypatch.setattr("specivo.services.api_key_service.API_KEY_MAX_PER_USER", 2)
+        await _create_user(db_session, login=f"bounded_{locale}")
+        token = await _login_user(client, f"bounded_{locale}")
+        await _create_key(client, token, name="one")
+        await _create_key(client, token, name="two")
+
+        resp = await client.post(
+            "/api/v1/my/api-keys/",
+            json={"name": "three"},
+            headers={"Authorization": f"Bearer {token}", "Accept-Language": locale},
+        )
+        assert resp.status_code == 422, resp.text
+        error = resp.json()["errors"][0]
+        assert error["code"] == "api_key_limit"
+        assert "2" in error["message"]
+        for word in ("Specivo", "Pro", "Enterprise", "Upgrade", "upgrade"):
+            assert word not in error["message"]
+
+    def test_the_bound_is_500(self):
+        from specivo.core.constants import API_KEY_MAX_PER_USER
+
+        assert API_KEY_MAX_PER_USER == 500

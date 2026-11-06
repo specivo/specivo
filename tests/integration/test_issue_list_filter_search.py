@@ -22,7 +22,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
-from specivo.core.features import get_feature_registry
 from specivo.core.lookup_cache import invalidate_lookups
 from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
@@ -397,15 +396,28 @@ async def test_pagination_keeps_the_filters(client: AsyncClient, world: World, d
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def saved_filters_feature():
-    # The autouse registry snapshot in tests/conftest.py restores this.
-    get_feature_registry().register("saved_filters", "tests")
+async def test_saved_filter_tabs_show_when_filters_exist(client: AsyncClient, world: World, db_session: AsyncSession):
+    """A non-admin member sees tabs for their saved filters, and none without any."""
+    w = world
+    assert not w.reader.is_admin
+    html = await _page(client, w)
+    assert 'class="filter-tabs"' not in html
+
+    db_session.add(SavedFilter(name="My open work", user_id=w.reader.id, project_id=w.project.id, filter_definition={}))
+    await db_session.commit()
+    html = await _page(client, w)
+    assert 'class="filter-tabs"' in html
+    assert re.search(r'class="filter-tab[^"]*">\s*My open work', html)
 
 
-async def test_saved_filter_tabs_link_to_their_filters(
-    client: AsyncClient, world: World, db_session: AsyncSession, saved_filters_feature
-):
+async def test_issue_list_has_no_bulk_checkboxes(client: AsyncClient, world: World):
+    """The list view has no selection column: there is no bulk toolbar to act on it."""
+    html = await _page(client, world)
+    assert 'class="issue-table"' in html
+    assert 'type="checkbox"' not in html.split('class="issue-table"', 1)[1].split("</table>", 1)[0]
+
+
+async def test_saved_filter_tabs_link_to_their_filters(client: AsyncClient, world: World, db_session: AsyncSession):
     w = world
     db_session.add(
         SavedFilter(

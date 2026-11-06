@@ -308,11 +308,6 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 
     templates.env.globals["current_locale"] = get_locale
 
-    # Feature-gating: expose has_feature() to every template
-    from specivo.core.features import has_feature
-
-    templates.env.globals["has_feature"] = has_feature
-
     # Brand name — from DB setting, available in all templates
     templates.env.globals["brand_name"] = _brand_name
 

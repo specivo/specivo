@@ -62,7 +62,6 @@ class SettingsService:
 
     async def get_dashboard_stats(self, session: AsyncSession) -> dict[str, int]:
         """Return admin dashboard stat counts."""
-        from specivo.models.agent_session import AgentSession
         from specivo.models.project import Project
         from specivo.models.user import User
         from specivo.services.anonymous_user_service import real_users_clause
@@ -73,22 +72,8 @@ class SettingsService:
         active_projects = (
             await session.execute(select(func.count()).select_from(Project).where(Project.status == 1))
         ).scalar_one()
-        agent_sessions = (await session.execute(select(func.count()).select_from(AgentSession))).scalar_one()
-
-        kill_events = 0
-        try:
-            from specivo.core.features import has_feature
-
-            if has_feature("kill_switch"):
-                from specivo.models.kill_switch import KillEvent
-
-                kill_events = (await session.execute(select(func.count()).select_from(KillEvent))).scalar_one()
-        except Exception:
-            pass
 
         return {
             "total_users": total_users,
             "active_projects": active_projects,
-            "agent_sessions": agent_sessions,
-            "kill_events": kill_events,
         }

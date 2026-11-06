@@ -72,8 +72,6 @@ markers = [
     "integration: API endpoint tests (requires database)",
     "service: Service layer tests (requires database)",
     "slow: Tests that take >5 seconds",
-    "pro: Tests for Pro tier features",
-    "enterprise: Tests for Enterprise tier features",
     "serial: Tests that cannot run under xdist (shared state like Redis rate limits)",
     "e2e: End-to-end browser tests (requires running server)",
     "sso_idp: Tests against the disposable IdP (make sso-idp-up)",

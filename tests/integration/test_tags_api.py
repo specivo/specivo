@@ -470,9 +470,6 @@ class TestTagInputLimits:
         assert resp.status_code == 422, resp.text
 
     async def test_bulk_normalises_names_and_ids(self, client, project, issue, admin_token):
-        from specivo.core.features import get_feature_registry
-
-        get_feature_registry().register("bulk_operations", "tests")
         resp = await client.post(
             f"/api/v1/projects/{project.key}/issues/bulk-tags/",
             headers=_auth(admin_token),
@@ -483,3 +480,42 @@ class TestTagInputLimits:
 
         resp = await client.get(f"/api/v1/issues/{issue.display_key}/tags/", headers=_auth(admin_token))
         assert [t["name"] for t in resp.json()] == ["release"]
+
+
+class TestBulkTagging:
+    async def test_bulk_tags_work_for_a_permitted_user(self, db_session, client, project, issue, member_token):
+        """A non-admin who may tag the project's issues can bulk-tag them too."""
+        resp = await client.post(
+            f"/api/v1/projects/{project.key}/issues/bulk-tags/",
+            headers=_auth(member_token),
+            json={"issue_ids": [issue.id], "add": ["triage"]},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"issues": 1, "links_added": 1, "links_removed": 0}
+
+        resp = await client.get(f"/api/v1/issues/{issue.display_key}/tags/", headers=_auth(member_token))
+        assert [t["name"] for t in resp.json()] == ["triage"]
+
+    async def test_bulk_tags_refused_without_project_access(
+        self, db_session, client, tracker, priority, status_open, admin, member_token
+    ):
+        """A user who cannot tag the project's issues (no access to it) is refused."""
+        private = ProjectFactory.build(key="BTP", name="Bulk private", is_public=False)
+        db_session.add(private)
+        await db_session.commit()
+        await db_session.refresh(private)
+        hidden = await IssueService().create(
+            db_session,
+            private,
+            IssueCreate(project_key=private.key, tracker_id=tracker.id, subject="Hidden"),
+            admin,
+        )
+        await db_session.commit()
+
+        resp = await client.post(
+            f"/api/v1/projects/{private.key}/issues/bulk-tags/",
+            headers=_auth(member_token),
+            json={"issue_ids": [hidden.id], "add": ["sneaky"]},
+        )
+        assert resp.status_code == 404, resp.text
+        assert await TagService().tags_for_issue(db_session, hidden.id) == []

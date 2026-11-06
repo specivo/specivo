@@ -23,8 +23,7 @@
   {% endif %}
 </div>
 
-{# Saved filter tabs — Pro feature #}
-{% if has_feature("saved_filters") %}
+{# Saved filter tabs, shown when the project has saved filters #}
 {% if saved_filters is defined and saved_filters %}
 <div class="filter-tabs" style="margin-bottom:var(--sp-space-lg);">
   {% for sf in saved_filters %}
@@ -34,7 +33,6 @@
   </a>
   {% endfor %}
 </div>
-{% endif %}
 {% endif %}
 
 {# Filter bar #}
@@ -98,7 +96,7 @@
   </div>
 </form>
 
-{# Pro: bulk action toolbar, saved filter tabs #}
+{# Plugin toolbar slot #}
 {% block issue_list_toolbar %}{% endblock %}
 
 {% if issues %}
@@ -251,7 +249,6 @@
   <table class="issue-table">
     <thead>
       <tr>
-        {% if has_feature("bulk_operations") %}<th class="td-checkbox"><input type="checkbox" /></th>{% endif %}
         <th></th>
         <th>{% trans %}Key{% endtrans %}</th>
         <th>{% trans %}Subject{% endtrans %}</th>

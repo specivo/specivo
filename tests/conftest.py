@@ -11,8 +11,7 @@ per test) because no DDL or data destruction occurs.
 All fixtures are defined in specivo.testing.conftest_base and re-exported
 here so pytest discovers them automatically.
 
-Core runs in core-only mode (no plugins). Pro and enterprise tests live
-in their respective repos.
+The suite runs without plugins.
 """
 
 import os
@@ -37,10 +36,8 @@ from specivo.testing.oidc_mock import mock_idp  # noqa: F401
 from specivo.testing.sso import sso_login, sso_provider  # noqa: F401
 
 # ---------------------------------------------------------------------------
-# Auto-skip pro / enterprise tests in core-only mode
+# Auto-skip tests whose dependencies are absent
 # ---------------------------------------------------------------------------
-
-_INSTALLED_PLUGINS = os.environ.get("INSTALLED_PLUGINS", "[]")
 
 # The disposable OIDC IdP (tests/fixtures/sso/docker-compose.yml) is also started on
 # demand. Its discovery document is fetched once at collection time, and only
@@ -61,24 +58,13 @@ def _issuer_is_up(issuer: str, timeout: float = 1.0) -> bool:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip tests whose dependencies are absent.
 
-    ``pro`` and ``enterprise`` need their plugins and ``sso_idp`` the
-    disposable IdP, which is started on demand.
+    ``sso_idp`` needs the disposable IdP, which is started on demand.
     """
-    has_pro = "specivo_pro" in _INSTALLED_PLUGINS
-    has_enterprise = "specivo_enterprise" in _INSTALLED_PLUGINS
-
-    skip_pro = pytest.mark.skip(reason="requires specivo-pro plugin (not installed)")
-    skip_ent = pytest.mark.skip(reason="requires specivo-enterprise plugin (not installed)")
-
     has_sso_idp = any(item.get_closest_marker("sso_idp") for item in items) and _issuer_is_up(_SSO_TEST_ISSUER)
     skip_sso_idp = pytest.mark.skip(
         reason=f"SSO test IdP is not serving {_SSO_TEST_ISSUER} (start it with: make sso-idp-up)"
     )
     for item in items:
-        if not has_pro and item.get_closest_marker("pro"):
-            item.add_marker(skip_pro)
-        if not has_enterprise and item.get_closest_marker("enterprise"):
-            item.add_marker(skip_ent)
         if not has_sso_idp and item.get_closest_marker("sso_idp"):
             item.add_marker(skip_sso_idp)
 
@@ -90,24 +76,10 @@ def _restore_plugin_manager():
     Integration tests that create custom apps (core-only, full-stack) via
     ``create_app()`` overwrite ``specivo.main._plugin_manager``. This fixture
     ensures it is restored so subsequent tests that use the default test app
-    see the correct feature registry.
-
-    The feature registry's *contents* are snapshotted too. Swapping the manager
-    back does not undo a ``feature_registry.register(...)`` call made against
-    the manager that stays in place, and a leaked feature silently changes
-    behaviour for every later test in the same worker process: tier tests
-    asserting core-only behaviour see an enterprise gate open and fail far away
-    from the test that opened it.
+    see the plugin manager they expect.
     """
     import specivo.main as _main_mod
 
     original_pm = _main_mod._plugin_manager
-    original_features = original_pm.feature_registry.list_features() if original_pm else {}
     yield
     _main_mod._plugin_manager = original_pm
-    if original_pm is not None:
-        registry = original_pm.feature_registry
-        for feature in set(registry.list_features()) - set(original_features):
-            registry.unregister(feature)
-        for feature, provider in original_features.items():
-            registry.register(feature, provider)

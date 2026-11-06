@@ -185,8 +185,8 @@ async def test_email_change_is_session_only(key_client: AsyncClient, db_session:
 
 
 #: Every admin route that needs a session, as (module, method, path). The kill
-#: switch and credential broker routers are mounted by the enterprise edition
-#: only, so they are checked here by their dependencies rather than over HTTP.
+#: switch and credential broker routers are not mounted, so they are checked
+#: here by their dependencies rather than over HTTP.
 SESSION_ONLY_ROUTES: list[tuple[str, str, str]] = [
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/reset-password/"),
     ("specivo.api.v1.admin.users", "PATCH", "/admin/users/{user_id}/email/"),

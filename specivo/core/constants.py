@@ -11,6 +11,10 @@ JWT_ALGORITHM = "HS256"
 API_KEY_ENTROPY_BYTES = 32
 REFRESH_TOKEN_ENTROPY_BYTES = 32
 CREDENTIAL_TOKEN_ENTROPY_BYTES = 48
+# Sanity bound on API keys per user, active and inactive alike. Key lists are
+# not paginated and a runaway script should fail rather than add rows forever;
+# authentication is an indexed hash lookup, so the count does not slow it down.
+API_KEY_MAX_PER_USER = 500
 
 # Pagination
 DEFAULT_PAGE_LIMIT = 25

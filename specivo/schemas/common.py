@@ -58,4 +58,3 @@ class HealthResponse(BaseModel):
     database: str
     redis: str
     version: str
-    tier: str = "core"

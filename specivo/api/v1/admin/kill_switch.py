@@ -1,4 +1,7 @@
-"""Admin kill switch API — graduated agent access revocation."""
+"""Admin kill switch API — graduated agent access revocation.
+
+Not mounted; not yet tested for release.
+"""
 
 from __future__ import annotations
 
