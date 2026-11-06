@@ -17,8 +17,9 @@ Pipeline:
              (the browser draws the diagram, see frontend/js/modules/mermaid.js)
            + wiki link inline pattern: [[Page]] -> <a href="/projects/X/wiki/page/">
            + issue ref inline pattern: PROJ-123 -> <a href="/issue/PROJ-123/">
-             (both on parsed text only, so code and raw HTML blocks are never
-             touched; issue refs stay out of link text too)
+           + bare URL inline pattern: https://x.example/a -> <a href="https://x.example/a">
+             (all three on parsed text only, so code and raw HTML blocks are
+             never touched; issue refs and URLs stay out of link text too)
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
@@ -46,6 +47,7 @@ from markdown.extensions.fenced_code import FencedBlockPreprocessor  # type: ign
 from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
 from markdown.preprocessors import Preprocessor  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
+from markdown.util import HTML_PLACEHOLDER_RE, AtomicString  # type: ignore[import-untyped]
 
 from specivo.core.i18n import gettext as _
 from specivo.services import markdown_budget
@@ -165,7 +167,153 @@ class _MermaidExtension(Extension):
         md.preprocessors.register(_MermaidPreprocessor(md), "mermaid_fences", 26)
 
 
-_MD_EXTENSIONS: list = ["fenced_code", "tables", "toc", "codehilite", _MermaidExtension()]
+# A bare URL: ``http://`` or ``https://``, ``www.`` or ``mailto:``, at the start
+# of the text or after a blank, an opening bracket or quote, an emphasis marker
+# or an inline element (whose placeholder ends in ``\x03``), and running to the
+# next blank, ``<``, ``>`` or placeholder. One scan to the end of the run per
+# match, so linear; :func:`_trim_bare_url` then cuts it to what is linked.
+BARE_URL_PATTERN = r"(?<![^\s(\[{*_~\"'\x03])((?:https?://|www\.|mailto:)[^\s<>\x02\x03]+)"
+# Host of an http(s) or www URL: dot-separated labels and an optional port.
+# No userinfo (``user:pass@``), so a link never hides a different host.
+_URL_HOST_RE = re.compile(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.?(?::\d{1,5})?")
+_MAILTO_RE = re.compile(r"mailto:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+# Characters a URL may not end in: they read as the sentence's punctuation.
+_URL_TRAILING_PUNCTUATION = "?!.,:;*_~'\""
+# An entity reference (``&amp;``) at the end of a URL is text after it.
+_URL_TRAILING_ENTITY_RE = re.compile(r"&[A-Za-z0-9]+;$")
+# A raw inline ``<a ...>`` or ``</a>`` tag, as Python-Markdown stashes it.
+_RAW_ANCHOR_RE = re.compile(r"<(/?)a(?:\s[^>]*)?>", re.IGNORECASE)
+_INLINE_PLACEHOLDER_PREFIX = "\x02klzzwxh:"
+
+
+def _trim_bare_url(url: str) -> str:
+    """Cut what GFM leaves out of an autolink off the end of *url*.
+
+    Trailing punctuation (``.``, ``,``, ``?``, quotes, ...) and an entity
+    reference are dropped, and so is a closing ``)`` without a matching ``(``
+    in the URL. Each step removes at least one character, so this is linear.
+    """
+    opened = url.count("(")
+    closed = url.count(")")
+    while url:
+        last = url[-1]
+        if last == ";" and (entity := _URL_TRAILING_ENTITY_RE.search(url[-33:])):
+            url = url[: len(url) - len(entity.group())]
+        elif last in _URL_TRAILING_PUNCTUATION:
+            url = url[:-1]
+        elif last == ")" and closed > opened:
+            url = url[:-1]
+            closed -= 1
+        else:
+            break
+    return url
+
+
+def bare_url_href(url: str) -> str | None:
+    """Return the ``href`` for bare *url* (already trimmed), or None if it is not linked.
+
+    ``www.`` gets an ``http://`` scheme. An http(s) or www URL needs a host
+    (labels and an optional port, no user info); a ``mailto:`` URL needs an
+    address with a domain.
+    """
+    if url.startswith("mailto:"):
+        return url if _MAILTO_RE.fullmatch(url) else None
+    if url.startswith("www."):
+        href = "http://" + url
+        rest = url
+    else:
+        href = url
+        rest = url.split("://", 1)[1]
+    host = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if not host or not _URL_HOST_RE.fullmatch(host):
+        return None
+    if url.startswith("www.") and "." not in host[len("www.") :].strip("."):
+        return None
+    return href
+
+
+class _BareUrlInlineProcessor(InlineProcessor):
+    """Link bare ``https://``, ``http://``, ``www.`` and ``mailto:`` URLs in parsed text.
+
+    An inline pattern only sees text Python-Markdown parses as Markdown, so
+    code spans, fenced and indented code blocks and raw HTML blocks keep their
+    URLs as written. ``ANCESTOR_EXCLUDES`` keeps it out of the text of a
+    Markdown link or ``<url>`` autolink, and a URL between a raw inline
+    ``<a ...>`` and its ``</a>`` is left alone too. Only http, https and
+    mailto targets are made; the sanitizer enforces the same list.
+    """
+
+    ANCESTOR_EXCLUDES = ("a",)
+
+    def __init__(self, md: _md.Markdown) -> None:
+        super().__init__(BARE_URL_PATTERN, md)
+        # Whether the text right after an inline placeholder is inside a raw
+        # ``<a>``, by placeholder id. Each placeholder is looked at once, so
+        # the checks of all the URLs in a text add up to one pass over it.
+        self._inside_anchor_after: dict[str, bool] = {}
+        self._stash_seen: object = None
+
+    def _raw_anchor_tag(self, node: object) -> bool | None:
+        """True for a stashed raw ``<a ...>``, False for ``</a>``, None for anything else."""
+        if not isinstance(node, str):
+            return None
+        m = HTML_PLACEHOLDER_RE.fullmatch(node)
+        if m is None:
+            return None
+        index = int(m.group(1))
+        blocks = self.md.htmlStash.rawHtmlBlocks
+        if index >= len(blocks):
+            return None
+        tag = _RAW_ANCHOR_RE.fullmatch(str(blocks[index]).strip())
+        return None if tag is None else not tag.group(1)
+
+    def _inside_raw_anchor(self, data: str, pos: int) -> bool:
+        """Whether *pos* in *data* follows a raw inline ``<a ...>`` not closed before it."""
+        stash = self.md.treeprocessors["inline"].stashed_nodes
+        if stash is not self._stash_seen:
+            self._stash_seen = stash
+            self._inside_anchor_after.clear()
+        known = self._inside_anchor_after
+        unseen: list[str] = []
+        inside = False
+        end = pos
+        while (start := data.rfind(_INLINE_PLACEHOLDER_PREFIX, 0, end)) >= 0:
+            close = data.find("\x03", start, end)
+            key = data[start + len(_INLINE_PLACEHOLDER_PREFIX) : close] if close >= 0 else ""
+            if key in known:
+                inside = known[key]
+                break
+            unseen.append(key)
+            end = start
+        for key in reversed(unseen):
+            tag = self._raw_anchor_tag(stash.get(key))
+            if tag is not None:
+                inside = tag
+            known[key] = inside
+        return inside
+
+    def handleMatch(  # noqa: N802 - Python-Markdown API
+        self, m: re.Match[str], data: str
+    ) -> tuple[Element | None, int | None, int | None]:
+        url = _trim_bare_url(m.group(1))
+        href = bare_url_href(url) if url else None
+        if href is None or self._inside_raw_anchor(data, m.start(1)):
+            return None, None, None
+        element = Element("a", {"href": href})
+        # Atomic, so issue refs, wiki links and emphasis are not looked for in it.
+        element.text = AtomicString(url)
+        return element, m.start(1), m.start(1) + len(url)
+
+
+class _BareUrlExtension(Extension):
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below links (160), ``<url>`` autolinks (120), inline HTML (90) and
+        # entities (80), so those are settled first; above emphasis (60), so
+        # ``*`` and ``_`` in a URL stay part of it.
+        md.inlinePatterns.register(_BareUrlInlineProcessor(md), "bare_urls", 75)
+
+
+_MD_EXTENSIONS: list = ["fenced_code", "tables", "toc", "codehilite", _MermaidExtension(), _BareUrlExtension()]
 _MD_EXTENSION_CONFIGS = {
     "codehilite": {"css_class": "codehilite", "guess_lang": False},
 }
@@ -512,7 +660,9 @@ def extract_links(text: str | None, instance_origin: str | None = None) -> list[
     slugs, ``KEY-123`` tokens and links to ``/issue/KEY-123/`` as issue refs,
     links to a wiki page or an attachment of this instance (relative, or
     absolute on *instance_origin*) as such, and bare-filename link and image
-    targets as attachment filenames.
+    targets as attachment filenames. A bare URL counts as the link the
+    renderer makes of it, so ``https://<instance>/issue/ACME-1/`` written as
+    plain text is a link to ACME-1.
 
     Text the renderer would show as plain text (over the render budget, see
     :func:`render_hazard`), or whose parse runs out of time, is scanned as
@@ -533,6 +683,7 @@ def extract_links(text: str | None, instance_origin: str | None = None) -> list[
                     "tables",
                     _WikiLinkExtension("", wiki_found, made),
                     _IssueRefExtension(None),
+                    _BareUrlExtension(),
                     _LinkCollectorExtension(found, made, instance_origin),
                     RenderDeadline(render_allowance()),
                 ],

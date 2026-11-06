@@ -59,6 +59,10 @@ _PARITY_INPUTS: list[tuple[str, str]] = [
         "Fixed in PROJ-123 and also PROJ-9 (see notes).",
     ),
     (
+        "bare_url_autolink",
+        "See https://example.com/docs, www.example.com and `https://example.com/code`.",
+    ),
+    (
         "issue_autolink_already_linked",
         "Already linked: [PROJ-1](/issue/PROJ-1/) — no double link.",
     ),
@@ -153,6 +157,12 @@ async def test_nonexistent_issue_ref_not_autolinked(auth_client: AsyncClient) ->
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
+
+
+async def test_bare_url_is_linked_in_preview(auth_client: AsyncClient) -> None:
+    resp = await auth_client.post(_PREVIEW_URL, json={"text": "Docs: https://example.com/d.", "context": "wiki"})
+    assert resp.status_code == 200, resp.text
+    assert '<a href="https://example.com/d" rel="noopener noreferrer">https://example.com/d</a>.' in resp.json()["html"]
 
 
 async def test_anonymous_request_is_rejected(client: AsyncClient) -> None:

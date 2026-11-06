@@ -224,6 +224,10 @@ User-authored content (wiki pages, issue descriptions, comments) is stored as ra
 rendered server-side:
 
 - **Library:** Python `markdown` with extensions: `fenced_code`, `tables`, `toc`, `codehilite`
+- **Bare URLs** (`https://…`, `http://…`, `www.…`, `mailto:…`) are linked GFM-style by an inline
+  pattern of our own, so code spans and blocks keep them as text, existing links are not linked
+  twice and trailing punctuation stays outside the link. Python-Markdown has no autolink extension
+  for bare URLs, and `pymdownx.magiclink` would add a dependency for this one feature.
 - **Sanitization:** rendered HTML goes through `nh3.clean()` with an explicit allowlist before it
   is wrapped in `Markup`. The content is user-authored, so rendering and sanitizing are one step —
   never mark Markdown-derived HTML safe without it (`specivo/services/markdown_service.py`).
