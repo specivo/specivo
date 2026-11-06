@@ -310,9 +310,13 @@ async def test_switch_off_leaves_signed_in_visitors_untouched(client: AsyncClien
 
 
 async def test_a_page_outside_the_allowlist_is_never_served(client: AsyncClient, live: World) -> None:
-    """The switch being on changes nothing for a page that did not opt in."""
+    """The switch being on changes nothing for a page that did not opt in.
+
+    The dashboard (``/``) is refused too, but sends the visitor to the project
+    list instead of the login screen while anonymous access is live; that is
+    pinned in ``test_anonymous_home_page.py``.
+    """
     for path in (
-        "/",
         f"/projects/{live.both.key}/roadmap/",
         f"/projects/{live.both.key}/settings/",
         f"/projects/{live.both.key}/sprints/",
