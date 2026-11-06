@@ -168,6 +168,19 @@ class AuditEvent(StrEnum):
     EXCHANGE_RATES_IMPORTED = "exchange_rates_imported"
     EXCHANGE_RATES_FETCH_TOGGLED = "exchange_rates_fetch_toggled"
     EXCHANGE_RATE_SETTINGS_CHANGED = "exchange_rate_settings_changed"
+    # AI model prices. A price period added by an administrator (details:
+    # ``price_id``, ``provider``, ``model``, ``currency``, ``effective_from``,
+    # ``effective_to``, ``source``, ``prices``; ``closed_price_id`` when it
+    # closed the open period); a period changed in place (the same plus
+    # ``changes``: ``{field: {old, new}}``, only ``effective_to``,
+    # ``is_active``, ``aliases`` and ``note`` can change); a period deleted;
+    # the bundled seed loaded with changes (``as_of``, ``inserted``,
+    # ``closed``, ``history_inserted``, ``aliases_updated``, ``unchanged``,
+    # ``skipped``).
+    AI_MODEL_PRICE_CREATED = "ai_model_price_created"
+    AI_MODEL_PRICE_UPDATED = "ai_model_price_updated"
+    AI_MODEL_PRICE_DELETED = "ai_model_price_deleted"
+    AI_MODEL_PRICES_SEEDED = "ai_model_prices_seeded"
 
 
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
@@ -184,6 +197,15 @@ _EXCHANGE_RATE_EVENTS = _EXCHANGE_RATE_ROW_EVENTS | {
     AuditEvent.EXCHANGE_RATES_FETCH_TOGGLED,
     AuditEvent.EXCHANGE_RATE_SETTINGS_CHANGED,
 }
+
+_AI_MODEL_PRICE_EVENTS = frozenset(
+    {
+        AuditEvent.AI_MODEL_PRICE_CREATED,
+        AuditEvent.AI_MODEL_PRICE_UPDATED,
+        AuditEvent.AI_MODEL_PRICE_DELETED,
+        AuditEvent.AI_MODEL_PRICES_SEEDED,
+    }
+)
 
 
 class AuditCategory(StrEnum):
@@ -302,6 +324,10 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.EXCHANGE_RATES_IMPORTED,
             AuditEvent.EXCHANGE_RATES_FETCH_TOGGLED,
             AuditEvent.EXCHANGE_RATE_SETTINGS_CHANGED,
+            AuditEvent.AI_MODEL_PRICE_CREATED,
+            AuditEvent.AI_MODEL_PRICE_UPDATED,
+            AuditEvent.AI_MODEL_PRICE_DELETED,
+            AuditEvent.AI_MODEL_PRICES_SEEDED,
         ],
         AuditCategory.ADMINISTRATION,
     ),
@@ -1361,6 +1387,36 @@ class SecurityAuditService:
             event_type=event_type,
             user_id=user_id,
             resource_type="exchange_rate" if event_type in _EXCHANGE_RATE_ROW_EVENTS else "setting",
+            resource_id=resource_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+
+    async def log_ai_model_price_change(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        user_id: int | None,
+        details: dict[str, Any],
+        resource_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log an AI model price added, changed or deleted, or a seed load that changed prices.
+
+        Written in the caller's transaction, in a savepoint, like
+        :meth:`log_exchange_rate_change`.
+        """
+        if event_type not in _AI_MODEL_PRICE_EVENTS:
+            raise ValueError(f"Not an AI model price event: {event_type!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event_type,
+            user_id=user_id,
+            resource_type="ai_model_price",
             resource_id=resource_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],

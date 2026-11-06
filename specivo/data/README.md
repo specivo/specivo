@@ -48,3 +48,55 @@ once per release):
    the changed rows itself) so existing installs receive the change. A
    withdrawn code is never deleted, because amounts may reference it; it is
    marked inactive instead.
+
+## ai_model_prices.json
+
+The AI model prices bundled with each release: one entry per model, with
+prices **per one million tokens** as decimal strings, all in USD. It seeds
+the `ai_model_prices` table (rows of source `seed`).
+
+| Field | Meaning |
+|---|---|
+| `as_of` | The instant the prices describe: the commit time of the source file. New price periods start here. |
+| `source` | Source file URL at the pinned commit, its licence and copyright |
+| `provider`, `model` | Specivo's provider slug and the normalised model name (lower case, no provider prefix) |
+| `input`, `output`, `cache_write_5m`, `cache_write_1h`, `cache_read`, `reasoning` | Prices per 1M tokens. A missing `cache_write_1h` is loaded as twice `input`; a missing `reasoning` means the output price. |
+| `long_context_threshold`, `long_*` | The long-context tier: a request whose context exceeds the threshold is billed entirely at these prices |
+
+**Source.** LiteLLM's `model_prices_and_context_window.json`
+(<https://github.com/BerriAI/litellm>), MIT License, Copyright (c) 2023 Berri
+AI. Only the text models (`chat`, `responses`) of the first-party providers
+listed in `specivo.core.ai_pricing_seed.LITELLM_PROVIDERS` are kept, without
+batch, flex or priority prices. Per-token prices are multiplied by one million
+and rounded half up to six decimal places (the script reports any rounding).
+The licence is credited in `THIRD-PARTY-NOTICES.md` and on the admin page.
+
+LiteLLM keeps current prices only. The loader is therefore **append-only**:
+a new model gets a period from `as_of`, an unchanged price is a no-op, a
+changed price ends the open bundled period at `as_of` and opens a new one, and
+administrator prices are never touched. Usage before a model's first period is
+unpriced unless someone enters an earlier price.
+
+**Refresh** (once per release):
+
+1. `uv run python scripts/refresh_ai_model_prices.py` downloads the newest
+   source file, pins the commit that last changed it, and rewrites
+   `ai_model_prices.json` with `as_of` set to that commit's time. Use
+   `--ref <sha>` for a given commit, or `--source <file> --as-of <instant>`
+   offline.
+2. Review the diff (one model per line): new models, changed prices, models
+   gone. A model that disappears keeps its last price period.
+3. Run `uv run pytest tests/unit/test_ai_pricing_seed.py`.
+4. Nothing else: workers load the new snapshot when they start after the
+   upgrade (`specivo.tasks.ai_model_prices`), and administrators can load it
+   from **Admin → AI model prices**.
+
+## ai_model_prices_history.json
+
+Optional, maintained **by hand**: known earlier price periods that the
+snapshot cannot carry, such as a provider's price before a cut. Each entry
+has the snapshot's model fields plus `effective_from` and `effective_to`
+(ISO 8601 with an offset; both required, the end exclusive). Periods of one
+model must not overlap each other. The loader inserts a period once, and skips
+it (with a warning) when a bundled period already covers part of it. Cite the
+provider's announcement in `note`.

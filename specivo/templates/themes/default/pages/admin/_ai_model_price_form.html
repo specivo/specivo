@@ -1,0 +1,78 @@
+{# The "new price" form. Context: form (prefill), currencies, now_input; fixed_provider/fixed_model on a model's page. #}
+{% set fp = form.prices or {} %}
+<form method="post" action="/admin/ai-model-prices/" class="sp-mp-form" data-testid="price-form">
+  {% if fixed_model %}
+    <input type="hidden" name="provider" value="{{ fixed_provider }}">
+    <input type="hidden" name="model" value="{{ fixed_model }}">
+    <input type="hidden" name="return_to" value="model">
+  {% else %}
+    <div class="sp-mp-field">
+      <label class="form-label" for="mp-provider">{% trans %}Provider{% endtrans %}</label>
+      <input id="mp-provider" type="text" name="provider" class="form-input" list="mp-providers" placeholder="anthropic" required>
+    </div>
+    <div class="sp-mp-field sp-mp-wide">
+      <label class="form-label" for="mp-model">{% trans %}Model{% endtrans %}</label>
+      <input id="mp-model" type="text" name="model" class="form-input" placeholder="claude-sonnet-4-5" required>
+    </div>
+  {% endif %}
+  <div class="sp-mp-field">
+    <label class="form-label" for="mp-currency">{% trans %}Currency{% endtrans %}</label>
+    <select id="mp-currency" name="currency" class="form-input">
+      {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == (form.currency or 'USD') else '' }}>{{ c.code }} · {{ c.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="sp-mp-field">
+    <label class="form-label" for="mp-from">{% trans %}Valid from (UTC){% endtrans %}</label>
+    <input id="mp-from" type="datetime-local" step="1" name="effective_from" class="form-input" value="{{ now_input }}" required>
+  </div>
+  <div class="sp-mp-field">
+    <label class="form-label" for="mp-to">{% trans %}Valid until (UTC, optional){% endtrans %}</label>
+    <input id="mp-to" type="datetime-local" step="1" name="effective_to" class="form-input">
+  </div>
+
+  <fieldset class="sp-mp-prices">
+    <legend class="form-label">{% trans %}Prices per 1M tokens{% endtrans %}</legend>
+    <label>{% trans %}Input{% endtrans %}<input type="text" inputmode="decimal" name="input" class="form-input" value="{{ fp.input or '' }}" required></label>
+    <label>{% trans %}Output{% endtrans %}<input type="text" inputmode="decimal" name="output" class="form-input" value="{{ fp.output or '' }}" required></label>
+    <label>{% trans %}Cache write, 5 minutes{% endtrans %}<input type="text" inputmode="decimal" name="cache_write_5m" class="form-input" value="{{ fp.cache_write_5m or '' }}"></label>
+    <label>{% trans %}Cache write, 1 hour{% endtrans %}<input type="text" inputmode="decimal" name="cache_write_1h" class="form-input" value="{{ fp.cache_write_1h or '' }}"></label>
+    <label>{% trans %}Cache read{% endtrans %}<input type="text" inputmode="decimal" name="cache_read" class="form-input" value="{{ fp.cache_read or '' }}"></label>
+    <label>{% trans %}Reasoning{% endtrans %}<input type="text" inputmode="decimal" name="reasoning" class="form-input" value="{{ fp.reasoning or '' }}" placeholder="{{ _('= output') }}"></label>
+  </fieldset>
+
+  <details class="sp-mp-more" {{ 'open' if form.long_context_threshold else '' }}>
+    <summary>{% trans %}Long context prices{% endtrans %}</summary>
+    <fieldset class="sp-mp-prices">
+      <label>{% trans %}Above (tokens of context){% endtrans %}<input type="text" inputmode="numeric" name="long_context_threshold" class="form-input" value="{{ form.long_context_threshold or '' }}" placeholder="200000"></label>
+      <label>{% trans %}Input{% endtrans %}<input type="text" inputmode="decimal" name="long_input" class="form-input" value="{{ fp.long_input or '' }}"></label>
+      <label>{% trans %}Output{% endtrans %}<input type="text" inputmode="decimal" name="long_output" class="form-input" value="{{ fp.long_output or '' }}"></label>
+      <label>{% trans %}Cache write, 5 minutes{% endtrans %}<input type="text" inputmode="decimal" name="long_cache_write_5m" class="form-input" value="{{ fp.long_cache_write_5m or '' }}"></label>
+      <label>{% trans %}Cache write, 1 hour{% endtrans %}<input type="text" inputmode="decimal" name="long_cache_write_1h" class="form-input" value="{{ fp.long_cache_write_1h or '' }}"></label>
+      <label>{% trans %}Cache read{% endtrans %}<input type="text" inputmode="decimal" name="long_cache_read" class="form-input" value="{{ fp.long_cache_read or '' }}"></label>
+    </fieldset>
+    <p class="sp-text-muted-xs">{% trans %}A request whose context (input plus cache reads and writes) exceeds the threshold is billed entirely at these prices. An empty price falls back to the normal one.{% endtrans %}</p>
+  </details>
+
+  <details class="sp-mp-more">
+    <summary>{% trans %}Aliases, local model and note{% endtrans %}</summary>
+    <div class="sp-mp-field sp-mp-wide">
+      <label class="form-label" for="mp-aliases">{% trans %}Aliases{% endtrans %}</label>
+      <input id="mp-aliases" type="text" name="aliases" class="form-input" value="{{ form.aliases or '' }}" placeholder="claude-sonnet-4-5-20250929">
+      <p class="sp-text-muted-xs">{% trans %}Other names tools report for this model, separated by spaces or commas.{% endtrans %}</p>
+    </div>
+    <label class="sp-mp-check"><input type="checkbox" name="is_local" value="1"> {% trans %}Local model{% endtrans %}</label>
+    <div class="sp-mp-field sp-mp-wide">
+      <label class="form-label" for="mp-baseline">{% trans %}Baseline model{% endtrans %}</label>
+      <input id="mp-baseline" type="text" name="baseline_model" class="form-input" placeholder="claude-sonnet-4-5">
+      <p class="sp-text-muted-xs">{% trans %}For a local model: the paid model whose prices value its usage.{% endtrans %}</p>
+    </div>
+    <div class="sp-mp-field sp-mp-wide">
+      <label class="form-label" for="mp-note">{% trans %}Note{% endtrans %}</label>
+      <input id="mp-note" type="text" name="note" class="form-input" maxlength="1000" placeholder="{{ _('For example a link to the price announcement') }}">
+    </div>
+  </details>
+
+  <div class="sp-mp-actions">
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Save price{% endtrans %}</button>
+  </div>
+</form>

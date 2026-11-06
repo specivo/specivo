@@ -38,4 +38,10 @@ Copyright 2023 Microsoft Corporation (intfloat)
 Embedding model for semantic search. 118M parameters, 384 dimensions, 100 languages.
 https://huggingface.co/intfloat/multilingual-e5-small
 
+## LiteLLM model price list — MIT License
+Copyright (c) 2023 Berri AI
+The bundled AI model prices (specivo/data/ai_model_prices.json) are derived from LiteLLM's
+model_prices_and_context_window.json.
+https://github.com/BerriAI/litellm
+
 Full license texts are available in specivo/static/vendor/LICENSES/

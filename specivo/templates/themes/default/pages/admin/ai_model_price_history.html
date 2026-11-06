@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% from "pages/admin/_ai_model_price_macros.html" import error_text, source_label, price_cells, price_head with context %}
+
+{% block title %}{{ model }} - {% trans %}AI model prices{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/ai-model-prices/">{% trans %}AI model prices{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{{ model }}</span>
+</div>
+
+<h1 class="sp-page-h1"><span class="sp-text-muted">{{ provider }}/</span>{{ model }}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}Every price period of this model, newest first. Usage is priced with the active period that contains its time; where a price you entered and a bundled price overlap, yours wins. Times are in UTC.{% endtrans %}</p>
+
+{% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Price added.{% endtrans %}</div>
+{% elif notice == "closed" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Price added. The previous price now ends where the new one starts.{% endtrans %}</div>
+{% elif notice == "deactivated" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Price deactivated.{% endtrans %}</div>
+{% elif notice == "activated" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Price activated.{% endtrans %}</div>
+{% elif notice == "ended" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}End of the period saved.{% endtrans %}</div>
+{% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Saved.{% endtrans %}</div>
+{% elif notice == "deleted" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Price deleted.{% endtrans %}</div>
+{% endif %}
+{% if error %}<div class="flash flash-error" role="alert" data-testid="price-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="history-card">
+  <h3 class="sp-card-h3">{% trans %}Price history{% endtrans %}</h3>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="history-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Valid{% endtrans %}</th>
+          {{ price_head() }}
+          <th>{% trans %}Source{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in rows %}
+        <tr data-price-id="{{ p.id }}" class="{{ '' if p.is_active else 'sp-mp-inactive' }}">
+          <td class="sp-mp-period">
+            {{ p.from }} &rarr; {{ p.to or _('open') }}
+            {% if p.id == current_id %}<span class="sp-badge-info">{% trans %}In use now{% endtrans %}</span>{% endif %}
+            {% if not p.is_active %}<span class="sp-badge-warning">{% trans %}Deactivated{% endtrans %}</span>{% endif %}
+            {% if in_use[p.id] %}<div class="sp-text-muted-xs">{% trans count=in_use[p.id] %}Prices {{ count }} usage entry{% pluralize %}Prices {{ count }} usage entries{% endtrans %}</div>{% endif %}
+          </td>
+          {{ price_cells(p) }}
+          <td>{{ source_label(p.source) }}</td>
+          <td>
+            <details class="sp-mp-row-actions">
+              <summary class="sp-btn-sm">{% trans %}Details{% endtrans %}</summary>
+              <dl class="sp-mp-dl">
+                {% if p.prices.reasoning %}<dt>{% trans %}Reasoning{% endtrans %}</dt><dd>{{ p.prices.reasoning }}</dd>{% endif %}
+                {% if p.long_context_threshold %}
+                  <dt>{% trans %}Long context{% endtrans %}</dt>
+                  <dd>{% trans threshold=p.long_context_threshold %}above {{ threshold }} tokens{% endtrans %}:
+                    {% trans %}input{% endtrans %} {{ p.prices.long_input or '–' }},
+                    {% trans %}output{% endtrans %} {{ p.prices.long_output or '–' }},
+                    {% trans %}cache write 5m{% endtrans %} {{ p.prices.long_cache_write_5m or '–' }},
+                    {% trans %}cache write 1h{% endtrans %} {{ p.prices.long_cache_write_1h or '–' }},
+                    {% trans %}cache read{% endtrans %} {{ p.prices.long_cache_read or '–' }}</dd>
+                {% endif %}
+                {% if p.is_local %}<dt>{% trans %}Local model{% endtrans %}</dt><dd>{{ p.baseline_model or '–' }}</dd>{% endif %}
+              </dl>
+              <form method="post" action="/admin/ai-model-prices/{{ p.id }}/details/" class="sp-mp-inline">
+                <label>{% trans %}Aliases{% endtrans %}<input type="text" name="aliases" class="form-input" value="{{ p.aliases|join(' ') }}"></label>
+                <label>{% trans %}Note{% endtrans %}<input type="text" name="note" class="form-input" maxlength="1000" value="{{ p.note }}"></label>
+                <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+              </form>
+              <form method="post" action="/admin/ai-model-prices/{{ p.id }}/end/" class="sp-mp-inline">
+                <label>{% trans %}Valid until (UTC){% endtrans %}<input type="datetime-local" step="1" name="effective_to" class="form-input" value="{{ p.to_input }}"></label>
+                <button type="submit" class="sp-btn-sm">{% trans %}Save end{% endtrans %}</button>
+              </form>
+              <div class="sp-mp-inline">
+                <form method="post" action="/admin/ai-model-prices/{{ p.id }}/active/">
+                  <input type="hidden" name="active" value="{{ '0' if p.is_active else '1' }}">
+                  <button type="submit" class="sp-btn-sm">{% if p.is_active %}{% trans %}Deactivate{% endtrans %}{% else %}{% trans %}Activate{% endtrans %}{% endif %}</button>
+                </form>
+                {% if p.source == 'admin' and not in_use[p.id] %}
+                <form method="post" action="/admin/ai-model-prices/{{ p.id }}/delete/">
+                  <button type="submit" class="sp-btn-sm">{% trans %}Delete{% endtrans %}</button>
+                </form>
+                {% endif %}
+              </div>
+              {% if p.note %}<p class="sp-text-muted-xs">{{ p.note }}</p>{% endif %}
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card sp-card-pad" id="new-price" data-testid="new-price-card">
+  <h3 class="sp-card-h3">{% trans %}New price from…{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}Enter the prices and the instant they take effect. The price you entered before ends at that instant; the bundled price stays as it is but yours wins from then on. To record a past period, also give its end.{% endtrans %}</p>
+  {% set fixed_provider = provider %}
+  {% set fixed_model = model %}
+  {% include "pages/admin/_ai_model_price_form.html" %}
+</div>
+{% endblock %}
