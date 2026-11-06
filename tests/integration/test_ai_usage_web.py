@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from specivo.core.money import Money
+from specivo.models.ai_subscription import AiSubscription
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.user import User
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
@@ -482,6 +484,30 @@ async def test_edit_permissions(client: AsyncClient, db_session: AsyncSession, w
     resp = await _post(client, w.users["carol"], f"/ai-usage/{bobs.id}/exclude/", {"next": "/"})
     assert resp.status_code == 403
     assert (await _entry(db_session, bobs.id)).excluded_at is None
+
+
+async def test_edit_form_lists_only_the_readers_own_subscriptions(
+    client: AsyncClient, db_session: AsyncSession, w: World
+):
+    bob = w.users["bob"]
+    db_session.add(
+        AiSubscription(
+            user_id=bob.id,
+            provider="anthropic",
+            plan_key="custom",
+            plan_name="Bobs Private Plan",
+            amount=Decimal("20"),
+            currency_code="USD",
+            billing_period="month",
+            starts_on=date(2020, 1, 1),
+        )
+    )
+    await db_session.commit()
+    bobs = await _log(db_session, w, "bob", comments="bobs")
+    own = await _get(client, bob, f"/ai-usage/{bobs.id}/edit/")
+    assert own.status_code == 200 and "Bobs Private Plan" in own.text
+    managed = await _get(client, w.users["mgr"], f"/ai-usage/{bobs.id}/edit/")
+    assert managed.status_code == 200 and "Bobs Private Plan" not in managed.text
 
 
 async def test_exclude_and_include(client: AsyncClient, db_session: AsyncSession, w: World):

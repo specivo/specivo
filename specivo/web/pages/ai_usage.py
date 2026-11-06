@@ -717,9 +717,13 @@ async def _form_choices(
         if current is not None:
             projects = [*projects, current]
     owner_id = entry.user_id if entry is not None else user.id
-    subs, _total = await AiSubscriptionService().list_subscriptions(
-        db, user_id=owner_id, active_on=utcnow().date(), limit=20
-    )
+    # Subscriptions are private to their owner and admins (the register's rule): a
+    # manager editing someone else's entry sees no plan list.
+    subs: list[Any] = []
+    if owner_id == user.id or user.is_admin:
+        subs, _total = await AiSubscriptionService().list_subscriptions(
+            db, user_id=owner_id, active_on=utcnow().date(), limit=20
+        )
     if fixed_project is not None:
         on_behalf = await _service.may_log_for_others(db, user, fixed_project)
     else:
