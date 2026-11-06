@@ -11267,3 +11267,31 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/settings.html
 msgid "Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting."
 msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "Original estimate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "Remaining estimate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "hours"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "minutes"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/detail.html
+msgid "h original"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/detail.html
+msgid "h remaining"
+msgstr ""

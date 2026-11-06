@@ -15,11 +15,19 @@ export function issueSidebar(initial) {
                 this.updateField(fieldName, event.target.value || null);
             },
 
-            saveEstimate() {
-                var h = parseInt(this.$refs.estH.value) || 0;
-                var m = Math.min(parseInt(this.$refs.estM.value) || 0, 59);
-                var total = (h || m) ? Math.round((h + m / 60) * 100) / 100 : null;
-                this.updateField('estimated_hours', total);
+            /* Save an hours field from its "<ref>H" and "<ref>M" inputs; the button
+               names both in data-field and data-ref. Blank inputs send null
+               (no change), so a zero is only sent when one was typed. */
+            saveHours(event) {
+                var field = event.currentTarget.dataset.field;
+                var ref = event.currentTarget.dataset.ref;
+                var hInput = this.$refs[ref + 'H'].value;
+                var mInput = this.$refs[ref + 'M'].value;
+                var h = parseInt(hInput) || 0;
+                var m = Math.min(parseInt(mInput) || 0, 59);
+                var typed = hInput !== '' || mInput !== '';
+                var total = (field === 'estimated_hours' ? (h || m) : typed) ? Math.round((h + m / 60) * 100) / 100 : null;
+                this.updateField(field, total);
             },
 
             async updateField(fieldName, value) {

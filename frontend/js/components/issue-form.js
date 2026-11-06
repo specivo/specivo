@@ -6,6 +6,22 @@ var SIMILAR_MIN_LENGTH = 10;
 var SIMILAR_MIN_LENGTH_UNSEGMENTED = 4;
 var SIMILAR_MAX_QUERY = 255;
 
+/* Whole hours and minutes of a stored hours value ("1.75" -> 1 and 45); '' when unset. */
+function hoursPart(value) {
+    return (value === null || value === undefined || value === '') ? '' : Math.floor(parseFloat(value));
+}
+function minutesPart(value) {
+    return (value === null || value === undefined || value === '') ? '' : Math.round((parseFloat(value) % 1) * 60);
+}
+
+/* Hours from the hour and minute inputs, rounded to 0.01; null when both are blank. */
+function toHours(hours, minutes) {
+    if ((hours === '' || hours === null) && (minutes === '' || minutes === null)) {
+        return null;
+    }
+    return Math.round(((parseInt(hours) || 0) + Math.min(parseInt(minutes) || 0, 59) / 60) * 100) / 100;
+}
+
 export function issueForm(initial) {
         return {
             submitting: false,
@@ -19,6 +35,10 @@ export function issueForm(initial) {
             due_date: initial.due_date || '',
             est_hours: initial.estimated_hours ? Math.floor(parseFloat(initial.estimated_hours)) : '',
             est_minutes: initial.estimated_hours ? Math.round((parseFloat(initial.estimated_hours) % 1) * 60) : '',
+            orig_hours: hoursPart(initial.original_estimate),
+            orig_minutes: minutesPart(initial.original_estimate),
+            rem_hours: hoursPart(initial.remaining_estimate),
+            rem_minutes: minutesPart(initial.remaining_estimate),
             done_ratio: initial.done_ratio || 0,
             is_private: initial.is_private || false,
             canSetPrivate: initial.canSetPrivate || false,
@@ -233,6 +253,8 @@ export function issueForm(initial) {
                     start_date: this.start_date || null,
                     due_date: this.due_date || null,
                     estimated_hours: (this.est_hours || this.est_minutes) ? Math.round(((parseInt(this.est_hours) || 0) + (parseInt(this.est_minutes) || 0) / 60) * 100) / 100 : null,
+                    original_estimate: toHours(this.orig_hours, this.orig_minutes),
+                    remaining_estimate: toHours(this.rem_hours, this.rem_minutes),
                     done_ratio: this.done_ratio,
                     // Without set_issues_private the server applies the tracker's
                     // default on create and keeps the current value on edit.

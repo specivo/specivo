@@ -11304,3 +11304,31 @@ msgstr "允许搜索引擎索引公开页面"
 #: specivo/templates/themes/default/pages/admin/settings.html
 msgid "Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting."
 msgstr "只提供无需账户即可阅读的页面：项目列表，以及在匿名访问开启期间已向匿名访问开放的项目的项目页面、问题和 Wiki 页面。其他所有内容仍标记为 noindex。robots.txt 和 /sitemap.xml 遵循此设置。"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "Original estimate"
+msgstr "原始预估"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "Remaining estimate"
+msgstr "剩余预估"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "hours"
+msgstr "小时"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "minutes"
+msgstr "分钟"
+
+#: specivo/templates/themes/default/pages/issues/detail.html
+msgid "h original"
+msgstr "小时（原始）"
+
+#: specivo/templates/themes/default/pages/issues/detail.html
+msgid "h remaining"
+msgstr "小时（剩余）"

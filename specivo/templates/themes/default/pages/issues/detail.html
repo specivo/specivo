@@ -487,7 +487,9 @@
           <tfoot>
             <tr>
               <td colspan="2" style="font-weight:600;font-size:var(--sp-font-size-sm);">{% trans %}Total{% endtrans %}</td>
-              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}{% trans %}h est.{% endtrans %}</td>
+              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}{% trans %}h est.{% endtrans %}
+                {%- if issue.original_estimate is not none %} · {{ '%.1f' | format(issue.original_estimate) }}{% trans %}h original{% endtrans %}{% endif %}
+                {%- if issue.remaining_estimate is not none %} · {{ '%.1f' | format(issue.remaining_estimate) }}{% trans %}h remaining{% endtrans %}{% endif %}</td>
               <td colspan="2"></td>
             </tr>
           </tfoot>

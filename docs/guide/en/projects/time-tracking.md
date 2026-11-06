@@ -89,10 +89,15 @@ See
 
 ## Estimate versus spent
 
-Issues carry an **estimate** — estimated hours, with original and remaining estimates — alongside the
+Issues carry an **estimate** — estimated hours, with an original and a remaining estimate — alongside the
 time actually **logged**. Comparing the two tells you whether a piece of work is on track: an issue
 estimated at 8 hours with 12 logged and still open is a signal worth a look. See the full field set
 in [What is an issue?](../issues/index.md).
+
+All three are set by hand, in hours and minutes, in the issue sidebar or the edit form, by anyone who
+may edit the issue. The **original estimate** keeps what was first planned while the estimate moves; the
+**remaining estimate** is the work left, and logging time does not lower it. The issue's **Time** tab
+totals the logged hours next to all three.
 
 ## The project Time area
 

@@ -31,6 +31,8 @@ _UPDATABLE_FIELDS = frozenset(
         "start_date",
         "due_date",
         "estimated_hours",
+        "original_estimate",
+        "remaining_estimate",
         "done_ratio",
         "is_private",
         "metadata",

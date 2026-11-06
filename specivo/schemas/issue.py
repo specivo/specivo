@@ -36,6 +36,9 @@ class IssueCreate(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     estimated_hours: Decimal | None = Field(None, ge=0)
+    # Hours first planned and hours of work left; set by hand, never derived from time entries.
+    original_estimate: Decimal | None = Field(default=None, ge=0)
+    remaining_estimate: Decimal | None = Field(default=None, ge=0)
     done_ratio: int = Field(default=0, ge=0, le=100)
     fixed_version_id: int | None = None
     sprint_id: int | None = None
@@ -78,6 +81,9 @@ class IssueUpdate(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     estimated_hours: Decimal | None = Field(None, ge=0)
+    # Hours first planned and hours of work left; set by hand, never derived from time entries.
+    original_estimate: Decimal | None = Field(default=None, ge=0)
+    remaining_estimate: Decimal | None = Field(default=None, ge=0)
     done_ratio: int | None = Field(None, ge=0, le=100)
     fixed_version_id: int | None = None
     sprint_id: int | None = None
@@ -166,6 +172,8 @@ class IssueOut(BaseModel):
     start_date: date | None
     due_date: date | None
     estimated_hours: Decimal | None
+    original_estimate: Decimal | None = None
+    remaining_estimate: Decimal | None = None
     metadata: dict
     is_private: bool
     lock_version: int
@@ -282,6 +290,8 @@ def issue_out(issue: Issue, computed: dict | None = None) -> IssueOut:
         start_date=issue.start_date,
         due_date=issue.due_date,
         estimated_hours=issue.estimated_hours,
+        original_estimate=issue.original_estimate,
+        remaining_estimate=issue.remaining_estimate,
         metadata={**(issue.issue_metadata or {}), **(computed or {})},
         is_private=issue.is_private,
         lock_version=issue.lock_version,

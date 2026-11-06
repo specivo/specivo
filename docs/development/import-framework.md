@@ -138,12 +138,12 @@ wikis; it only knows phases, handlers, and transactions.
 `issue_loader.py` creates every issue through `IssueService.create`, so an
 imported issue goes through the same checks as one made in the UI. Two kinds
 of value are written after it, on the row the service returned: the source's
-timestamps (`backdate`), and `remaining_estimate`, which `IssueCreate` does not
-take because nothing in Specivo edits it yet. It is the time left as the source
-tracked it (Jira's remaining estimate, for example) and is stored as given;
-`estimated_hours` stays the estimate Specivo shows, sums and journals. The
-remaining estimate's own history is not imported: a source like Jira lowers it
-on every worklog, and Specivo keeps no history for that column.
+timestamps (`backdate`), and `remaining_estimate`. It is the time left as the
+source tracked it (Jira's remaining estimate, for example) and is stored as
+given; `estimated_hours` stays the estimate Specivo sums. The issue page, the
+API and the MCP tools show both, and edits to either are journaled from then
+on. The remaining estimate's own history is not imported: a source like Jira
+lowers it on every worklog, which would bury the issue's history.
 
 ## History values that name a record
 

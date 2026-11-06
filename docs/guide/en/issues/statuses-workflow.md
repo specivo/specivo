@@ -55,7 +55,8 @@ tracker and role, for example "an issue moving to In Progress needs an assignee"
 change once Resolved". Field rules are set through the REST API only (`/api/v1/admin/workflows/field-rules/`);
 there is no screen for them yet. A rule can name `assigned_to_id`, `category_id`, `fixed_version_id`,
 `sprint_id`, `priority_id`, `tracker_id`, `subject`, `description`, `start_date`, `due_date`,
-`estimated_hours`, `done_ratio` or `parent_id`; any other name is refused. Metadata fields are covered by
+`estimated_hours`, `original_estimate`, `remaining_estimate`, `done_ratio` or `parent_id`; any other name
+is refused. Metadata fields are covered by
 their [schema](../metadata/schemas.md) instead.
 
 Rules apply to every save of an issue in that status, and judge what the save changes:

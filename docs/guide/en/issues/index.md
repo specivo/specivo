@@ -46,7 +46,7 @@ else is optional and can be filled in later.
 | **Target version** | The [version](../projects/versions.md) (milestone/release) this is aimed at |
 | **Sprint** | The [sprint](../projects/sprints.md) this issue is planned into |
 | **Start date / Due date** | When work should begin and finish |
-| **Estimate** | Estimated hours, plus original and remaining estimates |
+| **Estimate** | Estimated hours, plus the original estimate (what was first planned) and the remaining estimate (hours of work left) |
 | **% done** | Progress from 0 to 100 |
 | **Parent issue** | Makes this a [subtask](subtasks.md) of another issue |
 | **Private** | Hides the issue from everyone except its author, its assignee and administrators |

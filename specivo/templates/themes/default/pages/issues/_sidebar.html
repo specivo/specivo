@@ -265,22 +265,28 @@
              @change="onInputChange('due_date', $event)">
     </div>
 
-    {# Estimated #}
+    {# Estimates: hours and minutes, saved together like the other fields #}
+    {% macro hours_editor(label, value, field, ref) %}
     <div>
-      <label style="{{ lbl }}">{% trans %}Estimated{% endtrans %}</label>
-      {% set est_h = (issue.estimated_hours | int) if issue.estimated_hours else '' %}
-      {% set est_m = (((issue.estimated_hours - (issue.estimated_hours | int)) * 60) | round | int) if issue.estimated_hours else '' %}
+      <label style="{{ lbl }}">{{ label }}</label>
+      {% set h = (value | int) if value is not none else '' %}
+      {% set m = (((value - (value | int)) * 60) | round | int) if value is not none else '' %}
       <div style="display:flex;gap:var(--sp-space-xs);align-items:stretch;">
-        <input type="number" min="0" step="1" x-ref="estH" value="{{ est_h }}" placeholder="0"
+        <input type="number" min="0" step="1" x-ref="{{ ref }}H" value="{{ h }}" placeholder="0" aria-label="{{ label }} ({% trans %}hours{% endtrans %})"
                style="width:50px;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
         <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);align-self:center;">h</span>
-        <input type="number" min="0" max="59" step="1" x-ref="estM" value="{{ est_m }}" placeholder="0"
+        <input type="number" min="0" max="59" step="1" x-ref="{{ ref }}M" value="{{ m }}" placeholder="0" aria-label="{{ label }} ({% trans %}minutes{% endtrans %})"
                style="width:50px;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
         <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);align-self:center;">m</span>
         <button style="padding:0 var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-xs);background:var(--sp-bg-surface);color:var(--sp-text-secondary);cursor:pointer;"
-                @click="saveEstimate()">{% trans %}Save{% endtrans %}</button>
+                data-field="{{ field }}" data-ref="{{ ref }}" @click="saveHours($event)">{% trans %}Save{% endtrans %}</button>
       </div>
     </div>
+    {% endmacro %}
+    {# A zero estimate reads as no estimate, as it always has; a zero original or remaining estimate is shown. #}
+    {{ hours_editor(_('Estimated'), issue.estimated_hours or none, 'estimated_hours', 'est') }}
+    {{ hours_editor(_('Original estimate'), issue.original_estimate, 'original_estimate', 'orig') }}
+    {{ hours_editor(_('Remaining estimate'), issue.remaining_estimate, 'remaining_estimate', 'rem') }}
 
     {# Time Logged #}
     {% if can_view_time_entries %}

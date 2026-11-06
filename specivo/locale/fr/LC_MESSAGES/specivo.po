@@ -12065,3 +12065,31 @@ msgstr "Autoriser les moteurs de recherche à indexer les pages publiques"
 #: specivo/templates/themes/default/pages/admin/settings.html
 msgid "Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting."
 msgstr "Seules les pages que tout le monde peut lire sans compte sont proposées : la liste des projets, ainsi que les pages de projet, les demandes et les pages wiki des projets ouverts à l'accès anonyme tant qu'il est activé. Tout le reste reste marqué noindex. robots.txt et /sitemap.xml suivent ce réglage."
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "Original estimate"
+msgstr "Estimation initiale"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "Remaining estimate"
+msgstr "Estimation restante"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "hours"
+msgstr "heures"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html
+#: specivo/templates/themes/default/pages/issues/form.html
+msgid "minutes"
+msgstr "minutes"
+
+#: specivo/templates/themes/default/pages/issues/detail.html
+msgid "h original"
+msgstr "h initiales"
+
+#: specivo/templates/themes/default/pages/issues/detail.html
+msgid "h remaining"
+msgstr "h restantes"

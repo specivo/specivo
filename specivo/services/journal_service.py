@@ -36,6 +36,8 @@ _JOURNALIZED_ATTRS: list[tuple[str, str]] = [
     ("start_date", "start_date"),
     ("due_date", "due_date"),
     ("estimated_hours", "estimated_hours"),
+    ("original_estimate", "original_estimate"),
+    ("remaining_estimate", "remaining_estimate"),
     ("done_ratio", "done_ratio"),
     ("is_private", "is_private"),
     ("fixed_version_id", "fixed_version_id"),
