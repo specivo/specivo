@@ -25,6 +25,7 @@ know the shape of what's possible.
 | **Sprints** | List sprints, see sprint issues, and manage the plan/start/complete lifecycle. |
 | **Recurring tasks** | Create, list, update, and delete [recurring task patterns](../projects/recurring-tasks.md); skip a single scheduled occurrence; preview upcoming occurrences. The template subject and description support date macros (`{{month}}`, `{{weekday}}`, …) that expand per occurrence in the pattern's timezone. |
 | **Time** | Log time against an issue or project with an activity, or run your own timer: start it on an issue, check it, stop it to log the time, or discard it. |
+| **AI usage** | `specivo_log_ai_usage` logs the tokens an AI tool used on an issue or project, and `specivo_ai_usage` lists, reads, corrects, excludes and includes [AI usage entries](reporting-ai-usage.md#read-correct-and-exclude-entries). Agents cannot see their own token counters, so the numbers must come from a hook, the [reporter](reporting-ai-usage.md) or the tool's own `/cost` output, never from an estimate. Without an issue or project, an entry goes to the issue the agent session works on (see [Agent sessions](#agent-sessions)), or stays unassigned. |
 | **Orientation** | `specivo_whoami` (which account the key is), `specivo_list_lookups` (tracker/status/priority IDs), and `specivo_setup_guide` (config help). |
 
 !!! tip "Start with orientation tools"
@@ -35,7 +36,7 @@ know the shape of what's possible.
 ## Read vs write
 
 Roughly half the tools **read** (list, show, search, read wiki) and half **write** (create issues,
-add comments, update status, log time, edit wiki). The split matters because of permissions:
+add comments, update status, log time or AI usage, edit wiki). The split matters because of permissions:
 
 - **Reads** return whatever the key's account is allowed to see.
 - **Writes** are checked against that account's project role *every time*. If the account can't make
@@ -66,7 +67,8 @@ Specivo also groups each key's calls into **agent sessions**: calls less than 30
   (any status in the active group), assigned to its own account, or started a timer on, over MCP.
   The latest one wins. Only an issue the key's account can see is ever recorded.
 
-The session's issue is a hint for attributing AI usage to an issue; it grants nothing. Nothing about
+The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
+an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about
 the prompts or the conversation is stored.
 
 ## File uploads go through the REST API

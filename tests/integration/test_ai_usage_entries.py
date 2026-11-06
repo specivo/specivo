@@ -36,7 +36,7 @@ from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
 from specivo.services import ai_model_price_service as price_module
 from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput
-from specivo.services.ai_usage_service import PRICE_REFERENCE, AiUsageInput, AiUsageService
+from specivo.services.ai_usage_service import ON_BEHALF_REFUSED, PRICE_REFERENCE, AiUsageInput, AiUsageService
 from specivo.services.api_key_scope import ProjectScope, bound_scope
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.permission_service import clear_role_cache
@@ -609,6 +609,49 @@ async def test_on_behalf_refusals(db_session: AsyncSession, w: World) -> None:
     # An issue of the project the caller cannot see.
     with pytest.raises(NotFoundError):
         await _svc.log(db_session, w.alice, usage(project_id=w.p.id, issue_id=w.private_issue.id))
+
+
+async def test_on_behalf_refusal_is_the_same_whatever_the_target(db_session: AsyncSession, w: World) -> None:
+    """Without the right to log for others, an inactive, a non-member and a fine target are refused alike."""
+    answers = []
+    for target in (w.eve, w.outsider, w.bob):
+        with pytest.raises(AppError) as exc:
+            await _svc.log(db_session, w.alice, usage(project_id=w.p.id), target=target)
+        answers.append((exc.value.code, exc.value.message, exc.value.field, exc.value.status_code))
+    assert len(set(answers)) == 1
+    assert answers[0] == ("permission_denied", ON_BEHALF_REFUSED, "on_behalf_of", 403)
+
+
+async def test_resolve_target_hides_which_logins_exist(db_session: AsyncSession, w: World) -> None:
+    def answer(exc: AppError) -> tuple[str, str, str | None]:
+        return exc.code, exc.message, exc.field
+
+    # Alice may not log for others: every login but her own gets one answer, in a project or unassigned.
+    for project in (w.p, None):
+        answers = []
+        for login in ("aiu_bob", "aiu_eve", "aiu_outsider", "no-such-login"):
+            with pytest.raises(AppError) as exc:
+                await _svc.resolve_target(db_session, w.alice, login, project)
+            answers.append(answer(exc.value))
+        assert set(answers) == {("permission_denied", ON_BEHALF_REFUSED, "on_behalf_of")}
+    assert await _svc.resolve_target(db_session, w.alice, "AIU_ALICE", w.p) is w.alice
+    assert await _svc.resolve_target(db_session, w.alice, None, w.p) is w.alice
+
+    # The runner may log for others in AIU: there it learns that a login is unknown.
+    assert (await _svc.resolve_target(db_session, w.runner, "aiu_bob", w.p)).id == w.bob.id
+    with pytest.raises(AppError) as exc:
+        await _svc.resolve_target(db_session, w.runner, "no-such-login", w.p)
+    assert exc.value.code == "ai_usage_target_unknown"
+    # Not in AIV, nor for unassigned usage.
+    for project in (w.q, None):
+        with pytest.raises(AppError) as exc:
+            await _svc.resolve_target(db_session, w.runner, "no-such-login", project)
+        assert answer(exc.value) == ("permission_denied", ON_BEHALF_REFUSED, "on_behalf_of")
+
+    assert await _svc.may_log_for_others_anywhere(db_session, w.runner)
+    assert await _svc.may_log_for_others_anywhere(db_session, w.mgr)
+    assert await _svc.may_log_for_others_anywhere(db_session, w.admin)
+    assert not await _svc.may_log_for_others_anywhere(db_session, w.alice)
 
 
 async def test_own_unassigned_usage_needs_no_permission(db_session: AsyncSession, w: World) -> None:

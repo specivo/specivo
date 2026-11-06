@@ -210,6 +210,9 @@ class AuditEvent(StrEnum):
     AI_USAGE_INCLUDED = "ai_usage_included"
     AI_USAGE_DELETED = "ai_usage_deleted"
     AI_USAGE_COSTS_RECOMPUTED = "ai_usage_costs_recomputed"
+    # MCP tool calls on AI usage (every MCP call is audited): logging, and editing, excluding or including.
+    AI_USAGE_LOGGED = "ai_usage_logged"
+    AI_USAGE_CHANGED = "ai_usage_changed"
 
 
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
@@ -432,6 +435,8 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_USAGE_INCLUDED,
             AuditEvent.AI_USAGE_DELETED,
             AuditEvent.AI_USAGE_COSTS_RECOMPUTED,
+            AuditEvent.AI_USAGE_LOGGED,
+            AuditEvent.AI_USAGE_CHANGED,
         ],
         AuditCategory.AI_USAGE,
     ),

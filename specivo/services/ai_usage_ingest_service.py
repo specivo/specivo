@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -71,7 +71,8 @@ from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.repository import IssueCommitLink, RepositoryCommit, RepositoryIntegration
 from specivo.models.user import User
-from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
+from specivo.services.ai_usage_service import ON_BEHALF_REFUSED, AiUsageInput, AiUsageService
+from specivo.services.api_key_scope import is_global_admin
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -89,6 +90,7 @@ _ERROR_CODES: dict[str, str] = {
     "ai_tool_invalid": "invalid_record",
     "validation_error": "invalid_record",
     "currency_unknown": "currency_unknown",
+    "ai_usage_target_unknown": "target_unknown",
     "ai_usage_target_invalid": "target_invalid",
     "ai_usage_target_not_member": "target_not_member",
     "permission_denied": "forbidden",
@@ -96,6 +98,11 @@ _ERROR_CODES: dict[str, str] = {
     "key_conflict": "key_conflict",
     "ai_usage_attribution_conflict": "attribution_conflict",
 }
+
+
+def _refused() -> RecordRejectedError:
+    """The one rejection of an ``on_behalf_of`` record the sender may not tell apart from any other."""
+    return RecordRejectedError("forbidden", ON_BEHALF_REFUSED, "on_behalf_of")
 
 
 def contract_error(exc: AppError) -> Problem:
@@ -181,7 +188,9 @@ class _Batch:
     projects: dict[str, Project | None] = field(default_factory=dict)
     known_keys: frozenset[str] | None = None
     repos: dict[str, list[Project]] = field(default_factory=dict)
-    seen: set[tuple[int, str]] = field(default_factory=set)
+    seen: set[tuple[str, str]] = field(default_factory=set)
+    for_others_anywhere: bool | None = None
+    for_others_in: dict[int, bool] = field(default_factory=dict)
 
 
 class AiUsageIngestService:
@@ -253,14 +262,82 @@ class AiUsageIngestService:
 
     async def _write(self, session: AsyncSession, batch: _Batch, record: IngestRecord, result: RecordResult) -> None:
         actor = batch.actor
-        target = await self._target_user(session, batch, record.on_behalf_of)
-        seen = (target.id, record.idempotency_key)
+        login = (record.on_behalf_of or "").strip() or None
+        if login is not None and login.lower() == actor.login.lower():
+            login = None
+        # Keyed by the login as sent, so a repeated key is found the same way for logins that exist and do not.
+        seen = (login.lower() if login is not None else "", record.idempotency_key)
         if seen in batch.seen:
             raise RecordRejectedError(
                 "duplicate_key", "The batch already holds a record with this idempotency key", "idempotency_key"
             )
         batch.seen.add(seen)
 
+        reported: Money | None = None
+        if record.reported_amount is not None and record.reported_currency is not None:
+            try:
+                reported = Money(record.reported_amount, record.reported_currency)
+            except (MoneyError, ValueError):
+                raise RecordRejectedError(
+                    "currency_unknown", f"Unknown currency '{record.reported_currency}'", "reported_cost.currency"
+                ) from None
+        data = self._input(batch, record, reported)
+        # The content is checked before the target, so its errors never depend on whether the login exists.
+        await _usage.validate(session, data, source="reporter")
+
+        if login is None:
+            await self._upsert(session, batch, record, result, data, actor)
+            return
+        target, distinct = await self._target_user(session, batch, record, login)
+        if distinct:
+            await self._upsert(session, batch, record, result, data, target)
+            return
+        # The sender may not tell targets apart: every way this record can fail
+        # (the target's validity and membership, a key conflict, but also an
+        # explicit hint, which an unknown login never reaches) is the one
+        # refusal an unknown login gets, without the warnings found on the way.
+        warnings = list(result.warnings)
+        try:
+            await self._upsert(session, batch, record, result, data, target)
+        except (RecordRejectedError, AppError, IntegrityError, DBAPIError) as exc:
+            if isinstance(exc, IntegrityError | DBAPIError):
+                logger.exception("AI usage ingest: an on-behalf record failed in the database")
+            result.warnings = warnings
+            raise _refused() from None
+
+    @staticmethod
+    def _input(batch: _Batch, record: IngestRecord, reported: Money | None) -> AiUsageInput:
+        """The record's usage, without its project and issue (attribution fills them)."""
+        return AiUsageInput(
+            tool=record.tool,
+            model=record.model,
+            usage_date=record.usage_date,
+            provider=record.provider,
+            tokens=record.tokens,
+            long_context=record.long_context,
+            started_at=record.started_at,
+            ended_at=record.ended_at,
+            request_count=record.request_count,
+            cost_type=record.cost_type,
+            reported_cost=reported,
+            external_session_id=record.session_id,
+            git_branch=record.attribution.git_branch,
+            repo_hint=record.attribution.repo,
+            client_name=batch.client_name,
+            client_version=batch.client_version,
+            idempotency_key=record.idempotency_key,
+        )
+
+    async def _upsert(
+        self,
+        session: AsyncSession,
+        batch: _Batch,
+        record: IngestRecord,
+        result: RecordResult,
+        data: AiUsageInput,
+        target: User,
+    ) -> None:
+        actor = batch.actor
         existing = (
             await session.execute(
                 select(AiUsageEntry).where(
@@ -281,36 +358,11 @@ class AiUsageIngestService:
             # The stored attribution stays; the service checks the stored project.
             resolved = _Target()
 
-        reported: Money | None = None
-        if record.reported_amount is not None and record.reported_currency is not None:
-            try:
-                reported = Money(record.reported_amount, record.reported_currency)
-            except (MoneyError, ValueError):
-                raise RecordRejectedError(
-                    "currency_unknown", f"Unknown currency '{record.reported_currency}'", "reported_cost.currency"
-                ) from None
-
-        data = AiUsageInput(
-            tool=record.tool,
-            model=record.model,
-            usage_date=record.usage_date,
-            provider=record.provider,
-            tokens=record.tokens,
-            long_context=record.long_context,
-            started_at=record.started_at,
-            ended_at=record.ended_at,
-            request_count=record.request_count,
-            cost_type=record.cost_type,
-            reported_cost=reported,
+        data = replace(
+            data,
             project_id=resolved.project.id if resolved.project is not None else None,
             issue_id=resolved.issue.id if resolved.issue is not None else None,
             attribution_method=resolved.method,
-            external_session_id=record.session_id,
-            git_branch=record.attribution.git_branch,
-            repo_hint=record.attribution.repo,
-            client_name=batch.client_name,
-            client_version=batch.client_version,
-            idempotency_key=record.idempotency_key,
         )
         outcome = await _usage.upsert(
             session,
@@ -327,18 +379,67 @@ class AiUsageIngestService:
         result.revision = entry.revision
         result.attribution = await self._attribution_of(session, actor, entry)
 
-    async def _target_user(self, session: AsyncSession, batch: _Batch, login: str | None) -> User:
-        if login is None:
-            return batch.actor
+    async def _target_user(
+        self, session: AsyncSession, batch: _Batch, record: IngestRecord, login: str
+    ) -> tuple[User, bool]:
+        """The ``on_behalf_of`` user, and whether the sender may learn why that user is refused.
+
+        Against login enumeration, only a sender who may log for others in
+        the record's explicit project (``project_key``, or the project of
+        ``issue_ref``), or an administrator, gets ``target_unknown``,
+        ``target_invalid`` and ``target_not_member``. Every other sender gets
+        the one ``forbidden`` of :func:`_refused` for an unknown login, and
+        (``_write``) for **every** rejection of a record naming a known one,
+        whatever its cause, so no answer depends on whether the login exists.
+        A sender who may not log for others anywhere is refused here, before
+        anything else.
+        """
+        actor = batch.actor
+        if batch.for_others_anywhere is None:
+            batch.for_others_anywhere = await _usage.may_log_for_others_anywhere(session, actor)
+        if not batch.for_others_anywhere:
+            raise _refused()
         cache_key = login.lower()
         if cache_key not in batch.users:
-            batch.users[cache_key] = (
-                await session.execute(select(User).where(func.lower(User.login) == cache_key))
-            ).scalar_one_or_none()
+            batch.users[cache_key] = await _usage.user_by_login(session, login)
         user = batch.users[cache_key]
+        distinct = await self._may_tell_targets_apart(session, batch, record)
         if user is None:
-            raise RecordRejectedError("target_unknown", f"No user with the login '{login}'", "on_behalf_of")
-        return user
+            if distinct:
+                raise RecordRejectedError("target_unknown", f"No user with the login '{login}'", "on_behalf_of")
+            raise _refused()
+        return user, distinct
+
+    async def _may_tell_targets_apart(self, session: AsyncSession, batch: _Batch, record: IngestRecord) -> bool:
+        from specivo.services.issue_service import IssueService
+
+        actor = batch.actor
+        if is_global_admin(actor):
+            return True
+        # The record's one explicit project: from project_key, from issue_ref, and the same
+        # project when both are sent. No such project (none named, unknown, invisible or
+        # contradicting hints): the targets are not told apart.
+        project: Project | None = None
+        hints = record.attribution
+        if hints.project_key is not None:
+            project = (
+                await session.execute(select(Project).where(Project.key == hints.project_key))
+            ).scalar_one_or_none()
+            if project is None:
+                return False
+        if hints.issue_ref is not None:
+            try:
+                issue = await IssueService().get_by_display_key(session, hints.issue_ref, actor)
+            except AppError:
+                return False
+            if issue.project_id is None or (project is not None and issue.project_id != project.id):
+                return False
+            project = await session.get(Project, issue.project_id)
+        if project is None:
+            return False
+        if project.id not in batch.for_others_in:
+            batch.for_others_in[project.id] = await _usage.may_log_for_others(session, actor, project)
+        return batch.for_others_in[project.id]
 
     async def _attribution_of(self, session: AsyncSession, actor: User, entry: AiUsageEntry) -> dict[str, Any]:
         """The entry's attribution as the result shows it; an issue the actor cannot see is left out."""

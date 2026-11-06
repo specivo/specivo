@@ -209,6 +209,20 @@ the person (case does not matter). The rules:
 - A login that matches no account is `target_unknown`; an inactive or system account is
   `target_invalid`; a person who is not an active member of the project is
   `target_not_member`; a missing permission is `forbidden`.
+- So that `on_behalf_of` cannot be used to find out which logins exist, these codes are
+  only told apart for an administrator, or for an account that holds **Log AI usage for
+  others** in the record's explicit project (`attribution.project_key`, or the project of
+  `attribution.issue_ref`). Every other account gets `forbidden` with the same message
+  ("You cannot log AI usage for this user here") whether the login exists or not, whether the
+  person is active, a member or neither. Such a record is either stored (when it ends up
+  attributed to a project where the account may log for others) or rejected with this
+  `forbidden`, whatever the reason: an unusable `project_key` or `issue_ref` and a
+  `key_conflict` included. Its warnings found on the way (`attribution_dropped`,
+  `attribution_ambiguous`) are left out. Errors in the record's content
+  (`invalid_record`, `currency_unknown`, `duplicate_key`) come first and do not depend on
+  the login. An account that may log for others in no project at all gets this `forbidden`
+  for every `on_behalf_of` record but its own login. Send `project_key` (or `issue_ref`)
+  with on-behalf records to get the precise codes.
 - Every entry shows who reported it and with which key. Logging for someone else is recorded in
   the security audit log, and every person sees what was logged in their name.
 
@@ -327,10 +341,10 @@ on its own: a rejected record never affects the others.
 |---|---|---|
 | `invalid_record` | The record breaks the schema or a rule on this page; `field` names the property | No, fix it |
 | `currency_unknown` | `reported_cost.currency` is not a currency the server knows | No |
-| `target_unknown` | No account has the `on_behalf_of` login | No |
-| `target_invalid` | The target account is inactive or a system account | No |
-| `target_not_member` | The target user is not an active member of the project | No |
-| `forbidden` | The reporting account may not log this usage there | No |
+| `target_unknown` | No account has the `on_behalf_of` login (told only to accounts that may log for others in the record's project) | No |
+| `target_invalid` | The target account is inactive or a system account (same) | No |
+| `target_not_member` | The target user is not an active member of the project (same) | No |
+| `forbidden` | The reporting account may not log this usage there; for `on_behalf_of` also any of the three above when the account may not tell them apart | No |
 | `not_found` | An explicit `issue_ref` or `project_key` does not exist or cannot be seen | No |
 | `attribution_invalid` | `issue_ref` is not in `project_key` | No |
 | `attribution_conflict` | The stored entry is attributed to something else | Send without attribution |

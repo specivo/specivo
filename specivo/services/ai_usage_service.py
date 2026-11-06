@@ -167,6 +167,17 @@ def _invalid(message: str, field_name: str, code: str = "ai_usage_invalid") -> A
     return AppError(code=code, message=message, status_code=422, field=field_name)
 
 
+#: The one answer to a refused "on behalf of" request. Whoever may not log
+#: for others gets it for every target, existing or not, active or not, member
+#: or not, so the answer never tells which logins exist.
+ON_BEHALF_REFUSED = "You cannot log AI usage for this user here"
+
+
+def on_behalf_refused() -> PermissionDeniedError:
+    """The 403 of a refused "on behalf of" request (see ``ON_BEHALF_REFUSED``)."""
+    return PermissionDeniedError(ON_BEHALF_REFUSED, field="on_behalf_of")
+
+
 # ---------------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------------
@@ -219,6 +230,15 @@ class RecomputeOutcome:
     changed: int
     before: dict[str, dict[str, str]]
     after: dict[str, dict[str, str]]
+
+
+@dataclass
+class EntryReferences:
+    """What a page of entries names: users by id, project keys by id, and the issue keys the reader may see."""
+
+    users: dict[int, User] = field(default_factory=dict)
+    project_keys: dict[int, str] = field(default_factory=dict)
+    issue_keys: dict[int, str] = field(default_factory=dict)
 
 
 class _Totals:
@@ -364,11 +384,23 @@ class AiUsageService:
         user_id: int | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
-        include_excluded: bool = True,
+        tool: str | None = None,
+        model: str | None = None,
+        cost_type: str | None = None,
+        issue_id: int | None = None,
+        source: str | None = None,
+        excluded: bool | None = None,
+        unassigned: bool | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
-        """Entries *viewer* may read, newest day first; in *project* when given. Returns ``(page, total)``."""
+        """Entries *viewer* may read, newest day first; in *project* when given. Returns ``(page, total)``.
+
+        Filters: *model* matches the aliases of its price rows too;
+        *excluded* ``True`` / ``False`` keeps only excluded / counted entries
+        (None: both); *unassigned* ``True`` / ``False`` keeps only entries
+        without / with a project.
+        """
         conditions: list[ColumnElement[bool]] = []
         if project is not None:
             conditions.append(AiUsageEntry.project_id == project.id)
@@ -383,8 +415,24 @@ class AiUsageService:
             conditions.append(AiUsageEntry.usage_date >= date_from)
         if date_to is not None:
             conditions.append(AiUsageEntry.usage_date <= date_to)
-        if not include_excluded:
-            conditions.append(AiUsageEntry.excluded_at.is_(None))
+        if tool:
+            conditions.append(AiUsageEntry.tool_slug == tool.strip().lower())
+        if model and model.strip():
+            conditions.append(AiUsageEntry.model.in_(await self.model_names(session, None, model)))
+        if cost_type:
+            if cost_type not in AI_USAGE_COST_TYPES:
+                raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
+            conditions.append(AiUsageEntry.cost_type == cost_type)
+        if source:
+            if source not in AI_USAGE_SOURCES:
+                raise _invalid(f"source must be one of {', '.join(AI_USAGE_SOURCES)}", "source")
+            conditions.append(AiUsageEntry.source == source)
+        if issue_id is not None:
+            conditions.append(AiUsageEntry.issue_id == issue_id)
+        if excluded is not None:
+            conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
+        if unassigned is not None:
+            conditions.append(AiUsageEntry.project_id.is_(None) if unassigned else AiUsageEntry.project_id.is_not(None))
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
             (
@@ -449,18 +497,28 @@ class AiUsageService:
 
         if actor.is_anonymous:
             raise PermissionDeniedError("Sign in to log AI usage")
-        self.require_valid_target(target)
         on_behalf = target.id != actor.id
+        if not on_behalf:
+            self.require_valid_target(target)
         if project is None:
             if issue_id is not None:
                 raise ValidationError(message="An issue needs its project", field="issue_id")
-            if on_behalf and not is_global_admin(actor):
-                raise PermissionDeniedError("Only administrators may log unassigned AI usage for another user")
+            if on_behalf:
+                if not is_global_admin(actor):
+                    raise on_behalf_refused()
+                self.require_valid_target(target)
             return
         await ProjectService().require_project_access(session, project, actor)
         permission = Permission.LOG_AI_USAGE_FOR_OTHERS if on_behalf else Permission.LOG_AI_USAGE
         if not await check_permission(actor, project.id, permission, session, request=request):
-            raise PermissionDeniedError(f"Permission '{permission}' denied for this project")
+            # On behalf: the same refusal whatever the target, before anything about it is checked.
+            raise (
+                on_behalf_refused()
+                if on_behalf
+                else PermissionDeniedError(f"Permission '{permission}' denied for this project")
+            )
+        if on_behalf:
+            self.require_valid_target(target)
         if on_behalf and not await self.is_active_member(session, target, project):
             raise _invalid(
                 "The user is not an active member of this project",
@@ -471,6 +529,68 @@ class AiUsageService:
             issue = await IssueService().get_by_id(session, issue_id, user=actor)
             if issue.project_id != project.id:
                 raise ValidationError(message="The issue belongs to another project", field="issue_id")
+
+    async def may_log_for_others(self, session: AsyncSession, actor: User, project: Project | None) -> bool:
+        """Whether *actor* may log someone else's usage in *project* (None: unassigned, administrators only)."""
+        from specivo.services.permission_service import Permission, check_permission
+
+        if actor.is_anonymous:
+            return False
+        if project is None:
+            return is_global_admin(actor)
+        return await check_permission(actor, project.id, Permission.LOG_AI_USAGE_FOR_OTHERS, session)
+
+    async def may_log_for_others_anywhere(self, session: AsyncSession, actor: User) -> bool:
+        """Whether *actor* may log someone else's usage in at least one project (or unassigned, as an admin).
+
+        Narrowed to the authenticating API key's project limit, like
+        ``check_permission``.
+        """
+        from specivo.services.permission_service import (
+            Permission,
+            member_principal_clause,
+            projects_granting,
+        )
+
+        if actor.is_anonymous:
+            return False
+        if is_global_admin(actor):
+            return True
+        stmt = select(Project)
+        if not actor.is_admin:
+            stmt = stmt.where(Project.id.in_(select(Member.project_id).where(member_principal_clause(actor.id))))
+        projects = (await session.execute(stmt)).scalars().all()
+        return bool(await projects_granting(session, actor, projects, Permission.LOG_AI_USAGE_FOR_OTHERS))
+
+    async def resolve_target(
+        self, session: AsyncSession, actor: User, login: str | None, project: Project | None
+    ) -> User:
+        """The user named by *login* (``on_behalf_of``) for usage logged in *project*; the actor when empty.
+
+        Login enumeration: whoever may not log for others in *project*
+        (``may_log_for_others``) gets the one refusal of
+        :func:`on_behalf_refused` for every login but their own, whether it
+        exists, is inactive, is not a member or is fine. Only those who may
+        learn the difference get ``ai_usage_target_unknown``; the target's
+        validity and membership are checked by ``require_can_log``.
+        """
+        name = (login or "").strip()
+        if not name:
+            return actor
+        if name.lower() == actor.login.lower():
+            return actor
+        if not await self.may_log_for_others(session, actor, project):
+            raise on_behalf_refused()
+        user = await self.user_by_login(session, name)
+        if user is None:
+            raise _invalid(f"No user with the login '{name}'", "on_behalf_of", "ai_usage_target_unknown")
+        return user
+
+    @staticmethod
+    async def user_by_login(session: AsyncSession, login: str) -> User | None:
+        """The user with *login* (any case), or None."""
+        stmt = select(User).where(func.lower(User.login) == login.strip().lower())
+        return (await session.execute(stmt)).scalar_one_or_none()
 
     async def can_edit(self, session: AsyncSession, actor: User, entry: AiUsageEntry) -> bool:
         """Whether *actor* may change, exclude or include *entry*: its user, ``manage_ai_usage`` or an admin."""
@@ -496,6 +616,10 @@ class AiUsageService:
         return admin_reaches(actor, entry.project_id)
 
     # -- validation ---------------------------------------------------------------
+
+    async def validate(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> None:
+        """Raise the 422 the content of *data* would get (tool, model, dates, tokens, cost, texts); no authorization."""
+        await self._validated(session, data, source=source)
 
     async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
         from specivo.services.ai_subscription_service import AiToolService
@@ -1069,6 +1193,68 @@ class AiUsageService:
         await session.delete(entry)
         await session.flush()
         await self._audit(session, AuditEvent.AI_USAGE_DELETED, actor, entry, details, request)
+
+    # -- REST and MCP surfaces ------------------------------------------------------
+
+    async def create_for(
+        self,
+        session: AsyncSession,
+        actor: User,
+        data: AiUsageInput,
+        *,
+        project: Project | None,
+        on_behalf_of: str | None = None,
+        source: str = "manual",
+        api_key_id: int | None = None,
+        request: Request | None = None,
+    ) -> AiUsageEntry:
+        """Log *data* in *project* (None: unassigned), in the name of the login *on_behalf_of* or the actor's.
+
+        The login is resolved by :meth:`resolve_target`, so whoever may not log
+        for others there gets the same refusal for every login.
+        """
+        target = await self.resolve_target(session, actor, on_behalf_of, project)
+        data.project_id = project.id if project is not None else None
+        if data.project_id is None:
+            data.attribution_method = "none"
+        return await self.log(
+            session, actor, data, target=target, source=source, api_key_id=api_key_id, request=request
+        )
+
+    async def project_id_for_key(self, session: AsyncSession, actor: User, key: str | None) -> int | None:
+        """The id of the project *key* the actor can reach (404 otherwise); None for no key (unassigned)."""
+        from specivo.services.project_service import ProjectService
+
+        if key is None or not key.strip():
+            return None
+        project = await ProjectService().get_by_key(session, key.strip().upper())
+        await ProjectService().require_project_access(session, project, actor)
+        return project.id
+
+    async def references(self, session: AsyncSession, viewer: User, entries: list[AiUsageEntry]) -> EntryReferences:
+        """The users, project keys and issue keys *entries* name, in three queries.
+
+        Issues *viewer* cannot see are left out.
+        """
+        from specivo.services.issue_service import IssueService
+
+        user_ids = {e.user_id for e in entries} | {e.reporter_user_id for e in entries}
+        project_ids = {e.project_id for e in entries if e.project_id is not None}
+        issue_ids = {e.issue_id for e in entries if e.issue_id is not None}
+        refs = EntryReferences()
+        if user_ids:
+            rows = (await session.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
+            refs.users = {u.id: u for u in rows}
+        if project_ids:
+            rows_p = await session.execute(select(Project.id, Project.key).where(Project.id.in_(project_ids)))
+            refs.project_keys = {pid: key for pid, key in rows_p.all()}
+        if issue_ids:
+            stmt = select(Issue.id, Issue.project_key, Issue.sequence_number).where(Issue.id.in_(issue_ids))
+            clause = await IssueService().visible_issues_clause(session, viewer)
+            if clause is not None:
+                stmt = stmt.where(clause)
+            refs.issue_keys = {iid: f"{key}-{number}" for iid, key, number in (await session.execute(stmt)).all()}
+        return refs
 
     # -- range recompute ------------------------------------------------------------
 

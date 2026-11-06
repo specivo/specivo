@@ -170,6 +170,12 @@ Every entry shows which account and key logged it, every person sees all the usa
 their name, and logging for someone else is written to the
 [audit log](../install/audit-log.md).
 
+So that `on_behalf_of` cannot be used to find out who has an account, an account that may not
+report for others in the record's project gets the same `forbidden` answer for every login,
+whether it exists or not. Send `project_key` (or `issue_ref`) with on-behalf records: only an
+account with **Log AI usage for others** in that project, or an administrator, gets the precise
+`target_unknown`, `target_invalid` and `target_not_member` codes.
+
 ## Costs
 
 Send tokens; Specivo computes the cost from its [AI model prices](../install/ai-model-prices.md).
@@ -181,6 +187,33 @@ Send tokens; Specivo computes the cost from its [AI model prices](../install/ai-
   (`{"amount": "1.2345", "currency": "USD"}`). For `api` usage it is the spend.
 - `input` tokens must not include cache reads or writes; send those in `cache_read`,
   `cache_write_5m` and `cache_write_1h`.
+
+## Read, correct and exclude entries
+
+Reported usage is stored as AI usage entries, next to the ones people and agents log by hand.
+The REST API mirrors time entries; every URL needs its trailing slash:
+
+| Request | What it does |
+|---|---|
+| `GET /api/v1/my/ai-usage/` | The entries logged in your name, unassigned ones included. Filters: `project_key`, `unassigned`, `tool`, `model`, `cost_type`, `source`, `excluded`, `from_date`, `to_date`, `offset`, `limit`. |
+| `GET /api/v1/projects/{key}/ai-usage/` | A project's entries you may read: your own and those you reported, or everyone's with **View AI usage** set to *all*. The same filters, plus `user_id` and `issue_id`. |
+| `POST /api/v1/projects/{key}/ai-usage/` | Log an entry by hand: `tool`, `model`, `usage_date`, `tokens`, and optionally `issue_id`, `cost_type`, `cost` (`{"amount": "0.42", "currency": "USD"}`), `on_behalf_of` and `comments`. `POST /api/v1/my/ai-usage/` logs one without a project. |
+| `GET`, `PATCH`, `DELETE /api/v1/ai-usage/{id}/` | Read, change or delete one entry. `PATCH` with `project_key` (or `null`) moves it; `tokens` changes only the classes sent. |
+| `POST /api/v1/ai-usage/{id}/exclude/`, `/include/` | Leave an entry out of reports, or count it again. |
+
+Entries logged this way have the source `api` (with an API key) or `manual` (signed in). Agents use
+the MCP tools `specivo_log_ai_usage` (source `mcp`) and `specivo_ai_usage`
+(`op="list"`, `"get"`, `"update"`, `"exclude"`, `"include"`); see
+[What agents can do](capabilities.md).
+
+- You can change entries logged in your name; **Manage AI usage** in a project lets you change
+  anyone's there. Moving an entry to another project is checked like logging it there.
+- An entry sent by a reporter keeps its tokens, model and tool: only its project, issue and
+  comments can change (anything else is `ai_usage_field_locked`). Exclude a wrong one rather than
+  deleting it; a later re-send of the same bucket keeps it excluded. Only administrators delete
+  reported entries.
+- Changing the usage of a hand-logged entry prices it again. An edit, exclusion or deletion by
+  someone other than the entry's owner is written to the [audit log](../install/audit-log.md).
 
 ## Limits and errors
 

@@ -78,6 +78,7 @@
       "model": "claude-sonnet-4-5",
       "usage_date": "2026-11-05",
       "tokens": {"input": 1},
+      "attribution": {"project_key": "ACME"},
       "on_behalf_of": "nobody-by-this-login"
     }
   ]

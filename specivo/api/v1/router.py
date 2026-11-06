@@ -25,6 +25,7 @@ from specivo.api.v1.admin_ai_usage import router as admin_ai_usage_router
 from specivo.api.v1.agent_sessions import router as agent_sessions_router
 from specivo.api.v1.ai_model_prices import router as ai_model_prices_router
 from specivo.api.v1.ai_subscriptions import router as ai_subscriptions_router
+from specivo.api.v1.ai_usage import router as ai_usage_router
 from specivo.api.v1.ai_usage_ingest import router as ai_usage_ingest_router
 from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
@@ -77,6 +78,8 @@ api_router.include_router(ai_model_prices_router)
 api_router.include_router(ai_subscriptions_router)
 api_router.include_router(admin_ai_usage_router)
 api_router.include_router(ai_usage_ingest_router)
+# After the ingest: /ai-usage/ingest/ is matched before /ai-usage/{entry_id}/.
+api_router.include_router(ai_usage_router)
 api_router.include_router(wiki_router)
 api_router.include_router(search_router)
 api_router.include_router(search_admin_router)

@@ -63,6 +63,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_remove_relation": "Remove a relation by ID",
     "specivo_log_time": "Log time against a project or issue",
     "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
+    "specivo_log_ai_usage": (
+        "Log AI tokens an AI tool used (from a hook, the reporter or /cost output -- never estimated)"
+    ),
+    "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -181,6 +185,20 @@ Tags are flat labels shared by a project's issues and wiki pages; agents and peo
 3. `specivo_timer(op="stop", activity="Development", comments="...")` -- logs the time (activity name
    or ID; the default activity when omitted), or `op="discard"` to drop it without logging
 
+### Log AI usage
+You cannot see your own token counters. Never estimate tokens: log only numbers that come from a
+hook, the Specivo reporter, or the tool's own usage output (Claude Code's `/cost`, for example).
+The reporter (`POST /api/v1/ai-usage/ingest/`) is the routine way; the tools are for one-off entries
+and corrections.
+1. `specivo_log_ai_usage(tool="claude-code", model="claude-sonnet-4-5", input_tokens=N, output_tokens=N,
+   cache_read_tokens=N, issue_ref="ACME-12")` -- without `issue_ref` / `project_key` the entry goes to
+   the issue this agent session works on, else stays unassigned; the server prices it
+2. `specivo_ai_usage(op="list")` -- the entries logged in your name (unassigned ones included);
+   `project_key="ACME"` for a project's entries you may read
+3. `specivo_ai_usage(op="update", entry_id=N, issue_ref="ACME-12")` -- attribute or correct an entry;
+   entries from the reporter only take a project, issue and comments
+4. `specivo_ai_usage(op="exclude", entry_id=N)` -- leave an entry out of reports (`include` undoes it)
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -281,6 +299,11 @@ the security audit log. Notable cases:
   permission and emit `ISSUE_*` / `WIKI_*` audit events.
 - `specivo_log_time` and `specivo_timer` (`start`, `stop`) require **`log_time`** on the project.
   Reading logged time needs **`view_time_entries`**; the seeded Agent role has both.
+- `specivo_log_ai_usage` requires **`log_ai_usage`** on the project (nothing for unassigned usage in
+  your own name); `on_behalf_of` requires **`log_ai_usage_for_others`** and an active member as the
+  target, and gives the same refusal for every login otherwise. `specivo_ai_usage` changes entries
+  logged in your name, or any with **`manage_ai_usage`**. Everyone reads what is logged in their
+  name; others' entries need **`view_ai_usage`** with visibility `all`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
@@ -294,6 +317,8 @@ in the project security log.
 - Do NOT assume tracker/status/priority IDs -- call `specivo_list_lookups` first.
 - Do NOT replace full description via `update_issue` -- use `edit_description` for patches.
 - Do NOT call `log_time` without a valid `activity_id` from `list_lookups`.
+- Do NOT invent or estimate token counts for `specivo_log_ai_usage` -- you cannot see them; use a
+  hook, the reporter or `/cost` output.
 - Do NOT use `X-Api-Key` or `?key=` for REST API auth -- only `Authorization: Bearer spv_...` works.
 - Do NOT omit the trailing slash on REST API URLs -- FastAPI requires it.
 - Do NOT write tags or other tracked properties (status, assignee, metadata) into an issue description
