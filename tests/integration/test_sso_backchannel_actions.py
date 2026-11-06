@@ -7,7 +7,8 @@
   session of the user and their API keys (MCP keys included) switched off,
   with a ``USER_DEPROVISIONED`` record (reason ``sso_backchannel``). The
   account stays active: a later SSO sign-in works and the keys stay off. An
-  account with a password is treated as ``revoke_all_sessions``.
+  account with a password, or an administrator, is treated as
+  ``revoke_all_sessions``.
 
 Repeated tokens for the same IdP session (authentik sends one per session,
 sometimes twice, each with its own ``jti``) change nothing the second time.
@@ -222,6 +223,53 @@ async def test_deprovision_never_touches_an_account_with_a_password(
     assert await _keys(db_session, user_id) == [True, True]
     assert await _status(client, mcp) == 200
     assert _deprovisioned(caplog) == []
+
+
+async def test_deprovision_spares_the_keys_of_an_sso_only_administrator(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_login: SsoLoginDriver,
+    provider: SsoProvider,
+    mock_idp: MockIdP,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An administrator is offboarded in Specivo, never by an IdP message, as with SCIM.
+
+    IdPs send the same logout for a sign-out as for a disabled account, so an
+    administrator signing out at the IdP would otherwise switch off every
+    automation key they own. Their sessions from this provider still end.
+    """
+    await _set_action(db_session, provider, "deprovision")
+    user = await _member(db_session, provider, mock_idp, password=False)
+    user.is_admin = True
+    await db_session.flush()
+    user_id = user.id
+    first = await _sso_session(client, sso_login, sid="idp-session-a")
+    second = await _sso_session(client, sso_login, sid="idp-session-b")
+    elsewhere = build_sso_provider(MockIdP(issuer="https://other-idp.example.net/realms/test"), slug="other-idp")
+    db_session.add(elsewhere)
+    await db_session.flush()
+    identity = await link_identity(db_session, user, elsewhere, subject="other-subject")
+    other = await AuthService().create_sso_session(
+        db_session, user=user, identity=identity, provider=elsewhere, id_token="not-a-real-token", idp_sid=None
+    )
+    plain, mcp = await _two_keys(db_session, user)
+
+    with caplog.at_level(logging.INFO):
+        resp = await _post(client, mock_idp.mint_logout_token(sid="idp-session-a"))
+
+    assert resp.status_code == 200, resp.text
+    # Treated as revoke_all_sessions: this provider's sessions end, nothing else.
+    assert await _status(client, first) == 401
+    assert await _status(client, second) == 401
+    assert await _status(client, other.access_token) == 200
+    assert await _keys(db_session, user_id) == [True, True]
+    assert await _status(client, plain) == 200
+    assert await _status(client, mcp) == 200
+    assert _deprovisioned(caplog) == []
+    [skipped] = [r for r in caplog.records if r.getMessage().startswith("sso.deprovision.skipped")]
+    assert f"user_id={user_id}" in skipped.getMessage()
+    assert "reason=administrator" in skipped.getMessage()
 
 
 async def test_repeated_tokens_for_the_same_session_are_harmless(

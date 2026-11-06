@@ -452,8 +452,10 @@ the IdP's keys less than a minute ago (right after a key rotation). It answers 4
 | End every session of that person from this provider | Every session that came from this identity, whichever IdP session it belongs to. |
 | End all of their sessions and switch off their API keys | As above; and if the account signs in only through SSO (it has no password), every one of its sessions, also from other providers, and all of its API keys, MCP keys included, are switched off. The security audit log records `user_deprovisioned` with reason `sso_backchannel`. |
 
-The last choice never deactivates the account and never touches an account with a password or a
-service account (those get the second behaviour). If the person signs in through the IdP again
+The last choice never deactivates the account and never touches an account with a password, a
+service account or an administrator (those get the second behaviour; for an administrator Specivo
+logs `sso.deprovision.skipped ... reason=administrator`). Offboard an administrator in Specivo:
+remove the administrator rights or deactivate the account. If the person signs in through the IdP again
 later, that works, but their API keys stay off until they or an administrator switch them back on.
 IdPs send the same logout for a person who signed out as for one who was disabled, so choose it
 only if you accept that signing out at the IdP also switches off that person's API keys. A repeated
