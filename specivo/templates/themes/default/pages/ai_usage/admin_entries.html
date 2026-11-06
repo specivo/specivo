@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, pagination %}
+{% from "pages/ai_usage/_macros.html" import entry_table with context %}
+
+{# The entries behind a cell of the admin AI spend report, across projects. #}
+
+{% block title %}{% trans %}AI usage entries{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": "/"},
+  {"label": _("Admin"), "url": "/admin/"},
+  {"label": _("AI spend"), "url": "/admin/ai-spend/"},
+  {"label": _("Entries")}
+]) }}
+
+<div class="page-header">
+  <h1>{% trans %}AI usage entries{% endtrans %}</h1>
+</div>
+
+<p class="sp-text-muted-xs sp-spend-notes" data-testid="spend-entries-filters">
+  {% trans %}Filtered by:{% endtrans %}
+  {% if filters.from_date or filters.to_date %}{{ filters.from_date or "…" }} – {{ filters.to_date or "…" }}{% endif %}
+  {% if filters.project == "-" %} · {% trans %}Unassigned{% endtrans %}{% elif filters.project %} · {{ filters.project }}{% endif %}
+  {% if filters.issue == "-" %} · {% trans %}No issue{% endtrans %}{% elif filters.issue %} · {{ filters.issue }}{% endif %}
+  {% if filters.tool %} · {{ filters.tool }}{% endif %}
+  {% if filters.provider %} · {{ filters.provider }}{% endif %}
+  {% if filters.model %} · {{ filters.model }}{% endif %}
+  {% if filters.branch == "-" %} · {% trans %}No branch{% endtrans %}{% elif filters.branch %} · {{ filters.branch }}{% endif %}
+  {% if filters.cost_type %} · {{ filters.cost_type }}{% endif %}
+  · <a href="/admin/ai-spend/">{% trans %}Back to the report{% endtrans %}</a>
+</p>
+
+{% if rows %}
+<div class="card">
+  {{ entry_table(rows, return_to, show_project=True) }}
+</div>
+{{ pagination(total, offset, limit, "/admin/ai-spend/entries/", page_query) }}
+{% else %}
+<div class="card sp-aiu-empty" data-testid="aiu-empty">{% trans %}No AI usage matches these filters.{% endtrans %}</div>
+{% endif %}
+{% endblock %}

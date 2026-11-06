@@ -13,14 +13,18 @@
 
 <div class="page-header">
   <h1>{% trans %}AI usage{% endtrans %}</h1>
-  {% if can_log %}
   <div class="page-header-actions">
+    <a href="/projects/{{ project.key }}/ai-usage/report/" class="sp-btn sp-btn-ghost" data-testid="aiu-report-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-16"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+      {% trans %}Spend report{% endtrans %}
+    </a>
+    {% if can_log %}
     <a href="/projects/{{ project.key }}/ai-usage/new/" class="sp-btn sp-btn-primary" data-testid="aiu-log-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-16"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}Log AI usage{% endtrans %}
     </a>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 
 {% if notice %}<div class="flash flash-success" role="status" data-testid="aiu-notice">{{ notice_text(notice) }}</div>{% endif %}
@@ -74,6 +78,10 @@
       <option value="excluded" {{ 'selected' if filters.status == 'excluded' else '' }}>{% trans %}Excluded only{% endtrans %}</option>
     </select>
   </label>
+  {% if filters.provider %}<input type="hidden" name="provider" value="{{ filters.provider }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-provider-filter"><span class="filter-label">{% trans %}Provider{% endtrans %}</span>{{ filters.provider }}</span>{% endif %}
+  {% if filters.branch %}<input type="hidden" name="branch" value="{{ filters.branch }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-branch-filter"><span class="filter-label">{% trans %}Branch{% endtrans %}</span>{% if filters.branch == "-" %}{% trans %}No branch{% endtrans %}{% else %}{{ filters.branch }}{% endif %}</span>{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
     {% if page_query %}<a class="sp-btn sp-btn-ghost" href="/projects/{{ project.key }}/ai-usage/">{% trans %}Clear{% endtrans %}</a>{% endif %}

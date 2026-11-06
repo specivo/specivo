@@ -10,7 +10,7 @@ plans ("seats"). It is used for two things:
 
 - AI usage from a tool a plan covers is counted as **covered by the subscription**, instead of as
   pay-as-you-go spend or as unknown.
-- Spend reports spread each plan's fee over the usage it covered, valued at
+- [Spend reports](../projects/ai-spend-reports.md) spread each plan's fee over the usage it covered, valued at
   [API prices](ai-model-prices.md), so you can compare what the seat costs with what the same usage
   would have cost per token.
 

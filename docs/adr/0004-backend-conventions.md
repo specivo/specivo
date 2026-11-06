@@ -17,6 +17,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded the money convention (§4), the currency audit events and the repository provider change audit event (§18).
 **Revised:** 2026-11-06 — recorded exchange rates and the conversion contract (§4), and the exchange rate and development link detach/move audit events (§18).
 **Revised:** 2026-11-06 — recorded AI tools and personal AI subscriptions, their coverage and proration rules (§4), and the AI subscription audit events (§18).
+**Revised:** 2026-11-06 — recorded AI spend reports: grouping, conversion, seat allocation and who sees seat cost (§4), and the route order of `/ai-usage/report/` (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -297,6 +298,27 @@ module of its own beside `tools.py`) write `mcp`. Both log through `AiUsageServi
 issue keys the reader may see in three queries; an issue the reader cannot see shows as no issue. List filters live
 in `AiUsageService.list_entries` (a model filter matches its price aliases; an unknown login filter matches nothing
 rather than saying it is unknown).
+
+**AI spend reports.** Reports of AI usage go only through `AiSpendReportService.report`
+(`specivo.services.ai_spend_report_service`): one project (anyone who reaches it; rows only from the entries
+`AiUsageService` lets them read, excluded ones never) or the whole instance (`is_global_admin` only), grouped by any
+of `GROUP_BY` plus a `day` / `week` (ISO, from Monday) / `month` bucket of the UTC usage day, sorted by the grouping
+key unless the caller asks for spend (no rankings by default). Every amount is converted in **one**
+`ExchangeRateService.convert_many` call into the reporting currency (`reporting_currency_for`, or an explicit active
+currency) under the report's rate policy; results are folded per row with `summarize`, so unconverted amounts stay
+listed and the rates used are reported. Seat cost is computed at report time, never stored: per user, month and
+subscription the month's `prorated_fee` is spread over the entries with `cost_type = 'subscription'` and that
+`subscription_id`, weighted by `api_equivalent` converted into the plan's currency at each entry's date, over **all**
+of the user's counted entries of the month (whatever the viewer sees or the period covers, so a share is stable);
+a month without such priced entries leaves the fee **unallocated** (prorated to the days the period covers), shown
+only in instance reports without a tool, model or provider filter. Seat fees in another currency are converted at
+the month's last day (today for the running month, `SEAT_RATE_DAY`). A project report shows seat cost only to a
+viewer for whom `sees_every_entry` holds (an admin, or `ai_usage_visibility = 'all'` with no counted entry of the
+range hidden from them); no report names a plan or shows a fee as such. The query count does not grow with the data
+(one grouped query, the subscriptions, the weights, label lookups, at most three statements per conversion target).
+The REST routes (`/projects/{key}/ai-usage/report/`, `/ai-usage/report/`, `format=csv`) are included **before**
+the entries router so `/ai-usage/report/` is not read as an entry id; CSV cells that could start a spreadsheet
+formula are prefixed with `'`.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 

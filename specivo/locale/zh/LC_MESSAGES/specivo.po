@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 13:21+0100\n"
+"POT-Creation-Date: 2026-11-06 14:23+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -848,7 +848,8 @@ msgstr "第 %(first)s–%(last)s 条，共 %(total)s 条"
 #: specivo/templates/themes/default/pages/admin/audit_log.html:114
 #: specivo/templates/themes/default/pages/admin/currencies.html:42
 #: specivo/templates/themes/default/pages/ai_usage/my.html:66
-#: specivo/templates/themes/default/pages/ai_usage/project.html:70
+#: specivo/templates/themes/default/pages/ai_usage/project.html:74
+#: specivo/templates/themes/default/pages/ai_usage/report.html:174
 #: specivo/templates/themes/default/pages/search.html:314
 msgid "Show"
 msgstr "显示"
@@ -980,6 +981,7 @@ msgstr "路线图"
 #: specivo/templates/themes/default/pages/ai_usage/project.html:5
 #: specivo/templates/themes/default/pages/ai_usage/project.html:11
 #: specivo/templates/themes/default/pages/ai_usage/project.html:15
+#: specivo/templates/themes/default/pages/ai_usage/report.html:56
 #: specivo/templates/themes/default/pages/issues/detail.html:283
 #: specivo/templates/themes/default/pages/projects/detail.html:54
 #: specivo/web/pages/admin.py:1106
@@ -1001,7 +1003,7 @@ msgstr "重复任务"
 
 #: specivo/templates/themes/default/components/sidebar.html:83
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
-#: specivo/templates/themes/default/pages/admin/dashboard.html:173
+#: specivo/templates/themes/default/pages/admin/dashboard.html:183
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
@@ -1068,6 +1070,10 @@ msgstr "管理"
 #: specivo/templates/themes/default/pages/admin/versions.html:9
 #: specivo/templates/themes/default/pages/admin/workflows.html:3
 #: specivo/templates/themes/default/pages/admin/workflows.html:9
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:7
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:12
+#: specivo/templates/themes/default/pages/ai_usage/report.html:49
+#: specivo/templates/themes/default/pages/ai_usage/report.html:62
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:11
 msgid "Admin"
 msgstr "管理员"
@@ -1569,7 +1575,8 @@ msgstr "类型"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:115
 #: specivo/templates/themes/default/pages/ai_usage/form.html:43
 #: specivo/templates/themes/default/pages/ai_usage/my.html:32
-#: specivo/templates/themes/default/pages/ai_usage/my.html:87
+#: specivo/templates/themes/default/pages/ai_usage/my.html:88
+#: specivo/templates/themes/default/pages/ai_usage/report.html:12
 msgid "Project"
 msgstr "项目"
 
@@ -1586,6 +1593,8 @@ msgstr "没有指派给你的待处理工作项。"
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:10
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:27
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
+#: specivo/templates/themes/default/pages/ai_usage/project.html:82
+#: specivo/templates/themes/default/pages/ai_usage/report.html:15
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:25
 #: specivo/templates/themes/default/pages/projects/settings.html:1525
 msgid "Provider"
@@ -1596,7 +1605,9 @@ msgstr "提供商"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:66
 #: specivo/templates/themes/default/pages/ai_usage/form.html:81
 #: specivo/templates/themes/default/pages/ai_usage/my.html:47
-#: specivo/templates/themes/default/pages/ai_usage/project.html:47
+#: specivo/templates/themes/default/pages/ai_usage/project.html:51
+#: specivo/templates/themes/default/pages/ai_usage/report.html:16
+#: specivo/templates/themes/default/pages/ai_usage/report.html:135
 msgid "Model"
 msgstr "模型"
 
@@ -1605,6 +1616,7 @@ msgstr "模型"
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
 #: specivo/templates/themes/default/pages/ai_usage/form.html:143
+#: specivo/templates/themes/default/pages/ai_usage/report.html:146
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
 msgid "Currency"
 msgstr "货币"
@@ -1691,6 +1703,7 @@ msgstr "工具上报该模型时使用的其他名称，以空格或逗号分隔
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:6
+#: specivo/web/pages/ai_spend_reports.py:295
 msgid "Local model"
 msgstr "本地模型"
 
@@ -1819,7 +1832,7 @@ msgid "johndoe"
 msgstr "johndoe"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:26
-#: specivo/templates/themes/default/pages/admin/dashboard.html:183
+#: specivo/templates/themes/default/pages/admin/dashboard.html:193
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
@@ -2168,6 +2181,7 @@ msgstr "所有来源"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:42
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:33
+#: specivo/templates/themes/default/pages/ai_usage/report.html:82
 msgid "Period"
 msgstr "时间段"
 
@@ -2186,7 +2200,7 @@ msgstr "所有时间段"
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:127
 #: specivo/templates/themes/default/pages/admin/groups.html:34
 #: specivo/templates/themes/default/pages/ai_usage/my.html:74
-#: specivo/templates/themes/default/pages/ai_usage/project.html:78
+#: specivo/templates/themes/default/pages/ai_usage/project.html:86
 #: specivo/templates/themes/default/pages/time/list.html:39
 msgid "Filter"
 msgstr "筛选"
@@ -2290,7 +2304,8 @@ msgid "Person"
 msgstr "成员"
 
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:30
-#: specivo/templates/themes/default/pages/ai_usage/project.html:34
+#: specivo/templates/themes/default/pages/ai_usage/project.html:38
+#: specivo/templates/themes/default/pages/ai_usage/report.html:122
 msgid "Everyone"
 msgstr "所有人"
 
@@ -2368,6 +2383,7 @@ msgstr "从套餐开始"
 
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:80
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
+#: specivo/templates/themes/default/pages/ai_usage/report.html:32
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:17
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:66
 msgid "Custom"
@@ -2513,7 +2529,7 @@ msgstr "尚无项目选择加入匿名阅读。"
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
 #: specivo/templates/themes/default/pages/admin/audit_log.html:10
 #: specivo/templates/themes/default/pages/admin/audit_log.html:14
-#: specivo/templates/themes/default/pages/admin/dashboard.html:193
+#: specivo/templates/themes/default/pages/admin/dashboard.html:203
 msgid "Audit log"
 msgstr "审计日志"
 
@@ -2558,7 +2574,8 @@ msgstr "项目标识"
 #: specivo/templates/themes/default/pages/admin/audit_log.html:50
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:125
 #: specivo/templates/themes/default/pages/ai_usage/my.html:58
-#: specivo/templates/themes/default/pages/ai_usage/project.html:62
+#: specivo/templates/themes/default/pages/ai_usage/project.html:66
+#: specivo/templates/themes/default/pages/ai_usage/report.html:90
 #: specivo/templates/themes/default/pages/time/list.html:27
 msgid "From"
 msgstr "起始"
@@ -2567,7 +2584,8 @@ msgstr "起始"
 #: specivo/templates/themes/default/pages/admin/email.html:83
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:126
 #: specivo/templates/themes/default/pages/ai_usage/my.html:62
-#: specivo/templates/themes/default/pages/ai_usage/project.html:66
+#: specivo/templates/themes/default/pages/ai_usage/project.html:70
+#: specivo/templates/themes/default/pages/ai_usage/report.html:94
 #: specivo/templates/themes/default/pages/time/list.html:29
 msgid "To"
 msgstr "收件人"
@@ -2601,7 +2619,9 @@ msgstr "事件"
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:44
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:109
-#: specivo/templates/themes/default/pages/ai_usage/project.html:32
+#: specivo/templates/themes/default/pages/ai_usage/project.html:36
+#: specivo/templates/themes/default/pages/ai_usage/report.html:11
+#: specivo/templates/themes/default/pages/ai_usage/report.html:120
 #: specivo/templates/themes/default/pages/issues/detail.html:457
 #: specivo/templates/themes/default/pages/projects/settings.html:133
 #: specivo/templates/themes/default/pages/time/list.html:58
@@ -2646,6 +2666,7 @@ msgstr "该货币已停用。请先在下方启用，再将其选为报表货币
 #: specivo/templates/themes/default/pages/admin/currencies.html:23
 #: specivo/templates/themes/default/pages/admin/currencies.html:26
 #: specivo/templates/themes/default/pages/admin/currencies.html:70
+#: specivo/templates/themes/default/pages/ai_usage/report.html:148
 #: specivo/templates/themes/default/pages/projects/settings.html:79
 msgid "Reporting currency"
 msgstr "报表货币"
@@ -2663,6 +2684,7 @@ msgstr "金额报表以此货币显示，除非项目在其设置中选择了自
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:4
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:30
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:33
+#: specivo/templates/themes/default/pages/ai_usage/report.html:153
 msgid "Exchange rates"
 msgstr "汇率"
 
@@ -2794,9 +2816,9 @@ msgstr "管理用户账户、创建用户、重置密码。"
 #: specivo/templates/themes/default/pages/admin/dashboard.html:135
 #: specivo/templates/themes/default/pages/admin/dashboard.html:145
 #: specivo/templates/themes/default/pages/admin/dashboard.html:155
-#: specivo/templates/themes/default/pages/admin/dashboard.html:165
 #: specivo/templates/themes/default/pages/admin/dashboard.html:175
 #: specivo/templates/themes/default/pages/admin/dashboard.html:185
+#: specivo/templates/themes/default/pages/admin/dashboard.html:195
 msgid "Manage"
 msgstr "管理"
 
@@ -2900,29 +2922,53 @@ msgid "Flat-rate AI plans people pay for, and the AI tools list."
 msgstr "成员付费的固定费用 AI 套餐，以及 AI 工具列表。"
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:163
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:13
+#: specivo/templates/themes/default/pages/ai_usage/report.html:49
+#: specivo/templates/themes/default/pages/ai_usage/report.html:63
+#: specivo/templates/themes/default/pages/ai_usage/report.html:68
+msgid "AI spend"
+msgstr "AI 支出"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:164
+msgid ""
+"AI spend across the instance by person, model, tool and project, with "
+"subscription fees."
+msgstr "整个实例的 AI 支出，按人员、模型、工具和项目划分，含订阅费用。"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:165
+#: specivo/templates/themes/default/pages/admin/versions.html:32
+#: specivo/templates/themes/default/pages/admin/versions.html:57
+#: specivo/templates/themes/default/pages/issues/_development_macros.html:39
+#: specivo/templates/themes/default/pages/issues/list.html:41
+#: specivo/templates/themes/default/pages/projects/settings.html:464
+#: specivo/templates/themes/default/pages/projects/version_detail.html:84
+msgid "Open"
+msgstr "开放"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:173
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:4
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:10
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:35
 msgid "Metadata Presets"
 msgstr "元数据预设"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:164
+#: specivo/templates/themes/default/pages/admin/dashboard.html:174
 msgid "Manage reusable metadata field schemas for projects."
 msgstr "管理可复用的项目元数据字段架构。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:174
+#: specivo/templates/themes/default/pages/admin/dashboard.html:184
 msgid "Global application settings and configuration."
 msgstr "全局应用设置与配置。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:184
+#: specivo/templates/themes/default/pages/admin/dashboard.html:194
 msgid "SMTP configuration and test email delivery."
 msgstr "SMTP 配置与测试邮件发送。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:194
+#: specivo/templates/themes/default/pages/admin/dashboard.html:204
 msgid "Sign-ins, access and administration changes, and everything agents do."
 msgstr "登录、访问与管理变更，以及智能体执行的所有操作。"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:195
+#: specivo/templates/themes/default/pages/admin/dashboard.html:205
 #: specivo/templates/themes/default/pages/issues/description_diff.html:106
 #: specivo/templates/themes/default/pages/wiki/history.html:59
 msgid "View"
@@ -3200,6 +3246,7 @@ msgid "Rate of that date"
 msgstr "该日期的汇率"
 
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:82
+#: specivo/templates/themes/default/pages/ai_usage/report.html:156
 msgid "Latest rate"
 msgstr "最新汇率"
 
@@ -5293,21 +5340,14 @@ msgid "%(count)s closed"
 msgstr "%(count)s 个已关闭"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
+#: specivo/templates/themes/default/pages/ai_usage/report.html:235
+#: specivo/templates/themes/default/pages/ai_usage/report.html:279
 #: specivo/templates/themes/default/pages/issues/detail.html:483
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
 msgid "Total"
 msgstr "总计"
-
-#: specivo/templates/themes/default/pages/admin/versions.html:32
-#: specivo/templates/themes/default/pages/admin/versions.html:57
-#: specivo/templates/themes/default/pages/issues/_development_macros.html:39
-#: specivo/templates/themes/default/pages/issues/list.html:41
-#: specivo/templates/themes/default/pages/projects/settings.html:464
-#: specivo/templates/themes/default/pages/projects/version_detail.html:84
-msgid "Open"
-msgstr "开放"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:34
@@ -5392,7 +5432,7 @@ msgstr "选择追踪器和角色以管理工作流状态流转。"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:21
 #: specivo/templates/themes/default/pages/ai_usage/form.html:158
 #: specivo/templates/themes/default/pages/ai_usage/my.html:21
-#: specivo/templates/themes/default/pages/ai_usage/project.html:20
+#: specivo/templates/themes/default/pages/ai_usage/project.html:24
 msgid "Log AI usage"
 msgstr "记录 AI 使用"
 
@@ -5410,14 +5450,17 @@ msgid "No AI usage logged on this issue."
 msgstr "此工作项尚未记录 AI 使用。"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:4
+#: specivo/web/pages/ai_spend_reports.py:293
 msgid "Subscription"
 msgstr "订阅"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:5
+#: specivo/web/pages/ai_spend_reports.py:294
 msgid "API (pay per use)"
 msgstr "API（按量付费）"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:7
+#: specivo/web/pages/ai_spend_reports.py:296
 msgid "Free"
 msgstr "免费"
 
@@ -5426,6 +5469,7 @@ msgstr "免费"
 #: specivo/templates/themes/default/pages/issues/_activity.html:119
 #: specivo/templates/themes/default/pages/issues/detail.html:470
 #: specivo/templates/themes/default/pages/wiki/history.html:52
+#: specivo/web/pages/ai_spend_reports.py:298
 msgid "Unknown"
 msgstr "未知"
 
@@ -5582,6 +5626,8 @@ msgstr "无汇率"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:74
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:111
 #: specivo/templates/themes/default/pages/ai_usage/form.html:68
+#: specivo/templates/themes/default/pages/ai_usage/report.html:214
+#: specivo/templates/themes/default/pages/ai_usage/report.html:247
 msgid "Tokens"
 msgstr "令牌"
 
@@ -5594,6 +5640,9 @@ msgstr "输入 %(input)s · 输出 %(output)s · 缓存 %(cache)s"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:79
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:113
 #: specivo/templates/themes/default/pages/ai_usage/form.html:29
+#: specivo/templates/themes/default/pages/ai_usage/report.html:183
+#: specivo/templates/themes/default/pages/ai_usage/report.html:233
+#: specivo/templates/themes/default/pages/ai_usage/report.html:252
 msgid "Spend"
 msgstr "支出"
 
@@ -5602,14 +5651,22 @@ msgid "What the usage cost on top of flat-rate plans"
 msgstr "固定费用套餐之外的使用费用"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:202
+#: specivo/templates/themes/default/pages/ai_usage/report.html:234
+#: specivo/templates/themes/default/pages/ai_usage/report.html:253
 msgid "API-equivalent value"
 msgstr "API 等价价值"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:86
+#: specivo/templates/themes/default/pages/ai_usage/report.html:204
 msgid "The same tokens at pay-per-use prices"
 msgstr "相同令牌按量付费的价格"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:89
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:14
+#: specivo/templates/themes/default/pages/ai_usage/report.html:70
+#: specivo/templates/themes/default/pages/ai_usage/report.html:246
+#: specivo/templates/themes/default/pages/ai_usage/report.html:273
 msgid "Entries"
 msgstr "记录"
 
@@ -5636,7 +5693,9 @@ msgstr "工具和模型"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:69
 #: specivo/templates/themes/default/pages/ai_usage/form.html:129
 #: specivo/templates/themes/default/pages/ai_usage/my.html:51
-#: specivo/templates/themes/default/pages/ai_usage/project.html:51
+#: specivo/templates/themes/default/pages/ai_usage/project.html:55
+#: specivo/templates/themes/default/pages/ai_usage/report.html:17
+#: specivo/templates/themes/default/pages/ai_usage/report.html:139
 msgid "Cost type"
 msgstr "费用类型"
 
@@ -5683,17 +5742,20 @@ msgid "%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning"
 msgstr "输入 %(input)s，输出 %(output)s，缓存 %(cache)s，推理 %(reasoning)s"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:148
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:24
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
+#: specivo/templates/themes/default/pages/ai_usage/report.html:38
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:23
 #: specivo/templates/themes/default/pages/issues/form.html:144
 #: specivo/templates/themes/default/pages/issues/list.html:61
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
-#: specivo/web/pages/issues.py:186
+#: specivo/web/pages/ai_spend_reports.py:290 specivo/web/pages/issues.py:186
 msgid "Unassigned"
 msgstr "未分配"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:157
+#: specivo/templates/themes/default/pages/ai_usage/report.html:162
 msgid "Include"
 msgstr "计入"
 
@@ -5708,6 +5770,38 @@ msgstr "排除"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:167
 msgid "Delete this AI usage entry?"
 msgstr "删除这条 AI 使用记录？"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:7
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:18
+msgid "AI usage entries"
+msgstr "AI 使用记录"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:22
+msgid "Filtered by:"
+msgstr "筛选条件："
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:25
+#: specivo/templates/themes/default/pages/ai_usage/report.html:38
+#: specivo/web/pages/ai_spend_reports.py:290
+msgid "No issue"
+msgstr "无工作项"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:29
+#: specivo/templates/themes/default/pages/ai_usage/project.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:38
+#: specivo/web/pages/ai_spend_reports.py:290
+msgid "No branch"
+msgstr "无分支"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:31
+msgid "Back to the report"
+msgstr "返回报告"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:40
+#: specivo/templates/themes/default/pages/ai_usage/my.html:109
+#: specivo/templates/themes/default/pages/ai_usage/project.html:101
+msgid "No AI usage matches these filters."
+msgstr "没有符合这些筛选条件的 AI 使用。"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:4
 #: specivo/templates/themes/default/pages/ai_usage/form.html:18
@@ -5724,25 +5818,25 @@ msgid "This entry is left out of totals and reports."
 msgstr "此记录不计入合计和报告。"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:45
-#: specivo/templates/themes/default/pages/ai_usage/my.html:89
+#: specivo/templates/themes/default/pages/ai_usage/my.html:90
 msgid "No project (unassigned)"
 msgstr "无项目（未分配）"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:51
-#: specivo/templates/themes/default/pages/ai_usage/my.html:94
+#: specivo/templates/themes/default/pages/ai_usage/my.html:95
 #: specivo/templates/themes/default/pages/time/form.html:21
 msgid "Issue (optional)"
 msgstr "工作项（可选）"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:52
-#: specivo/templates/themes/default/pages/ai_usage/my.html:95
+#: specivo/templates/themes/default/pages/ai_usage/my.html:96
 #: specivo/templates/themes/default/pages/issues/detail.html:363
 #: specivo/templates/themes/default/pages/issues/detail.html:558
 msgid "e.g. PROJ-42"
 msgstr "例如 PROJ-42"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:52
-#: specivo/templates/themes/default/pages/ai_usage/project.html:59
+#: specivo/templates/themes/default/pages/ai_usage/project.html:63
 #: specivo/templates/themes/default/pages/time/form.html:22
 #, python-format
 msgid "e.g. %(key)s-1"
@@ -5762,7 +5856,9 @@ msgstr "由 AI 工具上报：工具、模型、令牌数和费用保持上报�
 #: specivo/templates/themes/default/pages/ai_usage/form.html:65
 #: specivo/templates/themes/default/pages/ai_usage/form.html:75
 #: specivo/templates/themes/default/pages/ai_usage/my.html:40
-#: specivo/templates/themes/default/pages/ai_usage/project.html:40
+#: specivo/templates/themes/default/pages/ai_usage/project.html:44
+#: specivo/templates/themes/default/pages/ai_usage/report.html:14
+#: specivo/templates/themes/default/pages/ai_usage/report.html:128
 msgid "Tool"
 msgstr "工具"
 
@@ -5846,69 +5942,287 @@ msgid ""
 msgstr "以您的名义记录的 AI 使用，涵盖所有项目及未分配的记录。您的 AI 工具在没有项目时上报的使用会留在这里，直到您将其移到某个项目或工作项。"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:42
-#: specivo/templates/themes/default/pages/ai_usage/project.html:42
+#: specivo/templates/themes/default/pages/ai_usage/project.html:46
+#: specivo/templates/themes/default/pages/ai_usage/report.html:130
 msgid "All tools"
 msgstr "所有工具"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:68
-#: specivo/templates/themes/default/pages/ai_usage/project.html:72
+#: specivo/templates/themes/default/pages/ai_usage/project.html:76
 msgid "All entries"
 msgstr "所有记录"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:69
-#: specivo/templates/themes/default/pages/ai_usage/project.html:73
+#: specivo/templates/themes/default/pages/ai_usage/project.html:77
 msgid "Counted only"
 msgstr "仅已计入"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:70
-#: specivo/templates/themes/default/pages/ai_usage/project.html:74
+#: specivo/templates/themes/default/pages/ai_usage/project.html:78
 msgid "Excluded only"
 msgstr "仅已排除"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:75
-#: specivo/templates/themes/default/pages/ai_usage/project.html:79
+#: specivo/templates/themes/default/pages/ai_usage/project.html:87
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:158
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:204
 #: specivo/templates/themes/default/pages/projects/settings.html:1013
 msgid "Clear"
 msgstr "清除"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:85
+#: specivo/templates/themes/default/pages/ai_usage/my.html:86
 msgid "Move the selected entries to"
 msgstr "将所选记录移动到"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:97
+#: specivo/templates/themes/default/pages/ai_usage/my.html:98
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:359
 #: specivo/templates/themes/default/pages/issues/detail.html:382
 msgid "Move"
 msgstr "移动"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:98
+#: specivo/templates/themes/default/pages/ai_usage/my.html:99
 msgid ""
 "An issue alone also sets its project. You can move entries only to "
 "projects where you may log AI usage."
 msgstr "只填写工作项时，也会同时设置其所属项目。您只能将记录移到您可以记录 AI 使用的项目。"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:107
+#: specivo/templates/themes/default/pages/ai_usage/my.html:109
 msgid "No AI usage is logged in your name yet."
 msgstr "尚未以您的名义记录 AI 使用。"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:107
-#: specivo/templates/themes/default/pages/ai_usage/project.html:93
-msgid "No AI usage matches these filters."
-msgstr "没有符合这些筛选条件的 AI 使用。"
+#: specivo/templates/themes/default/pages/ai_usage/project.html:19
+#: specivo/templates/themes/default/pages/ai_usage/report.html:57
+msgid "Spend report"
+msgstr "支出报告"
 
-#: specivo/templates/themes/default/pages/ai_usage/project.html:82
+#: specivo/templates/themes/default/pages/ai_usage/project.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:18
+msgid "Branch"
+msgstr "分支"
+
+#: specivo/templates/themes/default/pages/ai_usage/project.html:90
 msgid "No issue with that key in this project, or you cannot see it."
 msgstr "此项目中没有使用该键的工作项，或者您无法查看它。"
 
-#: specivo/templates/themes/default/pages/ai_usage/project.html:94
+#: specivo/templates/themes/default/pages/ai_usage/project.html:102
 msgid "No AI usage yet. Log it by hand, or let your AI tools report it."
 msgstr "尚无 AI 使用。可以手动记录，也可以让您的 AI 工具自动上报。"
 
-#: specivo/templates/themes/default/pages/ai_usage/project.html:95
+#: specivo/templates/themes/default/pages/ai_usage/project.html:103
 msgid "No AI usage yet."
 msgstr "尚无 AI 使用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:22
+msgid "Day"
+msgstr "日"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:23
+msgid "Week"
+msgstr "周"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:24
+msgid "Month"
+msgstr "月"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:28
+msgid "Last 7 days"
+msgstr "最近 7 天"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:29
+msgid "Last 30 days"
+msgstr "最近 30 天"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:30
+msgid "This month"
+msgstr "本月"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:31
+msgid "Last month"
+msgstr "上月"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:36
+#: specivo/templates/themes/default/pages/ai_usage/report.html:195
+#: specivo/templates/themes/default/pages/ai_usage/report.html:263
+#: specivo/web/pages/ai_spend_reports.py:286
+msgid "Unallocated seat cost"
+msgstr "未分摊的席位费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:37
+#: specivo/web/pages/ai_spend_reports.py:288
+msgid "An issue you cannot see"
+msgstr "您无法查看的工作项"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:49
+#: specivo/templates/themes/default/pages/ai_usage/report.html:68
+msgid "AI spend report"
+msgstr "AI 支出报告"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:71
+msgid "Download CSV"
+msgstr "下载 CSV"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:76
+msgid ""
+"Spend is what AI usage cost: pay-per-use charges plus the share of flat-"
+"rate subscriptions carried by the usage. API-equivalent value is what the"
+" same tokens would have cost at pay-per-use prices; it is an estimate, "
+"not a bill."
+msgstr ""
+"支出是 AI 使用的实际成本：按量计费的费用，加上该使用所分摊的包月订阅费用。API 等价价值是同样的 token "
+"按量计价时的费用；它是估算值，不是账单。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:77
+msgid ""
+"Subscription fees nobody's usage carried are shown as unallocated seat "
+"cost."
+msgstr "未被任何使用分摊的订阅费用显示为未分摊的席位费用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:80
+msgid "Choose an active currency."
+msgstr "请选择已启用的货币。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:80
+msgid "Choose a last day on or after the first day, at most three years later."
+msgstr "请选择不早于第一天、且不超过三年之后的最后一天。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:80
+msgid "The report could not be built with these settings."
+msgstr "无法使用这些设置生成报告。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:98
+msgid "Group by"
+msgstr "分组依据"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:100
+msgid "Nothing (totals)"
+msgstr "不分组（合计）"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:105
+msgid "Then by"
+msgstr "再按"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:112
+msgid "Per"
+msgstr "按"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:114
+msgid "Whole range"
+msgstr "整个期间"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:155
+msgid "Rate of each day"
+msgstr "每日汇率"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:160
+#: specivo/templates/themes/default/pages/ai_usage/report.html:189
+#: specivo/templates/themes/default/pages/ai_usage/report.html:250
+msgid "Seat cost"
+msgstr "席位费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:163
+msgid "Leave out"
+msgstr "不计入"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:167
+msgid "Order"
+msgstr "排序"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:169
+msgid "By group"
+msgstr "按分组"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:170
+msgid "By spend"
+msgstr "按支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:185
+msgid "Pay-per-use plus seat cost"
+msgstr "按量费用加席位费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:185
+msgid "Pay-per-use charges"
+msgstr "按量计费费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:191
+msgid "Subscription fees carried by this usage"
+msgstr "此使用分摊的订阅费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:197
+msgid "Fees of subscriptions without priced usage"
+msgstr "没有已计价使用的订阅费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:208
+#: specivo/templates/themes/default/pages/ai_usage/report.html:254
+msgid "Leverage"
+msgstr "杠杆率"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:210
+msgid "API-equivalent value of subscription usage per unit of seat cost"
+msgstr "订阅使用的 API 等价价值与席位费用之比"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:216
+#, python-format
+msgid "%(count)s entry"
+msgid_plural "%(count)s entries"
+msgstr[0] "%(count)s 条记录"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:216
+#, python-format
+msgid "%(count)s not priced"
+msgid_plural "%(count)s not priced"
+msgstr[0] "%(count)s 条未计价"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:221
+#, python-format
+msgid "%(first)s to %(last)s (UTC days), amounts in %(currency)s."
+msgstr "%(first)s 至 %(last)s（UTC 日期），金额单位为 %(currency)s。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:222
+msgid "Exchange rates used:"
+msgstr "使用的汇率："
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:224
+msgid ""
+"Seat cost is left out: subscription fees are shown only to administrators"
+" and to people who can see every entry of this project in the period."
+msgstr "未计入席位费用：订阅费用只向管理员以及能看到该项目在此期间所有记录的人显示。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:229
+msgid "Spend chart; the table below holds the same numbers"
+msgstr "支出图表；下表包含相同的数据"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:249
+msgid "Pay-per-use"
+msgstr "按量计费"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:263
+#: specivo/web/pages/ai_spend_reports.py:323
+msgid "All usage"
+msgstr "全部使用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:264
+msgid "Entries without a price"
+msgstr "未计价的记录"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:265
+#, python-format
+msgid ""
+"%(input)s in, %(output)s out, %(cache)s cache read, %(reasoning)s "
+"reasoning"
+msgstr "输入 %(input)s，输出 %(output)s，缓存读取 %(cache)s，推理 %(reasoning)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:268
+#: specivo/templates/themes/default/pages/ai_usage/report.html:284
+msgid "unallocated:"
+msgstr "未分摊："
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:273
+msgid "Subscriptions"
+msgstr "订阅"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:296
+msgid "No AI usage in this period."
+msgstr "此期间没有 AI 使用。"
 
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:8
 msgid "Choose a person"
@@ -7906,9 +8220,12 @@ msgstr "创建第一个工作项以开始使用。"
 #: specivo/templates/themes/default/pages/admin/users.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:7
 #: specivo/templates/themes/default/pages/admin/workflows.html:7
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:11
 #: specivo/templates/themes/default/pages/ai_usage/form.html:8
 #: specivo/templates/themes/default/pages/ai_usage/my.html:9
 #: specivo/templates/themes/default/pages/ai_usage/project.html:9
+#: specivo/templates/themes/default/pages/ai_usage/report.html:54
+#: specivo/templates/themes/default/pages/ai_usage/report.html:61
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
 #: specivo/templates/themes/default/pages/auth/api_keys.html:7
@@ -10380,7 +10697,8 @@ msgstr "关键词"
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
 #: specivo/templates/themes/default/pages/ai_usage/my.html:53
-#: specivo/templates/themes/default/pages/ai_usage/project.html:53
+#: specivo/templates/themes/default/pages/ai_usage/project.html:57
+#: specivo/templates/themes/default/pages/ai_usage/report.html:141
 #: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/list.html:43
 #: specivo/templates/themes/default/pages/projects/version_detail.html:83
@@ -10445,7 +10763,8 @@ msgid "Comment on %(title)s"
 msgstr "对 %(title)s 的评论"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:116
-#: specivo/templates/themes/default/pages/ai_usage/project.html:58
+#: specivo/templates/themes/default/pages/ai_usage/project.html:62
+#: specivo/templates/themes/default/pages/ai_usage/report.html:13
 #: specivo/templates/themes/default/pages/issues/detail.html:362
 #: specivo/templates/themes/default/pages/search.html:222
 #: specivo/templates/themes/default/pages/time/list.html:56

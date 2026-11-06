@@ -410,6 +410,10 @@ class AiUsageService:
         cost_type: str | None = None,
         issue_id: int | None = None,
         source: str | None = None,
+        provider: str | None = None,
+        branch: str | None = None,
+        without_issue: bool = False,
+        without_branch: bool = False,
         excluded: bool | None = None,
         unassigned: bool | None = None,
         offset: int = 0,
@@ -418,9 +422,11 @@ class AiUsageService:
         """Entries *viewer* may read, newest day first; in *project* when given. Returns ``(page, total)``.
 
         Filters: *model* matches the aliases of its price rows too;
-        *excluded* ``True`` / ``False`` keeps only excluded / counted entries
-        (None: both); *unassigned* ``True`` / ``False`` keeps only entries
-        without / with a project.
+        *provider* and *branch* match exactly (``without_issue`` /
+        ``without_branch`` keep entries without one); *excluded* ``True`` /
+        ``False`` keeps only excluded / counted entries (None: both);
+        *unassigned* ``True`` / ``False`` keeps only entries without / with a
+        project.
         """
         conditions = await self._list_conditions(
             session,
@@ -434,6 +440,10 @@ class AiUsageService:
             cost_type=cost_type,
             issue_id=issue_id,
             source=source,
+            provider=provider,
+            branch=branch,
+            without_issue=without_issue,
+            without_branch=without_branch,
             excluded=excluded,
             unassigned=unassigned,
         )
@@ -467,6 +477,10 @@ class AiUsageService:
         cost_type: str | None = None,
         issue_id: int | None = None,
         source: str | None = None,
+        provider: str | None = None,
+        branch: str | None = None,
+        without_issue: bool = False,
+        without_branch: bool = False,
         unassigned: bool | None = None,
     ) -> UsageSummary:
         """Totals of the entries ``list_entries`` would return with the same filters, excluded ones left out.
@@ -488,6 +502,10 @@ class AiUsageService:
             cost_type=cost_type,
             issue_id=issue_id,
             source=source,
+            provider=provider,
+            branch=branch,
+            without_issue=without_issue,
+            without_branch=without_branch,
             unassigned=unassigned,
         )
         counted = AiUsageEntry.excluded_at.is_(None)
@@ -532,6 +550,10 @@ class AiUsageService:
         cost_type: str | None = None,
         issue_id: int | None = None,
         source: str | None = None,
+        provider: str | None = None,
+        branch: str | None = None,
+        without_issue: bool = False,
+        without_branch: bool = False,
         excluded: bool | None = None,
         unassigned: bool | None = None,
     ) -> list[ColumnElement[bool]]:
@@ -564,6 +586,14 @@ class AiUsageService:
             conditions.append(AiUsageEntry.source == source)
         if issue_id is not None:
             conditions.append(AiUsageEntry.issue_id == issue_id)
+        if without_issue:
+            conditions.append(AiUsageEntry.issue_id.is_(None))
+        if provider and provider.strip():
+            conditions.append(AiUsageEntry.provider == (normalize_provider(provider) or provider.strip().lower()))
+        if branch and branch.strip():
+            conditions.append(AiUsageEntry.git_branch == branch.strip())
+        if without_branch:
+            conditions.append(AiUsageEntry.git_branch.is_(None))
         if excluded is not None:
             conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
         if unassigned is not None:

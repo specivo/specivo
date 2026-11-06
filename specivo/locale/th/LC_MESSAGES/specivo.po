@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 13:21+0100\n"
+"POT-Creation-Date: 2026-11-06 14:23+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -879,7 +879,8 @@ msgstr "%(first)s–%(last)s จาก %(total)s"
 #: specivo/templates/themes/default/pages/admin/audit_log.html:114
 #: specivo/templates/themes/default/pages/admin/currencies.html:42
 #: specivo/templates/themes/default/pages/ai_usage/my.html:66
-#: specivo/templates/themes/default/pages/ai_usage/project.html:70
+#: specivo/templates/themes/default/pages/ai_usage/project.html:74
+#: specivo/templates/themes/default/pages/ai_usage/report.html:174
 #: specivo/templates/themes/default/pages/search.html:314
 msgid "Show"
 msgstr "แสดง"
@@ -1011,6 +1012,7 @@ msgstr "แผนงาน"
 #: specivo/templates/themes/default/pages/ai_usage/project.html:5
 #: specivo/templates/themes/default/pages/ai_usage/project.html:11
 #: specivo/templates/themes/default/pages/ai_usage/project.html:15
+#: specivo/templates/themes/default/pages/ai_usage/report.html:56
 #: specivo/templates/themes/default/pages/issues/detail.html:283
 #: specivo/templates/themes/default/pages/projects/detail.html:54
 #: specivo/web/pages/admin.py:1106
@@ -1032,7 +1034,7 @@ msgstr "งานที่เกิดซ้ำ"
 
 #: specivo/templates/themes/default/components/sidebar.html:83
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
-#: specivo/templates/themes/default/pages/admin/dashboard.html:173
+#: specivo/templates/themes/default/pages/admin/dashboard.html:183
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
@@ -1099,6 +1101,10 @@ msgstr "การจัดการระบบ"
 #: specivo/templates/themes/default/pages/admin/versions.html:9
 #: specivo/templates/themes/default/pages/admin/workflows.html:3
 #: specivo/templates/themes/default/pages/admin/workflows.html:9
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:7
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:12
+#: specivo/templates/themes/default/pages/ai_usage/report.html:49
+#: specivo/templates/themes/default/pages/ai_usage/report.html:62
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:11
 msgid "Admin"
 msgstr "จัดการระบบ"
@@ -1608,7 +1614,8 @@ msgstr "ประเภท"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:115
 #: specivo/templates/themes/default/pages/ai_usage/form.html:43
 #: specivo/templates/themes/default/pages/ai_usage/my.html:32
-#: specivo/templates/themes/default/pages/ai_usage/my.html:87
+#: specivo/templates/themes/default/pages/ai_usage/my.html:88
+#: specivo/templates/themes/default/pages/ai_usage/report.html:12
 msgid "Project"
 msgstr "โปรเจกต์"
 
@@ -1625,6 +1632,8 @@ msgstr "ไม่มีงานที่มอบหมายให้คุณ
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:10
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:27
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
+#: specivo/templates/themes/default/pages/ai_usage/project.html:82
+#: specivo/templates/themes/default/pages/ai_usage/report.html:15
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:25
 #: specivo/templates/themes/default/pages/projects/settings.html:1525
 msgid "Provider"
@@ -1635,7 +1644,9 @@ msgstr "ผู้ให้บริการ"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:66
 #: specivo/templates/themes/default/pages/ai_usage/form.html:81
 #: specivo/templates/themes/default/pages/ai_usage/my.html:47
-#: specivo/templates/themes/default/pages/ai_usage/project.html:47
+#: specivo/templates/themes/default/pages/ai_usage/project.html:51
+#: specivo/templates/themes/default/pages/ai_usage/report.html:16
+#: specivo/templates/themes/default/pages/ai_usage/report.html:135
 msgid "Model"
 msgstr "โมเดล"
 
@@ -1644,6 +1655,7 @@ msgstr "โมเดล"
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
 #: specivo/templates/themes/default/pages/ai_usage/form.html:143
+#: specivo/templates/themes/default/pages/ai_usage/report.html:146
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
 msgid "Currency"
 msgstr "สกุลเงิน"
@@ -1732,6 +1744,7 @@ msgstr "ชื่ออื่นที่เครื่องมือใช้
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:6
+#: specivo/web/pages/ai_spend_reports.py:295
 msgid "Local model"
 msgstr "โมเดลภายในเครื่อง"
 
@@ -1867,7 +1880,7 @@ msgid "johndoe"
 msgstr "johndoe"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:26
-#: specivo/templates/themes/default/pages/admin/dashboard.html:183
+#: specivo/templates/themes/default/pages/admin/dashboard.html:193
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
@@ -2236,6 +2249,7 @@ msgstr "ทุกแหล่งที่มา"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:42
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:33
+#: specivo/templates/themes/default/pages/ai_usage/report.html:82
 msgid "Period"
 msgstr "ช่วงเวลา"
 
@@ -2254,7 +2268,7 @@ msgstr "ทุกช่วงเวลา"
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:127
 #: specivo/templates/themes/default/pages/admin/groups.html:34
 #: specivo/templates/themes/default/pages/ai_usage/my.html:74
-#: specivo/templates/themes/default/pages/ai_usage/project.html:78
+#: specivo/templates/themes/default/pages/ai_usage/project.html:86
 #: specivo/templates/themes/default/pages/time/list.html:39
 msgid "Filter"
 msgstr "กรอง"
@@ -2368,7 +2382,8 @@ msgid "Person"
 msgstr "บุคคล"
 
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:30
-#: specivo/templates/themes/default/pages/ai_usage/project.html:34
+#: specivo/templates/themes/default/pages/ai_usage/project.html:38
+#: specivo/templates/themes/default/pages/ai_usage/report.html:122
 msgid "Everyone"
 msgstr "ทุกคน"
 
@@ -2446,6 +2461,7 @@ msgstr "เริ่มจากแพ็กเกจ"
 
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:80
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
+#: specivo/templates/themes/default/pages/ai_usage/report.html:32
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:17
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:66
 msgid "Custom"
@@ -2604,7 +2620,7 @@ msgstr "ยังไม่มีโปรเจกต์ใดเลือกเ
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
 #: specivo/templates/themes/default/pages/admin/audit_log.html:10
 #: specivo/templates/themes/default/pages/admin/audit_log.html:14
-#: specivo/templates/themes/default/pages/admin/dashboard.html:193
+#: specivo/templates/themes/default/pages/admin/dashboard.html:203
 msgid "Audit log"
 msgstr "บันทึกการตรวจสอบ"
 
@@ -2652,7 +2668,8 @@ msgstr "รหัสโปรเจกต์"
 #: specivo/templates/themes/default/pages/admin/audit_log.html:50
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:125
 #: specivo/templates/themes/default/pages/ai_usage/my.html:58
-#: specivo/templates/themes/default/pages/ai_usage/project.html:62
+#: specivo/templates/themes/default/pages/ai_usage/project.html:66
+#: specivo/templates/themes/default/pages/ai_usage/report.html:90
 #: specivo/templates/themes/default/pages/time/list.html:27
 msgid "From"
 msgstr "จาก"
@@ -2661,7 +2678,8 @@ msgstr "จาก"
 #: specivo/templates/themes/default/pages/admin/email.html:83
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:126
 #: specivo/templates/themes/default/pages/ai_usage/my.html:62
-#: specivo/templates/themes/default/pages/ai_usage/project.html:66
+#: specivo/templates/themes/default/pages/ai_usage/project.html:70
+#: specivo/templates/themes/default/pages/ai_usage/report.html:94
 #: specivo/templates/themes/default/pages/time/list.html:29
 msgid "To"
 msgstr "ถึง"
@@ -2695,7 +2713,9 @@ msgstr "เหตุการณ์"
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:44
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:109
-#: specivo/templates/themes/default/pages/ai_usage/project.html:32
+#: specivo/templates/themes/default/pages/ai_usage/project.html:36
+#: specivo/templates/themes/default/pages/ai_usage/report.html:11
+#: specivo/templates/themes/default/pages/ai_usage/report.html:120
 #: specivo/templates/themes/default/pages/issues/detail.html:457
 #: specivo/templates/themes/default/pages/projects/settings.html:133
 #: specivo/templates/themes/default/pages/time/list.html:58
@@ -2742,6 +2762,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/currencies.html:23
 #: specivo/templates/themes/default/pages/admin/currencies.html:26
 #: specivo/templates/themes/default/pages/admin/currencies.html:70
+#: specivo/templates/themes/default/pages/ai_usage/report.html:148
 #: specivo/templates/themes/default/pages/projects/settings.html:79
 msgid "Reporting currency"
 msgstr "สกุลเงินสำหรับรายงาน"
@@ -2761,6 +2782,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:4
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:30
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:33
+#: specivo/templates/themes/default/pages/ai_usage/report.html:153
 msgid "Exchange rates"
 msgstr "อัตราแลกเปลี่ยน"
 
@@ -2893,9 +2915,9 @@ msgstr "จัดการบัญชีผู้ใช้ สร้างผ�
 #: specivo/templates/themes/default/pages/admin/dashboard.html:135
 #: specivo/templates/themes/default/pages/admin/dashboard.html:145
 #: specivo/templates/themes/default/pages/admin/dashboard.html:155
-#: specivo/templates/themes/default/pages/admin/dashboard.html:165
 #: specivo/templates/themes/default/pages/admin/dashboard.html:175
 #: specivo/templates/themes/default/pages/admin/dashboard.html:185
+#: specivo/templates/themes/default/pages/admin/dashboard.html:195
 msgid "Manage"
 msgstr "จัดการ"
 
@@ -3001,31 +3023,57 @@ msgid "Flat-rate AI plans people pay for, and the AI tools list."
 msgstr "แพ็กเกจ AI แบบเหมาจ่ายที่แต่ละคนชำระ และรายการเครื่องมือ AI"
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:163
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:13
+#: specivo/templates/themes/default/pages/ai_usage/report.html:49
+#: specivo/templates/themes/default/pages/ai_usage/report.html:63
+#: specivo/templates/themes/default/pages/ai_usage/report.html:68
+msgid "AI spend"
+msgstr "ค่าใช้จ่าย AI"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:164
+msgid ""
+"AI spend across the instance by person, model, tool and project, with "
+"subscription fees."
+msgstr ""
+"ค่าใช้จ่าย AI ทั้งระบบ แยกตามบุคคล โมเดล เครื่องมือ และโปรเจกต์ "
+"รวมค่าสมัครใช้งาน"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:165
+#: specivo/templates/themes/default/pages/admin/versions.html:32
+#: specivo/templates/themes/default/pages/admin/versions.html:57
+#: specivo/templates/themes/default/pages/issues/_development_macros.html:39
+#: specivo/templates/themes/default/pages/issues/list.html:41
+#: specivo/templates/themes/default/pages/projects/settings.html:464
+#: specivo/templates/themes/default/pages/projects/version_detail.html:84
+msgid "Open"
+msgstr "เปิด"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:173
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:4
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:10
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:35
 msgid "Metadata Presets"
 msgstr "พรีเซ็ตเมตาดาต้า"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:164
+#: specivo/templates/themes/default/pages/admin/dashboard.html:174
 msgid "Manage reusable metadata field schemas for projects."
 msgstr "จัดการสคีมาฟิลด์เมตาดาต้าที่นำกลับมาใช้ซ้ำได้สำหรับโปรเจกต์"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:174
+#: specivo/templates/themes/default/pages/admin/dashboard.html:184
 msgid "Global application settings and configuration."
 msgstr "การตั้งค่าและการกำหนดค่าแอปพลิเคชันส่วนกลาง"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:184
+#: specivo/templates/themes/default/pages/admin/dashboard.html:194
 msgid "SMTP configuration and test email delivery."
 msgstr "การตั้งค่า SMTP และทดสอบการส่งอีเมล"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:194
+#: specivo/templates/themes/default/pages/admin/dashboard.html:204
 msgid "Sign-ins, access and administration changes, and everything agents do."
 msgstr ""
 "การลงชื่อเข้าใช้ การเปลี่ยนแปลงสิทธิ์และการดูแลระบบ "
 "รวมถึงทุกอย่างที่เอเจนต์ทำ"
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:195
+#: specivo/templates/themes/default/pages/admin/dashboard.html:205
 #: specivo/templates/themes/default/pages/issues/description_diff.html:106
 #: specivo/templates/themes/default/pages/wiki/history.html:59
 msgid "View"
@@ -3308,6 +3356,7 @@ msgid "Rate of that date"
 msgstr "อัตราของวันนั้น"
 
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:82
+#: specivo/templates/themes/default/pages/ai_usage/report.html:156
 msgid "Latest rate"
 msgstr "อัตราล่าสุด"
 
@@ -5535,21 +5584,14 @@ msgid "%(count)s closed"
 msgstr "ปิดแล้ว %(count)s"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
+#: specivo/templates/themes/default/pages/ai_usage/report.html:235
+#: specivo/templates/themes/default/pages/ai_usage/report.html:279
 #: specivo/templates/themes/default/pages/issues/detail.html:483
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
 msgid "Total"
 msgstr "ทั้งหมด"
-
-#: specivo/templates/themes/default/pages/admin/versions.html:32
-#: specivo/templates/themes/default/pages/admin/versions.html:57
-#: specivo/templates/themes/default/pages/issues/_development_macros.html:39
-#: specivo/templates/themes/default/pages/issues/list.html:41
-#: specivo/templates/themes/default/pages/projects/settings.html:464
-#: specivo/templates/themes/default/pages/projects/version_detail.html:84
-msgid "Open"
-msgstr "เปิด"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:34
@@ -5634,7 +5676,7 @@ msgstr "เลือกแทร็กเกอร์และบทบาทเ
 #: specivo/templates/themes/default/pages/ai_usage/form.html:21
 #: specivo/templates/themes/default/pages/ai_usage/form.html:158
 #: specivo/templates/themes/default/pages/ai_usage/my.html:21
-#: specivo/templates/themes/default/pages/ai_usage/project.html:20
+#: specivo/templates/themes/default/pages/ai_usage/project.html:24
 msgid "Log AI usage"
 msgstr "บันทึกการใช้งาน AI"
 
@@ -5652,14 +5694,17 @@ msgid "No AI usage logged on this issue."
 msgstr "ยังไม่มีการบันทึกการใช้งาน AI ในงานนี้"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:4
+#: specivo/web/pages/ai_spend_reports.py:293
 msgid "Subscription"
 msgstr "การสมัครใช้งาน"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:5
+#: specivo/web/pages/ai_spend_reports.py:294
 msgid "API (pay per use)"
 msgstr "API (จ่ายตามการใช้งาน)"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:7
+#: specivo/web/pages/ai_spend_reports.py:296
 msgid "Free"
 msgstr "ฟรี"
 
@@ -5668,6 +5713,7 @@ msgstr "ฟรี"
 #: specivo/templates/themes/default/pages/issues/_activity.html:119
 #: specivo/templates/themes/default/pages/issues/detail.html:470
 #: specivo/templates/themes/default/pages/wiki/history.html:52
+#: specivo/web/pages/ai_spend_reports.py:298
 msgid "Unknown"
 msgstr "ไม่ทราบ"
 
@@ -5826,6 +5872,8 @@ msgstr "ไม่มีอัตราแลกเปลี่ยน"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:74
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:111
 #: specivo/templates/themes/default/pages/ai_usage/form.html:68
+#: specivo/templates/themes/default/pages/ai_usage/report.html:214
+#: specivo/templates/themes/default/pages/ai_usage/report.html:247
 msgid "Tokens"
 msgstr "โทเค็น"
 
@@ -5838,6 +5886,9 @@ msgstr "ขาเข้า %(input)s · ขาออก %(output)s · แคช 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:79
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:113
 #: specivo/templates/themes/default/pages/ai_usage/form.html:29
+#: specivo/templates/themes/default/pages/ai_usage/report.html:183
+#: specivo/templates/themes/default/pages/ai_usage/report.html:233
+#: specivo/templates/themes/default/pages/ai_usage/report.html:252
 msgid "Spend"
 msgstr "ค่าใช้จ่าย"
 
@@ -5846,14 +5897,22 @@ msgid "What the usage cost on top of flat-rate plans"
 msgstr "ค่าใช้จ่ายของการใช้งานนอกเหนือจากแพ็กเกจราคาคงที่"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:202
+#: specivo/templates/themes/default/pages/ai_usage/report.html:234
+#: specivo/templates/themes/default/pages/ai_usage/report.html:253
 msgid "API-equivalent value"
 msgstr "มูลค่าเทียบเท่า API"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:86
+#: specivo/templates/themes/default/pages/ai_usage/report.html:204
 msgid "The same tokens at pay-per-use prices"
 msgstr "โทเค็นจำนวนเดียวกันในราคาแบบจ่ายตามการใช้งาน"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:89
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:14
+#: specivo/templates/themes/default/pages/ai_usage/report.html:70
+#: specivo/templates/themes/default/pages/ai_usage/report.html:246
+#: specivo/templates/themes/default/pages/ai_usage/report.html:273
 msgid "Entries"
 msgstr "รายการ"
 
@@ -5880,7 +5939,9 @@ msgstr "เครื่องมือและโมเดล"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:69
 #: specivo/templates/themes/default/pages/ai_usage/form.html:129
 #: specivo/templates/themes/default/pages/ai_usage/my.html:51
-#: specivo/templates/themes/default/pages/ai_usage/project.html:51
+#: specivo/templates/themes/default/pages/ai_usage/project.html:55
+#: specivo/templates/themes/default/pages/ai_usage/report.html:17
+#: specivo/templates/themes/default/pages/ai_usage/report.html:139
 msgid "Cost type"
 msgstr "ประเภทค่าใช้จ่าย"
 
@@ -5929,17 +5990,20 @@ msgstr ""
 "%(reasoning)s"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:148
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:24
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
+#: specivo/templates/themes/default/pages/ai_usage/report.html:38
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:23
 #: specivo/templates/themes/default/pages/issues/form.html:144
 #: specivo/templates/themes/default/pages/issues/list.html:61
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
-#: specivo/web/pages/issues.py:186
+#: specivo/web/pages/ai_spend_reports.py:290 specivo/web/pages/issues.py:186
 msgid "Unassigned"
 msgstr "ยังไม่ได้มอบหมาย"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:157
+#: specivo/templates/themes/default/pages/ai_usage/report.html:162
 msgid "Include"
 msgstr "นับรวม"
 
@@ -5954,6 +6018,38 @@ msgstr "ไม่นับ"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:167
 msgid "Delete this AI usage entry?"
 msgstr "ลบรายการการใช้งาน AI นี้หรือไม่"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:7
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:18
+msgid "AI usage entries"
+msgstr "รายการการใช้ AI"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:22
+msgid "Filtered by:"
+msgstr "กรองตาม:"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:25
+#: specivo/templates/themes/default/pages/ai_usage/report.html:38
+#: specivo/web/pages/ai_spend_reports.py:290
+msgid "No issue"
+msgstr "ไม่มีงาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:29
+#: specivo/templates/themes/default/pages/ai_usage/project.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:38
+#: specivo/web/pages/ai_spend_reports.py:290
+msgid "No branch"
+msgstr "ไม่มี branch"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:31
+msgid "Back to the report"
+msgstr "กลับไปที่รายงาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:40
+#: specivo/templates/themes/default/pages/ai_usage/my.html:109
+#: specivo/templates/themes/default/pages/ai_usage/project.html:101
+msgid "No AI usage matches these filters."
+msgstr "ไม่มีการใช้งาน AI ที่ตรงกับตัวกรองนี้"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:4
 #: specivo/templates/themes/default/pages/ai_usage/form.html:18
@@ -5970,25 +6066,25 @@ msgid "This entry is left out of totals and reports."
 msgstr "รายการนี้ไม่ถูกนับในยอดรวมและรายงาน"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:45
-#: specivo/templates/themes/default/pages/ai_usage/my.html:89
+#: specivo/templates/themes/default/pages/ai_usage/my.html:90
 msgid "No project (unassigned)"
 msgstr "ไม่มีโปรเจกต์ (ยังไม่ได้มอบหมาย)"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:51
-#: specivo/templates/themes/default/pages/ai_usage/my.html:94
+#: specivo/templates/themes/default/pages/ai_usage/my.html:95
 #: specivo/templates/themes/default/pages/time/form.html:21
 msgid "Issue (optional)"
 msgstr "งาน (ไม่บังคับ)"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:52
-#: specivo/templates/themes/default/pages/ai_usage/my.html:95
+#: specivo/templates/themes/default/pages/ai_usage/my.html:96
 #: specivo/templates/themes/default/pages/issues/detail.html:363
 #: specivo/templates/themes/default/pages/issues/detail.html:558
 msgid "e.g. PROJ-42"
 msgstr "เช่น PROJ-42"
 
 #: specivo/templates/themes/default/pages/ai_usage/form.html:52
-#: specivo/templates/themes/default/pages/ai_usage/project.html:59
+#: specivo/templates/themes/default/pages/ai_usage/project.html:63
 #: specivo/templates/themes/default/pages/time/form.html:22
 #, python-format
 msgid "e.g. %(key)s-1"
@@ -6011,7 +6107,9 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/form.html:65
 #: specivo/templates/themes/default/pages/ai_usage/form.html:75
 #: specivo/templates/themes/default/pages/ai_usage/my.html:40
-#: specivo/templates/themes/default/pages/ai_usage/project.html:40
+#: specivo/templates/themes/default/pages/ai_usage/project.html:44
+#: specivo/templates/themes/default/pages/ai_usage/report.html:14
+#: specivo/templates/themes/default/pages/ai_usage/report.html:128
 msgid "Tool"
 msgstr "เครื่องมือ"
 
@@ -6105,44 +6203,45 @@ msgstr ""
 "ของคุณรายงานมาโดยไม่มีโปรเจกต์จะรออยู่ที่นี่จนกว่าคุณจะย้ายไปยังโปรเจกต์หรืองาน"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:42
-#: specivo/templates/themes/default/pages/ai_usage/project.html:42
+#: specivo/templates/themes/default/pages/ai_usage/project.html:46
+#: specivo/templates/themes/default/pages/ai_usage/report.html:130
 msgid "All tools"
 msgstr "ทุกเครื่องมือ"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:68
-#: specivo/templates/themes/default/pages/ai_usage/project.html:72
+#: specivo/templates/themes/default/pages/ai_usage/project.html:76
 msgid "All entries"
 msgstr "ทุกรายการ"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:69
-#: specivo/templates/themes/default/pages/ai_usage/project.html:73
+#: specivo/templates/themes/default/pages/ai_usage/project.html:77
 msgid "Counted only"
 msgstr "เฉพาะที่นับ"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:70
-#: specivo/templates/themes/default/pages/ai_usage/project.html:74
+#: specivo/templates/themes/default/pages/ai_usage/project.html:78
 msgid "Excluded only"
 msgstr "เฉพาะที่ไม่นับ"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:75
-#: specivo/templates/themes/default/pages/ai_usage/project.html:79
+#: specivo/templates/themes/default/pages/ai_usage/project.html:87
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:158
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:204
 #: specivo/templates/themes/default/pages/projects/settings.html:1013
 msgid "Clear"
 msgstr "ล้าง"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:85
+#: specivo/templates/themes/default/pages/ai_usage/my.html:86
 msgid "Move the selected entries to"
 msgstr "ย้ายรายการที่เลือกไปยัง"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:97
+#: specivo/templates/themes/default/pages/ai_usage/my.html:98
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:359
 #: specivo/templates/themes/default/pages/issues/detail.html:382
 msgid "Move"
 msgstr "ย้าย"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:98
+#: specivo/templates/themes/default/pages/ai_usage/my.html:99
 msgid ""
 "An issue alone also sets its project. You can move entries only to "
 "projects where you may log AI usage."
@@ -6150,28 +6249,252 @@ msgstr ""
 "ถ้าระบุเพียงงาน ระบบจะตั้งโปรเจกต์ของงานนั้นให้ด้วย "
 "คุณย้ายรายการได้เฉพาะไปยังโปรเจกต์ที่คุณบันทึกการใช้งาน AI ได้"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:107
+#: specivo/templates/themes/default/pages/ai_usage/my.html:109
 msgid "No AI usage is logged in your name yet."
 msgstr "ยังไม่มีการบันทึกการใช้งาน AI ในนามของคุณ"
 
-#: specivo/templates/themes/default/pages/ai_usage/my.html:107
-#: specivo/templates/themes/default/pages/ai_usage/project.html:93
-msgid "No AI usage matches these filters."
-msgstr "ไม่มีการใช้งาน AI ที่ตรงกับตัวกรองนี้"
+#: specivo/templates/themes/default/pages/ai_usage/project.html:19
+#: specivo/templates/themes/default/pages/ai_usage/report.html:57
+msgid "Spend report"
+msgstr "รายงานค่าใช้จ่าย"
 
-#: specivo/templates/themes/default/pages/ai_usage/project.html:82
+#: specivo/templates/themes/default/pages/ai_usage/project.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:18
+msgid "Branch"
+msgstr "Branch"
+
+#: specivo/templates/themes/default/pages/ai_usage/project.html:90
 msgid "No issue with that key in this project, or you cannot see it."
 msgstr "ไม่มีงานที่ใช้คีย์นี้ในโปรเจกต์นี้ หรือคุณมองไม่เห็นงานนั้น"
 
-#: specivo/templates/themes/default/pages/ai_usage/project.html:94
+#: specivo/templates/themes/default/pages/ai_usage/project.html:102
 msgid "No AI usage yet. Log it by hand, or let your AI tools report it."
 msgstr ""
 "ยังไม่มีการใช้งาน AI บันทึกด้วยตนเอง หรือให้เครื่องมือ AI "
 "ของคุณรายงานเข้ามา"
 
-#: specivo/templates/themes/default/pages/ai_usage/project.html:95
+#: specivo/templates/themes/default/pages/ai_usage/project.html:103
 msgid "No AI usage yet."
 msgstr "ยังไม่มีการใช้งาน AI"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:22
+msgid "Day"
+msgstr "วัน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:23
+msgid "Week"
+msgstr "สัปดาห์"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:24
+msgid "Month"
+msgstr "เดือน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:28
+msgid "Last 7 days"
+msgstr "7 วันล่าสุด"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:29
+msgid "Last 30 days"
+msgstr "30 วันล่าสุด"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:30
+msgid "This month"
+msgstr "เดือนนี้"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:31
+msgid "Last month"
+msgstr "เดือนที่แล้ว"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:36
+#: specivo/templates/themes/default/pages/ai_usage/report.html:195
+#: specivo/templates/themes/default/pages/ai_usage/report.html:263
+#: specivo/web/pages/ai_spend_reports.py:286
+msgid "Unallocated seat cost"
+msgstr "ค่าที่นั่งที่ยังไม่ได้ปันส่วน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:37
+#: specivo/web/pages/ai_spend_reports.py:288
+msgid "An issue you cannot see"
+msgstr "งานที่คุณมองไม่เห็น"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:49
+#: specivo/templates/themes/default/pages/ai_usage/report.html:68
+msgid "AI spend report"
+msgstr "รายงานค่าใช้จ่าย AI"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:71
+msgid "Download CSV"
+msgstr "ดาวน์โหลด CSV"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:76
+msgid ""
+"Spend is what AI usage cost: pay-per-use charges plus the share of flat-"
+"rate subscriptions carried by the usage. API-equivalent value is what the"
+" same tokens would have cost at pay-per-use prices; it is an estimate, "
+"not a bill."
+msgstr ""
+"ค่าใช้จ่ายคือต้นทุนของการใช้ AI ได้แก่ ค่าบริการแบบจ่ายตามการใช้งาน "
+"บวกส่วนแบ่งของค่าสมัครใช้งานแบบเหมาจ่ายที่การใช้งานนั้นรับไว้ "
+"มูลค่าเทียบเท่า API "
+"คือราคาที่โทเค็นชุดเดียวกันจะมีค่าใช้จ่ายหากจ่ายตามการใช้งาน "
+"เป็นเพียงการประมาณ ไม่ใช่ใบแจ้งหนี้"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:77
+msgid ""
+"Subscription fees nobody's usage carried are shown as unallocated seat "
+"cost."
+msgstr ""
+"ค่าสมัครใช้งานที่ไม่มีการใช้งานใดรับไว้ "
+"จะแสดงเป็นค่าที่นั่งที่ยังไม่ได้ปันส่วน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:80
+msgid "Choose an active currency."
+msgstr "เลือกสกุลเงินที่เปิดใช้งาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:80
+msgid "Choose a last day on or after the first day, at most three years later."
+msgstr "เลือกวันสุดท้ายที่ตรงกับหรือหลังวันแรก และไม่เกินสามปี"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:80
+msgid "The report could not be built with these settings."
+msgstr "ไม่สามารถสร้างรายงานด้วยการตั้งค่านี้ได้"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:98
+msgid "Group by"
+msgstr "จัดกลุ่มตาม"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:100
+msgid "Nothing (totals)"
+msgstr "ไม่จัดกลุ่ม (ยอดรวม)"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:105
+msgid "Then by"
+msgstr "แล้วตาม"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:112
+msgid "Per"
+msgstr "ต่อ"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:114
+msgid "Whole range"
+msgstr "ทั้งช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:155
+msgid "Rate of each day"
+msgstr "อัตราของแต่ละวัน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:160
+#: specivo/templates/themes/default/pages/ai_usage/report.html:189
+#: specivo/templates/themes/default/pages/ai_usage/report.html:250
+msgid "Seat cost"
+msgstr "ค่าที่นั่ง"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:163
+msgid "Leave out"
+msgstr "ไม่รวม"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:167
+msgid "Order"
+msgstr "ลำดับ"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:169
+msgid "By group"
+msgstr "ตามกลุ่ม"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:170
+msgid "By spend"
+msgstr "ตามค่าใช้จ่าย"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:185
+msgid "Pay-per-use plus seat cost"
+msgstr "ค่าจ่ายตามการใช้งานบวกค่าที่นั่ง"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:185
+msgid "Pay-per-use charges"
+msgstr "ค่าบริการแบบจ่ายตามการใช้งาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:191
+msgid "Subscription fees carried by this usage"
+msgstr "ค่าสมัครใช้งานที่การใช้งานนี้รับไว้"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:197
+msgid "Fees of subscriptions without priced usage"
+msgstr "ค่าสมัครใช้งานที่ไม่มีการใช้งานที่มีราคา"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:208
+#: specivo/templates/themes/default/pages/ai_usage/report.html:254
+msgid "Leverage"
+msgstr "อัตราความคุ้มค่า"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:210
+msgid "API-equivalent value of subscription usage per unit of seat cost"
+msgstr "มูลค่าเทียบเท่า API ของการใช้งานแบบสมัครใช้งาน ต่อค่าที่นั่งหนึ่งหน่วย"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:216
+#, python-format
+msgid "%(count)s entry"
+msgid_plural "%(count)s entries"
+msgstr[0] "%(count)s รายการ"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:216
+#, python-format
+msgid "%(count)s not priced"
+msgid_plural "%(count)s not priced"
+msgstr[0] "%(count)s ไม่มีราคา"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:221
+#, python-format
+msgid "%(first)s to %(last)s (UTC days), amounts in %(currency)s."
+msgstr "%(first)s ถึง %(last)s (วันตาม UTC) จำนวนเงินเป็น %(currency)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:222
+msgid "Exchange rates used:"
+msgstr "อัตราแลกเปลี่ยนที่ใช้:"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:224
+msgid ""
+"Seat cost is left out: subscription fees are shown only to administrators"
+" and to people who can see every entry of this project in the period."
+msgstr ""
+"ไม่รวมค่าที่นั่ง: "
+"ค่าสมัครใช้งานจะแสดงเฉพาะผู้ดูแลระบบและผู้ที่เห็นทุกรายการของโปรเจกต์นี้ในช่วงเวลานั้น"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:229
+msgid "Spend chart; the table below holds the same numbers"
+msgstr "แผนภูมิค่าใช้จ่าย ตารางด้านล่างมีตัวเลขเดียวกัน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:249
+msgid "Pay-per-use"
+msgstr "จ่ายตามการใช้งาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:263
+#: specivo/web/pages/ai_spend_reports.py:323
+msgid "All usage"
+msgstr "การใช้งานทั้งหมด"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:264
+msgid "Entries without a price"
+msgstr "รายการที่ไม่มีราคา"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:265
+#, python-format
+msgid ""
+"%(input)s in, %(output)s out, %(cache)s cache read, %(reasoning)s "
+"reasoning"
+msgstr "เข้า %(input)s ออก %(output)s อ่านแคช %(cache)s การให้เหตุผล %(reasoning)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:268
+#: specivo/templates/themes/default/pages/ai_usage/report.html:284
+msgid "unallocated:"
+msgstr "ยังไม่ได้ปันส่วน:"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:273
+msgid "Subscriptions"
+msgstr "การสมัครใช้งาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:296
+msgid "No AI usage in this period."
+msgstr "ไม่มีการใช้ AI ในช่วงเวลานี้"
 
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:8
 msgid "Choose a person"
@@ -8225,9 +8548,12 @@ msgstr "สร้างงานแรกของคุณเพื่อเร
 #: specivo/templates/themes/default/pages/admin/users.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:7
 #: specivo/templates/themes/default/pages/admin/workflows.html:7
+#: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:11
 #: specivo/templates/themes/default/pages/ai_usage/form.html:8
 #: specivo/templates/themes/default/pages/ai_usage/my.html:9
 #: specivo/templates/themes/default/pages/ai_usage/project.html:9
+#: specivo/templates/themes/default/pages/ai_usage/report.html:54
+#: specivo/templates/themes/default/pages/ai_usage/report.html:61
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
 #: specivo/templates/themes/default/pages/auth/api_keys.html:7
@@ -10783,7 +11109,8 @@ msgstr "คำค้น"
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
 #: specivo/templates/themes/default/pages/ai_usage/my.html:53
-#: specivo/templates/themes/default/pages/ai_usage/project.html:53
+#: specivo/templates/themes/default/pages/ai_usage/project.html:57
+#: specivo/templates/themes/default/pages/ai_usage/report.html:141
 #: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/list.html:43
 #: specivo/templates/themes/default/pages/projects/version_detail.html:83
@@ -10848,7 +11175,8 @@ msgid "Comment on %(title)s"
 msgstr "ความคิดเห็นเกี่ยวกับ %(title)s"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:116
-#: specivo/templates/themes/default/pages/ai_usage/project.html:58
+#: specivo/templates/themes/default/pages/ai_usage/project.html:62
+#: specivo/templates/themes/default/pages/ai_usage/report.html:13
 #: specivo/templates/themes/default/pages/issues/detail.html:362
 #: specivo/templates/themes/default/pages/search.html:222
 #: specivo/templates/themes/default/pages/time/list.html:56
