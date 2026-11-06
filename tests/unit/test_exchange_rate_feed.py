@@ -390,3 +390,109 @@ async def test_a_slow_drip_is_cut_off_at_the_total_deadline(monkeypatch: pytest.
     with pytest.raises(FeedError, match="in time"):
         await fetch_feed("https://rates.example.com/daily.xml", transport=transport, allow_private=False)
     assert time.monotonic() - started < 2
+
+
+# ---------------------------------------------------------------------------
+# Through a proxy: fail closed, per-hop checks
+# ---------------------------------------------------------------------------
+
+
+def _always_proxy(url: str) -> str:
+    return "http://proxy.internal:3128"
+
+
+async def test_proxied_unresolvable_host_is_refused_by_default() -> None:
+    with pytest.raises(FeedError, match="does not resolve on this server"):
+        await fetch_feed(
+            "https://rates.example.com/daily.xml",
+            transport=httpx.MockTransport(_never_called),
+            resolver=_resolver({}),
+            proxy_for=_always_proxy,
+            allow_private=False,
+            allow_unresolved_via_proxy=False,
+        )
+
+
+async def test_proxied_unresolvable_host_is_allowed_when_the_operator_says_so() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, content=ECB_XML)
+
+    rates = await fetch_feed(
+        "https://rates.example.com/daily.xml",
+        transport=httpx.MockTransport(handler),
+        resolver=_resolver({}),
+        proxy_for=_always_proxy,
+        allow_private=False,
+        allow_unresolved_via_proxy=True,
+    )
+
+    assert len(rates) == 29
+    # Through the proxy the request keeps its host name: the proxy resolves it.
+    assert seen[0].url.host == "rates.example.com"
+
+
+async def test_proxied_redirect_hop_to_an_internal_address_is_refused() -> None:
+    hosts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return httpx.Response(302, headers={"Location": "https://intranet.example.com/admin"})
+
+    with pytest.raises(FeedError, match="cannot be used"):
+        await fetch_feed(
+            "https://rates.example.com/daily.xml",
+            transport=httpx.MockTransport(handler),
+            resolver=_resolver({"rates.example.com": ["93.184.215.14"], "intranet.example.com": ["10.0.0.7"]}),
+            proxy_for=_always_proxy,
+            allow_private=False,
+            allow_unresolved_via_proxy=True,
+        )
+    assert hosts == ["rates.example.com"]
+
+
+async def test_proxy_is_chosen_again_for_each_hop() -> None:
+    routes: list[tuple[str, str | None]] = []
+
+    def proxy_for(url: str) -> str | None:
+        host = httpx.URL(url).host
+        proxy = None if host == "mirror.example.org" else "http://proxy.internal:3128"
+        routes.append((host, proxy))
+        return proxy
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers["host"] == "rates.example.com":
+            return httpx.Response(302, headers={"Location": "https://mirror.example.org/daily.xml"})
+        return httpx.Response(200, content=ECB_XML)
+
+    seen_hosts: list[str] = []
+
+    def recording(request: httpx.Request) -> httpx.Response:
+        seen_hosts.append(request.url.host)
+        return handler(request)
+
+    await fetch_feed(
+        "https://rates.example.com/daily.xml",
+        transport=httpx.MockTransport(recording),
+        resolver=_resolver({"rates.example.com": ["93.184.215.14"], "mirror.example.org": ["93.184.215.15"]}),
+        proxy_for=proxy_for,
+        allow_private=False,
+        allow_unresolved_via_proxy=False,
+    )
+
+    assert routes == [("rates.example.com", "http://proxy.internal:3128"), ("mirror.example.org", None)]
+    # Proxied hop keeps the name; the direct hop is pinned to the checked address.
+    assert seen_hosts == ["rates.example.com", "93.184.215.15"]
+
+
+async def test_direct_unresolvable_host_is_refused_as_unreachable() -> None:
+    with pytest.raises(FeedError, match="Could not reach"):
+        await fetch_feed(
+            "https://rates.example.com/daily.xml",
+            transport=httpx.MockTransport(_never_called),
+            resolver=_resolver({}),
+            allow_private=False,
+            allow_unresolved_via_proxy=True,
+        )

@@ -134,8 +134,20 @@ and the connection is made to the checked address.
   Set it when your Frankfurter instance runs on your internal network. It is an environment setting
   on purpose: the admin page cannot open internal addresses.
 - Numeric host spellings other than an ordinary address (`0x7f.1`, `2130706433`) are refused.
-- Behind a proxy, the target host is still checked when the server can resolve it. When only the
-  proxy can resolve names, the request is handed to the proxy, which then decides what is reachable.
+- Behind a proxy (`HTTPS_PROXY`), the proxy is chosen again for every redirect, and the target host
+  is resolved and checked on the server before the request goes to the proxy. A host that does not
+  resolve on the server is **refused**, because it cannot be checked. If your server can only
+  resolve names through the proxy, set `EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY=true` in
+  `.env`.
+
+!!! warning "With a proxy, the proxy must enforce egress rules"
+    The proxy resolves the host name again by itself, so Specivo's check cannot stop a name that
+    answers differently the second time (DNS rebinding), and with
+    `EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY` nothing is checked on the server at all. When a
+    proxy is configured, it must refuse connections to private and link-local ranges
+    (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.0.0/16`, `fc00::/7`,
+    `fe80::/10`) unless you mean to allow them.
+
 - The whole fetch, download included, must finish within 20 seconds, and the file may be at most
   8 MB.
 

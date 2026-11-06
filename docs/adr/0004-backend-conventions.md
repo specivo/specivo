@@ -210,8 +210,9 @@ through `exchange_rate_pivot` (EUR) only when neither direction has a rate. A mi
 (`ConversionSummary`, `ConversionSummaryOut`). Never convert per row in a loop of queries, and never through `float`.
 The optional ECB fetch is off unless `exchange_rates_fetch_enabled` is `"true"`. It goes through
 `specivo.services.exchange_rate_feed`: every hop resolved, checked and pinned (private ranges only with
-`EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS`, metadata never), environment proxies applied inside that guard
-(`trust_env=False`), one total deadline, strict UTF-8 with no DTD, and error messages that never echo the response.
+`EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS`, metadata never), environment proxies chosen per hop inside that guard
+(`trust_env=False`; unresolvable targets refused unless `EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY`; the proxy
+must enforce egress rules, as it resolves again), one total deadline, strict UTF-8 with no DTD, and error messages that never echo the response.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 

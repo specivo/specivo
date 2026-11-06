@@ -37,13 +37,16 @@ refused. The whole fetch, body included, has one deadline
 :data:`MAX_FEED_BYTES`.
 
 **Proxies.** ``HTTPS_PROXY`` / ``HTTP_PROXY`` / ``NO_PROXY`` from the
-environment are honoured, like the model download, but applied here rather
-than by httpx (``trust_env=False``), so the guard still sees the target host.
-Through a proxy the target is still resolved and checked when the host can
-resolve it; when it cannot (DNS only behind the proxy), the request is passed
-to the proxy, which then decides what is reachable. Failures (no network on an
-air-gapped host, a proxy refusing, a bad body) raise :class:`FeedError`;
-nothing is retried until the next scheduled run.
+environment are honoured, like the model download, but applied here, per
+request and redirect hop, rather than by httpx (``trust_env=False``), so the
+guard still sees the target host. Through a proxy the target is resolved and
+checked here first; a host that does not resolve here is refused unless the
+operator sets ``EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY``. The proxy then
+resolves the name again, so this check cannot stop DNS rebinding through it:
+**a configured proxy must enforce egress rules to private and link-local
+ranges itself.** Failures (no network on an air-gapped host, a proxy refusing,
+a bad body) raise :class:`FeedError`; nothing is retried until the next
+scheduled run.
 """
 
 from __future__ import annotations
@@ -96,6 +99,10 @@ class FeedError(Exception):
 
 class FeedBlockedAddressError(httpx.RequestError):
     """A request (or a redirect) would reach an address the fetch never contacts."""
+
+
+class FeedUnresolvedError(httpx.RequestError):
+    """Through a proxy, the target host does not resolve here, so it cannot be checked."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,36 +191,63 @@ async def _resolve_host(host: str, port: int) -> list[str]:
     return [str(info[4][0]) for info in infos]
 
 
+ProxyFor = Callable[[str], "str | None"]
+
+
 class _FeedGuardTransport(httpx.AsyncBaseTransport):
-    """Checks the destination of every request (each redirect hop is a request).
+    """Checks the destination of every request; each redirect hop is a request of its own.
+
+    For every request the guard picks the route again (*proxy_for*: direct, or
+    which proxy), then:
+
+    - refuses non-canonical numeric hosts and forbidden IP literals;
+    - with a *resolver*, resolves the host and refuses it when any answer is
+      forbidden (:func:`is_forbidden_address`), or when it does not resolve
+      (fail closed, also through a proxy, unless *allow_unresolved_via_proxy*);
+    - direct: connects to the checked addresses only (pinned, with the original
+      ``Host`` header and TLS server name), so DNS cannot change between the
+      check and the connection;
+    - through a proxy: hands the original request to the proxy. The proxy
+      resolves the name again, so a host that answers differently the second
+      time (DNS rebinding) is not caught here: **when a proxy is configured it
+      must itself refuse private and link-local destinations.**
 
     *resolver* ``None`` checks IP literals only (the test seam with a mock
-    transport). With a resolver, the host is resolved and every answer must
-    pass :func:`is_forbidden_address`; without a proxy the request is then sent
-    to those addresses (original ``Host`` header and TLS server name), so the
-    check and the connection see the same address. Through a proxy the request
-    goes to the proxy unchanged, and a host the resolver cannot resolve is left
-    to the proxy.
+    transport).
     """
 
     def __init__(
         self,
-        inner: httpx.AsyncBaseTransport,
+        direct: httpx.AsyncBaseTransport,
         *,
         resolver: Resolver | None,
         allow_private: bool,
-        proxied: bool = False,
+        proxy_for: ProxyFor | None = None,
+        proxied: Callable[[str], httpx.AsyncBaseTransport] | None = None,
+        allow_unresolved_via_proxy: bool = False,
     ) -> None:
-        self._inner = inner
+        self._direct = direct
         self._resolver = resolver
         self._allow_private = allow_private
+        self._proxy_for = proxy_for or (lambda url: None)
         self._proxied = proxied
+        self._allow_unresolved_via_proxy = allow_unresolved_via_proxy
+        self._proxy_transports: dict[str, httpx.AsyncBaseTransport] = {}
 
     def _refuse(self, request: httpx.Request) -> FeedBlockedAddressError:
         return FeedBlockedAddressError("The feed address resolves to an address that cannot be used", request=request)
 
+    def _via_proxy(self, proxy: str) -> httpx.AsyncBaseTransport:
+        if self._proxied is None:
+            return self._direct
+        if proxy not in self._proxy_transports:
+            self._proxy_transports[proxy] = self._proxied(proxy)
+        return self._proxy_transports[proxy]
+
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         host = request.url.host
+        proxy = self._proxy_for(str(request.url))
+        route = self._via_proxy(proxy) if proxy else self._direct
         if is_noncanonical_numeric_host(host):
             raise self._refuse(request)
         try:
@@ -223,23 +257,27 @@ class _FeedGuardTransport(httpx.AsyncBaseTransport):
         if literal is not None:
             if is_forbidden_address(literal, allow_private=self._allow_private):
                 raise self._refuse(request)
-            return await self._inner.handle_async_request(request)
+            return await route.handle_async_request(request)
         if self._resolver is None:
-            return await self._inner.handle_async_request(request)
+            return await route.handle_async_request(request)
 
         port = request.url.port or (443 if request.url.scheme == "https" else 80)
         try:
             addresses = await self._resolver(host, port)
         except OSError:
-            if self._proxied:
-                return await self._inner.handle_async_request(request)
-            raise httpx.ConnectError("Could not resolve the feed host", request=request) from None
+            addresses = []
         if not addresses:
-            raise httpx.ConnectError("The feed host has no address", request=request)
+            if proxy and self._allow_unresolved_via_proxy:
+                # The operator vouches that the proxy enforces egress rules.
+                return await route.handle_async_request(request)
+            if proxy:
+                raise FeedUnresolvedError("The feed host does not resolve on this server", request=request)
+            raise httpx.ConnectError("Could not resolve the feed host", request=request)
         if any(is_forbidden_address(a, allow_private=self._allow_private) for a in addresses):
             raise self._refuse(request)
-        if self._proxied:
-            return await self._inner.handle_async_request(request)
+        if proxy:
+            # Checked, but the proxy resolves again: it must enforce egress rules itself.
+            return await route.handle_async_request(request)
 
         extensions: dict[str, Any] = dict(request.extensions)
         if request.url.scheme == "https":
@@ -254,14 +292,17 @@ class _FeedGuardTransport(httpx.AsyncBaseTransport):
                 extensions=extensions,
             )
             try:
-                return await self._inner.handle_async_request(pinned)
+                return await self._direct.handle_async_request(pinned)
             except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 last_error = exc
         assert last_error is not None
         raise last_error
 
     async def aclose(self) -> None:
-        await self._inner.aclose()
+        await self._direct.aclose()
+        for transport in self._proxy_transports.values():
+            if transport is not self._direct:
+                await transport.aclose()
 
 
 def _environment_proxy(url: str) -> str | None:
@@ -432,28 +473,48 @@ async def fetch_feed(
     transport: httpx.AsyncBaseTransport | None = None,
     resolver: Resolver | None = None,
     allow_private: bool | None = None,
+    allow_unresolved_via_proxy: bool | None = None,
+    proxy_for: ProxyFor | None = None,
 ) -> list[FeedRate]:
     """Download *url* and parse it. Raises :class:`FeedError` on any failure.
 
-    *transport* replaces the network (tests pass an ``httpx.MockTransport``);
-    with it, host names are checked only when a *resolver* is given too.
-    *allow_private* defaults to ``EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS``.
+    *transport* replaces the network (tests pass an ``httpx.MockTransport``,
+    used for direct and proxied requests alike); with it, host names are
+    checked only when a *resolver* is given too, and nothing is proxied unless
+    *proxy_for* says so. *allow_private* and *allow_unresolved_via_proxy*
+    default to ``EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS`` and
+    ``EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY``.
     """
     try:
         url = validate_feed_url(url)
     except ValueError as exc:
         raise FeedError(str(exc)) from None
-    if allow_private is None:
+    if allow_private is None or allow_unresolved_via_proxy is None:
         from specivo.core.config import get_settings
 
-        allow_private = get_settings().exchange_rate_feed_allow_private_networks
+        settings = get_settings()
+        if allow_private is None:
+            allow_private = settings.exchange_rate_feed_allow_private_networks
+        if allow_unresolved_via_proxy is None:
+            allow_unresolved_via_proxy = settings.exchange_rate_feed_allow_unresolved_via_proxy
     if transport is not None:
-        guarded = _FeedGuardTransport(transport, resolver=resolver, allow_private=allow_private)
-    else:
-        proxy = _environment_proxy(url)
-        inner = httpx.AsyncHTTPTransport(retries=0, proxy=proxy) if proxy else httpx.AsyncHTTPTransport(retries=0)
+        mock = transport
         guarded = _FeedGuardTransport(
-            inner, resolver=resolver or _resolve_host, allow_private=allow_private, proxied=bool(proxy)
+            mock,
+            resolver=resolver,
+            allow_private=allow_private,
+            proxy_for=proxy_for,
+            proxied=lambda proxy: mock,
+            allow_unresolved_via_proxy=allow_unresolved_via_proxy,
+        )
+    else:
+        guarded = _FeedGuardTransport(
+            httpx.AsyncHTTPTransport(retries=0),
+            resolver=resolver or _resolve_host,
+            allow_private=allow_private,
+            proxy_for=proxy_for or _environment_proxy,
+            proxied=lambda proxy: httpx.AsyncHTTPTransport(retries=0, proxy=proxy),
+            allow_unresolved_via_proxy=allow_unresolved_via_proxy,
         )
     try:
         async with asyncio.timeout(FEED_TIMEOUT_SECONDS):
@@ -464,6 +525,11 @@ async def fetch_feed(
         raise FeedError("The feed did not answer in time") from None
     except FeedBlockedAddressError:
         raise FeedError("The feed address or a redirect leads to an address that cannot be used") from None
+    except FeedUnresolvedError:
+        raise FeedError(
+            "The feed host does not resolve on this server, so its address cannot be checked before "
+            "the proxy is used (see EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY)"
+        ) from None
     except httpx.TimeoutException:
         raise FeedError("The feed did not answer in time") from None
     except httpx.TooManyRedirects:
