@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 00:21+0100\n"
+"POT-Creation-Date: 2026-11-06 01:06+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -576,7 +576,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:918
 #: specivo/templates/themes/default/pages/projects/settings.html:1066
 #: specivo/templates/themes/default/pages/projects/settings.html:1300
-#: specivo/templates/themes/default/pages/projects/settings.html:1614
+#: specivo/templates/themes/default/pages/projects/settings.html:1638
 #: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr ""
@@ -637,6 +637,7 @@ msgstr ""
 #: specivo/templates/themes/default/components/header.html:87
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:62
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:45
 #: specivo/templates/themes/default/pages/admin/groups.html:98
 #: specivo/templates/themes/default/pages/admin/groups.html:123
 #: specivo/templates/themes/default/pages/admin/groups.html:172
@@ -670,8 +671,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:1045
 #: specivo/templates/themes/default/pages/projects/settings.html:1260
 #: specivo/templates/themes/default/pages/projects/settings.html:1284
-#: specivo/templates/themes/default/pages/projects/settings.html:1578
 #: specivo/templates/themes/default/pages/projects/settings.html:1602
+#: specivo/templates/themes/default/pages/projects/settings.html:1626
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -912,7 +913,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:79
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
-#: specivo/templates/themes/default/pages/admin/dashboard.html:159
+#: specivo/templates/themes/default/pages/admin/dashboard.html:169
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
@@ -938,7 +939,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:118
 #: specivo/templates/themes/default/pages/admin/dashboard.html:51
-#: specivo/web/pages/admin.py:1135
+#: specivo/web/pages/admin.py:1140
 msgid "Administration"
 msgstr ""
 
@@ -956,6 +957,9 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/dashboard.html:9
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:9
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:9
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:4
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:28
 #: specivo/templates/themes/default/pages/admin/group_detail.html:3
 #: specivo/templates/themes/default/pages/admin/group_detail.html:9
 #: specivo/templates/themes/default/pages/admin/groups.html:3
@@ -1019,6 +1023,8 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_card.html:19
 #: specivo/templates/themes/default/pages/admin/currencies.html:32
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:44
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:233
 #: specivo/templates/themes/default/pages/admin/groups.html:125
 #: specivo/templates/themes/default/pages/admin/projects.html:23
 #: specivo/templates/themes/default/pages/admin/roles.html:50
@@ -1037,7 +1043,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:112
 #: specivo/templates/themes/default/pages/projects/settings.html:298
 #: specivo/templates/themes/default/pages/projects/settings.html:906
-#: specivo/templates/themes/default/pages/projects/settings.html:1643
+#: specivo/templates/themes/default/pages/projects/settings.html:1667
 #: specivo/templates/themes/default/pages/wiki/edit.html:133
 msgid "Save"
 msgstr ""
@@ -1054,7 +1060,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:481
 #: specivo/templates/themes/default/pages/projects/settings.html:1021
 #: specivo/templates/themes/default/pages/projects/settings.html:1262
-#: specivo/templates/themes/default/pages/projects/settings.html:1580
+#: specivo/templates/themes/default/pages/projects/settings.html:1604
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -1448,7 +1454,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:462
 #: specivo/templates/themes/default/pages/projects/settings.html:558
 #: specivo/templates/themes/default/pages/projects/settings.html:1176
-#: specivo/templates/themes/default/pages/projects/settings.html:1454
+#: specivo/templates/themes/default/pages/projects/settings.html:1464
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:109
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:173
 #: specivo/templates/themes/default/pages/projects/version_detail.html:97
@@ -1504,7 +1510,7 @@ msgid "johndoe"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:26
-#: specivo/templates/themes/default/pages/admin/dashboard.html:169
+#: specivo/templates/themes/default/pages/admin/dashboard.html:179
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
@@ -1611,7 +1617,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:3
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:12
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:16
-#: specivo/templates/themes/default/pages/admin/dashboard.html:190
+#: specivo/templates/themes/default/pages/admin/dashboard.html:200
 msgid "Agent Groups"
 msgstr ""
 
@@ -1628,8 +1634,9 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/dashboard.html:151
 #: specivo/templates/themes/default/pages/admin/dashboard.html:161
 #: specivo/templates/themes/default/pages/admin/dashboard.html:171
-#: specivo/templates/themes/default/pages/admin/dashboard.html:192
-#: specivo/templates/themes/default/pages/admin/dashboard.html:204
+#: specivo/templates/themes/default/pages/admin/dashboard.html:181
+#: specivo/templates/themes/default/pages/admin/dashboard.html:202
+#: specivo/templates/themes/default/pages/admin/dashboard.html:214
 msgid "Manage"
 msgstr ""
 
@@ -1676,7 +1683,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/audit_log.html:4
 #: specivo/templates/themes/default/pages/admin/audit_log.html:10
 #: specivo/templates/themes/default/pages/admin/audit_log.html:14
-#: specivo/templates/themes/default/pages/admin/dashboard.html:179
+#: specivo/templates/themes/default/pages/admin/dashboard.html:189
 msgid "Audit log"
 msgstr ""
 
@@ -1719,12 +1726,14 @@ msgid "Project key"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:50
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:125
 #: specivo/templates/themes/default/pages/time/list.html:27
 msgid "From"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:54
 #: specivo/templates/themes/default/pages/admin/email.html:83
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:126
 #: specivo/templates/themes/default/pages/time/list.html:29
 msgid "To"
 msgstr ""
@@ -1736,6 +1745,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:63
 #: specivo/templates/themes/default/pages/admin/currencies.html:47
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:127
 #: specivo/templates/themes/default/pages/admin/groups.html:34
 #: specivo/templates/themes/default/pages/time/list.html:39
 msgid "Filter"
@@ -1752,13 +1762,13 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
 #: specivo/templates/themes/default/pages/projects/settings.html:1174
-#: specivo/templates/themes/default/pages/projects/settings.html:1452
+#: specivo/templates/themes/default/pages/projects/settings.html:1462
 msgid "Time"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:79
 #: specivo/templates/themes/default/pages/projects/settings.html:1175
-#: specivo/templates/themes/default/pages/projects/settings.html:1453
+#: specivo/templates/themes/default/pages/projects/settings.html:1463
 msgid "Event"
 msgstr ""
 
@@ -1776,7 +1786,7 @@ msgid "Resource"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:84
-#: specivo/templates/themes/default/pages/projects/settings.html:1455
+#: specivo/templates/themes/default/pages/projects/settings.html:1465
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:116
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:164
@@ -1804,6 +1814,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/currencies.html:11
 #: specivo/templates/themes/default/pages/admin/currencies.html:14
 #: specivo/templates/themes/default/pages/admin/dashboard.html:139
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:34
 #: specivo/templates/themes/default/pages/projects/settings.html:86
 msgid "Currencies"
 msgstr ""
@@ -1815,6 +1826,8 @@ msgid ""
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:19
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:21
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:8
 msgid "Unknown currency code."
 msgstr ""
 
@@ -1829,6 +1842,16 @@ msgstr ""
 msgid ""
 "Money reports are shown in this currency unless a project chooses its own"
 " in its settings."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/currencies.html:24
+#: specivo/templates/themes/default/pages/admin/dashboard.html:149
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:3
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:11
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:4
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:30
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:33
+msgid "Exchange rates"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:37
@@ -1848,6 +1871,7 @@ msgid "Search by code or name"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:43
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:118
 msgid "All currencies"
 msgstr ""
 
@@ -1906,6 +1930,7 @@ msgid "Kind"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
 msgid "Currency"
 msgstr ""
 
@@ -1929,14 +1954,14 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:27
 #: specivo/templates/themes/default/pages/projects/settings.html:674
 #: specivo/templates/themes/default/pages/projects/settings.html:1136
-#: specivo/templates/themes/default/pages/projects/settings.html:1414
+#: specivo/templates/themes/default/pages/projects/settings.html:1424
 msgid "Enable"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:87
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:28
 #: specivo/templates/themes/default/pages/projects/settings.html:1135
-#: specivo/templates/themes/default/pages/projects/settings.html:1413
+#: specivo/templates/themes/default/pages/projects/settings.html:1423
 msgid "Disable"
 msgstr ""
 
@@ -2001,7 +2026,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:15
-#: specivo/web/pages/admin.py:1136
+#: specivo/web/pages/admin.py:1141
 msgid "Single sign-on"
 msgstr ""
 
@@ -2064,47 +2089,51 @@ msgstr ""
 msgid "Choose the reporting currency and which currencies pickers offer."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:149
+#: specivo/templates/themes/default/pages/admin/dashboard.html:150
+msgid "Enter, import or fetch the daily rates reports convert with."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:159
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:4
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:10
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:35
 msgid "Metadata Presets"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:150
+#: specivo/templates/themes/default/pages/admin/dashboard.html:160
 msgid "Manage reusable metadata field schemas for projects."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:160
+#: specivo/templates/themes/default/pages/admin/dashboard.html:170
 msgid "Global application settings and configuration."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:170
+#: specivo/templates/themes/default/pages/admin/dashboard.html:180
 msgid "SMTP configuration and test email delivery."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:180
+#: specivo/templates/themes/default/pages/admin/dashboard.html:190
 msgid "Sign-ins, access and administration changes, and everything agents do."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:181
+#: specivo/templates/themes/default/pages/admin/dashboard.html:191
 #: specivo/templates/themes/default/pages/issues/description_diff.html:106
 #: specivo/templates/themes/default/pages/wiki/history.html:55
 msgid "View"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:191
+#: specivo/templates/themes/default/pages/admin/dashboard.html:201
 msgid "Manage agent groups, members, and access policies."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:202
+#: specivo/templates/themes/default/pages/admin/dashboard.html:212
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:3
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:12
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:15
 msgid "Kill Switch"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/dashboard.html:203
+#: specivo/templates/themes/default/pages/admin/dashboard.html:213
 msgid "Emergency agent access revocation and event log."
 msgstr ""
 
@@ -2213,6 +2242,435 @@ msgstr ""
 msgid "Body"
 msgstr ""
 
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:3
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:13
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:16
+msgid "Edit rate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:20
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:7
+msgid "That currency is disabled. Enable it on the Currencies page first."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:22
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:9
+msgid ""
+"Enter the rate as a positive decimal number with at most 12 decimal "
+"places, such as 36.5123."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:23
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:10
+msgid "The two currencies of a rate must differ."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:24
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:11
+msgid "A manual rate for that day and pair already exists. Edit it instead."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:25
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:15
+msgid "Enter a valid date."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:31
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:50
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:133
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:188
+#: specivo/templates/themes/default/pages/issues/description_diff.html:73
+#: specivo/templates/themes/default/pages/issues/detail.html:363
+#: specivo/templates/themes/default/pages/issues/detail.html:387
+#: specivo/templates/themes/default/pages/time/list.html:54
+#: specivo/templates/themes/default/pages/wiki/history.html:32
+msgid "Date"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:35
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:54
+msgid "Base currency"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:39
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:58
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:134
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:188
+msgid "Rate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:40
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:59
+msgid "Quote currency"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:12
+msgid ""
+"Only manual rates can be edited. To override an imported or fetched rate,"
+" add a manual rate for the same day."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:13
+msgid "The maximum age must be a whole number of days from 0 to 366."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:14
+msgid "Enter an http:// or https:// address for the rate feed."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:16
+msgid "That rate no longer exists."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:21
+msgid "Manual"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:21
+msgid "CSV import"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:34
+msgid ""
+"Reports convert amounts into the reporting currency with these daily "
+"rates. A rate reads \"1 base = rate quote\". Enter rates by hand, import "
+"a CSV file, or let Specivo fetch the European Central Bank reference "
+"rates every day."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:36
+msgid "Rate added."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:37
+msgid "Rate saved."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:38
+msgid "Rate deleted."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:39
+msgid "Settings saved."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:40
+msgid "Rates fetched."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:41
+msgid "The rates could not be fetched. The reason is shown under Automatic fetch."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:47
+msgid "Add a rate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:48
+msgid "A rate entered here wins over an imported or fetched rate of the same day."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:63
+#: specivo/templates/themes/default/pages/admin/group_detail.html:59
+#: specivo/templates/themes/default/pages/issues/detail.html:515
+#: specivo/templates/themes/default/pages/issues/form.html:383
+#: specivo/templates/themes/default/pages/projects/settings.html:188
+msgid "Add"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:68
+msgid "Try a conversion"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:71
+msgid "Amount"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:72
+msgid "From currency"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:76
+msgid "To currency"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:79
+msgid "Date of the amount"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:80
+msgid "Rate policy"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:81
+msgid "Rate of that date"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:82
+msgid "Latest rate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:84
+msgid "Convert"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:94
+msgid "Same currency: no rate needed."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:97
+#, python-format
+msgid "Rate used: 1 %(from_code)s = %(rate)s %(to_code)s, from %(day)s."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:98
+msgid "Derived from the inverse rate."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:99
+#, python-format
+msgid "Through %(pivot)s."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:104
+#, python-format
+msgid "%(amount)s could not be converted."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:105
+#, python-format
+msgid ""
+"The newest rate is from %(day)s, older than the maximum age of %(days)s "
+"days."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:106
+msgid "There is no rate for this pair on or before that date."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:107
+msgid ""
+"Reports list such amounts separately as unconverted; they are never "
+"counted as zero."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:115
+msgid "Rates"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:121
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:135
+msgid "Source"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:122
+msgid "All sources"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:146
+#: specivo/templates/themes/default/pages/admin/groups.html:71
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:92
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:145
+#: specivo/templates/themes/default/pages/admin/projects.html:81
+#: specivo/templates/themes/default/pages/admin/settings.html:165
+#: specivo/templates/themes/default/pages/admin/versions.html:125
+#: specivo/templates/themes/default/pages/issues/detail.html:76
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:86
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
+#: specivo/templates/themes/default/pages/projects/settings.html:426
+#: specivo/templates/themes/default/pages/projects/settings.html:577
+#: specivo/templates/themes/default/pages/projects/settings.html:754
+#: specivo/templates/themes/default/pages/projects/settings.html:975
+#: specivo/templates/themes/default/pages/projects/settings.html:1138
+#: specivo/templates/themes/default/pages/projects/settings.html:1426
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:43
+#: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:118
+#: specivo/templates/themes/default/pages/projects/version_detail.html:44
+#: specivo/templates/themes/default/pages/time/list.html:86
+#: specivo/templates/themes/default/pages/wiki/edit.html:14
+#: specivo/templates/themes/default/pages/wiki/show.html:35
+msgid "Edit"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:148
+#: specivo/templates/themes/default/pages/admin/groups.html:72
+#: specivo/templates/themes/default/pages/admin/groups.html:142
+#: specivo/templates/themes/default/pages/admin/groups.html:174
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:453
+#: specivo/templates/themes/default/pages/admin/versions.html:128
+#: specivo/templates/themes/default/pages/auth/api_keys.html:132
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:96
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:98
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:133
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:89
+#: specivo/templates/themes/default/pages/projects/settings.html:429
+#: specivo/templates/themes/default/pages/projects/settings.html:580
+#: specivo/templates/themes/default/pages/projects/settings.html:757
+#: specivo/templates/themes/default/pages/projects/settings.html:978
+#: specivo/templates/themes/default/pages/projects/settings.html:1141
+#: specivo/templates/themes/default/pages/projects/settings.html:1429
+#: specivo/templates/themes/default/pages/wiki/show.html:160
+#: specivo/templates/themes/default/pages/wiki/show.html:195
+#: specivo/templates/themes/default/pages/wiki/show.html:197
+#: specivo/templates/themes/default/pages/wiki/show.html:233
+msgid "Delete"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:153
+msgid ""
+"No rates yet. Add one above, import a CSV file, or switch on the "
+"automatic fetch."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:162
+msgid "Import a CSV file"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:163
+#, python-format
+msgid ""
+"One rate per line: <code>date,base,quote,rate</code>, for example "
+"<code>2026-11-05,USD,THB,32.45</code>. The header line is optional; dates"
+" are YYYY-MM-DD and rates use a dot. A file with any bad line imports "
+"nothing. Up to %(size)s MB."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:165
+msgid "CSV file"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:166
+msgid "Or paste CSV lines"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:168
+msgid "Preview"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:169
+msgid "Import"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:176
+#, python-format
+msgid "%(count)s line has a problem. Nothing was imported."
+msgid_plural "%(count)s lines have problems. Nothing was imported."
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:178
+#, python-format
+msgid "Line %(line)s"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:181
+#, python-format
+msgid "Imported: %(created)s new, %(updated)s changed, %(unchanged)s unchanged."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:183
+#, python-format
+msgid ""
+"Preview: %(created)s new, %(updated)s changed, %(unchanged)s unchanged. "
+"Nothing has been written yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:188
+msgid "Line"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:195
+msgid "New"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:195
+msgid "Changes the imported rate"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:195
+msgid "Unchanged"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:207
+msgid "Conversion settings"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:209
+msgid "Pivot currency"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:215
+msgid ""
+"When no rate links two currencies directly, they are converted through "
+"this one. Keep EUR when you use the ECB rates."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:217
+msgid "Maximum age of a rate (days)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:220
+msgid ""
+"An amount is converted with the newest rate on or before its date, if "
+"that rate is at most this old. Otherwise it is shown as unconverted."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:222
+msgid "Automatic fetch"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:224
+msgid "Fetch the rates once a day"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:225
+msgid ""
+"Off by default. Needs outbound internet access from the worker, directly "
+"or through the proxy set in HTTPS_PROXY. Leave it off on an air-gapped "
+"install."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:227
+msgid "Feed address"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:230
+msgid ""
+"Empty uses the ECB daily reference rates. A self-hosted Frankfurter "
+"instance works too."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:240
+#, python-format
+msgid "Last fetch %(at)s: %(stored)s rates stored, newest from %(day)s."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:242
+#, python-format
+msgid "Last fetch %(at)s failed: %(reason)s"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:245
+msgid "No fetch has run yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:248
+msgid "Fetch now"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:251
+msgid ""
+"Source of fetched rates: European Central Bank, euro foreign exchange "
+"reference rates. The ECB publishes them for information purposes only; "
+"they are not meant for transactions."
+msgstr ""
+
 #: specivo/templates/themes/default/pages/admin/group_detail.html:22
 msgid "Failed to add user."
 msgstr ""
@@ -2243,13 +2701,6 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:45
 msgid "Search by name or login..."
-msgstr ""
-
-#: specivo/templates/themes/default/pages/admin/group_detail.html:59
-#: specivo/templates/themes/default/pages/issues/detail.html:515
-#: specivo/templates/themes/default/pages/issues/form.html:383
-#: specivo/templates/themes/default/pages/projects/settings.html:188
-msgid "Add"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:60
@@ -2349,59 +2800,6 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/groups.html:59
 msgid "No groups."
-msgstr ""
-
-#: specivo/templates/themes/default/pages/admin/groups.html:71
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:92
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:145
-#: specivo/templates/themes/default/pages/admin/projects.html:81
-#: specivo/templates/themes/default/pages/admin/settings.html:165
-#: specivo/templates/themes/default/pages/admin/versions.html:125
-#: specivo/templates/themes/default/pages/issues/detail.html:76
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:86
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
-#: specivo/templates/themes/default/pages/projects/settings.html:426
-#: specivo/templates/themes/default/pages/projects/settings.html:577
-#: specivo/templates/themes/default/pages/projects/settings.html:754
-#: specivo/templates/themes/default/pages/projects/settings.html:975
-#: specivo/templates/themes/default/pages/projects/settings.html:1138
-#: specivo/templates/themes/default/pages/projects/settings.html:1416
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:43
-#: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:118
-#: specivo/templates/themes/default/pages/projects/version_detail.html:44
-#: specivo/templates/themes/default/pages/time/list.html:86
-#: specivo/templates/themes/default/pages/wiki/edit.html:14
-#: specivo/templates/themes/default/pages/wiki/show.html:35
-msgid "Edit"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/admin/groups.html:72
-#: specivo/templates/themes/default/pages/admin/groups.html:142
-#: specivo/templates/themes/default/pages/admin/groups.html:174
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:453
-#: specivo/templates/themes/default/pages/admin/versions.html:128
-#: specivo/templates/themes/default/pages/auth/api_keys.html:132
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:96
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:98
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:133
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:89
-#: specivo/templates/themes/default/pages/projects/settings.html:429
-#: specivo/templates/themes/default/pages/projects/settings.html:580
-#: specivo/templates/themes/default/pages/projects/settings.html:757
-#: specivo/templates/themes/default/pages/projects/settings.html:978
-#: specivo/templates/themes/default/pages/projects/settings.html:1141
-#: specivo/templates/themes/default/pages/projects/settings.html:1419
-#: specivo/templates/themes/default/pages/wiki/show.html:160
-#: specivo/templates/themes/default/pages/wiki/show.html:195
-#: specivo/templates/themes/default/pages/wiki/show.html:197
-#: specivo/templates/themes/default/pages/wiki/show.html:233
-msgid "Delete"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/groups.html:85
@@ -2990,7 +3388,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:127
 #: specivo/templates/themes/default/pages/projects/settings.html:1128
-#: specivo/templates/themes/default/pages/projects/settings.html:1404
+#: specivo/templates/themes/default/pages/projects/settings.html:1414
 msgid "disabled"
 msgstr ""
 
@@ -3774,7 +4172,7 @@ msgid "Authentication settings"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
-#: specivo/templates/themes/default/pages/projects/settings.html:1494
+#: specivo/templates/themes/default/pages/projects/settings.html:1516
 msgid "Provider"
 msgstr ""
 
@@ -3996,7 +4394,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
 #: specivo/templates/themes/default/pages/auth/profile.html:226
-#: specivo/templates/themes/default/pages/projects/settings.html:1603
+#: specivo/templates/themes/default/pages/projects/settings.html:1627
 msgid "Disconnect"
 msgstr ""
 
@@ -4229,8 +4627,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:597
 #: specivo/templates/themes/default/pages/projects/settings.html:1214
 #: specivo/templates/themes/default/pages/projects/settings.html:1276
-#: specivo/templates/themes/default/pages/projects/settings.html:1485
-#: specivo/templates/themes/default/pages/projects/settings.html:1594
+#: specivo/templates/themes/default/pages/projects/settings.html:1495
+#: specivo/templates/themes/default/pages/projects/settings.html:1618
 msgid "Close"
 msgstr ""
 
@@ -4385,7 +4783,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/auth/api_keys.html:60
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:39
 #: specivo/templates/themes/default/pages/projects/settings.html:1100
-#: specivo/templates/themes/default/pages/projects/settings.html:1374
+#: specivo/templates/themes/default/pages/projects/settings.html:1384
 msgid "Dismiss"
 msgstr ""
 
@@ -4592,7 +4990,7 @@ msgid "Notification preferences will be available in a future release."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/preferences.html:82
-#: specivo/web/pages/admin.py:1138
+#: specivo/web/pages/admin.py:1143
 msgid "Sessions"
 msgstr ""
 
@@ -5461,14 +5859,6 @@ msgstr ""
 msgid "Author"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/description_diff.html:73
-#: specivo/templates/themes/default/pages/issues/detail.html:363
-#: specivo/templates/themes/default/pages/issues/detail.html:387
-#: specivo/templates/themes/default/pages/time/list.html:54
-#: specivo/templates/themes/default/pages/wiki/history.html:32
-msgid "Date"
-msgstr ""
-
 #: specivo/templates/themes/default/pages/issues/description_diff.html:90
 #: specivo/templates/themes/default/pages/wiki/history.html:43
 msgid "Current"
@@ -5882,6 +6272,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/currencies.html:7
 #: specivo/templates/themes/default/pages/admin/dashboard.html:8
 #: specivo/templates/themes/default/pages/admin/email.html:7
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:7
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:26
 #: specivo/templates/themes/default/pages/admin/group_detail.html:7
 #: specivo/templates/themes/default/pages/admin/groups.html:7
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:8
@@ -6318,7 +6710,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:187
 #: specivo/templates/themes/default/pages/projects/settings.html:1158
-#: specivo/templates/themes/default/pages/projects/settings.html:1436
+#: specivo/templates/themes/default/pages/projects/settings.html:1446
 msgid "Refresh"
 msgstr ""
 
@@ -6679,7 +7071,7 @@ msgid "Webhooks"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:31
-#: specivo/templates/themes/default/pages/projects/settings.html:1319
+#: specivo/templates/themes/default/pages/projects/settings.html:1326
 msgid "Repositories"
 msgstr ""
 
@@ -7293,8 +7685,8 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1132
 #: specivo/templates/themes/default/pages/projects/settings.html:1155
-#: specivo/templates/themes/default/pages/projects/settings.html:1410
-#: specivo/templates/themes/default/pages/projects/settings.html:1433
+#: specivo/templates/themes/default/pages/projects/settings.html:1420
+#: specivo/templates/themes/default/pages/projects/settings.html:1443
 msgid "Delivery log"
 msgstr ""
 
@@ -7303,7 +7695,7 @@ msgid "Send test"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1165
-#: specivo/templates/themes/default/pages/projects/settings.html:1443
+#: specivo/templates/themes/default/pages/projects/settings.html:1453
 msgid "No deliveries yet"
 msgstr ""
 
@@ -7326,12 +7718,12 @@ msgid "Response"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1201
-#: specivo/templates/themes/default/pages/projects/settings.html:1472
+#: specivo/templates/themes/default/pages/projects/settings.html:1482
 msgid "Newer"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1203
-#: specivo/templates/themes/default/pages/projects/settings.html:1474
+#: specivo/templates/themes/default/pages/projects/settings.html:1484
 msgid "Older"
 msgstr ""
 
@@ -7389,7 +7781,7 @@ msgid "Failed to save the repository."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1302
-#: specivo/templates/themes/default/pages/projects/settings.html:1324
+#: specivo/templates/themes/default/pages/projects/settings.html:1331
 msgid "Connect a repository"
 msgstr ""
 
@@ -7421,152 +7813,199 @@ msgstr ""
 msgid "Processed"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1333
+#: specivo/templates/themes/default/pages/projects/settings.html:1314
+msgid "Enter the repository as owner/name."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1315
+msgid "Enter the repository's http(s) address."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1316
+msgid "Choose a merge status, or turn merge automation off."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1317
+#, python-brace-format
+msgid "Detected {provider} repository {repo}"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1318
+#, python-brace-format
+msgid "Filled in repository {repo} from the URL"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1319
+#, python-brace-format
+msgid ""
+"Changing the provider gives this repository a new webhook URL and secret."
+" The current webhook stops working at once; set it up again on "
+"{provider}."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1320
+#, python-brace-format
+msgid ""
+"The provider changed from {old} to {new}. The old webhook URL no longer "
+"works: set the webhook up again on {new} with this URL and secret."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1343
 msgid "Webhook URL"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1340
+#: specivo/templates/themes/default/pages/projects/settings.html:1350
 msgid "Secret"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1346
+#: specivo/templates/themes/default/pages/projects/settings.html:1356
 msgid "Copy the secret now: it is not shown again."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1350
+#: specivo/templates/themes/default/pages/projects/settings.html:1360
 msgid ""
 "In the repository on GitHub, open Settings, then Webhooks, then Add "
 "webhook."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1351
+#: specivo/templates/themes/default/pages/projects/settings.html:1361
 msgid ""
 "Paste the webhook URL into Payload URL and set Content type to "
 "application/json."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1352
-#: specivo/templates/themes/default/pages/projects/settings.html:1368
+#: specivo/templates/themes/default/pages/projects/settings.html:1362
+#: specivo/templates/themes/default/pages/projects/settings.html:1378
 msgid "Paste the secret into Secret."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1353
+#: specivo/templates/themes/default/pages/projects/settings.html:1363
 msgid ""
 "Choose \"Let me select individual events\", tick Pushes and Pull "
 "requests, and save. GitHub sends a ping at once; it appears in the "
 "delivery log."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1358
+#: specivo/templates/themes/default/pages/projects/settings.html:1368
 msgid ""
 "In the project on GitLab, open Settings, then Webhooks, then Add new "
 "webhook."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1359
+#: specivo/templates/themes/default/pages/projects/settings.html:1369
 msgid "Paste the webhook URL into URL and the secret into Secret token."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1360
+#: specivo/templates/themes/default/pages/projects/settings.html:1370
 msgid "Under Trigger, select Push events and Merge request events."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1361
+#: specivo/templates/themes/default/pages/projects/settings.html:1371
 msgid "Save, then use Test, Push events to send a first delivery."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1366
+#: specivo/templates/themes/default/pages/projects/settings.html:1376
 msgid ""
 "In the repository, open Settings, then Webhooks, then Add webhook, and "
 "pick the Gitea or Forgejo webhook type, matching the server."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1367
+#: specivo/templates/themes/default/pages/projects/settings.html:1377
 msgid ""
 "Paste the webhook URL into Target URL. Keep the HTTP method POST and set "
 "the POST content type to application/json."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1369
+#: specivo/templates/themes/default/pages/projects/settings.html:1379
 msgid ""
 "Under Trigger on, choose Custom events, tick Push and Pull request, then "
 "add the webhook. Test delivery sends a push."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1387
+#: specivo/templates/themes/default/pages/projects/settings.html:1397
 msgid "No repositories connected"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1388
+#: specivo/templates/themes/default/pages/projects/settings.html:1398
 msgid ""
 "Connect a GitHub, GitLab, Gitea or Forgejo repository: commits that "
 "mention an issue key, such as \"Fixes KEY-12\", or are pushed to a branch"
 " named after one, are linked to the issue."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1389
+#: specivo/templates/themes/default/pages/projects/settings.html:1399
 msgid "Connect the first repository"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1402
+#: specivo/templates/themes/default/pages/projects/settings.html:1412
 msgid "Last delivery:"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1403
+#: specivo/templates/themes/default/pages/projects/settings.html:1413
 msgid "includes subprojects"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1405
+#: specivo/templates/themes/default/pages/projects/settings.html:1415
 msgid "commit commands on"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1406
+#: specivo/templates/themes/default/pages/projects/settings.html:1416
 msgid "merge automation on"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1411
+#: specivo/templates/themes/default/pages/projects/settings.html:1421
 msgid "New secret"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1444
+#: specivo/templates/themes/default/pages/projects/settings.html:1454
 msgid "Deliveries appear here once the forge sends its first webhook to this URL."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1502
+#: specivo/templates/themes/default/pages/projects/settings.html:1504
+msgid "Repository URL"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1507
+msgid ""
+"Paste the address of the repository's page, or its clone address. "
+"Provider and Repository are filled in from it."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1511
+msgid "Undo"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1528
 msgid "Repository"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1504
+#: specivo/templates/themes/default/pages/projects/settings.html:1531
 msgid ""
 "The full name as the forge shows it, owner and repository. Deliveries "
 "that name another repository are ignored."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1507
-msgid "Repository URL"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/projects/settings.html:1511
+#: specivo/templates/themes/default/pages/projects/settings.html:1534
 msgid "Issues commits may link to"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1513
+#: specivo/templates/themes/default/pages/projects/settings.html:1536
 msgid "This project"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1514
+#: specivo/templates/themes/default/pages/projects/settings.html:1537
 msgid "This project and its subprojects"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1516
+#: specivo/templates/themes/default/pages/projects/settings.html:1539
 msgid "Keys of other projects in commit messages are ignored."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1519
+#: specivo/templates/themes/default/pages/projects/settings.html:1542
 msgid "Changes to issues"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1520
+#: specivo/templates/themes/default/pages/projects/settings.html:1543
 msgid ""
 "Commit commands trust the commit author email, which anyone with push "
 "access can set to any address. With commands on, anyone who can push to "
@@ -7574,105 +8013,105 @@ msgid ""
 "use."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1523
+#: specivo/templates/themes/default/pages/projects/settings.html:1546
 msgid "Commit commands"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1525
+#: specivo/templates/themes/default/pages/projects/settings.html:1548
 msgid ""
 "\"Fixes KEY-12\" in a commit on the default branch moves the issue to the"
 " fixing status, as the Specivo user whose verified email wrote the "
 "commit. Their permissions and the workflow apply."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1527
+#: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid "Fixing status"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1529
+#: specivo/templates/themes/default/pages/projects/settings.html:1552
 msgid "Do not change the status"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1537
+#: specivo/templates/themes/default/pages/projects/settings.html:1560
 msgid "Time logging"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1539
+#: specivo/templates/themes/default/pages/projects/settings.html:1562
 msgid ""
 "\"KEY-12 @1h30m\" (also @2h, @90m, @1.5h) logs the time on the issue for "
 "the commit's author, on any branch. They need permission to log time."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1543
+#: specivo/templates/themes/default/pages/projects/settings.html:1566
 msgid "Merge automation"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1545
+#: specivo/templates/themes/default/pages/projects/settings.html:1568
 msgid ""
 "When a pull or merge request that says \"Fixes KEY-12\" is merged into "
 "the default branch, the issue moves to the merge status. The change is "
 "made by Git, with the project role chosen here, and follows the workflow."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1548
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
 msgid "Merge status"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1550
+#: specivo/templates/themes/default/pages/projects/settings.html:1573
 msgid "Choose a status"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1557
+#: specivo/templates/themes/default/pages/projects/settings.html:1581
 msgid "Role of Git in this project"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1563
+#: specivo/templates/themes/default/pages/projects/settings.html:1587
 msgid ""
 "The Automation role may edit issues but has no workflow transitions until"
 " an administrator grants them. Changing the role needs permission to "
 "manage members."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1569
+#: specivo/templates/themes/default/pages/projects/settings.html:1593
 msgid "Ignore pull requests from forks and outsiders"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1571
+#: specivo/templates/themes/default/pages/projects/settings.html:1595
 msgid ""
 "Requests from another repository, or on GitHub by someone who is not a "
 "collaborator, are not linked to issues until they are merged."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1574
+#: specivo/templates/themes/default/pages/projects/settings.html:1598
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1593
+#: specivo/templates/themes/default/pages/projects/settings.html:1617
 msgid "Disconnect repository"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1599
+#: specivo/templates/themes/default/pages/projects/settings.html:1623
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1612
+#: specivo/templates/themes/default/pages/projects/settings.html:1636
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
 msgid "Saved"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1613
+#: specivo/templates/themes/default/pages/projects/settings.html:1637
 msgid "Could not save the branch name settings."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1618
+#: specivo/templates/themes/default/pages/projects/settings.html:1642
 msgid "Branch names"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1620
+#: specivo/templates/themes/default/pages/projects/settings.html:1644
 #, python-brace-format
 msgid ""
 "The \"Copy branch name\" button on an issue builds the name from this "
@@ -7681,23 +8120,23 @@ msgid ""
 "Branches named this way link their commits to the issue."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1622
+#: specivo/templates/themes/default/pages/projects/settings.html:1646
 msgid "Format"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1624
+#: specivo/templates/themes/default/pages/projects/settings.html:1648
 msgid "Example:"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1634
+#: specivo/templates/themes/default/pages/projects/settings.html:1658
 msgid "Other trackers"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1653
+#: specivo/templates/themes/default/pages/projects/settings.html:1677
 msgid "Search indexing"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1655
+#: specivo/templates/themes/default/pages/projects/settings.html:1679
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."
@@ -8662,51 +9101,51 @@ msgstr ""
 msgid "This is already the user's email address."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1131
+#: specivo/web/pages/admin.py:1136
 msgid "Sign-in"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1132
+#: specivo/web/pages/admin.py:1137
 msgid "Access"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1133
+#: specivo/web/pages/admin.py:1138
 msgid "Agents"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1134
+#: specivo/web/pages/admin.py:1139
 msgid "Issues and wiki"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1137
+#: specivo/web/pages/admin.py:1142
 msgid "Provisioning"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1200
+#: specivo/web/pages/admin.py:1205
 msgid "Unknown category."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1202
+#: specivo/web/pages/admin.py:1207
 msgid "Unknown event type."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1207
+#: specivo/web/pages/admin.py:1212
 msgid "No user has this login."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1212
+#: specivo/web/pages/admin.py:1217
 msgid "No project has this key."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1217
+#: specivo/web/pages/admin.py:1222
 msgid "The from date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1223
+#: specivo/web/pages/admin.py:1228
 msgid "The to date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1227
+#: specivo/web/pages/admin.py:1232
 msgid "The IP address is too long."
 msgstr ""
 
