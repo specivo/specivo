@@ -2,6 +2,7 @@
 
 Pure functions, no database, like :mod:`specivo.hooks.refs`.
 
+``Ignore KEY-1`` in the title or body means no link to KEY-1 at all.
 A pull request links to an issue from its title, its body (description) or
 its source branch, limited to the keys in the integration's scope and, like a
 commit, to ``REPOSITORY_MAX_REFS_PER_COMMIT`` issues (title first, then body,
@@ -18,7 +19,7 @@ from datetime import datetime
 
 from specivo.core.constants import REPOSITORY_MAX_REFS_PER_COMMIT
 from specivo.hooks.providers.base import PullRequestEvent
-from specivo.hooks.refs import extract_branch_refs, extract_refs
+from specivo.hooks.refs import extract_branch_refs, extract_ignored, extract_refs
 
 _MERGED = "merged"
 
@@ -34,7 +35,11 @@ class PullRequestLink:
 
 
 def pull_request_links(event: PullRequestEvent, known_keys: frozenset[str]) -> dict[str, PullRequestLink]:
-    """display key → link, for the in-scope issues *event* references."""
+    """display key → link, for the in-scope issues *event* references.
+
+    ``Ignore KEY-1`` in the title or body drops KEY-1 from every source.
+    """
+    ignored = extract_ignored(event.title, known_keys) | extract_ignored(event.body, known_keys)
     links: dict[str, PullRequestLink] = {}
     for source, refs in (
         ("title", extract_refs(event.title, known_keys)),
@@ -42,6 +47,8 @@ def pull_request_links(event: PullRequestEvent, known_keys: frozenset[str]) -> d
         ("branch", extract_branch_refs(event.source_branch or "", known_keys)),
     ):
         for ref in refs:
+            if ref.display_key in ignored:
+                continue
             closing = ref.keyword == "fixes"
             current = links.get(ref.display_key)
             if current is None:

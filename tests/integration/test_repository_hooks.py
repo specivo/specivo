@@ -199,11 +199,12 @@ class TestPush:
         assert await _count(db_session, IssueCommitLink) == 0
         assert await _count(db_session, RepositoryCommit) == 0
 
-    async def test_tag_push_is_ignored(self, client, db_session, world, queued):
+    async def test_tag_push_records_a_tag_and_links_no_commit(self, client, db_session, world, queued):
         integration = await make_integration(db_session, world.project)
         payload = push_payload("github", [commit("t", "RHOOK-1")], ref="refs/tags/v1.0")
         result = await _push_and_process(client, db_session, integration, payload, queued)
-        assert result.status == "ignored"
+        assert result.status == "processed"
+        assert result.detail.startswith("Tag v1.0")
         assert await _count(db_session, IssueCommitLink) == 0
 
     async def test_default_branch_refreshed(self, client, db_session, world, queued):
@@ -428,12 +429,13 @@ class TestRefusals:
         delivery = (await db_session.execute(select(RepositoryDelivery))).scalar_one()
         assert delivery.status == "failed"
 
-    async def test_unhandled_event_is_ignored(self, client, db_session, world, queued):
+    async def test_unhandled_event_is_ignored_without_its_payload(self, client, db_session, world, queued):
         integration = await make_integration(db_session, world.project)
         resp = await _post(client, integration, push_payload("github", [commit("e", "RHOOK-1")]), event="issues")
         assert (resp.status_code, resp.json()) == (200, {"status": "ignored"})
         delivery = (await db_session.execute(select(RepositoryDelivery))).scalar_one()
-        assert (delivery.event, delivery.status) == ("issues", "ignored")
+        assert (delivery.event, delivery.status, delivery.payload) == ("issues", "ignored", None)
+        assert queued == []
 
     async def test_cookie_without_csrf_token_is_not_refused(self, client, db_session, world, queued):
         integration = await make_integration(db_session, world.project)

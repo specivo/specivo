@@ -20,6 +20,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_show_issue": (
         "Issue details: parent, children, tags, commits, PRs, links to/from, source number; search= for a section"
     ),
+    "specivo_issue_development": (
+        "Development activity of an issue as JSON: commits, PRs, reviews, CI, deployments, releases; "
+        "summary and a paged timeline (kinds=, limit=, offset=)"
+    ),
     "specivo_create_issue": "Create an issue, optionally with parent_ref and tags (call list_lookups first for IDs)",
     "specivo_update_issue": "Update issue fields or re-parent (parent_ref); lock_version handled automatically",
     "specivo_move_issue": "Move an issue to another project (new KEY-N; the old ref still resolves)",
@@ -114,6 +118,8 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    `Comments: N`, and `Commits: N` with the newest linked commits and `Pull requests: N` with their state
    when a connected repository referenced the issue; an imported issue also has `Imported from: RT #123`,
    and `specivo_search` finds it by that number: `RT #123`, `#123`, or a key such as `PROJ-7`)
+   For builds, deployments and releases call `specivo_issue_development(issue_ref)` (filter with
+   `kinds=["ci", "deployment"]`); `specivo_show_issue` only sums them up on its `Development:` line.
 3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
 4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
 5. Follow the links: `specivo_show_issue` and `specivo_read_wiki` list `Links to:`, `Linked from:`

@@ -388,10 +388,43 @@ async def _commit_lines(session: AsyncSession, issue_id: int) -> list[str]:
 
 
 async def _pull_request_lines(session: AsyncSession, issue_id: int) -> list[str]:
-    """``Pull requests: N`` and each linked request (number, state, title, branch, URL); none when unlinked."""
+    """``Pull requests: N`` and each linked request (number, state, title, branch, URL); none when unlinked.
+
+    Then one ``Development:`` line summing up reviews, CI, deployments and
+    releases, when there are any (details: ``specivo_issue_development``).
+    """
     from specivo.services.repository_service import development_for_issue
 
-    pull_requests = (await development_for_issue(session, issue_id)).pull_requests
+    development = await development_for_issue(session, issue_id, limit=1)
+    pull_requests = development.pull_requests
+    lines = _pull_request_list(pull_requests)
+    summary_line = _development_summary_line(development)
+    if summary_line:
+        lines.append(summary_line)
+    return lines
+
+
+def _development_summary_line(development: Any) -> str | None:
+    """``Development: reviews approved; CI failing (3 runs); deployed to production 2026-...; released in v1.2``."""
+    summary = development.summary
+    if summary is None:
+        return None
+    parts: list[str] = []
+    if summary.reviews:
+        parts.append(f"reviews {summary.reviews.replace('_', ' ')}")
+    if summary.ci:
+        parts.append(f"CI {summary.ci} ({summary.counts.get('ci', 0)} runs)")
+    for env in summary.deployments:
+        where = env.environment_type or env.environment
+        parts.append(f"deployed to {where} {env.deployed_at.isoformat(timespec='minutes')}")
+    if summary.released_in:
+        parts.append("released in " + ", ".join(r.tag_name for r in summary.released_in[:5]))
+    if not parts:
+        return None
+    return "Development: " + "; ".join(parts) + " (specivo_issue_development for details)"
+
+
+def _pull_request_list(pull_requests: list) -> list[str]:
     if not pull_requests:
         return []
     lines = [f"Pull requests: {len(pull_requests)}"]
@@ -405,6 +438,38 @@ async def _pull_request_lines(session: AsyncSession, issue_id: int) -> list[str]
             line += f" {pr.url}"
         lines.append(line)
     return lines
+
+
+async def _issue_development(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+    kinds: list[str] | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> str:
+    """The issue's development activity as JSON, the same document ``GET /api/v1/issues/{ref}/development/`` returns."""
+    import json
+
+    from specivo.core.constants import DEVELOPMENT_TIMELINE_MAX_LIMIT, DEVELOPMENT_TIMELINE_MAX_OFFSET
+    from specivo.schemas.repository import DEVELOPMENT_KINDS
+    from specivo.services.repository_service import development_for_issue
+
+    if kinds is not None:
+        unknown = sorted(set(kinds) - set(DEVELOPMENT_KINDS))
+        if unknown:
+            raise ValidationError(f"Unknown kinds: {', '.join(unknown)}. Use: {', '.join(DEVELOPMENT_KINDS)}")
+    if not 1 <= limit <= DEVELOPMENT_TIMELINE_MAX_LIMIT:
+        raise ValidationError(f"limit must be between 1 and {DEVELOPMENT_TIMELINE_MAX_LIMIT}")
+    if not 0 <= offset <= DEVELOPMENT_TIMELINE_MAX_OFFSET:
+        raise ValidationError(f"offset must be between 0 and {DEVELOPMENT_TIMELINE_MAX_OFFSET}")
+    issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    await _require_permission(session, user, issue.project_id, "view_issues")
+    development = await development_for_issue(session, issue.id, kinds=kinds, offset=offset, limit=limit)
+    await _log_tool(
+        session, user, AuditEvent.ISSUE_READ, "issue_development", {"issue_ref": issue_ref}, project_id=issue.project_id
+    )
+    return json.dumps(development.model_dump(mode="json"), ensure_ascii=False)
 
 
 def _extract_section(text: str, search: str) -> str | None:

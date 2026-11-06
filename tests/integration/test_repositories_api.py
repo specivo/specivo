@@ -99,6 +99,7 @@ class TestCrud:
             "merge_status_id": None,
             "merge_automation_enabled": False,
             "ignore_external_pull_requests": True,
+            "environment_types": {},
         }
 
         stored = (

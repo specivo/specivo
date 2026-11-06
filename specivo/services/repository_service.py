@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -40,13 +41,24 @@ from specivo.models.repository import (
     RepositoryCommit,
     RepositoryDelivery,
     RepositoryIntegration,
+    RepositoryRelease,
 )
 from specivo.models.role import Role, RoleBuiltin
 from specivo.models.user import User
+from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.repository import (
+    DEVELOPMENT_KINDS,
     DevelopmentBranchOut,
+    DevelopmentCiRunOut,
     DevelopmentCommitOut,
+    DevelopmentDeploymentOut,
+    DevelopmentEnvironmentOut,
     DevelopmentPullRequestOut,
+    DevelopmentReleaseOut,
+    DevelopmentRepositoryOut,
+    DevelopmentReviewOut,
+    DevelopmentSummaryOut,
+    DevelopmentTimelineItemOut,
     IssueDevelopmentOut,
     RepositoryIntegrationCreate,
     RepositoryIntegrationOut,
@@ -523,15 +535,34 @@ def branch_url(provider: str, repo_url: str, branch: str) -> str | None:
     return f"{repo_url.rstrip('/')}/{path}/{quote(branch, safe='/')}"
 
 
-async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDevelopmentOut:
-    """Commits, pull requests and branches linked to an issue, in three queries.
+async def development_for_issue(
+    session: AsyncSession,
+    issue_id: int,
+    *,
+    kinds: Sequence[str] | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> IssueDevelopmentOut:
+    """Everything developed for an issue: commits, pull requests, branches, reviews, CI, deployments, releases.
 
     Commits newest first (at most ``DEVELOPMENT_COMMIT_LIMIT``, with the
     total), pull requests open first then newest, and the branches of both
-    except each repository's default branch. The caller has already checked
-    that the user may see the issue.
+    except each repository's default branch. Reviews, CI runs, deployments and
+    releases (newest first; CI runs and deployments at most
+    ``DEVELOPMENT_ACTIVITY_PER_ISSUE``), a ``summary`` with counts and combined
+    statuses, and the ``timeline`` of *kinds* (all when None) paged by
+    *offset* and *limit*. The caller has already checked that the user may
+    see the issue: anyone who may sees all of it, and nobody else any of it.
     """
-    from specivo.core.constants import DEVELOPMENT_COMMIT_LIMIT, DEVELOPMENT_PULL_REQUEST_LIMIT
+    from specivo.core.constants import (
+        DEVELOPMENT_ACTIVITY_PER_ISSUE,
+        DEVELOPMENT_COMMIT_LIMIT,
+        DEVELOPMENT_PULL_REQUEST_LIMIT,
+        DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
+    )
+    from specivo.hooks import development as dev
+    from specivo.models.repository import CiRun, Deployment, PullRequestReview
+    from specivo.services import repository_activity as activity
 
     commits, total = await commits_for_issue(session, issue_id, DEVELOPMENT_COMMIT_LIMIT)
     integration_ids = {c.integration_id for c in commits}
@@ -548,7 +579,57 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
             .limit(DEVELOPMENT_PULL_REQUEST_LIMIT)
         )
     ).all()
+    pr_count = await session.scalar(
+        select(func.count()).select_from(IssuePullRequestLink).where(IssuePullRequestLink.issue_id == issue_id)
+    )
+    review_rows = (
+        await session.execute(
+            activity.reviews_query(issue_id).order_by(
+                PullRequestReview.submitted_at.desc(), PullRequestReview.id.desc()
+            )
+        )
+    ).all()
+    ci_clause = activity.ci_runs_clause(issue_id)
+    ci_rows = list(
+        (
+            await session.execute(
+                select(CiRun)
+                .where(ci_clause)
+                .order_by(CiRun.occurred_at.desc(), CiRun.id.desc())
+                .limit(DEVELOPMENT_ACTIVITY_PER_ISSUE)
+            )
+        ).scalars()
+    )
+    deploy_clause = activity.deployments_clause(issue_id)
+    deploy_rows = list(
+        (
+            await session.execute(
+                select(Deployment)
+                .where(deploy_clause)
+                .order_by(Deployment.occurred_at.desc(), Deployment.id.desc())
+                .limit(DEVELOPMENT_ACTIVITY_PER_ISSUE)
+            )
+        ).scalars()
+    )
+    release_rows = (
+        await session.execute(
+            activity.releases_query(issue_id).order_by(
+                func.coalesce(RepositoryRelease.released_at, RepositoryRelease.occurred_at).desc(),
+                RepositoryRelease.id.desc(),
+            )
+        )
+    ).all()
+    ci_count = await session.scalar(select(func.count()).select_from(CiRun).where(ci_clause))
+    deploy_count = await session.scalar(select(func.count()).select_from(Deployment).where(deploy_clause))
+
     integration_ids |= {pr.integration_id for pr, _closing in pr_rows}
+    integration_ids |= {pr.integration_id for _review, pr in review_rows}
+    integration_ids |= {r.integration_id for r in ci_rows} | {d.integration_id for d in deploy_rows}
+    integration_ids |= {r.integration_id for r, *_rest in release_rows}
+    selected_kinds = [k for k in DEVELOPMENT_KINDS if kinds is None or k in kinds]
+    page_limit = limit if limit is not None else DEVELOPMENT_TIMELINE_DEFAULT_LIMIT
+    timeline_total, timeline_rows = await activity.timeline(session, issue_id, selected_kinds, offset, page_limit)
+    integration_ids |= {row.integration_id for row in timeline_rows}
     integrations = (
         {
             i.id: i
@@ -580,6 +661,7 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
         _branch(integration, pr.source_branch)
         pull_requests.append(
             DevelopmentPullRequestOut(
+                id=pr.id,
                 number=pr.number,
                 title=pr.title,
                 url=pr.url,
@@ -600,6 +682,7 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
         _branch(integration, c.branch)
         commits_out.append(
             DevelopmentCommitOut(
+                id=c.id,
                 sha=c.sha,
                 short_sha=c.short_sha,
                 first_line=c.first_line,
@@ -612,6 +695,148 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
                 provider=integration.provider,
             )
         )
+    reviews_out = [
+        DevelopmentReviewOut(
+            pull_request_id=pr.id,
+            pull_request_number=pr.number,
+            reviewer_login=review.reviewer_login,
+            state=review.state,
+            submitted_at=review.submitted_at,
+            url=review.url or pr.url,
+            repository=integrations[pr.integration_id].repo_full_name,
+            provider=pr.provider,
+        )
+        for review, pr in review_rows
+    ]
+    ci_out = [
+        DevelopmentCiRunOut(
+            id=r.id,
+            run_type=r.run_type,
+            name=r.name,
+            status=r.status,
+            head_sha=r.head_sha,
+            branch=r.branch,
+            pull_request_number=r.pull_request_number,
+            url=r.url,
+            attempt=r.attempt,
+            started_at=r.started_at,
+            completed_at=r.completed_at,
+            occurred_at=r.occurred_at,
+            repository=integrations[r.integration_id].repo_full_name,
+            provider=r.provider,
+        )
+        for r in ci_rows
+    ]
+
+    def _env_type(d: Deployment) -> str | None:
+        overrides = (integrations[d.integration_id].settings or {}).get("environment_types")
+        return dev.environment_type(d.environment, overrides if isinstance(overrides, dict) else None)
+
+    deployments_out = [
+        DevelopmentDeploymentOut(
+            id=d.id,
+            environment=d.environment,
+            environment_type=_env_type(d),
+            status=d.status,
+            sha=d.sha,
+            ref=d.ref,
+            url=d.url,
+            deployed_at=d.deployed_at,
+            occurred_at=d.occurred_at,
+            repository=integrations[d.integration_id].repo_full_name,
+            provider=d.provider,
+        )
+        for d in deploy_rows
+    ]
+    releases_out = [
+        DevelopmentReleaseOut(
+            id=r.id,
+            tag_name=r.tag_name,
+            name=r.name,
+            is_release=r.is_release,
+            sha=r.sha,
+            url=r.url,
+            released_at=r.released_at,
+            occurred_at=r.occurred_at,
+            source=source,
+            version_id=version_id,
+            version_name=version_name,
+            repository=integrations[r.integration_id].repo_full_name,
+            provider=r.provider,
+        )
+        for r, source, version_id, version_name in release_rows
+    ]
+
+    latest_env: dict[str | None, DevelopmentEnvironmentOut] = {}
+    for d in deployments_out:
+        if d.deployed_at is None:
+            continue
+        current = latest_env.get(d.environment_type)
+        if current is None or d.deployed_at > current.deployed_at:
+            latest_env[d.environment_type] = DevelopmentEnvironmentOut(
+                environment_type=d.environment_type,
+                environment=d.environment,
+                deployed_at=d.deployed_at,
+                url=d.url,
+                repository=d.repository,
+                provider=d.provider,
+            )
+    env_order: dict[str | None, int] = {t: i for i, t in enumerate((*reversed(dev.ENVIRONMENT_TYPES), None))}
+    summary = DevelopmentSummaryOut(
+        counts={
+            "commit": total,
+            "pull_request": int(pr_count or 0),
+            "review": len(reviews_out),
+            "ci": int(ci_count or 0),
+            "deployment": int(deploy_count or 0),
+            "release": len(releases_out),
+        },
+        pull_requests=dev.combined_pull_request_state(pr.state for pr, _closing in pr_rows),
+        reviews=dev.combined_review_state(r.state for r in reviews_out),
+        ci=dev.combined_ci_state(
+            dev.CiLatest(
+                (r.integration_id, r.run_type, r.name),
+                r.status,
+                dev.ci_order_key(r.attempt, r.provider_updated_at or r.occurred_at, r.status),
+            )
+            for r in ci_rows
+        ),
+        deployments=sorted(latest_env.values(), key=lambda e: env_order[e.environment_type]),
+        # The first release the issue made it into comes first.
+        released_in=sorted(releases_out, key=lambda r: (r.released_at or r.occurred_at, r.id)),
+        repositories=[
+            DevelopmentRepositoryOut(name=i.repo_full_name, url=i.repo_url, provider=i.provider)
+            for i in sorted(integrations.values(), key=lambda i: i.repo_full_name.lower())
+        ],
+    )
+    timeline_items = [
+        DevelopmentTimelineItemOut(
+            kind=row.kind,
+            id=row.id,
+            occurred_at=row.occurred_at,
+            title=row.title,
+            state=row.state,
+            url=row.url,
+            repository=integrations[row.integration_id].repo_full_name,
+            provider=row.provider or integrations[row.integration_id].provider,
+            sha=row.sha,
+            branch=row.branch,
+            number=row.number,
+            actor=row.actor,
+        )
+        for row in timeline_rows
+    ]
     return IssueDevelopmentOut(
-        commit_count=total, commits=commits_out, pull_requests=pull_requests, branches=list(branches.values())
+        commit_count=total,
+        commits=commits_out,
+        pull_requests=pull_requests,
+        branches=list(branches.values()),
+        reviews=reviews_out,
+        ci_runs=ci_out,
+        deployments=deployments_out,
+        releases=releases_out,
+        summary=summary,
+        timeline=PaginatedResponse[DevelopmentTimelineItemOut](
+            total_count=timeline_total, offset=offset, limit=page_limit, items=timeline_items
+        ),
     )

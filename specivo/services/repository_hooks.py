@@ -19,6 +19,11 @@ the Celery task ``process_repository_delivery``, which calls
    appended to the issue's ``commits`` metadata (no duplicates).
 5. Mark the delivery ``processed``, ``ignored`` or ``failed`` with a reason.
 
+Other events go by their kind (``ForgeProvider.event_kind``): pull/merge
+requests to ``repository_pull_requests``; reviews, CI, deployments, tags and
+releases to ``repository_activity``. A pushed tag is a tag, not commits.
+A (commit, issue) pair someone detached is never linked again.
+
 The delivery detail never names an issue or a project outside the scope:
 references to them are not references at all (see ``specivo.hooks.refs``).
 A sweeper re-queues ``accepted`` rows that were never processed (broker down
@@ -48,7 +53,7 @@ from specivo.core.constants import (
 )
 from specivo.core.utils import utcnow
 from specivo.hooks.providers import CommitData, PushEvent, get_provider
-from specivo.hooks.refs import Keyword, Ref, extract_branch_refs, extract_refs
+from specivo.hooks.refs import Keyword, Ref, extract_branch_refs, extract_ignored, extract_refs
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.repository import (
@@ -253,12 +258,7 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
         )
     else:
         try:
-            if delivery.event == "pull_request":
-                from specivo.services.repository_pull_requests import process_pull_request
-
-                result = await process_pull_request(session, integration, delivery.payload or {})
-            else:
-                result = await _process_push(session, integration, delivery.payload or {})
+            result = await _dispatch(session, integration, delivery.event, delivery.payload or {})
         except Exception as exc:  # noqa: BLE001 - recorded on the delivery, never lost
             logger.exception(
                 "Repository delivery %d failed",
@@ -292,6 +292,38 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
         },
     )
     return result
+
+
+async def _dispatch(
+    session: AsyncSession, integration: RepositoryIntegration, event: str, payload: dict[str, Any]
+) -> ProcessResult:
+    """Process a delivery by the kind its provider gives the event."""
+    from specivo.hooks import development as dev
+    from specivo.services import repository_activity as activity
+
+    kind = get_provider(integration.provider).event_kind(event)
+    if kind == dev.KIND_PULL_REQUEST:
+        from specivo.services.repository_pull_requests import process_pull_request
+
+        result: ProcessResult = await process_pull_request(session, integration, payload)
+        # GitLab carries approvals on merge request events.
+        reviews = get_provider(integration.provider).parse_reviews(event, payload)
+        if reviews:
+            changed, _reason = await activity.apply_reviews(session, integration, reviews)
+            if changed:
+                result.detail += f" {changed} review(s) recorded."
+        return result
+    if kind == dev.KIND_REVIEW:
+        return await activity.process_review(session, integration, event, payload)
+    if kind == dev.KIND_CI:
+        return await activity.process_ci(session, integration, event, payload)
+    if kind == dev.KIND_DEPLOYMENT:
+        return await activity.process_deployment(session, integration, event, payload)
+    if kind == dev.KIND_RELEASE:
+        return await activity.process_release(session, integration, event, payload)
+    if kind == dev.KIND_PUSH:
+        return await _process_push(session, integration, payload)
+    return ProcessResult(DELIVERY_IGNORED, f"Event {event} is not used by Specivo.")
 
 
 async def scope_project_keys(session: AsyncSession, integration: RepositoryIntegration) -> dict[str, int]:
@@ -390,10 +422,17 @@ async def resolve_references(
 def _commit_refs(
     commit: CommitData, branch_refs: Sequence[Ref], known_keys: frozenset[str]
 ) -> dict[str, tuple[Ref, str]]:
-    """display key → (ref, source); a reference in the message wins over the branch name."""
-    refs: dict[str, tuple[Ref, str]] = {r.display_key: (r, "branch") for r in branch_refs}
+    """display key → (ref, source); a reference in the message wins over the branch name.
+
+    ``Ignore KEY-1`` in the message drops KEY-1 altogether, branch name included.
+    """
     # Parse only what is stored: the message is capped before the parser sees it.
-    for ref in extract_refs(commit.message[:REPOSITORY_COMMIT_MESSAGE_MAX_CHARS], known_keys):
+    message = commit.message[:REPOSITORY_COMMIT_MESSAGE_MAX_CHARS]
+    ignored = extract_ignored(message, known_keys)
+    refs: dict[str, tuple[Ref, str]] = {
+        r.display_key: (r, "branch") for r in branch_refs if r.display_key not in ignored
+    }
+    for ref in extract_refs(message, known_keys):
         refs[ref.display_key] = (ref, "message")
     return dict(list(refs.items())[:REPOSITORY_MAX_REFS_PER_COMMIT])
 
@@ -419,6 +458,10 @@ async def _process_push(
     push = get_provider(integration.provider).parse_push(payload)
     if push.default_branch and push.default_branch != integration.default_branch:
         integration.default_branch = push.default_branch[:255]
+    if push.tag is not None:
+        from specivo.services.repository_activity import process_tag_push
+
+        return await process_tag_push(session, integration, push)
     if push.branch is None:
         return ProcessResult(DELIVERY_IGNORED, f"Not a branch push ({push.ref or 'no ref'}).")
     if not push.commits:
@@ -511,6 +554,13 @@ async def _link_batch(
             if display_key in issue_ids:
                 link = (commits[c.sha].id, issue_ids[display_key])
                 refs_by_link[link] = _stronger(refs_by_link.get(link), (ref, source))
+    # A pair someone detached is never linked again, whoever redelivers the push.
+    from specivo.services.repository_activity import ITEM_COMMIT, detached_pairs
+
+    for pair in await detached_pairs(session, ITEM_COMMIT, refs_by_link):
+        del refs_by_link[pair]
+    if not refs_by_link:
+        return [], []
     inserted = await session.execute(
         pg_insert(IssueCommitLink)
         .values(

@@ -217,6 +217,11 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
             await session.execute(select(IssuePullRequestLink).where(IssuePullRequestLink.pull_request_id == pr.id))
         ).scalars()
     }
+    # A pair someone detached is never linked again.
+    from specivo.services.repository_activity import ITEM_PULL_REQUEST, detached_pairs
+
+    for _pr_id, issue_id in await detached_pairs(session, ITEM_PULL_REQUEST, {(pr.id, i) for i in issues}):
+        del issues[issue_id]
     git_user = await get_git_user(session)
     from specivo.services.journal_service import JournalService
 
