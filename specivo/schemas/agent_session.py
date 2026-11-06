@@ -14,7 +14,8 @@ class AgentSessionOut(BaseModel):
     api_key_id: int
     user_id: int
     issue_id: int | None
-    model_name: str | None
+    client_name: str | None
+    client_version: str | None
     started_at: datetime
     last_activity_at: datetime
     created_at: datetime

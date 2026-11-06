@@ -57,12 +57,18 @@ The value of the Redis layer is:
 
 Interaction with ``agent_sessions``
 -----------------------------------
-The Postgres ``agent_sessions`` table tracks **long-term agent
-identity** (one row per ``(api_key_id, user_agent)``). That is a
-different concept from the ephemeral MCP transport sessions keyed
-here. This store does not replace ``agent_sessions``; it only stores
-``api_key_id`` / ``user_id`` in each Redis hash so that later
-consumers can join back to the durable identity record.
+The Postgres ``agent_sessions`` table holds one row per **activity
+window of an API key**: requests (REST or MCP) less than
+``agent_session_timeout`` apart extend the same row, and a longer gap
+starts a new one. Each row records the client that opened it and the
+issue the agent last started work on (see
+``specivo.services.agent_session_service``). That is a different
+concept from the MCP transport sessions keyed here: one transport
+session can span several activity windows, and one window can be served
+by several transport sessions using the same key. This store does not
+replace ``agent_sessions``; it only stores ``api_key_id`` / ``user_id``
+in each Redis hash so that later consumers can join back to the key and
+its activity windows.
 """
 
 from __future__ import annotations

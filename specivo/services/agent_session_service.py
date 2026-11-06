@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import UTC
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -15,6 +16,7 @@ from specivo.core.utils import utcnow
 from specivo.models.agent_session import AgentSession
 
 if TYPE_CHECKING:
+    from specivo.models.issue import Issue
     from specivo.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -32,30 +34,45 @@ def _get_session_timeout() -> int:
     return _SESSION_TIMEOUT_SECONDS
 
 
-# Patterns to extract model name from User-Agent header.
+_CLIENT_NAME_MAX = 100
+_CLIENT_VERSION_MAX = 50
+
+# The first product token of a User-Agent: ``name`` or ``name/version``.
 # Examples:
-#   "claude-code/1.0 (Claude opus-4)" -> "claude opus-4"
-#   "Claude/opus-4" -> "opus-4"
-#   "claude-code/1.0" -> "claude-code"
-_MODEL_PATTERNS = [
-    re.compile(r"\(Claude\s+(.+?)\)", re.IGNORECASE),  # (Claude opus-4)
-    re.compile(r"Claude/(\S+)", re.IGNORECASE),  # Claude/opus-4
-    re.compile(r"(claude-code)\b", re.IGNORECASE),  # claude-code (fallback)
-]
+#   "claude-code/2.1.0 (external, cli)" -> ("claude-code", "2.1.0")
+#   "python-httpx/0.28.1"               -> ("python-httpx", "0.28.1")
+#   "curl"                              -> ("curl", None)
+_UA_PRODUCT = re.compile(r"^\s*([^\s/()]+)(?:/([^\s()]+))?")
 
 
-def parse_model_name(user_agent: str | None) -> str | None:
-    """Extract AI model name from User-Agent string.
+@dataclass(frozen=True)
+class ClientInfo:
+    """The client that opened an agent session: a name and an optional version."""
 
-    Returns None if no recognizable pattern is found.
+    name: str
+    version: str | None = None
+
+    @classmethod
+    def of(cls, name: str | None, version: str | None = None) -> ClientInfo | None:
+        """Return a trimmed ``ClientInfo`` that fits the columns, or ``None`` for a blank name."""
+        name = (name or "").strip()[:_CLIENT_NAME_MAX]
+        if not name:
+            return None
+        version = (version or "").strip()[:_CLIENT_VERSION_MAX] or None
+        return cls(name=name, version=version)
+
+
+def parse_user_agent(user_agent: str | None) -> ClientInfo | None:
+    """Return the first product of a User-Agent header as a ``ClientInfo``.
+
+    Returns ``None`` when the header is missing or does not start with a product.
     """
     if not user_agent:
         return None
-    for pattern in _MODEL_PATTERNS:
-        match = pattern.search(user_agent)
-        if match:
-            return match.group(1).strip()
-    return None
+    match = _UA_PRODUCT.match(user_agent)
+    if match is None:
+        return None
+    return ClientInfo.of(match.group(1), match.group(2))
 
 
 class AgentSessionService:
@@ -67,13 +84,19 @@ class AgentSessionService:
         api_key_id: int,
         user_id: int,
         user_agent: str | None = None,
+        client: ClientInfo | None = None,
     ) -> AgentSession:
         """Find an active session for this API key or create a new one.
 
         A session is considered "active" if its last_activity_at is within
         the timeout window. Otherwise a new session is started.
+
+        *client* (the MCP ``clientInfo``) names the client; without it the
+        first product of *user_agent* does. A session that has no client yet
+        takes the one this request brings; a known client is never replaced.
         """
         now = utcnow()
+        client = client or parse_user_agent(user_agent)
 
         # Look for the most recent session for this API key
         stmt = (
@@ -88,17 +111,18 @@ class AgentSessionService:
         if existing is not None:
             elapsed = (now - existing.last_activity_at.replace(tzinfo=UTC)).total_seconds()
             if elapsed < _get_session_timeout():
-                # Update activity timestamp
                 existing.last_activity_at = now
+                if existing.client_name is None and client is not None:
+                    existing.client_name = client.name
+                    existing.client_version = client.version
                 await session.flush()
                 return existing
 
-        # Create new session
-        model_name = parse_model_name(user_agent)
         agent_session = AgentSession(
             api_key_id=api_key_id,
             user_id=user_id,
-            model_name=model_name,
+            client_name=client.name if client else None,
+            client_version=client.version if client else None,
             started_at=now,
             last_activity_at=now,
         )
@@ -106,12 +130,67 @@ class AgentSessionService:
         await session.flush()
 
         logger.debug(
-            "Created agent session %d for api_key_id=%d model=%s",
+            "Created agent session %d for api_key_id=%d client=%s",
             agent_session.id,
             api_key_id,
-            model_name,
+            client,
         )
         return agent_session
+
+    async def record_issue(self, session: AsyncSession, agent_session_id: int, user: User, issue: Issue) -> bool:
+        """Make *issue* the issue agent session *agent_session_id* is working on.
+
+        Called when, through MCP, the session's account moves *issue* into an
+        ``active`` status, assigns it to itself or starts a timer on it; the
+        latest such issue wins. Nothing is recorded (and ``False`` returned)
+        when the session is not *user*'s or *user* may not see *issue*, so a
+        session never names an issue its account cannot see.
+        """
+        from specivo.services.issue_service import IssueService
+
+        agent_session = await session.get(AgentSession, agent_session_id)
+        if agent_session is None or agent_session.user_id != user.id:
+            return False
+        if not await IssueService().is_visible(session, issue, user):
+            return False
+        if agent_session.issue_id != issue.id:
+            agent_session.issue_id = issue.id
+            await session.flush()
+        return True
+
+    async def issue_for(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> int | None:
+        """Return the issue of *user_id*'s agent session overlapping ``[started_at, ended_at]``.
+
+        Only sessions that name an issue count. When several overlap the
+        window, the one sharing the longest stretch of it wins, then the most
+        recently active. A session's window is ``[started_at, last_activity_at]``;
+        touching at a single instant counts as overlapping. ``None`` when no
+        session overlaps. The caller still checks that the user may log to
+        the issue: this is an attribution hint, not a permission.
+        """
+        if ended_at < started_at:
+            started_at, ended_at = ended_at, started_at
+        overlap = func.least(AgentSession.last_activity_at, ended_at) - func.greatest(
+            AgentSession.started_at, started_at
+        )
+        stmt = (
+            select(AgentSession.issue_id)
+            .where(
+                AgentSession.user_id == user_id,
+                AgentSession.issue_id.is_not(None),
+                AgentSession.started_at <= ended_at,
+                AgentSession.last_activity_at >= started_at,
+            )
+            .order_by(overlap.desc(), AgentSession.last_activity_at.desc(), AgentSession.id.desc())
+            .limit(1)
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
 
     async def update_activity(self, session: AsyncSession, session_id: int) -> None:
         """Update last_activity_at timestamp for a session."""

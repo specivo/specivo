@@ -270,6 +270,18 @@ A missing cost type defaults to `subscription` when `AiSubscriptionService.subsc
 the admin price page after a past period is entered) re-prices entries, each at its own `priced_at`, bumping `revision`
 where costs change. No prompt, code or file path is ever stored.
 
+**Agent sessions.** `agent_sessions` holds one row per activity window of an API key (requests less than
+`agent_session_timeout` apart), started or extended by `AgentSessionService.get_or_create_session` on every
+API-key request and MCP tool call. `client_name` / `client_version` name the client, never a model: the MCP
+`clientInfo` (published per request by `ClientInfoMiddleware` in `specivo.mcp.client_context`), else the first
+User-Agent product; a window keeps the first client it sees. `issue_id` is set only through MCP, by
+`record_working_issue` after a tool moves an issue into an `active` status, assigns it to the calling account or
+starts a timer on it (latest wins), and only for an issue that account can see. Tools reach the current window
+through the `agent_session_id_var` context variable that `_get_session_and_user` sets for the tool call, not through
+their signatures, and both writes run in a savepoint so a failure never fails the tool.
+`AgentSessionService.issue_for(user_id, started_at, ended_at)` returns the issue of the window overlapping a time
+range longest (ties: most recently active); it is an attribution hint, so callers still check they may log there.
+
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
 **Principals.** A `members` row is held by exactly one principal — a user (`user_id`) or a user group (`group_id`) — with the other column NULL and `ck_members_one_principal` enforcing it. Roles hang off the row through `member_roles` identically either way, so nothing downstream of a resolved role knows which kind granted it. Uniqueness per project is two plain `UniqueConstraint`s rather than partial indexes: PostgreSQL treats NULLs as distinct, so each ignores the other principal's rows.
