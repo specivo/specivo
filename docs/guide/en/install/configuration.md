@@ -257,6 +257,40 @@ address.
 TRUSTED_PROXIES=["192.0.2.10/32"]
 ```
 
+## MCP sessions
+
+An AI agent connected over MCP (Streamable HTTP, at `/mcp/`) holds a session that it names in the
+`Mcp-Session-Id` header of every request. Specivo keeps each session in Redis, so it survives the
+agent's computer going to sleep, a dropped network connection and a restart of Specivo: when the
+agent comes back with its session id, the session works as before.
+
+| Variable | Purpose |
+|---|---|
+| `MCP_SESSION_TTL_SECONDS` | How long a session may go unused before it expires. Every request starts the period again, so a session in use never expires. Default `604800` (7 days). After it, the agent's next request is answered with HTTP 404, and an MCP client then opens a new session by itself. |
+| `MCP_SESSION_IDLE_TIMEOUT_SECONDS` | How long an unused session is kept in memory. Only frees memory: the next request rebuilds the session from Redis. Default `3600` (1 hour). |
+
+Sessions survive a restart of Redis only when Redis saves its data to disk. The bundled Redis does
+(append-only file); Specivo logs a warning at startup when an external Redis does not. Without it,
+agents connected when Redis restarts start new sessions.
+
+The legacy SSE transport (`/mcp/sse/`) does not keep sessions across reconnects or restarts;
+configure agents for Streamable HTTP (`"type": "http"`).
+
+### Proxies in front of Specivo
+
+MCP responses are streamed. The bundled nginx is already set up for this. If another proxy (Caddy,
+Traefik, a load balancer, Cloudflare) stands in front of Specivo, make sure that for `/mcp/` it:
+
+- **does not buffer responses.** nginx: `proxy_buffering off;`. Specivo also sends
+  `X-Accel-Buffering: no`, which nginx-based proxies obey.
+- **allows long-lived responses.** An agent keeps a stream open for as long as it is connected,
+  and Specivo sends a keep-alive on it every 15 seconds. A read timeout of at least a minute is
+  enough; the bundled nginx uses `proxy_read_timeout 24h;`.
+- **uses HTTP/1.1 or later to Specivo** with keep-alive. nginx: `proxy_http_version 1.1;` and
+  `proxy_set_header Connection "";`.
+
+A proxy that cuts a stream does not end the session: the agent reconnects and carries on.
+
 ## Repository integrations and webhooks
 
 [Repository integrations](../integrations/repositories.md) receive webhooks from GitHub, GitLab,

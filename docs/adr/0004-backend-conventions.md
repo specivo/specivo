@@ -13,6 +13,7 @@ marker.
 **Revised:** 2026-10-31 — recorded the SSO session check at the IdP and its session columns (§7).
 **Revised:** 2026-11-05 — recorded that metadata schemas and workflow field rules judge the change a
 write makes, not the state of the issue (§6).
+**Revised:** 2026-11-06 — recorded how MCP transport sessions live and end (§4).
 **Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
 **Revised:** 2026-11-06 — recorded the money convention (§4), the currency audit events and the repository provider change audit event (§18).
 **Revised:** 2026-11-06 — recorded exchange rates and the conversion contract (§4), and the exchange rate and development link detach/move audit events (§18).
@@ -288,6 +289,14 @@ their signatures, and both writes run in a savepoint so a failure never fails th
 range longest (ties: most recently active); it is an attribution hint, so callers still check they may log there.
 The id of the API key that authenticated a tool call is published the same way (`mcp_api_key_id_var`), for tools
 that record their reporting key (`specivo_log_ai_usage`).
+
+**MCP transport sessions** are a different thing from agent sessions: the `Mcp-Session-Id` of a Streamable HTTP
+connection. Their Redis entry (`specivo.mcp.session_store`, sliding TTL `mcp_session_ttl_seconds`) is the source of
+truth; the SDK's in-memory transport is a cache that `PersistentStreamableHTTPSessionManager` rebuilds from it after
+an idle reap (`mcp_session_idle_timeout_seconds`), a dropped client stream or a restart, born initialized and only for
+the API key that opened it. A session that is gone (expired, ended by DELETE, unknown, or another key's) is answered
+with HTTP 404, the spec's signal to re-initialize, never with a JSON-RPC error: a `-32602` reads as a caller mistake
+and no client recovers from it.
 
 **AI usage surfaces.** The REST routes (`api/v1/ai_usage.py`) mirror time entries: `/projects/{key}/ai-usage/`,
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and

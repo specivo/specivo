@@ -193,10 +193,15 @@ class Settings(BaseSettings):
     # kept must not be changeable from an admin session or key.
     audit_log_retention_months: int = Field(default=12, ge=0)
 
-    # MCP transport session metadata (Redis-backed).
-    # Sliding TTL refreshed on every session access; entries are dropped
-    # automatically after this many seconds of inactivity.
-    mcp_session_ttl_seconds: int = 7 * 24 * 60 * 60
+    # MCP Streamable HTTP sessions.
+    # How long a session may go unused before it expires: the Redis entry's
+    # sliding TTL, refreshed on every request. Until then a client returning
+    # with its Mcp-Session-Id (after sleep, a network drop or an api restart)
+    # keeps its session; after it, the client gets HTTP 404 and re-initializes.
+    mcp_session_ttl_seconds: int = Field(default=7 * 24 * 60 * 60, gt=0)
+    # How long an idle session's live transport is kept in memory. Only frees
+    # memory: a session reaped here is rebuilt from Redis on its next request.
+    mcp_session_idle_timeout_seconds: int = Field(default=60 * 60, gt=0)
 
     # i18n
     default_language: str = "en"
