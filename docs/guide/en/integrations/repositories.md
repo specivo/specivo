@@ -245,8 +245,9 @@ The first time a commit is linked to an issue:
   activity (its avatar is a branch icon): "Commit `abc1234` on `feat/ACME-12-login-form` by Alex Example: Add the login form",
   with a link to the commit. A pull request gets "Pull request #14 by `alex-example`: Add the
   login form" (GitLab: "Merge request !14").
-- The commit SHA is added to the issue's `commits` metadata, the branch (for a link from the branch
-  name, or a pull request's source branch) to `branches`, and a pull request's URL to
+- The commit SHA is added to the issue's `commits` metadata, the branch (when the branch name
+  references the issue, even if the commit message names it too, unless it is the default branch;
+  or a pull request's source branch) to `branches`, and a pull request's URL to
   `pull_requests`. Values already there are not added again. These are the fields of the
   [Software Development preset](../metadata/schemas.md#software-development).
 

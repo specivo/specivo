@@ -16,7 +16,9 @@ the Celery task ``process_repository_delivery``, which calls
    with ``matched_user_id`` set only from a *verified* email.
 4. Insert the (commit, issue) links with ``ON CONFLICT DO NOTHING``. Only the
    newly inserted ones get a journal, written by ``$git``, and the commit SHA
-   appended to the issue's ``commits`` metadata (no duplicates).
+   appended to the issue's ``commits`` metadata (no duplicates). When the
+   branch name references the issue (whether or not the message does too) and
+   it is not the default branch, the branch goes to ``branches`` as well.
 5. Mark the delivery ``processed``, ``ignored`` or ``failed`` with a reason.
 
 Other events go by their kind (``ForgeProvider.event_kind``): pull/merge
@@ -36,7 +38,7 @@ import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import quote
 
 from sqlalchemy import delete, func, or_, select, tuple_, update
@@ -77,6 +79,21 @@ GIT_LOGIN = "$git"
 #: The issue metadata keys commit SHAs and branch names are appended to.
 COMMITS_METADATA_KEY = "commits"
 BRANCHES_METADATA_KEY = "branches"
+
+
+class CommitRef(NamedTuple):
+    """One commit's reference to one issue.
+
+    *source* is where the link comes from: ``"message"`` wins over
+    ``"branch"``, and only message references carry a keyword and commands.
+    *branch_named* says whether the branch name references the issue too,
+    which is what puts the branch in the issue's ``branches`` metadata.
+    """
+
+    ref: Ref
+    source: str
+    branch_named: bool
+
 
 _EVENT_MAX_LENGTH = 50
 _DETAIL_MAX_LENGTH = 1000
@@ -419,21 +436,21 @@ async def resolve_references(
     return resolved
 
 
-def _commit_refs(
-    commit: CommitData, branch_refs: Sequence[Ref], known_keys: frozenset[str]
-) -> dict[str, tuple[Ref, str]]:
-    """display key → (ref, source); a reference in the message wins over the branch name.
+def _commit_refs(commit: CommitData, branch_refs: Sequence[Ref], known_keys: frozenset[str]) -> dict[str, CommitRef]:
+    """display key → reference; a reference in the message wins over the branch name.
 
-    ``Ignore KEY-1`` in the message drops KEY-1 altogether, branch name included.
+    The message decides what the link means (its keyword and commands), but a
+    key the branch name also carries stays ``branch_named``. ``Ignore KEY-1``
+    in the message drops KEY-1 altogether, branch name included.
     """
     # Parse only what is stored: the message is capped before the parser sees it.
     message = commit.message[:REPOSITORY_COMMIT_MESSAGE_MAX_CHARS]
     ignored = extract_ignored(message, known_keys)
-    refs: dict[str, tuple[Ref, str]] = {
-        r.display_key: (r, "branch") for r in branch_refs if r.display_key not in ignored
+    refs: dict[str, CommitRef] = {
+        r.display_key: CommitRef(r, "branch", True) for r in branch_refs if r.display_key not in ignored
     }
     for ref in extract_refs(message, known_keys):
-        refs[ref.display_key] = (ref, "message")
+        refs[ref.display_key] = CommitRef(ref, "message", ref.display_key in refs)
     return dict(list(refs.items())[:REPOSITORY_MAX_REFS_PER_COMMIT])
 
 
@@ -498,7 +515,7 @@ async def _link_batch(
     session: AsyncSession,
     integration: RepositoryIntegration,
     push: PushEvent,
-    batch: Sequence[tuple[CommitData, dict[str, tuple[Ref, str]]]],
+    batch: Sequence[tuple[CommitData, dict[str, CommitRef]]],
     scope: dict[str, int],
 ) -> tuple[list[tuple[int, int]], list[tuple[str, str, str]]]:
     """Store one batch of referencing commits and their links; journal the new links and run their commands.
@@ -506,7 +523,7 @@ async def _link_batch(
     Returns the new (commit id, issue id) links and the command outcomes.
     """
     # Resolve references to issues in scope. A reference to a missing issue is dropped silently.
-    pairs = {(ref.key, ref.number) for _c, refs in batch for ref, _s in refs.values()}
+    pairs = {(cr.ref.key, cr.ref.number) for _c, refs in batch for cr in refs.values()}
     issue_ids = await resolve_references(session, pairs, scope)
     if not issue_ids:
         return [], []
@@ -548,12 +565,12 @@ async def _link_batch(
     commits = {row.sha: row for row in commit_rows}
 
     # Two references to one issue (its old and its current key) make one link.
-    refs_by_link: dict[tuple[int, int], tuple[Ref, str]] = {}
+    refs_by_link: dict[tuple[int, int], CommitRef] = {}
     for c, refs in batch:
-        for display_key, (ref, source) in refs.items():
+        for display_key, commit_ref in refs.items():
             if display_key in issue_ids:
                 link = (commits[c.sha].id, issue_ids[display_key])
-                refs_by_link[link] = _stronger(refs_by_link.get(link), (ref, source))
+                refs_by_link[link] = _stronger(refs_by_link.get(link), commit_ref)
     # A pair someone detached is never linked again, whoever redelivers the push.
     from specivo.services.repository_activity import ITEM_COMMIT, detached_pairs
 
@@ -568,10 +585,10 @@ async def _link_batch(
                 {
                     "commit_id": commit_id,
                     "issue_id": issue_id,
-                    "source": source,
-                    "keyword": ref.keyword if source == "message" else None,
+                    "source": cr.source,
+                    "keyword": cr.ref.keyword if cr.source == "message" else None,
                 }
-                for (commit_id, issue_id), (ref, source) in refs_by_link.items()
+                for (commit_id, issue_id), cr in refs_by_link.items()
             ]
         )
         .on_conflict_do_nothing()
@@ -582,32 +599,39 @@ async def _link_batch(
         return [], []
     by_id = {row.id: row for row in commit_rows}
     outcomes = await _record_new_links(
-        session, integration, [(by_id[c], i, *refs_by_link[(c, i)]) for c, i in new_links]
+        session, integration, [(by_id[c], i, refs_by_link[(c, i)]) for c, i in new_links]
     )
     return new_links, outcomes
 
 
-def _stronger(current: tuple[Ref, str] | None, other: tuple[Ref, str]) -> tuple[Ref, str]:
-    """Merge two references to the same issue: the message wins over the branch name, and commands add up."""
+def _stronger(current: CommitRef | None, other: CommitRef) -> CommitRef:
+    """Merge two references to the same issue (its old and current key).
+
+    The message wins over the branch name, commands add up, and the link
+    stays ``branch_named`` if either reference was.
+    """
     if current is None:
         return other
-    (ref, source), (other_ref, other_source) = current, other
-    if source != other_source:
-        return current if source == "message" else other
+    branch_named = current.branch_named or other.branch_named
+    if current.source != other.source:
+        winner = current if current.source == "message" else other
+        return winner._replace(branch_named=branch_named)
+    ref, other_ref = current.ref, other.ref
     keyword: Keyword = "fixes" if "fixes" in (ref.keyword, other_ref.keyword) else "refs"
     hours = ref.hours if ref.hours is not None else other_ref.hours
-    return Ref(ref.key, ref.number, keyword, hours), source
+    return CommitRef(Ref(ref.key, ref.number, keyword, hours), current.source, branch_named)
 
 
 async def _record_new_links(
     session: AsyncSession,
     integration: RepositoryIntegration,
-    links: Sequence[tuple[RepositoryCommit, int, Ref, str]],
+    links: Sequence[tuple[RepositoryCommit, int, CommitRef]],
 ) -> list[tuple[str, str, str]]:
     """Journal, metadata and commands for new (commit, issue) links.
 
-    One ``$git`` journal per link; the SHA (and the branch, for a link from
-    the branch name) appended to the issue's metadata; then the commit
+    One ``$git`` journal per link; the SHA appended to the issue's metadata,
+    and the branch too when its name references the issue (even if the
+    message also does) and it is not the default branch; then the commit
     commands of message references (see ``repository_commands``). Returns
     (issue key, command, outcome) for each command the links carried.
     """
@@ -616,7 +640,7 @@ async def _record_new_links(
 
     git_user = await get_git_user(session)
     journals = JournalService()
-    issue_ids = sorted({issue_id for _commit, issue_id, _ref, _source in links})
+    issue_ids = sorted({issue_id for _commit, issue_id, _cr in links})
     # Lock the issues in id order, so two pushes touching the same issues cannot deadlock.
     issues = {
         issue.id: issue
@@ -628,13 +652,13 @@ async def _record_new_links(
     }
     shas_by_issue: dict[int, list[str]] = {}
     branches_by_issue: dict[int, list[str]] = {}
-    for commit, issue_id, _ref, source in links:
+    for commit, issue_id, commit_ref in links:
         issue = issues.get(issue_id)
         if issue is None:  # pragma: no cover - deleted between the link insert and now
             continue
         await journals.add_comment(session, issue, git_user, commit_journal_note(commit))
         shas_by_issue.setdefault(issue_id, []).append(commit.sha)
-        if source == "branch" and commit.branch:
+        if commit_ref.branch_named and commit.branch and commit.branch != integration.default_branch:
             branches_by_issue.setdefault(issue_id, []).append(commit.branch)
     for issue_id, shas in shas_by_issue.items():
         additions = {COMMITS_METADATA_KEY: shas}
@@ -644,12 +668,12 @@ async def _record_new_links(
     await session.flush()
 
     outcomes: list[tuple[str, str, str]] = []
-    for commit, issue_id, ref, source in links:
+    for commit, issue_id, commit_ref in links:
         issue = issues.get(issue_id)
-        if issue is None or source != "message":
+        if issue is None or commit_ref.source != "message":
             continue
         for command, outcome in await run_commit_commands(
-            session, integration, commit, issue, ref, commit_label=commit_label(commit)
+            session, integration, commit, issue, commit_ref.ref, commit_label=commit_label(commit)
         ):
             outcomes.append((issue.display_key, command, outcome))
     if outcomes:
