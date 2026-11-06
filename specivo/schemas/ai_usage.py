@@ -1,4 +1,4 @@
-"""Schemas of the AI usage administration routes (the range recompute)."""
+"""Schemas of the AI usage routes: the administration range recompute and the ingest contract."""
 
 from __future__ import annotations
 
@@ -27,3 +27,69 @@ class AiUsageRecomputeOut(BaseModel):
 
     task_id: str
     entries: int
+
+
+# ---------------------------------------------------------------------------
+# Ingest contract v1 (docs/contracts/ai-usage/v1/)
+# ---------------------------------------------------------------------------
+
+
+class AiUsageIngestRateLimitOut(BaseModel):
+    requests: int
+    window_seconds: int
+
+
+class AiUsageIngestInfoOut(BaseModel):
+    """What the ingest endpoint accepts (``info.schema.json``)."""
+
+    versions: list[str] = Field(description="Contract versions accepted in the batch's 'schema', newest first")
+    max_records: int
+    max_bytes: int
+    max_age_days: int
+    rate_limit: AiUsageIngestRateLimitOut | None
+    server_time: AwareDatetime
+    tools: list[str] = Field(description="Slugs of the active AI tools; other valid slugs are accepted too")
+    currencies: list[str] = Field(description="Currency codes accepted in reported_cost")
+
+
+class AiUsageIngestProblemOut(BaseModel):
+    code: str
+    message: str
+    field: str | None = None
+
+
+class AiUsageIngestAttributionOut(BaseModel):
+    method: str
+    project_key: str | None = None
+    issue_ref: str | None = None
+
+
+class AiUsageIngestRecordOut(BaseModel):
+    index: int
+    idempotency_key: str | None
+    status: str = Field(description="created, updated, unchanged or rejected")
+    entry_id: int | None
+    revision: int | None
+    attribution: AiUsageIngestAttributionOut | None
+    warnings: list[AiUsageIngestProblemOut]
+    error: AiUsageIngestProblemOut | None
+
+
+class AiUsageIngestSummaryOut(BaseModel):
+    received: int
+    created: int
+    updated: int
+    unchanged: int
+    rejected: int
+
+
+class AiUsageIngestOut(BaseModel):
+    """The response to a batch (``result.schema.json``): one result per record, in order."""
+
+    schema_: str = Field(alias="schema", serialization_alias="schema")
+    server_time: AwareDatetime
+    summary: AiUsageIngestSummaryOut
+    results: list[AiUsageIngestRecordOut]
+    warnings: list[AiUsageIngestProblemOut]
+
+    model_config = {"populate_by_name": True}
