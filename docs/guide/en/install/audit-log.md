@@ -23,7 +23,7 @@ The viewer groups event types into categories:
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
-| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
+| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
 | Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
 | Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
@@ -121,6 +121,20 @@ never logged. Other edits of a repository integration are not audit events. See
 
 Saving the value that is already set writes nothing. See
 [Currencies and the reporting currency](currencies.md).
+
+### Exchange rates
+
+| Event | Account | Details |
+|---|---|---|
+| `exchange_rate_created` | the administrator | `rate_id`, `rate_date`, `base`, `quote`, `rate`, `source` (`manual`) |
+| `exchange_rate_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new` |
+| `exchange_rate_deleted` | the administrator | the deleted rate: `rate_id`, `rate_date`, `base`, `quote`, `rate`, `source` |
+| `exchange_rates_imported` | the administrator | `rows`, `created`, `updated`, `unchanged`, `date_from`, `date_to` |
+| `exchange_rates_fetch_toggled` | the administrator | `enabled`, `url` |
+| `exchange_rate_settings_changed` | the administrator | `changes`: `pivot`, `max_age_days` or `fetch_url`, each with `old` and `new` |
+
+A CSV preview, a refused import and saving unchanged values write nothing. The daily fetch itself is
+not an audit event; its last outcome is shown on the admin page. See [Exchange rates](exchange-rates.md).
 
 ## Personal data
 

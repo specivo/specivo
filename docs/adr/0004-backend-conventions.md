@@ -15,6 +15,7 @@ marker.
 write makes, not the state of the issue (§6).
 **Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
 **Revised:** 2026-11-06 — recorded the money convention (§4), the currency audit events and the repository provider change audit event (§18).
+**Revised:** 2026-11-06 — recorded exchange rates and the conversion contract (§4) and the exchange rate audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -197,6 +198,17 @@ are validated to the minor units on input. Over the API an amount is a string (`
 (`CurrencyService.require_selectable`); a stored reference to a currency disabled since stays valid. The reporting
 currency is the instance setting `reporting_currency` (default USD) unless `projects.reporting_currency_code`
 overrides it; resolve it with `reporting_currency_for(session, project)`.
+
+**Exchange rates and conversion.** Rates live in `exchange_rates` (`1 base_code = rate quote_code` on `rate_date`, a
+`DATE`; `NUMERIC(24, 12)`; source `manual`, `csv` or `ecb`; one row per day, pair and source; the inverse is never
+stored). Convert only through `ExchangeRateService` (`convert`, `convert_many`, `summarize`), which loads the rates a
+batch needs in at most two queries and resolves them in memory with `specivo.core.exchange.RateBook`: newest date on
+or before the amount's date within `exchange_rate_max_age_days` (policy `entry_date`, the default; or `latest`, or a
+fixed date), then same-day precedence manual > csv > ecb, the stored pair before its inverse, and triangulation
+through `exchange_rate_pivot` (EUR) only when neither direction has a rate. A missing rate is a `RateMissing` result
+(`no_rate` / `stale`), never zero: reports total the `Converted` results and list the rest per currency and reason
+(`ConversionSummary`, `ConversionSummaryOut`). Never convert per row in a loop of queries, and never through `float`.
+The optional ECB fetch is off unless `exchange_rates_fetch_enabled` is `"true"`.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
@@ -581,6 +593,12 @@ confirmation link that matches no request is not audited.
 **Currency events.** `CURRENCY_TOGGLED` (details: `code`, `is_active`) and `REPORTING_CURRENCY_CHANGED`
 (`scope` = `instance` or `project`, `project_key` for a project, `old`, `new`; a project's `null` means it follows
 the instance) are written by `CurrencyService` in the transaction of the change, only when the value changes.
+
+**Exchange rate events.** `EXCHANGE_RATE_CREATED` / `_UPDATED` / `_DELETED` (details: `rate_id`, `rate_date`, `base`,
+`quote`, `rate`, `source`; an update adds `changes`), `EXCHANGE_RATES_IMPORTED` (`rows`, `created`, `updated`,
+`unchanged`, `date_from`, `date_to`), `EXCHANGE_RATES_FETCH_TOGGLED` (`enabled`, `url`) and
+`EXCHANGE_RATE_SETTINGS_CHANGED` (`changes`: `{key: {old, new}}`) are written by `ExchangeRateService` in the
+transaction of the change. Dry runs, refused imports and the scheduled fetch write none.
 
 **Repository provider change.** `REPOSITORY_PROVIDER_CHANGED` (category Administration) is written by
 `RepositoryIntegrationService.update` when an integration moves to another forge, which also moves its
