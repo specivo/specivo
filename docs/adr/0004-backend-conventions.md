@@ -370,8 +370,10 @@ unassigned) runs the same `require_can_log` in the destination in the entry's us
 `ON_BEHALF_REFUSED`, field `on_behalf_of`) for every login but their own: unknown, inactive, non-member and permitted
 targets alike. `require_can_log` checks the on-behalf permission before the target's validity and membership, and
 REST and MCP resolve the login with `AiUsageService.resolve_target`, which looks the login up only after that check.
-The ingest also folds a key conflict and its attribution warnings into the refusal, validates record content before the
-target, and refuses a sender without the right in any project before looking anything up.
+The ingest validates record content before the target, refuses a sender without the right in any project before
+looking anything up, and, for a sender who may not tell targets apart in the record's explicit project, turns every
+rejection of a record naming another user (explicit hints, key conflicts, database errors included) into that refusal,
+without the warnings found on the way.
 The per-project form of both entry kinds' cross-project visibility is read once by
 `permission_service.entry_visibility_projects(session, user, permission, visibility_attribute)`; use it rather than
 another membership query.

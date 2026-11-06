@@ -100,14 +100,6 @@ _ERROR_CODES: dict[str, str] = {
 }
 
 
-#: Rejections that tell something about the ``on_behalf_of`` user; a sender who may not
-#: tell targets apart gets :func:`_refused` instead.
-_TARGET_CODES: frozenset[str] = frozenset(
-    {"forbidden", "target_unknown", "target_invalid", "target_not_member", "key_conflict"}
-)
-_ATTRIBUTION_WARNINGS: frozenset[str] = frozenset({"attribution_dropped", "attribution_ambiguous"})
-
-
 def _refused() -> RecordRejectedError:
     """The one rejection of an ``on_behalf_of`` record the sender may not tell apart from any other."""
     return RecordRejectedError("forbidden", ON_BEHALF_REFUSED, "on_behalf_of")
@@ -300,15 +292,18 @@ class AiUsageIngestService:
         if distinct:
             await self._upsert(session, batch, record, result, data, target)
             return
+        # The sender may not tell targets apart: every way this record can fail
+        # (the target's validity and membership, a key conflict, but also an
+        # explicit hint, which an unknown login never reaches) is the one
+        # refusal an unknown login gets, without the warnings found on the way.
+        warnings = list(result.warnings)
         try:
             await self._upsert(session, batch, record, result, data, target)
-        except (RecordRejectedError, AppError) as exc:
-            problem = exc.problem if isinstance(exc, RecordRejectedError) else contract_error(exc)
-            if problem.code in _TARGET_CODES:
-                # Attribution warnings may name what was found from the target's own sessions.
-                result.warnings = [w for w in result.warnings if w.code not in _ATTRIBUTION_WARNINGS]
-                raise _refused() from None
-            raise
+        except (RecordRejectedError, AppError, IntegrityError, DBAPIError) as exc:
+            if isinstance(exc, IntegrityError | DBAPIError):
+                logger.exception("AI usage ingest: an on-behalf record failed in the database")
+            result.warnings = warnings
+            raise _refused() from None
 
     @staticmethod
     def _input(batch: _Batch, record: IngestRecord, reported: Money | None) -> AiUsageInput:
@@ -394,8 +389,10 @@ class AiUsageIngestService:
         ``issue_ref``), or an administrator, gets ``target_unknown``,
         ``target_invalid`` and ``target_not_member``. Every other sender gets
         the one ``forbidden`` of :func:`_refused` for an unknown login, and
-        (``_write``) for every refusal about a known one. A sender who may
-        not log for others anywhere is refused here, before anything else.
+        (``_write``) for **every** rejection of a record naming a known one,
+        whatever its cause, so no answer depends on whether the login exists.
+        A sender who may not log for others anywhere is refused here, before
+        anything else.
         """
         actor = batch.actor
         if batch.for_others_anywhere is None:
@@ -419,18 +416,25 @@ class AiUsageIngestService:
         actor = batch.actor
         if is_global_admin(actor):
             return True
+        # The record's one explicit project: from project_key, from issue_ref, and the same
+        # project when both are sent. No such project (none named, unknown, invisible or
+        # contradicting hints): the targets are not told apart.
         project: Project | None = None
         hints = record.attribution
+        if hints.project_key is not None:
+            project = (
+                await session.execute(select(Project).where(Project.key == hints.project_key))
+            ).scalar_one_or_none()
+            if project is None:
+                return False
         if hints.issue_ref is not None:
             try:
                 issue = await IssueService().get_by_display_key(session, hints.issue_ref, actor)
             except AppError:
                 return False
-            project = await session.get(Project, issue.project_id) if issue.project_id is not None else None
-        elif hints.project_key is not None:
-            project = (
-                await session.execute(select(Project).where(Project.key == hints.project_key))
-            ).scalar_one_or_none()
+            if issue.project_id is None or (project is not None and issue.project_id != project.id):
+                return False
+            project = await session.get(Project, issue.project_id)
         if project is None:
             return False
         if project.id not in batch.for_others_in:

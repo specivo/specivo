@@ -214,11 +214,15 @@ the person (case does not matter). The rules:
   others** in the record's explicit project (`attribution.project_key`, or the project of
   `attribution.issue_ref`). Every other account gets `forbidden` with the same message
   ("You cannot log AI usage for this user here") whether the login exists or not, whether the
-  person is active, a member or neither. The same goes for a `key_conflict` on such a
-  record, and its `attribution_dropped` and `attribution_ambiguous` warnings are left out.
-  An account that may log for others in no project at all gets this `forbidden` for every
-  `on_behalf_of` record but its own login. Send `project_key` (or `issue_ref`) with
-  on-behalf records to get the precise codes.
+  person is active, a member or neither. Such a record is either stored (when it ends up
+  attributed to a project where the account may log for others) or rejected with this
+  `forbidden`, whatever the reason: an unusable `project_key` or `issue_ref` and a
+  `key_conflict` included. Its warnings found on the way (`attribution_dropped`,
+  `attribution_ambiguous`) are left out. Errors in the record's content
+  (`invalid_record`, `currency_unknown`, `duplicate_key`) come first and do not depend on
+  the login. An account that may log for others in no project at all gets this `forbidden`
+  for every `on_behalf_of` record but its own login. Send `project_key` (or `issue_ref`)
+  with on-behalf records to get the precise codes.
 - Every entry shows who reported it and with which key. Logging for someone else is recorded in
   the security audit log, and every person sees what was logged in their name.
 

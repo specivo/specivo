@@ -653,9 +653,36 @@ async def test_on_behalf_refused(client: AsyncClient, w: World) -> None:
     assert reader["error"]["code"] == "forbidden"
 
 
-def _rejection(result: dict[str, Any]) -> tuple[str, Any, Any]:
-    """What a rejected record tells: status, error and warnings (the key aside)."""
-    return result["status"], result["error"], result["warnings"]
+def _answer(result: dict[str, Any]) -> str:
+    """A record's result as sent, without its index and key, for byte-for-byte comparison."""
+    return json.dumps({k: v for k, v in result.items() if k not in ("index", "idempotency_key")}, sort_keys=True)
+
+
+#: Explicit hints that cannot be used, each its own reason to reject a record.
+BOGUS_HINTS: list[dict[str, Any]] = [
+    {"project_key": "NOPE"},  # no such project
+    {"issue_ref": "INGX-999"},  # no such issue
+    {"issue_ref": "INGX-20"},  # private: the senders cannot see it
+    {"issue_ref": "INGX-7", "project_key": "INGY"},  # the issue is not in the project
+]
+
+REFUSED = {"code": "forbidden", "message": "You cannot log AI usage for this user here", "field": "on_behalf_of"}
+
+
+async def _assert_one_answer(client: AsyncClient, w: World, who: str, logins: list[str], hints: list[Any]) -> None:
+    for n, attribution in enumerate(hints):
+        extra = {"attribution": attribution} if attribution else {}
+        results = await post(
+            client,
+            w,
+            who,
+            *[record(f"k-enum-{n}-{i}", on_behalf_of=login, **extra) for i, login in enumerate(logins)],
+        )
+        answers = {_answer(r) for r in results}
+        assert len(answers) == 1, (who, attribution, results)
+        assert results[0]["status"] == "rejected"
+        assert results[0]["error"] == REFUSED
+        assert results[0]["warnings"] == []
 
 
 async def test_on_behalf_without_rights_hides_which_logins_exist(
@@ -666,21 +693,9 @@ async def test_on_behalf_without_rights_hides_which_logins_exist(
     db_session.add(inactive)
     await db_session.commit()
     logins = ["ingx-reader", "ingx-outsider", "ingx-gone", "ingx-bot", "no-such-login"]
-    for attribution in ({"project_key": "INGX"}, {"issue_ref": "INGX-3"}, None):
-        extra = {"attribution": attribution} if attribution else {}
-        results = await post(
-            client,
-            w,
-            "teammate",
-            *[record(f"k-enum-{i}", on_behalf_of=login, **extra) for i, login in enumerate(logins)],
-        )
-        answers = {json.dumps(_rejection(r), sort_keys=True) for r in results}
-        assert len(answers) == 1, results
-        assert results[0]["error"] == {
-            "code": "forbidden",
-            "message": "You cannot log AI usage for this user here",
-            "field": "on_behalf_of",
-        }
+    hints: list[Any] = [{"project_key": "INGX"}, {"issue_ref": "INGX-3"}, {"git_branch": "feat/ingx-3-x"}, None]
+    await _assert_one_answer(client, w, "teammate", logins, [*hints, *BOGUS_HINTS])
+
     # Content errors come first, the same for both.
     bad = {"usage_date": "2020-01-01"}
     known, unknown = await post(
@@ -690,29 +705,21 @@ async def test_on_behalf_without_rights_hides_which_logins_exist(
         record("k-enum-bad1", on_behalf_of="ingx-reader", **bad),
         record("k-enum-bad2", on_behalf_of="no-such-login", **bad),
     )
-    assert _rejection(known) == _rejection(unknown)
+    assert _answer(known) == _answer(unknown)
     assert known["error"]["code"] == "invalid_record"
 
 
 async def test_on_behalf_outside_the_senders_projects_hides_which_logins_exist(
     client: AsyncClient, db_session: AsyncSession, w: World
 ) -> None:
-    """The bot may log for others in INGX only: in INGY and unassigned, targets are not told apart."""
+    """The bot may log for others in INGX only: elsewhere, unassigned or with unusable hints, targets look alike."""
     inactive = UserFactory.build(login="ingx-gone2", status="deactivated")
     db_session.add(inactive)
     await db_session.commit()
     logins = ["ingx-bot2", "ingx-teammate", "ingx-outsider", "ingx-gone2", "no-such-login"]
-    for attribution in ({"project_key": "INGY"}, {"issue_ref": "INGY-1"}, None):
-        extra = {"attribution": attribution} if attribution else {}
-        results = await post(
-            client,
-            w,
-            "bot",
-            *[record(f"k-enum2-{i}", on_behalf_of=login, **extra) for i, login in enumerate(logins)],
-        )
-        answers = {json.dumps(_rejection(r), sort_keys=True) for r in results}
-        assert len(answers) == 1, (attribution, results)
-        assert results[0]["error"]["code"] == "forbidden"
+    hints: list[Any] = [{"project_key": "INGY"}, {"issue_ref": "INGY-1"}, None]
+    await _assert_one_answer(client, w, "bot", logins, [*hints, *BOGUS_HINTS])
+
     # In INGX the bot may: the codes differ there.
     results = await post(
         client,
