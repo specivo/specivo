@@ -50,7 +50,7 @@ Open **My AI subscriptions** from your user menu or your [profile](../getting-st
     enter what you are actually charged.
 
 The listed plans are Claude Pro, Claude Max 5x, Claude Max 20x, ChatGPT Plus, ChatGPT Pro, Cursor
-Pro, GitHub Copilot Pro and Pro+, and Google AI Pro. Choose **Custom** for anything else and type
+Pro, GitHub Copilot Pro, Pro+ and Max, Google AI Pro, Google AI Ultra (5x and 20x), and SuperGrok. Choose **Custom** for anything else and type
 the plan name, the provider and the fee.
 
 The fee is entered with no more decimal places than the currency has (two for USD or THB, none for

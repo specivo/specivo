@@ -75,6 +75,10 @@ def test_presets_cover_the_plans_the_register_offers() -> None:
         "cursor-pro",
         "copilot-pro",
         "google-ai-pro",
+        "copilot-max",
+        "google-ai-ultra-5x",
+        "google-ai-ultra-20x",
+        "supergrok",
     } <= keys
     assert len(keys) == len(PLAN_PRESETS)
     assert "custom" not in keys

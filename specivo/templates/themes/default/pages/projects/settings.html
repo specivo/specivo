@@ -1338,6 +1338,9 @@
         </button>
       </div>
 
+      {% from "components/app_url_warning.html" import app_url_warning %}
+      {{ app_url_warning(request) }}
+
       <!-- Hook URL and secret, shown once, with setup steps for the provider -->
       <template x-if="reveal">
         <div class="sp-key-reveal sp-webhook-reveal" data-testid="repository-secret">

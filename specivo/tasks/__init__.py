@@ -95,6 +95,20 @@ def _bootstrap_worker(**_kwargs) -> None:
     from specivo.core.plugin_manager import bootstrap
 
     bootstrap()
+    _warn_about_app_url()
+
+
+def _warn_about_app_url() -> None:
+    """Log once at worker start when ``APP_URL`` is local: emails sent from here carry its links."""
+    import logging
+
+    try:
+        from specivo.core.app_url import log_app_url_warning
+        from specivo.core.config import get_settings
+
+        log_app_url_warning(get_settings(), component="worker")
+    except Exception as exc:  # noqa: BLE001 - a start-up check must not stop the worker
+        logging.getLogger(__name__).warning("APP_URL check at worker start failed: %s", exc)
 
 
 # Eagerly import every task module so that @celery_app.task decorators
