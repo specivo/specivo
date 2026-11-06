@@ -1,0 +1,77 @@
+{# One page of Development timeline entries, then the "Show more" row that
+   replaces itself with the next page. Rendered inside the timeline list and
+   on its own by /partials/issues/<key>/development/timeline/?offset=N.
+   Commits and pull requests get a menu to detach or move them for people
+   who may edit the issue (``can_edit_development``); the issueDevelopment
+   component in detail.html acts on it. #}
+{% from "pages/issues/_development_macros.html" import item_kind, state_badge, environment_label, when, forge_link %}
+{% set page = development.timeline %}
+{% for item in page.items %}
+{% set extra = dev_extra.get(item.kind ~ ":" ~ item.id, {}) %}
+{% set sigil = "!" if item.provider == "gitlab" else "#" %}
+{% set editable = can_edit_development and item.kind in ("commit", "pull_request") %}
+{% set label = (item.sha[:7] if item.kind == "commit" and item.sha else sigil ~ item.number) %}
+<li class="sp-dev-item sp-dev-kind-{{ item.kind }}" data-testid="development-item" data-kind="{{ item.kind }}"
+    {%- if editable %} data-dev-kind="{{ item.kind }}" data-dev-id="{{ item.id }}" data-dev-label="{{ label }}"{% endif %}>
+  <div class="sp-dev-body">
+    <div class="sp-dev-main">
+      <span class="sp-dev-kind">{{ item_kind(item.kind) }}</span>
+      {% if item.kind == "commit" %}
+        {{ forge_link(item.url, label, "sp-dev-sha") }}
+        <span class="sp-dev-text">{{ item.title }}</span>
+      {% elif item.kind == "pull_request" %}
+        {% if item.state %}{{ state_badge(item.state) }}{% endif %}
+        {{ forge_link(item.url, sigil ~ item.number, "sp-dev-ref") }}
+        <span class="sp-dev-text">{{ item.title }}</span>
+        {% if extra.closing %}<span class="sp-dev-closing" title="{% trans %}Says it fixes this issue{% endtrans %}">{% trans %}fixes{% endtrans %}</span>{% endif %}
+      {% elif item.kind == "review" %}
+        {% if item.state %}{{ state_badge(item.state) }}{% endif %}
+        {{ forge_link(item.url, sigil ~ item.number, "sp-dev-ref") }}
+        <span class="sp-dev-text">{{ item.title }}</span>
+      {% elif item.kind == "ci" %}
+        {% if item.state %}{{ state_badge(item.state) }}{% endif %}
+        {{ forge_link(item.url, item.title or _("Build"), "sp-dev-name") }}
+      {% elif item.kind == "deployment" %}
+        {% if item.state %}{{ state_badge(item.state) }}{% endif %}
+        {{ forge_link(item.url, item.title, "sp-dev-name") }}
+      {% elif item.kind == "release" %}
+        {% if item.state %}{{ state_badge(item.state) }}{% endif %}
+        {{ forge_link(item.url, item.title, "sp-dev-ref") }}
+      {% endif %}
+    </div>
+    <div class="sp-dev-meta">
+      {%- if item.actor %}<span>{{ item.actor }}</span> · {% endif -%}
+      {%- if item.kind in ("ci", "deployment") and item.number %}<span>{{ sigil ~ item.number }}</span> · {% endif -%}
+      {%- if item.branch -%}
+        {%- if extra.branch_url %}<a class="sp-dev-branch" href="{{ extra.branch_url }}" target="_blank" rel="noopener noreferrer"><code>{{ item.branch }}</code></a>
+        {%- else %}<code>{{ item.branch }}</code>{% endif %} · {% endif -%}
+      {%- if item.kind in ("ci", "deployment", "release") and item.sha %}<code>{{ item.sha[:7] }}</code> · {% endif -%}
+      <span>{{ item.repository }}</span> · {{ when(item.occurred_at, user.timezone) }}
+    </div>
+  </div>
+  {% if editable %}
+  <div class="sp-dev-actions" x-data="{ open: false }" @keydown.escape="open = false">
+    <button type="button" class="sp-dev-menu-btn" aria-haspopup="true" :aria-expanded="open ? 'true' : 'false'"
+            aria-label="{% trans label=label %}Actions for %(label)s{% endtrans %}" title="{{ _('Actions') }}"
+            @click="open = !open" data-testid="development-item-menu">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+    <div class="sp-dev-menu" role="menu" x-show="open" x-cloak @click.outside="open = false">
+      <button type="button" role="menuitem" class="sp-dev-menu-item" @click="open = false; detach($el)" data-testid="development-detach">{% trans %}Detach from this issue{% endtrans %}</button>
+      <button type="button" role="menuitem" class="sp-dev-menu-item" @click="open = false; openMove($el)" data-testid="development-move">{% trans %}Move to another issue…{% endtrans %}</button>
+    </div>
+  </div>
+  {% endif %}
+</li>
+{% endfor %}
+{% set shown = page.offset + page.items | length %}
+{% if shown < page.total_count %}
+{% set base = "/partials/issues/" ~ issue.display_key ~ "/development/timeline/" %}
+<li class="sp-dev-more-row">
+  <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost sp-dev-more" data-testid="development-more"
+          hx-get="{{ base }}?offset={{ shown }}{% for k in dev_kinds %}&amp;kinds={{ k }}{% endfor %}"
+          hx-target="closest li" hx-swap="outerHTML">{% trans count=[dev_page_size, page.total_count - shown] | min %}Show %(count)s more{% endtrans %}</button>
+</li>
+{% elif not page.items %}
+<li class="sp-dev-empty">{% trans %}Nothing to show.{% endtrans %}</li>
+{% endif %}

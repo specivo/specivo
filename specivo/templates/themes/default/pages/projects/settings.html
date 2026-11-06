@@ -1317,7 +1317,13 @@
     "detected": _("Detected {provider} repository {repo}"),
     "filledRepo": _("Filled in repository {repo} from the URL"),
     "providerChanging": _("Changing the provider gives this repository a new webhook URL and secret. The current webhook stops working at once; set it up again on {provider}."),
-    "providerChanged": _("The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret.")
+    "providerChanged": _("The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret."),
+    "errEnvName": _("Enter an environment name, or a prefix ending in *."),
+    "errEnvStar": _("A prefix needs at least one character before the *."),
+    "errEnvLong": _("Use at most 255 characters."),
+    "errEnvDuplicate": _("This environment is listed twice."),
+    "errEnvType": _("Choose a type."),
+    "errEnvTooMany": _("At most 100 environments can be listed.")
   } | tojson }} })'>
 
     <div class="card" data-testid="repositories-card">
@@ -1593,6 +1599,45 @@
                 <span>{% trans %}Ignore pull requests from forks and outsiders{% endtrans %}</span>
               </label>
               <div class="form-hint">{% trans %}Requests from another repository, or on GitHub by someone who is not a collaborator, are not linked to issues until they are merged.{% endtrans %}</div>
+            </fieldset>
+            <fieldset class="sp-repo-options sp-repo-envs" data-testid="repository-environments">
+              <legend class="form-label">{% trans %}Environment types{% endtrans %}</legend>
+              <div class="form-hint" id="repository-env-hint">{% trans %}Deployments are grouped by environment type, guessed from the environment's name ("prod-eu" is production). List the environments the guess gets wrong. A name ending in * covers every environment that starts with it, such as review/*. Names match in any case.{% endtrans %}</div>
+              <div id="repository-env-list" class="sp-repo-env-list" tabindex="-1" aria-describedby="repository-env-hint">
+                <template x-for="(row, idx) in form.environment_types" :key="row.key">
+                  <div class="sp-repo-env-row" data-testid="repository-env-row">
+                    <div class="sp-repo-env-field">
+                      <label class="sp-repo-env-label" :for="'repository-env-' + row.key + '-name'">{% trans %}Environment name or prefix*{% endtrans %}</label>
+                      <input class="form-input" type="text" maxlength="300" placeholder="{{ _('e.g. github-pages or review/*') }}"
+                             :id="'repository-env-' + row.key + '-name'" x-model="row.name" @blur="touchEnv(row, 'name')"
+                             :aria-invalid="envInvalid(row, 'name')" :aria-describedby="envDescribedBy(row, 'name')"
+                             data-testid="repository-env-name">
+                      <div class="form-error" :id="'repository-env-' + row.key + '-name-error'" x-show="envErrorFor(row, 'name')" x-text="envErrorFor(row, 'name')" data-testid="repository-env-name-error"></div>
+                    </div>
+                    <div class="sp-repo-env-field">
+                      <label class="sp-repo-env-label" :for="'repository-env-' + row.key + '-type'">{% trans %}Type{% endtrans %}</label>
+                      <select class="form-input" :id="'repository-env-' + row.key + '-type'" x-model="row.type" @change="touchEnv(row, 'type')" @blur="touchEnv(row, 'type')"
+                              :aria-invalid="envInvalid(row, 'type')" :aria-describedby="envDescribedBy(row, 'type')"
+                              data-testid="repository-env-type">
+                        <option value="">{% trans %}Choose a type{% endtrans %}</option>
+                        <option value="production" :selected="row.type === 'production'">{% trans %}Production{% endtrans %}</option>
+                        <option value="staging" :selected="row.type === 'staging'">{% trans %}Staging{% endtrans %}</option>
+                        <option value="testing" :selected="row.type === 'testing'">{% trans %}Testing{% endtrans %}</option>
+                        <option value="development" :selected="row.type === 'development'">{% trans %}Development{% endtrans %}</option>
+                      </select>
+                      <div class="form-error" :id="'repository-env-' + row.key + '-type-error'" x-show="envErrorFor(row, 'type')" x-text="envErrorFor(row, 'type')" data-testid="repository-env-type-error"></div>
+                    </div>
+                    <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm sp-repo-env-remove" @click="removeEnvRow(row)" aria-label="{{ _('Remove this environment') }}" title="{{ _('Remove') }}" data-testid="repository-env-remove">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </template>
+              </div>
+              <div class="form-error" x-show="envListError()" x-text="envListError()" data-testid="repository-env-list-error"></div>
+              <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="addEnvRow()" data-testid="repository-env-add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                {% trans %}Add an environment{% endtrans %}
+              </button>
             </fieldset>
             <template x-if="!editing">
               <div class="form-hint">{% trans %}A webhook URL and a secret are generated and shown once after the repository is connected.{% endtrans %}</div>

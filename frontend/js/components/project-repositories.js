@@ -29,6 +29,13 @@
  * (or pasting) rewrites a known host's or an SSH address as the repository's
  * web URL.
  *
+ * "Environment types" is an editable list of rows, environment name (or a
+ * prefix ending in `*`) and type, saved as `settings.environment_types`. A
+ * row is checked as the server checks it: a name of 1 to 255 characters, not
+ * `*` alone, not listed twice (any case), with a type; at most 100 rows.
+ * Rows left completely empty are dropped on save. A row's errors show on its
+ * fields like the other fields' errors (`aria-invalid`, `.form-error`).
+ *
  * Editing may change the provider. The server then gives the integration a
  * new hook URL and secret, revealed once like on create, with a note that the
  * webhook must be set up again on the new forge.
@@ -62,8 +69,25 @@ export function projectRepositories(initial) {
         detected: 'Detected {provider} repository {repo}',
         filledRepo: 'Filled in repository {repo} from the URL',
         providerChanging: 'Changing the provider gives this repository a new webhook URL and secret. The current webhook stops working at once; set it up again on {provider}.',
-        providerChanged: 'The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret.'
+        providerChanged: 'The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret.',
+        errEnvName: 'Enter an environment name, or a prefix ending in *.',
+        errEnvStar: 'A prefix needs at least one character before the *.',
+        errEnvLong: 'Use at most 255 characters.',
+        errEnvDuplicate: 'This environment is listed twice.',
+        errEnvType: 'Choose a type.',
+        errEnvTooMany: 'At most 100 environments can be listed.'
     }, initial.i18n || {});
+    var ENV_MAX = 100;
+    var envRowSeq = 0;
+
+    function envRow(name, type) {
+        envRowSeq += 1;
+        return {key: envRowSeq, name: name || '', type: type || ''};
+    }
+
+    function envRowBlank(row) {
+        return row.name.trim() === '' && row.type === '';
+    }
     var PAGE = 20;
     var defaultRoleId = initial.defaultRoleId || null;
 
@@ -79,6 +103,7 @@ export function projectRepositories(initial) {
             merge_automation_enabled: false,
             merge_status_id: '',
             ignore_external_pull_requests: true,
+            environment_types: [],
             automation_role_id: defaultRoleId === null ? '' : String(defaultRoleId)
         };
     }
@@ -92,14 +117,16 @@ export function projectRepositories(initial) {
         {name: 'repo_url', id: 'repository-url'},
         {name: 'provider', id: 'repository-provider'},
         {name: 'repo_full_name', id: 'repository-name'},
-        {name: 'merge_status_id', id: 'repository-merge-status'}
+        {name: 'merge_status_id', id: 'repository-merge-status'},
+        {name: 'environment_types', id: 'repository-env-list'}
     ];
     // Server error `field` values and the form field they belong to.
     var SERVER_FIELDS = {
         provider: 'provider',
         repo_full_name: 'repo_full_name',
         repo_url: 'repo_url',
-        'settings.merge_status_id': 'merge_status_id'
+        'settings.merge_status_id': 'merge_status_id',
+        'settings.environment_types': 'environment_types'
     };
 
     function validName(value) {
@@ -155,7 +182,81 @@ export function projectRepositories(initial) {
             if (!validName(f.repo_full_name)) errors.repo_full_name = i18n.errRepoName;
             if (!REPO_URL.test(f.repo_url.trim())) errors.repo_url = i18n.errRepoUrl;
             if (f.merge_automation_enabled && f.merge_status_id === '') errors.merge_status_id = i18n.errMergeStatus;
+            if (Object.keys(this.envErrors).length > 0) errors.environment_types = i18n.errEnvName;
             return errors;
+        },
+
+        /** Errors of the environment rows: {"<key>.name" | "<key>.type" | "list": message}. */
+        get envErrors() {
+            var errors = {};
+            var seen = {};
+            var rows = this.form.environment_types.filter(function (r) { return !envRowBlank(r); });
+            if (rows.length > ENV_MAX) errors.list = i18n.errEnvTooMany;
+            rows.forEach(function (row) {
+                var name = row.name.trim();
+                if (name === '') {
+                    errors[row.key + '.name'] = i18n.errEnvName;
+                } else if (name === '*') {
+                    errors[row.key + '.name'] = i18n.errEnvStar;
+                } else if (name.length > 255) {
+                    errors[row.key + '.name'] = i18n.errEnvLong;
+                } else if (seen[name.toLowerCase()]) {
+                    errors[row.key + '.name'] = i18n.errEnvDuplicate;
+                } else {
+                    seen[name.toLowerCase()] = true;
+                }
+                if (row.type === '') errors[row.key + '.type'] = i18n.errEnvType;
+            });
+            return errors;
+        },
+
+        /** The message under an environment row's *part* ("name" or "type"), once shown. */
+        envErrorFor(row, part) {
+            var message = this.envErrors[row.key + '.' + part];
+            if (message && (this.touched['env.' + row.key + '.' + part] || this.submitted)) return message;
+            return '';
+        },
+
+        envInvalid(row, part) {
+            return this.envErrorFor(row, part) ? 'true' : null;
+        },
+
+        envDescribedBy(row, part) {
+            return this.envErrorFor(row, part) ? 'repository-env-' + row.key + '-' + part + '-error' : null;
+        },
+
+        /** The message for the whole list: too many rows, or the server's error about it. */
+        envListError() {
+            if (this.envErrors.list && this.submitted) return this.envErrors.list;
+            var server = this.serverErrors.environment_types;
+            if (server && JSON.stringify(this._envPayload()) === server.value) return server.message;
+            return '';
+        },
+
+        touchEnv(row, part) {
+            this.touched['env.' + row.key + '.' + part] = true;
+        },
+
+        addEnvRow() {
+            this.form.environment_types.push(envRow('', ''));
+            var key = envRowSeq;
+            this.$nextTick(function () {
+                var el = document.getElementById('repository-env-' + key + '-name');
+                if (el) el.focus();
+            });
+        },
+
+        removeEnvRow(row) {
+            this.form.environment_types = this.form.environment_types.filter(function (r) { return r.key !== row.key; });
+        },
+
+        _envPayload() {
+            var out = {};
+            this.form.environment_types.forEach(function (row) {
+                if (envRowBlank(row)) return;
+                out[row.name.trim()] = row.type;
+            });
+            return out;
         },
 
         /** The message shown under *field*, or '' while it is valid or still pristine. */
@@ -164,7 +265,7 @@ export function projectRepositories(initial) {
             if (message && (this.touched[field] || this.submitted)) return message;
             var server = this.serverErrors[field];
             // A server error stands until the value it was about changes.
-            if (server && String(this.form[field]) === server.value) return server.message;
+            if (server && this._fieldValue(field) === server.value) return server.message;
             return '';
         },
 
@@ -178,6 +279,10 @@ export function projectRepositories(initial) {
             var ids = hintId ? [hintId] : [];
             if (this.errorFor(field)) ids.push(this.fieldId(field) + '-error');
             return ids.length ? ids.join(' ') : null;
+        },
+
+        _fieldValue(field) {
+            return field === 'environment_types' ? JSON.stringify(this._envPayload()) : String(this.form[field]);
         },
 
         fieldId(field) {
@@ -292,6 +397,8 @@ export function projectRepositories(initial) {
             this.$nextTick(function () {
                 var first = FIELDS.find(function (x) { return self.errorFor(x.name); });
                 var el = first ? document.getElementById(first.id) : null;
+                // The environment list: its first field with an error, else the list itself.
+                if (el && first.name === 'environment_types') el = el.querySelector('[aria-invalid="true"]') || el;
                 if (!el) return;
                 el.scrollIntoView({block: 'center'});
                 el.focus({preventScroll: true});
@@ -303,11 +410,13 @@ export function projectRepositories(initial) {
             var found = false;
             var self = this;
             (body.errors || []).forEach(function (err) {
-                var field = SERVER_FIELDS[err.field];
+                // An error about one entry (settings.environment_types.<name>) belongs to the list.
+                var name = err.field && err.field.indexOf('settings.environment_types.') === 0 ? 'settings.environment_types' : err.field;
+                var field = SERVER_FIELDS[name];
                 if (!field || !err.message) return;
                 self.serverErrors[field] = {
                     message: String(err.message).replace(/^Value error, /, ''),
-                    value: String(self.form[field])
+                    value: self._fieldValue(field)
                 };
                 found = true;
             });
@@ -394,6 +503,8 @@ export function projectRepositories(initial) {
             form.merge_automation_enabled = settings.merge_automation_enabled === true;
             form.merge_status_id = settings.merge_status_id ? String(settings.merge_status_id) : '';
             form.ignore_external_pull_requests = settings.ignore_external_pull_requests !== false;
+            var envTypes = settings.environment_types || {};
+            form.environment_types = Object.keys(envTypes).map(function (name) { return envRow(name, envTypes[name]); });
             if (r.automation_role_id) form.automation_role_id = String(r.automation_role_id);
             this.form = form;
             this.showModal = true;
@@ -446,7 +557,8 @@ export function projectRepositories(initial) {
                     fixing_status_id: idOrNull(f.fixing_status_id),
                     merge_automation_enabled: f.merge_automation_enabled,
                     merge_status_id: idOrNull(f.merge_status_id),
-                    ignore_external_pull_requests: f.ignore_external_pull_requests
+                    ignore_external_pull_requests: f.ignore_external_pull_requests,
+                    environment_types: this._envPayload()
                 }
             };
             if (f.merge_automation_enabled && this.canPickRole && idOrNull(f.automation_role_id) !== null) {

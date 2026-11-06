@@ -271,7 +271,7 @@
       <div class="activity-tabs-header">
         <a class="activity-tab" data-tab="activity" :class="{ active: tab === 'activity' }" @click.prevent="show('activity')" href="#activity">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
         {% if dev_count %}
-        <a class="activity-tab" data-tab="development" data-testid="development-tab" :class="{ active: tab === 'development' }" @click.prevent="show('development')" href="#development">{% trans %}Development{% endtrans %} <span class="tab-count">{{ dev_count }}</span></a>
+        <a class="activity-tab" data-tab="development" data-testid="development-tab" :class="{ active: tab === 'development' }" @click.prevent="show('development')" href="#development">{% trans %}Development{% endtrans %} <span class="tab-count" id="development-tab-count">{{ dev_count }}</span></a>
         {% endif %}
         {# Time entries name people and hours, and attachments are outside the
            anonymous scope, so neither tab exists for a visitor without an
@@ -324,10 +324,64 @@
         {% endif %}
       </div>
 
-      {# Development tab: linked pull requests and commits #}
+      {# Development tab: a summary of the linked work and its timeline. The
+         body reloads itself (sp-dev-refresh) after a detach or move. #}
       {% if dev_count %}
-      <div x-show="tab === 'development'" x-cloak data-testid="development-tab-panel">
-        {% include "pages/issues/_development.html" %}
+      <div x-show="tab === 'development'" x-cloak data-testid="development-tab-panel"
+           x-data='issueDevelopment({ issueKey: {{ issue.display_key | tojson }}, i18n: {{ {
+             "confirmDetach": _("Detach {item} from this issue? It will not be linked to it again, even when the forge sends it again."),
+             "detachFailed": _("Could not detach it."),
+             "moveFailed": _("Could not move it."),
+             "connectFailed": _("Unable to connect."),
+             "enterIssue": _("Enter the key of the issue to move it to."),
+             "moveLead": _("Move {item} to the issue below. It is detached from this issue and will not be linked to it again.")
+           } | tojson }} })'>
+        <div class="flash flash-error sp-dev-error" role="alert" x-show="error" x-cloak data-testid="development-error"><span x-text="error"></span></div>
+        <div id="issue-development" x-ref="body"
+             hx-get="/partials/issues/{{ issue.display_key }}/development/"
+             hx-trigger="sp-dev-refresh"
+             hx-swap="innerHTML">
+          {% include "pages/issues/_development.html" %}
+        </div>
+        {% if can_edit_development %}
+        <template x-if="move">
+          <div class="sp-scrim open" @click.self="closeMove()" @keydown.escape="closeMove()">
+            <div class="sp-modal sp-modal--xs" role="dialog" aria-modal="true" aria-labelledby="dev-move-title" data-testid="development-move-dialog">
+              <div class="sp-modal-header">
+                <h2 id="dev-move-title">{% trans %}Move to another issue{% endtrans %}</h2>
+                <button type="button" class="sp-modal-close" @click="closeMove()" aria-label="{{ _('Close') }}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="sp-modal-body">
+                <p class="sp-modal-lead" x-text="move.lead"></p>
+                <div class="form-group sp-dev-picker">
+                  <label class="form-label" for="dev-move-target">{% trans %}Issue{% endtrans %}</label>
+                  <input class="form-input" id="dev-move-target" type="text" autocomplete="off" placeholder="{{ _('e.g. PROJ-42') }}"
+                         x-model="target" x-init="focusLater($el)"
+                         @keydown="onKeydown($event)" @blur="closeSuggestions()"
+                         :aria-invalid="moveError ? 'true' : null" :aria-describedby="moveError ? 'dev-move-target-error' : null"
+                         data-testid="development-move-target">
+                  <div class="sp-dev-suggestions" x-show="showSuggestions" x-cloak role="listbox">
+                    <template x-for="(s, idx) in suggestions" :key="s.key">
+                      <div class="sp-dev-suggestion" role="option" :class="{ active: idx === highlightIndex }"
+                           @mousedown.prevent="selectSuggestion(s)" @mouseenter="highlightIndex = idx">
+                        <span class="sp-dev-suggestion-key" x-text="s.key"></span>
+                        <span class="sp-dev-suggestion-subject" x-text="s.subject"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="form-error" id="dev-move-target-error" x-show="moveError" x-text="moveError" data-testid="development-move-error"></div>
+                </div>
+              </div>
+              <div class="sp-modal-footer">
+                <button type="button" class="sp-btn sp-btn-ghost" @click="closeMove()">{% trans %}Cancel{% endtrans %}</button>
+                <button type="button" class="sp-btn sp-btn-primary" @click="submitMove()" :disabled="busy" data-testid="development-move-submit">{% trans %}Move{% endtrans %}</button>
+              </div>
+            </div>
+          </div>
+        </template>
+        {% endif %}
       </div>
       {% endif %}
 

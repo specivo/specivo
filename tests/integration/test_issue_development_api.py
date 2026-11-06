@@ -177,7 +177,7 @@ async def test_tab_label_counts_pull_requests_and_commits(client, db_session, se
     label = _dev_tab(page)
     assert label is not None
     assert "Development" in label
-    assert '<span class="tab-count">3</span>' in label  # one pull request and two commits
+    assert '<span class="tab-count" id="development-tab-count">3</span>' in label  # one pull request and two commits
 
 
 async def test_tabs_keep_their_order(client, db_session, seeded):
@@ -224,7 +224,7 @@ async def test_a_branch_alone_shows_no_tab(client, db_session, seeded, monkeypat
     from specivo.schemas.repository import DevelopmentBranchOut, IssueDevelopmentOut
     from specivo.services import repository_service
 
-    async def _only_a_branch(session, issue_id):
+    async def _only_a_branch(session, issue_id, **_kwargs):
         branch = DevelopmentBranchOut(name="feat/x", url=None, repository="example-org/widgets", provider="github")
         return IssueDevelopmentOut(commit_count=0, commits=[], pull_requests=[], branches=[branch])
 

@@ -133,7 +133,7 @@
   .analytics-layout { grid-template-columns: 1fr; }
 
   /* Issue detail layout: single column */
-  .issue-detail-layout { grid-template-columns: 1fr; }
+  .issue-detail-layout { grid-template-columns: minmax(0, 1fr); }
 
   /* Settings versions table: wrap in scrollable container */
   .card { overflow-x: auto; }
