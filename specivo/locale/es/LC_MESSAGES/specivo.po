@@ -12074,3 +12074,46 @@ msgstr "h originales"
 #: specivo/templates/themes/default/pages/issues/detail.html
 msgid "h remaining"
 msgstr "h restantes"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Limit to projects (optional)"
+msgstr "Limitar a proyectos (opcional)"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Loading projects..."
+msgstr "Cargando proyectos..."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "The projects could not be loaded."
+msgstr "No se pudieron cargar los proyectos."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Filter projects"
+msgstr "Filtrar proyectos"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "There are no projects to limit the key to."
+msgstr "No hay proyectos a los que limitar la clave."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "No projects match the filter."
+msgstr "Ningún proyecto coincide con el filtro."
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "Nothing ticked: the key reaches every project you can see."
+msgstr "Nada marcado: la clave llega a todos los proyectos que puede ver."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Nothing ticked: the key reaches every project the account can."
+msgstr "Nada marcado: la clave llega a todos los proyectos a los que llega la cuenta."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+#, python-format
+msgid "Limited to: %(projects)s"
+msgstr "Limitada a: %(projects)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "None: its projects were deleted"
+msgstr "Ninguno: sus proyectos se eliminaron"

@@ -1,3 +1,4 @@
+import { apiKeyProjectPicker } from '../lib/api-key-project-picker';
 import { avatarIconClass, avatarInitials } from '../lib/avatar';
 export function adminUserDetail(initial) {
         var i18n = Object.assign({
@@ -21,11 +22,15 @@ export function adminUserDetail(initial) {
             creating: 'Creating...',
             createKey: 'Create Key',
             keyActive: 'Active',
-            keyRevoked: 'Revoked'
+            keyRevoked: 'Revoked',
+            limitAllHint: 'Nothing ticked: the key reaches every project the account can.',
+            limitAll: 'All projects',
+            limitedTo: 'Limited to: %(projects)s',
+            limitNone: 'None: its projects were deleted'
         }, initial.i18n || {});
         var statusLabels = initial.statusLabels || {};
 
-        return {
+        var component = {
             i18n: i18n,
             targetUser: initial.targetUser || {},
             apiKeys: initial.apiKeys || [],
@@ -55,6 +60,17 @@ export function adminUserDetail(initial) {
             createError: '',
             copied: false,
 
+            init() {
+                this.limitI18n = {
+                    allHint: i18n.limitAllHint,
+                    all: i18n.limitAll,
+                    limitedTo: i18n.limitedTo,
+                    none: i18n.limitNone
+                };
+                // The create form is always shown, so its project list loads with the page.
+                this.loadLimitProjects();
+            },
+
             async loadKeys() {
                 var res = await spFetch('/api/v1/admin/users/' + this.targetUser.id + '/api-keys/');
                 if (res.ok) {
@@ -66,16 +82,20 @@ export function adminUserDetail(initial) {
                 if (!this.newKeyName.trim()) return;
                 this.creating = true;
                 this.createError = '';
+                var body = {name: this.newKeyName.trim()};
+                var scopes = this.limitScopes();
+                if (scopes) body.scopes = scopes;
                 try {
                     var res = await spFetch('/api/v1/admin/users/' + this.targetUser.id + '/api-keys/', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({name: this.newKeyName.trim()})
+                        body: JSON.stringify(body)
                     });
                     if (res.ok) {
                         var data = await res.json();
                         this.newKey = data.raw_key;
                         this.newKeyName = '';
+                        this.resetLimit();
                         await this.loadKeys();
                     } else {
                         var errData = await res.json().catch(function () { return {}; });
@@ -138,4 +158,5 @@ export function adminUserDetail(initial) {
                 return spFormatDate(d);
             }
         };
+        return Object.assign(component, apiKeyProjectPicker());
     }

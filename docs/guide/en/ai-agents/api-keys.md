@@ -11,11 +11,17 @@ that access away again.
 ## Create a key
 
 1. Open **Your profile → API keys** (`/my/api-keys/`).
-2. Click to create a new key and give it a clear name (for example, `claude-code` or `ci-agent`).
-3. Copy the key when it's shown. It looks like `spv_your_api_key_here` — a string that always
-   starts with `spv_`.
+2. Click **New API Key** and give the key a clear name (for example, `claude-code` or `ci-agent`).
+3. Optionally, tick the projects the key should be limited to under **Limit to projects
+   (optional)** (see [Limit a key to some projects](#limit-a-key-to-some-projects)). Leave every
+   box unticked for a key that reaches all projects you can see.
+4. Click **Create key**, then copy the key when it's shown. It looks like `spv_your_api_key_here`,
+   a string that always starts with `spv_`.
 
-![Your API keys page](../../assets/img/my-api-keys.webp)
+![Your API keys page, with the create form limiting a new key to two projects](../../assets/img/my-api-keys.webp)
+
+The **Projects** column of the key list shows what each key reaches: **All projects**, or
+**Limited to:** followed by the project keys.
 
 !!! warning "Copy the key now"
     The full key value is shown only once, at creation. Specivo stores it hashed and cannot display
@@ -32,8 +38,14 @@ so it inherits exactly that user's project roles and permissions — no project 
 
 ## Limit a key to some projects
 
-A key can be limited to some projects when it is created. Pass `scopes` in the body of
-`POST /api/v1/my/api-keys/`, naming each project by key or by id:
+A key can be limited to some projects when it is created. In the create form, tick those
+projects in the **Limit to projects (optional)** list. It lists the projects you can see; with more
+than 15 a filter box above the list finds them by key or name. The line under the list says what
+the key will reach: "Nothing ticked" means every project you can see, otherwise it names the ticked
+projects.
+
+Over the REST API, pass `scopes` in the body of `POST /api/v1/my/api-keys/`, naming each project
+by key or by id:
 
 ```json
 {
@@ -63,10 +75,12 @@ reaches. The key list (`GET /api/v1/my/api-keys/`) shows the limit as `project_k
 `["ACME", "OPS"]`, or `null` for a key that is not limited. A project deleted later drops out of
 the list; a key whose projects are all gone reaches nothing.
 
-An administrator can create a limited key for a service account the same way, through
-`POST /api/v1/admin/users/{id}/api-keys/` from a signed-in session. There the projects only have to
-exist: the account can be added to them afterwards, and the key never reaches more than the
-account's own roles allow.
+An administrator can create a limited key for a service account the same way: on the account's
+page in **Admin → Users**, which has the same project list under the key name, or through
+`POST /api/v1/admin/users/{id}/api-keys/` from a signed-in session. There the list holds every
+project and the projects only have to exist: the account can be added to them afterwards, and the
+key never reaches more than the account's own roles allow. The account's key list shows the limit
+the same way.
 
 The limit is fixed when the key is created. To change it, create a new key and revoke the old one.
 

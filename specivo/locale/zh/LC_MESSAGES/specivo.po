@@ -11340,3 +11340,46 @@ msgstr "小时（原始）"
 #: specivo/templates/themes/default/pages/issues/detail.html
 msgid "h remaining"
 msgstr "小时（剩余）"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Limit to projects (optional)"
+msgstr "限制到项目（可选）"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Loading projects..."
+msgstr "正在加载项目..."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "The projects could not be loaded."
+msgstr "无法加载项目。"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Filter projects"
+msgstr "筛选项目"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "There are no projects to limit the key to."
+msgstr "没有可将密钥限制到的项目。"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "No projects match the filter."
+msgstr "没有与筛选条件匹配的项目。"
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "Nothing ticked: the key reaches every project you can see."
+msgstr "未勾选任何项目：该密钥可访问您能看到的所有项目。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Nothing ticked: the key reaches every project the account can."
+msgstr "未勾选任何项目：该密钥可访问此账户能访问的所有项目。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+#, python-format
+msgid "Limited to: %(projects)s"
+msgstr "仅限：%(projects)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "None: its projects were deleted"
+msgstr "无：其项目已被删除"

@@ -1,5 +1,7 @@
+import { apiKeyProjectPicker } from '../lib/api-key-project-picker';
+
 export function apiKeyManager() {
-        return {
+        var component = {
             keys: [],
             showCreate: false,
             newKeyName: '',
@@ -34,6 +36,12 @@ export function apiKeyManager() {
                 this.msgInactive = d.msgInactive || 'Inactive';
                 this.msgDeactivate = d.msgDeactivate || 'Deactivate';
                 this.msgActivate = d.msgActivate || 'Activate';
+                this.limitI18n = {
+                    allHint: d.msgLimitAllHint || 'Nothing ticked: the key reaches every project you can see.',
+                    all: d.msgLimitAll || 'All projects',
+                    limitedTo: d.msgLimitedTo || 'Limited to: %(projects)s',
+                    none: d.msgLimitNone || 'None: its projects were deleted'
+                };
                 this.loadKeys();
             },
 
@@ -44,20 +52,30 @@ export function apiKeyManager() {
                 }
             },
 
+            toggleCreate() {
+                this.showCreate = !this.showCreate;
+                this.newKey = null;
+                if (this.showCreate) this.loadLimitProjects();
+            },
+
             async createKey() {
                 if (!this.newKeyName.trim()) return;
                 this.loading = true;
                 this.error = '';
+                var body = {name: this.newKeyName.trim()};
+                var scopes = this.limitScopes();
+                if (scopes) body.scopes = scopes;
                 try {
                     var res = await spFetch('/api/v1/my/api-keys/', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({name: this.newKeyName.trim()})
+                        body: JSON.stringify(body)
                     });
                     if (res.ok) {
                         var data = await res.json();
                         this.newKey = data.raw_key;
                         this.newKeyName = '';
+                        this.resetLimit();
                         await this.loadKeys();
                     } else {
                         var errData = await res.json();
@@ -105,4 +123,5 @@ export function apiKeyManager() {
                 return spFormatDate(iso) || '-';
             }
         };
+        return Object.assign(component, apiKeyProjectPicker());
     }

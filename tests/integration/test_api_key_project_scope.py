@@ -15,14 +15,17 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date
+from html.parser import HTMLParser
 from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
+from jinja2.utils import htmlsafe_json_dumps
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import ValidationError
+from specivo.core.i18n import activate, deactivate, gettext
 from specivo.models.auth import ApiKey
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
@@ -786,3 +789,107 @@ async def test_search_folds_a_forbidden_refusal_into_not_found(
     missing = await client.get("/api/v1/search/", params={"q": "quokka", "project_key": "KSFNONE"})
     assert _refusal(forbidden, a_key) == _refusal(missing, "KSFNONE")
     assert forbidden.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Web pages: the project picker of the create forms, and the limit in the key lists
+# ---------------------------------------------------------------------------
+
+
+def _th(msgid: str) -> str:
+    """The Thai translation of *msgid*, which must exist and differ from English."""
+    activate("th")
+    try:
+        translated = gettext(msgid)
+    finally:
+        deactivate()
+    assert translated and translated != msgid, f"the Thai catalogue does not translate {msgid!r}"
+    return translated
+
+
+class _ComponentAttrs(HTMLParser):
+    """The attributes of the first element whose ``x-data`` names *component*."""
+
+    def __init__(self, component: str) -> None:
+        super().__init__()
+        self._component = component
+        self.attrs: dict[str, str | None] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        if self.attrs is None and (values.get("x-data") or "").split("(", 1)[0].strip() == self._component:
+            self.attrs = values
+
+
+def _component_attrs(html: str, component: str) -> dict[str, str | None]:
+    parser = _ComponentAttrs(component)
+    parser.feed(html)
+    assert parser.attrs is not None, f"no x-data element for {component!r}"
+    return parser.attrs
+
+
+async def _thai_page(client: AsyncClient, db: AsyncSession, url: str) -> str:
+    user: User = client.state.user
+    user.language = "th"
+    db.add(user)
+    await db.commit()
+    resp = await client.get(url, cookies={"access_token": client.state.token})
+    assert resp.status_code == 200, resp.text
+    return resp.text
+
+
+_PICKER_MSGIDS = (
+    "Limit to projects (optional)",
+    "Loading projects...",
+    "The projects could not be loaded.",
+    "Filter projects",
+    "There are no projects to limit the key to.",
+    "No projects match the filter.",
+)
+
+
+async def test_api_keys_page_offers_the_project_limit(auth_client: AsyncClient, db_session: AsyncSession):
+    html = await _thai_page(auth_client, db_session, "/my/api-keys/")
+
+    for msgid in _PICKER_MSGIDS:
+        assert _th(msgid) in html, msgid
+    # A checkbox per project, bound by id: the ids are what the request sends and what is stored.
+    assert 'x-model.number="limitSelected"' in html
+    assert "limitLabel(key)" in html
+    attrs = _component_attrs(html, "apiKeyManager")
+    assert attrs["data-msg-limit-all-hint"] == _th("Nothing ticked: the key reaches every project you can see.")
+    assert attrs["data-msg-limit-all"] == _th("All projects")
+    assert attrs["data-msg-limited-to"] == _th("Limited to: %(projects)s")
+    assert attrs["data-msg-limit-none"] == _th("None: its projects were deleted")
+
+
+async def test_service_account_page_offers_the_project_limit_and_shows_it(
+    admin_client: AsyncClient, db_session: AsyncSession
+):
+    project = await _project(db_session, "KSUI")
+    agent = ServiceAccountFactory.build(login="ksui_agent", status="active")
+    db_session.add(agent)
+    await db_session.flush()
+    service = ApiKeyService()
+    await service.create_key(
+        db_session, agent.id, "ksui-limited", scopes={"projects": [project.id]}, check_scope_access=False
+    )
+    await service.create_key(db_session, agent.id, "ksui-open")
+    await db_session.commit()
+
+    html = await _thai_page(admin_client, db_session, f"/admin/users/{agent.id}/")
+
+    for msgid in _PICKER_MSGIDS:
+        assert _th(msgid) in html, msgid
+    x_data = _component_attrs(html, "adminUserDetail")["x-data"] or ""
+    assert x_data.rstrip().endswith(")"), "the adminUserDetail x-data attribute was truncated"
+    # The keys the page starts with carry their limit, as the API list does.
+    keys = json.loads(x_data.split("apiKeys: ", 1)[1].split(", i18n: ", 1)[0])
+    assert {k["name"]: k["project_keys"] for k in keys} == {"ksui-limited": [project.key], "ksui-open": None}
+    for msgid in (
+        "Nothing ticked: the key reaches every project the account can.",
+        "All projects",
+        "Limited to: %(projects)s",
+        "None: its projects were deleted",
+    ):
+        assert str(htmlsafe_json_dumps(_th(msgid)))[1:-1] in x_data, msgid
