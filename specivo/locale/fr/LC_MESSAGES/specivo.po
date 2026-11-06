@@ -12104,3 +12104,46 @@ msgstr "h initiales"
 #: specivo/templates/themes/default/pages/issues/detail.html
 msgid "h remaining"
 msgstr "h restantes"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Limit to projects (optional)"
+msgstr "Limiter à des projets (facultatif)"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Loading projects..."
+msgstr "Chargement des projets..."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "The projects could not be loaded."
+msgstr "Impossible de charger les projets."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Filter projects"
+msgstr "Filtrer les projets"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "There are no projects to limit the key to."
+msgstr "Aucun projet auquel limiter la clé."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "No projects match the filter."
+msgstr "Aucun projet ne correspond au filtre."
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "Nothing ticked: the key reaches every project you can see."
+msgstr "Rien de coché : la clé accède à tous les projets que vous pouvez voir."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Nothing ticked: the key reaches every project the account can."
+msgstr "Rien de coché : la clé accède à tous les projets auxquels le compte a accès."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+#, python-format
+msgid "Limited to: %(projects)s"
+msgstr "Limitée à : %(projects)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "None: its projects were deleted"
+msgstr "Aucun : ses projets ont été supprimés"

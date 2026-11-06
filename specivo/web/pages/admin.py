@@ -17,7 +17,7 @@ from specivo.core.config import get_settings
 from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.models.user import User as UserModel
-from specivo.services.api_key_scope import is_global_admin
+from specivo.services.api_key_scope import is_global_admin, project_keys_by_api_key
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.security_audit_service import (
     EVENT_CATEGORIES,
@@ -177,11 +177,13 @@ async def admin_user_detail(
         raise HTTPException(status_code=404, detail="User not found")
 
     api_keys = await _api_key_svc.list_keys(session=db, user_id=target_user.id)
+    limits = await project_keys_by_api_key(db, api_keys)
     keys_data = [
         {
             "id": k.id,
             "name": k.name,
             "key_prefix": k.key_prefix,
+            "project_keys": limits[k.id],
             "is_active": k.is_active,
             "created_at": k.created_at.isoformat() if k.created_at else None,
             "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,

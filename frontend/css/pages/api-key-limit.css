@@ -1,0 +1,26 @@
+/* The "Limit to projects" picker of the API key create forms (Your API keys,
+   and an account's page in Admin > Users), and the limit column of their key lists. */
+
+.sp-key-limit { border: 0; padding: 0; margin: var(--sp-space-md) 0; min-width: 0; max-width: 520px; }
+.sp-key-limit legend { padding: 0; }
+.sp-key-limit-filter { margin-bottom: var(--sp-space-xs); }
+.sp-key-limit-list {
+  list-style: none; margin: 0; padding: var(--sp-space-xs) 0;
+  max-height: 15rem; overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius);
+  background: var(--sp-bg-input);
+}
+.sp-key-limit-option {
+  display: flex; align-items: baseline; gap: var(--sp-space-sm);
+  padding: 4px var(--sp-space-md); cursor: pointer; font-size: var(--sp-font-size-sm);
+}
+.sp-key-limit-option:hover { background: var(--sp-accent-subtle); }
+.sp-key-limit-option input { flex: none; margin: 0; align-self: center; }
+.sp-key-limit-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); font-weight: 600; flex: none; }
+.sp-key-limit-name { color: var(--sp-text-secondary); min-width: 0; overflow-wrap: anywhere; }
+.sp-key-limit-note { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); padding: 4px var(--sp-space-md); }
+.sp-key-limit-error { color: var(--sp-danger); padding-left: 0; }
+.sp-key-limit-summary { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); overflow-wrap: anywhere; }
+
+.sp-key-limit-cell { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); overflow-wrap: anywhere; }
+.sp-key-limit-cell-limited { color: var(--sp-text-primary); font-weight: 500; }

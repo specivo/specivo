@@ -20,12 +20,16 @@
      data-msg-active="{{ _('Active') }}"
      data-msg-inactive="{{ _('Inactive') }}"
      data-msg-deactivate="{{ _('Deactivate') }}"
-     data-msg-activate="{{ _('Activate') }}">
+     data-msg-activate="{{ _('Activate') }}"
+     data-msg-limit-all-hint="{{ _('Nothing ticked: the key reaches every project you can see.') }}"
+     data-msg-limit-all="{{ _('All projects') }}"
+     data-msg-limited-to="{{ _('Limited to: %(projects)s') }}"
+     data-msg-limit-none="{{ _('None: its projects were deleted') }}">
 
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}API Keys{% endtrans %}</h1>
     {% if not api_keys_refused %}
-    <button class="sp-btn sp-btn-primary" @click="showCreate = !showCreate; newKey = null;">
+    <button class="sp-btn sp-btn-primary" @click="toggleCreate()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}New API Key{% endtrans %}
     </button>
@@ -76,6 +80,7 @@
           style="max-width: 400px;"
         >
       </div>
+      {% include "pages/auth/_api_key_project_picker.html" %}
       <div x-show="error" class="flash flash-error" style="margin-bottom: var(--sp-space-md);" x-text="error"></div>
       <div style="display: flex; gap: var(--sp-space-sm);">
         <button class="sp-btn sp-btn-primary" type="submit" :disabled="loading" x-text="loading ? msgCreating : msgCreate"></button>
@@ -91,6 +96,7 @@
         <tr>
           <th>{% trans %}Name{% endtrans %}</th>
           <th>{% trans %}Key prefix{% endtrans %}</th>
+          <th>{% trans %}Projects{% endtrans %}</th>
           <th>{% trans %}Created{% endtrans %}</th>
           <th>{% trans %}Last used{% endtrans %}</th>
           <th>{% trans %}Status{% endtrans %}</th>
@@ -100,7 +106,7 @@
       <tbody>
         <template x-if="keys.length === 0">
           <tr>
-            <td colspan="6" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">
+            <td colspan="7" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">
               {% trans %}No API keys yet. Create one to get started.{% endtrans %}
             </td>
           </tr>
@@ -111,6 +117,7 @@
             <td>
               <code style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs);" x-text="key.key_prefix + '...'"></code>
             </td>
+            <td class="sp-key-limit-cell" :class="key.project_keys ? 'sp-key-limit-cell-limited' : ''" x-text="limitLabel(key)"></td>
             <td x-text="formatDate(key.created_at)"></td>
             <td x-text="formatDate(key.last_used_at)"></td>
             <td>

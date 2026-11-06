@@ -1,0 +1,28 @@
+{#- "Limit to projects" in an API key create form. The host Alpine component
+    mixes in apiKeyProjectPicker (frontend/js/lib/api-key-project-picker.js). -#}
+<fieldset class="sp-key-limit">
+  <legend class="form-label">{% trans %}Limit to projects (optional){% endtrans %}</legend>
+  <div x-show="limitLoading" class="sp-key-limit-note">{% trans %}Loading projects...{% endtrans %}</div>
+  <div x-show="limitLoadFailed" class="sp-key-limit-note sp-key-limit-error" role="alert">{% trans %}The projects could not be loaded.{% endtrans %}</div>
+  <template x-if="limitLoaded">
+    <div>
+      <input x-show="limitShowFilter()" class="form-input sp-key-limit-filter" type="search"
+             x-model="limitFilter"
+             placeholder="{{ _('Filter projects') }}" aria-label="{{ _('Filter projects') }}">
+      <div x-show="limitProjects.length === 0" class="sp-key-limit-note">{% trans %}There are no projects to limit the key to.{% endtrans %}</div>
+      <ul x-show="limitProjects.length > 0" class="sp-key-limit-list">
+        <template x-for="project in limitVisibleProjects()" :key="project.id">
+          <li>
+            <label class="sp-key-limit-option">
+              <input type="checkbox" :value="project.id" x-model.number="limitSelected">
+              <span class="sp-key-limit-key" x-text="project.key"></span>
+              <span class="sp-key-limit-name" x-text="project.name"></span>
+            </label>
+          </li>
+        </template>
+        <li x-show="limitNoMatch()" class="sp-key-limit-note">{% trans %}No projects match the filter.{% endtrans %}</li>
+      </ul>
+    </div>
+  </template>
+  <div class="sp-key-limit-summary" aria-live="polite" x-text="limitSummary()"></div>
+</fieldset>

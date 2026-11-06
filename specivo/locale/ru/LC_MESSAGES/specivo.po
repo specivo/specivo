@@ -12030,3 +12030,46 @@ msgstr "ч исх."
 #: specivo/templates/themes/default/pages/issues/detail.html
 msgid "h remaining"
 msgstr "ч осталось"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Limit to projects (optional)"
+msgstr "Ограничить проектами (необязательно)"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Loading projects..."
+msgstr "Загрузка проектов..."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "The projects could not be loaded."
+msgstr "Не удалось загрузить проекты."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Filter projects"
+msgstr "Фильтр проектов"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "There are no projects to limit the key to."
+msgstr "Нет проектов, которыми можно ограничить ключ."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "No projects match the filter."
+msgstr "Нет проектов, подходящих под фильтр."
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "Nothing ticked: the key reaches every project you can see."
+msgstr "Ничего не отмечено: ключ даёт доступ ко всем проектам, которые вы видите."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Nothing ticked: the key reaches every project the account can."
+msgstr "Ничего не отмечено: ключ даёт доступ ко всем проектам, доступным учётной записи."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+#, python-format
+msgid "Limited to: %(projects)s"
+msgstr "Ограничен проектами: %(projects)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "None: its projects were deleted"
+msgstr "Нет: его проекты удалены"

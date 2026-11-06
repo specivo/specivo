@@ -11780,3 +11780,46 @@ msgstr "ชม. เดิม"
 #: specivo/templates/themes/default/pages/issues/detail.html
 msgid "h remaining"
 msgstr "ชม. คงเหลือ"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Limit to projects (optional)"
+msgstr "จำกัดเฉพาะโปรเจกต์ (ไม่บังคับ)"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Loading projects..."
+msgstr "กำลังโหลดโปรเจกต์..."
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "The projects could not be loaded."
+msgstr "ไม่สามารถโหลดโปรเจกต์ได้"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "Filter projects"
+msgstr "กรองโปรเจกต์"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "There are no projects to limit the key to."
+msgstr "ไม่มีโปรเจกต์ที่จะจำกัดคีย์ได้"
+
+#: specivo/templates/themes/default/pages/auth/_api_key_project_picker.html
+msgid "No projects match the filter."
+msgstr "ไม่มีโปรเจกต์ที่ตรงกับตัวกรอง"
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "Nothing ticked: the key reaches every project you can see."
+msgstr "ไม่ได้เลือกไว้: คีย์จะเข้าถึงได้ทุกโปรเจกต์ที่คุณมองเห็น"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Nothing ticked: the key reaches every project the account can."
+msgstr "ไม่ได้เลือกไว้: คีย์จะเข้าถึงได้ทุกโปรเจกต์ที่บัญชีนี้เข้าถึงได้"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+#, python-format
+msgid "Limited to: %(projects)s"
+msgstr "จำกัดเฉพาะ: %(projects)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "None: its projects were deleted"
+msgstr "ไม่มี: โปรเจกต์ของคีย์นี้ถูกลบแล้ว"
