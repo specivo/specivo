@@ -111,6 +111,58 @@ async def test_initialize_list_call_and_read_over_http(mcp_key) -> None:  # noqa
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_tool_call_records_the_client_from_the_handshake(mcp_key, db_engine) -> None:  # noqa: F811
+    from sqlalchemy import select
+
+    from specivo.main import create_app
+    from specivo.mcp.mount import get_mcp_session_manager
+    from specivo.models.agent_session import AgentSession
+
+    raw_key, _user_id, key_id = mcp_key
+    app = create_app()
+    manager = get_mcp_session_manager()
+    assert manager is not None
+
+    init_params = {**_INIT_PARAMS, "clientInfo": {"name": "protocol-client", "version": "3.4.5"}}
+    headers = {"Authorization": f"Bearer {raw_key}", "Accept": _ACCEPT, "User-Agent": "fallback-agent/9"}
+    async with manager.run():
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            init = await client.post(
+                "/mcp/",
+                headers=headers,
+                json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": init_params},
+            )
+            assert init.status_code == 200, init.text
+            headers = {
+                **headers,
+                "Mcp-Session-Id": init.headers["mcp-session-id"],
+                "Mcp-Protocol-Version": "2025-03-26",
+            }
+            await client.post("/mcp/", headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+            called = await client.post(
+                "/mcp/",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "specivo_whoami", "arguments": {}},
+                },
+            )
+            assert _sse_json(called.text)["result"]["isError"] is False
+
+    async with db_engine.begin() as conn:
+        rows = (
+            await conn.execute(
+                select(AgentSession.client_name, AgentSession.client_version).where(AgentSession.api_key_id == key_id)
+            )
+        ).all()
+    # clientInfo from the handshake wins over the User-Agent.
+    assert [tuple(r) for r in rows] == [("protocol-client", "3.4.5")]
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_unexpected_tool_error_does_not_leak_details(monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "password=hunter2 at /srv/specivo/secrets.env"
 

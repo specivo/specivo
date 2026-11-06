@@ -27,6 +27,7 @@ from specivo.core.exceptions import (
     ValidationError,
 )
 from specivo.core.utils import utcnow
+from specivo.mcp.client_context import record_working_issue
 from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
@@ -700,10 +701,29 @@ async def _update_issue(
         # The service takes 0 for "move to root".
         supplied["parent_id"] = parent.id if parent is not None else 0
     data = IssueUpdate(**supplied, lock_version=issue.lock_version)
+    status_before, assignee_before = issue.status_id, issue.assigned_to_id
     updated = await _issue_svc.update(session, issue, data, user, notes=notes)
     await session.flush()
     await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "update_issue", {"issue_ref": issue_ref})
+    if await _starts_work(session, user, updated, status_before, assignee_before):
+        await record_working_issue(session, user, updated)
     return f"Updated issue {updated.display_key}: {updated.subject}\nLock version: {updated.lock_version}"
+
+
+async def _starts_work(
+    session: AsyncSession, user: User, issue: Issue, status_before: int, assignee_before: int | None
+) -> bool:
+    """Whether an update means *user* has started work on *issue*.
+
+    True when it moved the issue into a status of the ``active`` group, or
+    assigned it to *user*. Setting a value the issue already had is not a change.
+    """
+    if issue.assigned_to_id == user.id and assignee_before != user.id:
+        return True
+    if issue.status_id != status_before:
+        status = await session.get(IssueStatus, issue.status_id)
+        return status is not None and status.category == "active"
+    return False
 
 
 async def _move_issue(
@@ -2251,6 +2271,7 @@ async def _timer(
         timer, replaced = await _time_entry_svc.start_timer_replacing(
             session, user, issue.project_id, issue.id, comments
         )
+        await record_working_issue(session, user, issue)
         await _log_tool(
             session,
             user,

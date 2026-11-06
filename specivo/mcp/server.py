@@ -24,6 +24,7 @@ from pydantic import Field
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
 from specivo.mcp.auth import authenticate_mcp_tool
+from specivo.mcp.client_context import ClientInfoMiddleware, agent_session_id_var, mcp_client_var
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools import (
     _add_comment,
@@ -92,6 +93,7 @@ logger = logging.getLogger(__name__)
 mcp = MCPServer(
     "specivo",
     version=_pkg_version("specivo"),
+    middleware=[ClientInfoMiddleware()],
     instructions=(
         "Specivo -- self-hosted platform for project tracking, knowledge base, and AI-safe automation. "
         "Call specivo_setup_guide() to get the full agent configuration guide, "
@@ -113,6 +115,11 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     Here we re-validate it against the DB on every tool call so that
     key revocation, expiry, or user deactivation takes effect immediately.
 
+    The key's ``AgentSession`` is found or started, named after the calling
+    client (``mcp_client_var``), and its id is published in
+    ``agent_session_id_var`` for the tool call, so a tool can record the
+    issue the agent is working on (``record_working_issue``).
+
     The session is committed on clean exit and rolled back on error.
 
     Any failure is re-raised as ``ToolError`` (see ``_to_tool_error``) so
@@ -133,12 +140,26 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
             try:
                 user, api_key = await authenticate_mcp_tool(session)
                 await activate_api_key_scope(session, api_key)
-                # Track agent session
+                # Track the agent session, named after the calling client
+                # (ClientInfoMiddleware), so tools can record its issue.
+                # A savepoint, so a failure cannot poison the tool's transaction.
+                agent_session_id: int | None = None
+                savepoint = await session.begin_nested()
                 try:
-                    await _agent_session_svc.get_or_create_session(session, api_key.id, user.id, user_agent=None)
+                    agent_session = await _agent_session_svc.get_or_create_session(
+                        session, api_key.id, user.id, client=mcp_client_var.get()
+                    )
+                    await savepoint.commit()
+                    agent_session_id = agent_session.id
                 except Exception:
+                    if savepoint.is_active:
+                        await savepoint.rollback()
                     logger.debug("AgentSession tracking failed", exc_info=True)
-                yield session, user
+                session_token = agent_session_id_var.set(agent_session_id)
+                try:
+                    yield session, user
+                finally:
+                    agent_session_id_var.reset(session_token)
                 await session.commit()
             except Exception as exc:
                 await session.rollback()

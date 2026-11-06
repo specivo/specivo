@@ -55,6 +55,20 @@ journal, the same as a person's edits — nothing an agent does is hidden.
 The log covers MCP. An agent that calls the REST API with its key is treated like a person: its
 issue and wiki edits are in their history, not in the audit log.
 
+## Agent sessions
+
+Specivo also groups each key's calls into **agent sessions**: calls less than 30 minutes apart
+(`AGENT_SESSION_TIMEOUT`, in seconds) belong to the same session. A session records:
+
+- **the client** that made the calls, by the name and version it announces when it connects (for
+  example `claude-code` and `2.1.0`), or else the first product in its `User-Agent` header;
+- **the issue the agent is working on**: the issue it last moved into an *in progress* status
+  (any status in the active group), assigned to its own account, or started a timer on, over MCP.
+  The latest one wins. Only an issue the key's account can see is ever recorded.
+
+The session's issue is a hint for attributing AI usage to an issue; it grants nothing. Nothing about
+the prompts or the conversation is stored.
+
 ## File uploads go through the REST API
 
 The MCP tools are **text-only** — they can read and write issues, comments, and wiki text, but they
