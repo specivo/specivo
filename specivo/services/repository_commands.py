@@ -8,10 +8,16 @@ Commit commands (``commands_enabled``) run once per (commit, issue) link, as
 the commit's *matched user*, the Specivo account whose verified email is the
 commit author email:
 
-- ``Fixes KEY-1`` on the default branch moves the issue to the integration's
-  ``fixing_status_id``, through the regular update path: the user needs
-  ``edit_issues`` and a workflow transition, like in the UI.
-- ``KEY-1 @1h30m`` (any branch, with ``time_logging_enabled`` as well) logs
+- ``Fixes KEY-1`` moves the issue to the integration's ``fixing_status_id``
+  the first time Specivo sees the commit on the default branch: in the push
+  that first links it, or, for a commit first pushed to another branch, in
+  the later push that brings it to the default branch (a merge or a
+  fast-forward). It goes through the regular update path: the user needs
+  ``edit_issues`` and a workflow transition, like in the UI. It runs once per
+  (commit, issue), whatever the outcome (``issue_commit_links.fix_ran_at``):
+  redeliveries, replays after a force-push and the commit reaching the
+  default branch again change nothing.
+- ``KEY-1 @1h30m`` (any branch, when the link is new, with ``time_logging_enabled`` as well) logs
   the time for that user, who needs ``log_time``. The entry is dated on the
   commit day in the user's timezone, with the default activity, and the
   commit's first line and short SHA as its comment.
@@ -39,6 +45,7 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
@@ -65,6 +72,11 @@ LOGGED = "logged"
 _DONE = (MOVED, LOGGED)
 
 _TIME_COMMENT_MAX_CHARS = 200
+
+#: What a link's ``Fixes`` command does in this push: ``run`` (the commit is on
+#: the default branch and the command has not run), ``wait`` (it is not on the
+#: default branch yet) or ``skip`` (it ran before).
+FixState = Literal["run", "wait", "skip"]
 
 
 def integration_settings(integration: RepositoryIntegration) -> RepositorySettings:
@@ -244,14 +256,18 @@ async def run_commit_commands(
     ref: Ref,
     *,
     commit_label: str,
+    fix: FixState,
+    log_time: bool,
 ) -> list[tuple[str, str]]:
-    """Run the commands *ref* carries for a newly linked commit; returns (command, outcome) pairs.
+    """Run the commands *ref* carries for a linked commit; returns (command, outcome) pairs.
 
     Only a reference in the message carries commands (``ref`` from a branch
-    name is always a plain ``refs``).
+    name is always a plain ``refs``). *fix* says what ``Fixes`` does (see
+    :data:`FixState`; ``wait`` reports ``not_default_branch``); *log_time* is
+    true only for a newly inserted link, so the time is logged once.
     """
-    wants_fix = ref.keyword == "fixes"
-    wants_time = ref.hours is not None
+    wants_fix = ref.keyword == "fixes" and fix != "skip"
+    wants_time = ref.hours is not None and log_time
     if not (wants_fix or wants_time):
         return []
     settings = integration_settings(integration)
@@ -267,8 +283,12 @@ async def run_commit_commands(
     )
     with without_admin_rights(user):
         if wants_fix:
-            fix = skip or await _fix(session, integration, settings, commit, issue, user, commit_label)
-            outcomes.append(("fixes", fix))
+            fixed = (
+                "not_default_branch"
+                if fix == "wait"
+                else skip or await _fix(session, settings, commit, issue, user, commit_label)
+            )
+            outcomes.append(("fixes", fixed))
         if wants_time:
             assert ref.hours is not None
             if not settings.time_logging_enabled:
@@ -280,7 +300,6 @@ async def run_commit_commands(
 
 async def _fix(
     session: AsyncSession,
-    integration: RepositoryIntegration,
     settings: RepositorySettings,
     commit: RepositoryCommit,
     issue: Issue,
@@ -290,8 +309,6 @@ async def _fix(
     from specivo.services.issue_service import IssueService
     from specivo.services.permission_service import Permission, check_permission
 
-    if commit.branch != integration.default_branch:
-        return "not_default_branch"
     if settings.fixing_status_id is None:
         return "no_fixing_status"
     if user is None:

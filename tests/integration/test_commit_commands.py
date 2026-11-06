@@ -97,9 +97,9 @@ def queued(monkeypatch) -> list[int]:
     return calls
 
 
-async def _integration(db: AsyncSession, world: World, **settings):
+async def _integration(db: AsyncSession, world: World, *, provider: str = "github", **settings):
     return await make_integration(
-        db, world.project, settings={**COMMANDS, "fixing_status_id": world.fixed.id, **settings}
+        db, world.project, provider=provider, settings={**COMMANDS, "fixing_status_id": world.fixed.id, **settings}
     )
 
 
@@ -195,6 +195,135 @@ class TestFixingKeyword:
         await db_session.commit()
         await _push(client, db_session, integration, [c], queued)
         assert await _status(db_session, world.issue) == world.new.id
+
+
+PROVIDERS = ["github", "gitlab", "gitea", "forgejo"]
+
+
+class TestFixesWhenAKnownCommitReachesTheDefaultBranch:
+    """``Fixes`` waits on a feature branch and runs once, when the same commit is pushed to the default branch."""
+
+    @pytest.mark.parametrize("provider", PROVIDERS)
+    async def test_merge_into_default_branch_moves_the_issue(self, client, db_session, world, queued, provider):
+        integration = await _integration(db_session, world, provider=provider)
+        c = commit(f"m1-{provider}", "Fixes CMD-1", email=DEV_EMAIL)
+        first = await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "CMD-1 fixes: not_default_branch" in first.detail
+
+        merged = await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.fixed.id
+        assert "CMD-1 fixes: moved" in merged.detail
+        assert "0 new link(s)" in merged.detail
+
+        from specivo.models.journal import Journal
+
+        journals = (await db_session.execute(select(Journal).where(Journal.issue_id == world.issue.id))).scalars()
+        fixed = [j for j in journals if j.notes and j.notes.startswith("Fixed in commit")]
+        assert [j.user_id for j in fixed] == [world.dev.id]
+
+    async def test_the_command_runs_once_across_pushes_and_redeliveries(self, client, db_session, world, queued):
+        integration = await _integration(db_session, world)
+        c = commit("m2", "Fixes CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        await _push(client, db_session, integration, [c], queued, branch="main", delivery="merge-1")
+        assert await _status(db_session, world.issue) == world.fixed.id
+
+        world.issue.status_id = world.new.id  # someone reopens it
+        await db_session.commit()
+        # A redelivery with a new id, a force-push replay and the commit reaching main again.
+        again = await _push(client, db_session, integration, [c], queued, branch="main", delivery="merge-2")
+        await _push(client, db_session, integration, [c], queued, branch="main")
+        await _push(client, db_session, integration, [c], queued, branch="feat/other")
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "fixes" not in again.detail
+
+    async def test_first_seen_on_default_branch_is_not_run_again(self, client, db_session, world, queued):
+        integration = await _integration(db_session, world)
+        c = commit("m3", "Fixes CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="main")
+        world.issue.status_id = world.new.id
+        await db_session.commit()
+        await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.new.id
+
+    async def test_a_refused_command_is_not_retried(self, client, db_session, world, queued):
+        world.role.permissions = ["view_issues", "log_time"]
+        await db_session.commit()
+        integration = await _integration(db_session, world)
+        c = commit("m4", "Fixes CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        refused = await _push(client, db_session, integration, [c], queued, branch="main")
+        assert "CMD-1 fixes: missing_permission:edit_issues" in refused.detail
+
+        world.role.permissions = ["view_issues", "edit_issues", "log_time"]
+        await db_session.commit()
+        again = await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "fixes" not in again.detail
+
+    async def test_time_is_logged_once_at_first_sight(self, client, db_session, world, queued):
+        integration = await _integration(db_session, world)
+        c = commit("m5", "Fixes CMD-1 @1h", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        merged = await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.fixed.id
+        assert [e.hours for e in await _entries(db_session, world.issue)] == [Decimal("1.00")]
+        assert "time" not in merged.detail
+
+    async def test_a_plain_reference_reaching_main_does_nothing(self, client, db_session, world, queued):
+        integration = await _integration(db_session, world)
+        c = commit("m6", "Refs CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        merged = await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "Commands" not in merged.detail
+
+    async def test_a_detached_link_is_not_acted_on(self, client, db_session, world, queued):
+        from specivo.models.repository import RepositoryCommit
+        from specivo.services.repository_activity import ITEM_COMMIT, detach_item
+
+        integration = await _integration(db_session, world)
+        c = commit("m7", "Fixes CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        row = (await db_session.execute(select(RepositoryCommit).where(RepositoryCommit.sha == c["id"]))).scalar_one()
+        await detach_item(db_session, world.issue, ITEM_COMMIT, row.id, actor=world.dev)
+        await db_session.commit()
+
+        await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.new.id
+
+    async def test_commands_disabled_when_it_reaches_main(self, client, db_session, world, queued):
+        integration = await _integration(db_session, world, commands_enabled=False, time_logging_enabled=False)
+        c = commit("m8", "Fixes CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [c], queued, branch="feat/login")
+        merged = await _push(client, db_session, integration, [c], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "commands_disabled" in merged.detail
+
+    async def test_known_commit_newly_reaching_main_among_new_ones(self, client, db_session, world, queued):
+        """A merge push lists the feature commit and the merge commit; each issue moves once."""
+        second = IssueFactory.build(
+            project_id=world.project.id,
+            project_key=world.project.key,
+            sequence_number=2,
+            tracker_id=world.tracker.id,
+            status_id=world.new.id,
+            priority_id=world.issue.priority_id,
+            author_id=world.dev.id,
+            subject="Logout fails",
+        )
+        db_session.add(second)
+        await db_session.commit()
+        integration = await _integration(db_session, world)
+        feature = commit("m9", "Fixes CMD-1", email=DEV_EMAIL)
+        await _push(client, db_session, integration, [feature], queued, branch="feat/login")
+        merge = commit("m9-merge", "Merge branch feat/login, fixes CMD-2", email=DEV_EMAIL)
+        result = await _push(client, db_session, integration, [feature, merge], queued, branch="main")
+        assert await _status(db_session, world.issue) == world.fixed.id
+        assert await _status(db_session, second) == world.fixed.id
+        assert "CMD-1 fixes: moved" in result.detail
+        assert "CMD-2 fixes: moved" in result.detail
 
 
 class TestTimeLogging:
