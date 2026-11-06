@@ -56,6 +56,24 @@ msgstr "{actor_name} 发表了评论"
 msgid "[{issue_key}] {actor_name} commented"
 msgstr "[{issue_key}] {actor_name} 发表了评论"
 
+#: specivo/core/notification_templates.py:35
+#, python-brace-format
+msgid "{actor_name} mentioned you"
+msgstr "{actor_name} 提到了你"
+
+#: specivo/core/notification_templates.py:36
+#, python-brace-format
+msgid "[{issue_key}] {actor_name} mentioned you"
+msgstr "[{issue_key}] {actor_name} 提到了你"
+
+#: specivo/core/notification_templates.py:39
+msgid "View issue"
+msgstr "查看工作项"
+
+#: specivo/core/notification_templates.py:40
+msgid "View comment"
+msgstr "查看评论"
+
 #: specivo/core/notification_templates.py:31
 msgid "Password reset request"
 msgstr "密码重置请求"

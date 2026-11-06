@@ -147,6 +147,16 @@ happened ("Assigned to you by …", "… commented"). Every mail carries a `Mess
 also carries `X-Specivo-Issue`, `X-Specivo-Project` and `X-Specivo-Event` (`assignment`,
 `updated`, `comment` or `mention`), and a `List-Id` per project, for filtering rules.
 
+Each person's mail is written in their own language, the one under **Preferences**, or the
+instance's default language if theirs is not available, and its time is shown in their timezone.
+It ends with a link to the issue, or to the comment, built from [`APP_URL`](#public-address-app_url).
+If `APP_URL` is empty, the link is left out. If it still points at `localhost`, so does the link,
+and Specivo logs a warning at start-up.
+
+Mail goes only to people who can open the issue, so the subject of a private issue never reaches
+anyone else. Someone mentioned with `@username` gets a mail saying so; if they also watch the issue
+or are assigned to it, that is the only mail they get about the comment.
+
 `Message-ID`s end in the domain of `SMTP_FROM`. To use another one, for example when the from
 address is on a shared mail provider's domain, set it:
 

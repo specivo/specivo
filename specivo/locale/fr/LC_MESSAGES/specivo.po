@@ -56,6 +56,24 @@ msgstr "{actor_name} a commenté"
 msgid "[{issue_key}] {actor_name} commented"
 msgstr "[{issue_key}] {actor_name} a commenté"
 
+#: specivo/core/notification_templates.py:35
+#, python-brace-format
+msgid "{actor_name} mentioned you"
+msgstr "{actor_name} vous a mentionné"
+
+#: specivo/core/notification_templates.py:36
+#, python-brace-format
+msgid "[{issue_key}] {actor_name} mentioned you"
+msgstr "[{issue_key}] {actor_name} vous a mentionné"
+
+#: specivo/core/notification_templates.py:39
+msgid "View issue"
+msgstr "Voir le ticket"
+
+#: specivo/core/notification_templates.py:40
+msgid "View comment"
+msgstr "Voir le commentaire"
+
 #: specivo/core/notification_templates.py:31
 msgid "Password reset request"
 msgstr "Demande de réinitialisation du mot de passe"

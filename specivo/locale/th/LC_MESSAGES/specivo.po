@@ -56,6 +56,24 @@ msgstr "{actor_name} แสดงความคิดเห็น"
 msgid "[{issue_key}] {actor_name} commented"
 msgstr "[{issue_key}] {actor_name} แสดงความคิดเห็น"
 
+#: specivo/core/notification_templates.py:35
+#, python-brace-format
+msgid "{actor_name} mentioned you"
+msgstr "{actor_name} กล่าวถึงคุณ"
+
+#: specivo/core/notification_templates.py:36
+#, python-brace-format
+msgid "[{issue_key}] {actor_name} mentioned you"
+msgstr "[{issue_key}] {actor_name} กล่าวถึงคุณ"
+
+#: specivo/core/notification_templates.py:39
+msgid "View issue"
+msgstr "ดูงาน"
+
+#: specivo/core/notification_templates.py:40
+msgid "View comment"
+msgstr "ดูความคิดเห็น"
+
 #: specivo/core/notification_templates.py:31
 msgid "Password reset request"
 msgstr "คำขอรีเซ็ตรหัสผ่าน"

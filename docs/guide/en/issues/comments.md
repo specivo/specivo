@@ -22,6 +22,10 @@ pull a teammate into the discussion or hand something off without reassigning th
 Only people who can open the issue are notified: mentioning someone who cannot see it (a private
 issue, or a project they are not a member of) sends them nothing.
 
+The person is notified in the app and, if the instance sends email, by a mail that says you
+mentioned them, in their own language and with a link to your comment. If they also watch the issue
+or are assigned to it, they get that one notification about the comment, not two.
+
 ## Reply in threads
 
 Reply to a specific comment to keep a side discussion together as a **thread**, instead of one long

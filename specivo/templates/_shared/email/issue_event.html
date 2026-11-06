@@ -1,0 +1,11 @@
+{% extends "email/base_email.html" %}
+{% block content %}
+<p><strong>{{ lead }}</strong><br><span style="color: #666; font-size: 13px;">{{ occurred_at }}</span></p>
+<p><strong>{{ issue_key }}</strong> {{ issue_subject }}</p>
+{% if comment_text %}
+<blockquote style="margin: 0 0 1em; padding: 0 0 0 12px; border-left: 3px solid #ddd; white-space: pre-wrap;">{{ comment_text }}</blockquote>
+{% endif %}
+{% if url %}
+<p><a href="{{ url }}" style="display: inline-block; padding: 8px 16px; background-color: #2563EB; color: #ffffff; text-decoration: none; border-radius: 4px;">{{ link_label }}</a></p>
+{% endif %}
+{% endblock %}

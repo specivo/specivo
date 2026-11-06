@@ -13,7 +13,6 @@ from specivo.models.journal import Journal
 from specivo.models.reaction import Mention
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import real_users_clause
-from specivo.services.issue_service import IssueService
 from specivo.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,6 @@ class MentionService:
 
     def __init__(self) -> None:
         self._notification_service = NotificationService()
-        self._issue_service = IssueService()
 
     def parse_mentions(self, text: str) -> list[str]:
         """Extract unique usernames from @mentions in text.
@@ -42,13 +40,21 @@ class MentionService:
         journal: Journal,
         text: str,
         actor: User,
+        *,
+        notify: bool = True,
     ) -> list[Mention]:
         """Parse @mentions from text, create Mention records, and trigger notifications.
 
         - Only creates mentions for users that actually exist in the database.
         - Does not create a mention for the actor (no self-mention).
         - Silently ignores nonexistent usernames.
-        - Notifies only the mentioned users who can see the issue.
+        - Notifies only the mentioned users who can see the issue, in app and
+          by email as their ``mention`` preferences allow
+          (``NotificationService.notify_mentions``).
+
+        With ``notify=False`` only the records are written: the caller passes
+        the mentioned users to ``NotificationService.notify_comment``, which
+        notifies them and keeps them from also getting the comment notification.
 
         Returns the list of created Mention records.
         """
@@ -81,22 +87,11 @@ class MentionService:
 
         # Only users who can see the issue hear about it; the mention itself is
         # still recorded.
-        issue = await session.get(Issue, journal.issue_id) if journal.issue_id is not None else None
-        if issue is not None and created_mentions:
-            mentioned_ids = [mention.user_id for mention in created_mentions]
-            title = f"You were mentioned by {actor.display_name}"
-            for mentioned_user in await self._issue_service.users_who_can_view(session, issue, mentioned_ids):
-                await self._notification_service.create_notification(
-                    session,
-                    user_id=mentioned_user.id,
-                    event_type="mention",
-                    entity_type="issue",
-                    entity_id=issue.id,
-                    project_id=issue.project_id,
-                    actor_id=actor.id,
-                    title=title,
-                    body=text,
-                )
+        if notify and created_mentions and journal.issue_id is not None:
+            issue = await session.get(Issue, journal.issue_id)
+            if issue is not None:
+                mentioned_ids = [mention.user_id for mention in created_mentions]
+                await self._notification_service.notify_mentions(session, issue, journal, mentioned_ids, actor)
 
         if created_mentions:
             await session.flush()

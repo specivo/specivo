@@ -46,6 +46,6 @@ class EmailChannel:
             subject = payload.title
             paragraphs = [payload.event_text or payload.title, payload.body_plain]
         paragraphs.append(payload.entity_url)
-        body_plain = "\n\n".join(p for p in paragraphs if p) + "\n"
+        body_plain = payload.body_text or "\n\n".join(p for p in paragraphs if p) + "\n"
         send_notification_email.delay(to_email, subject, body_html, body_plain, headers)
         logger.debug("Queued email to %s: %s", to_email, subject)

@@ -1,5 +1,9 @@
 """Notification message templates -- single source of truth for all notification text.
 
+They are lazy: ``NotificationService`` formats them once per recipient, inside
+``recipient_locale``, so each person reads them in their own language rather
+than the actor's.
+
 Use str.format() with named placeholders. Keys:
 - issue_key: e.g. "ACME-15"
 - issue_subject: e.g. "Fix login bug"
@@ -26,6 +30,14 @@ ISSUE_UPDATED_IN_APP_TITLE = _l("[{issue_key}] Updated by {actor_name}")
 # --- Comment ---
 COMMENT_EMAIL_LEAD = _l("{actor_name} commented")
 COMMENT_IN_APP_TITLE = _l("[{issue_key}] {actor_name} commented")
+
+# --- Mention ---
+MENTION_EMAIL_LEAD = _l("{actor_name} mentioned you")
+MENTION_IN_APP_TITLE = _l("[{issue_key}] {actor_name} mentioned you")
+
+# --- Link at the end of every issue mail ---
+EMAIL_VIEW_ISSUE = _l("View issue")
+EMAIL_VIEW_COMMENT = _l("View comment")
 
 # --- Password reset ---
 PASSWORD_RESET_EMAIL_SUBJECT = _l("Password reset request")

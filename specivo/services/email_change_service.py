@@ -46,8 +46,7 @@ import hashlib
 import logging
 import secrets
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -63,8 +62,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.config import get_settings
 from specivo.core.constants import CREDENTIAL_TOKEN_ENTROPY_BYTES
 from specivo.core.exceptions import AppError, ConflictError, ValidationError
-from specivo.core.i18n import activate, get_locale
 from specivo.core.i18n import gettext as _
+from specivo.core.i18n import recipient_locale
 from specivo.core.rate_limit import RateLimiter
 from specivo.core.utils import utcnow
 from specivo.models.auth import EmailChangeToken, PasswordResetToken
@@ -251,15 +250,9 @@ def _url(path: str) -> str:
     return f"{settings.app_url.rstrip('/')}{settings.stealth_prefix.rstrip('/')}{path}"
 
 
-@contextmanager
-def _language(language: str | None) -> Iterator[None]:
-    """Translate in ``language`` (the recipient's), then restore the request's locale."""
-    previous = get_locale()
-    activate(language or get_settings().default_language)
-    try:
-        yield
-    finally:
-        activate(previous)
+def _language(language: str | None) -> AbstractContextManager[str]:
+    """Translate in ``language`` (the recipient's, see ``recipient_locale``), then restore the request's locale."""
+    return recipient_locale(language)
 
 
 def _brand() -> str:

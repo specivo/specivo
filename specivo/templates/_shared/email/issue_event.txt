@@ -1,0 +1,9 @@
+{{ lead }}
+{{ occurred_at }}
+
+[{{ issue_key }}] {{ issue_subject }}
+{% if comment_text %}
+{{ comment_text }}
+{% endif %}{% if url %}
+{{ link_label }}: {{ url }}
+{% endif %}
