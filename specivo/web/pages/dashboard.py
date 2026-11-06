@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from typing import cast
 
 from fastapi import APIRouter, Query, Request, Response
@@ -29,6 +30,8 @@ from specivo.services.project_service import ProjectService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_current_user_optional, get_templates
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["web-dashboard"], include_in_schema=False)
 
 _project_svc = ProjectService()
@@ -50,15 +53,59 @@ def _visible(clause: ColumnElement[bool] | None) -> ColumnElement[bool]:
     return true() if clause is None else clause
 
 
+async def _anonymous_landing(request: Request, db: AsyncSession) -> Response:
+    """Where a visitor refused by the dashboard is sent.
+
+    A visitor without any credentials goes to the project list when anonymous
+    access is live, that is when the instance switch is on and at least one
+    project is readable without an account, so the site's main URL does not
+    look private while its public projects are open. Everyone else, and that
+    includes a visitor whose session failed (they are asked to sign in again,
+    as on every other page), goes to the login screen as before.
+
+    The decision reuses ``resolve_anonymous_principal`` and
+    ``ProjectService.accessible_projects_clause``, the same definitions the
+    project list applies, and reads both on every request. The answer depends
+    on the cookies sent and on settings that can change at any time, so it is
+    marked uncacheable either way.
+    """
+    from specivo.core.security import has_credentials, resolve_anonymous_principal
+
+    target = "/login/"
+    if not has_credentials(request):
+        try:
+            anonymous = await resolve_anonymous_principal(db)
+            if anonymous is not None:
+                readable = await _project_svc.accessible_projects_clause(db, anonymous)
+                if readable is not None and await db.scalar(select(select(Project.id).where(readable).exists())):
+                    target = "/projects/"
+        except Exception:
+            # Fail closed, as ``get_web_reader`` does: a visitor is never sent
+            # to the public pages on a guess. The login screen is what the
+            # dashboard always answered.
+            logger.warning("Could not resolve anonymous access for the home page", exc_info=True)
+            target = "/login/"
+
+    response = RedirectResponse(target, status_code=302)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie, Authorization"
+    return response
+
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """Render the main dashboard page."""
+    """Render the main dashboard page.
+
+    The dashboard itself is never served anonymously (it is not in
+    ``ANONYMOUS_WEB_ROUTES``). Only the destination of a refused visitor
+    depends on anonymous access: see :func:`_anonymous_landing`.
+    """
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return await _anonymous_landing(request, db)
     user = cast("User", user_obj)
 
     # list_projects already enforces visibility (admins see all,
