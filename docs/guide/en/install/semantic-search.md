@@ -91,6 +91,39 @@ has it. On an older pgvector, search compares every embedding and logs a warning
 Index lookups are approximate: on a large instance a close match can rank a place or two
 differently than an exact comparison would. Raising `SEARCH_HNSW_EF_SEARCH` narrows that.
 
+### Minimum similarity
+
+Every query has nearest chunks, even one that has nothing to do with your content. So semantic
+search only counts a chunk as a hit when its similarity to the query reaches a minimum. Chunks
+below it are left out of the results and out of the result count, and a query with no real match
+shows the normal "no results" page.
+
+Similarity is the cosine similarity of the two embeddings, from -1 to 1; it is also the `score` the
+REST API returns for each result in `semantic` mode. How high related and unrelated texts score
+depends on the model, so the minimum comes from the model unless you set one:
+
+| Model | Default minimum |
+|---|---|
+| `multilingual-e5-small` and the rest of the E5 family | `0.82` |
+| Any other model | None: every nearest chunk counts |
+
+The E5 models score every pair of texts high, between about 0.7 and 0.9. Measured on issue and wiki
+text, a search for something a chunk actually describes scored 0.81 to 0.89 (0.87 typically), and
+searches unrelated to the content (a recipe, sports, random letters, or a lone word like "trash")
+reached at most 0.81. The default sits just above that.
+
+In **hybrid** search the minimum applies to the semantic half only. Every keyword match stays; a
+result found by meaning alone needs to reach the minimum.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `SEARCH_SEMANTIC_MIN_SIMILARITY` | unset (the model's default) | The minimum cosine similarity, from `-1` to `1`. Lower it if semantic search misses loosely worded matches, raise it if unrelated results still appear. `-1` turns the cut-off off |
+
+To tune it for your content, set it to `-1` for a moment and restart the `api` container. Then
+search through the REST API (`GET /api/v1/search/?q=...&mode=semantic`) for a few things you know
+are there and a few that should find nothing, and compare the `score` of the top results. Set the
+variable between the two groups and restart again.
+
 ## The default model
 
 | | |
@@ -342,6 +375,13 @@ Work down the list in [Check that it works](#check-that-it-works): the files in
 model files, files in the wrong folder (it must be the `models` folder *inside* the folder mounted
 as `/app/data`, and `SPECIVO_DATA_DIR` in `.env` must point at the same place for all containers), a
 stopped `celery-embeddings` worker, or a backfill that has not run since the files were added.
+If those are fine, the semantic matches may score below the [minimum similarity](#minimum-similarity):
+check their `score` in the REST API and lower `SEARCH_SEMANTIC_MIN_SIMILARITY` if needed.
+
+**Semantic search returns results that have nothing to do with the query.**
+Results below the [minimum similarity](#minimum-similarity) are left out, but a short or very
+generic query can still reach it. Raise `SEARCH_SEMANTIC_MIN_SIMILARITY` a little (for example to
+`0.84`) and restart the `api` container.
 
 **A result I know exists is missing, or looks out of date.**
 In keyword mode, check that you can open the item: search only shows what you are allowed to see,

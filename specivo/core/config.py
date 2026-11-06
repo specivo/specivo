@@ -230,6 +230,11 @@ class Settings(BaseSettings):
     # chunks are fetched per wanted result before visibility filtering.
     search_hnsw_ef_search: int = Field(default=100, ge=10, le=1000)
     search_semantic_overfetch: int = Field(default=4, ge=1, le=50)
+    # Minimum cosine similarity (-1 to 1) a semantic hit needs, in semantic
+    # search and for semantic-only hits in hybrid search. Unset: the default
+    # for the embedding model's family (0.82 for multilingual-e5); -1 keeps
+    # every nearest neighbour. See specivo.services.similarity_threshold.
+    search_semantic_min_similarity: float | None = Field(default=None, ge=-1.0, le=1.0)
 
     # CPU seconds one Markdown field may use to render before it is abandoned
     # and shown as plain text; the wall-clock ceiling is 4x this. A backstop:

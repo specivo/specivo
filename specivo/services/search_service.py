@@ -49,6 +49,7 @@ from specivo.schemas.search import (
 )
 from specivo.services.api_key_scope import scope_project_ids
 from specivo.services.permission_service import Permission
+from specivo.services.similarity_threshold import min_similarity_for
 from specivo.services.wiki_utils import WIKI_LINK_RE
 
 # Shortcuts for f-string interpolation into raw SQL. These expand to the
@@ -1498,7 +1499,10 @@ class SearchService:
 
         Generates an embedding for the query text, then finds the most
         similar chunks via cosine distance. Returns results mapped back
-        to their source entities.
+        to their source entities. Chunks less similar than the model's
+        minimum similarity (see :mod:`specivo.services.similarity_threshold`)
+        are dropped from both the results and the total, so a query unrelated
+        to the content finds nothing rather than its nearest neighbours.
 
         When ``filters.tag_names`` is set, only tagged issues and wiki pages can
         match (comments and attachments are excluded), keeping hybrid results
@@ -1545,6 +1549,15 @@ class SearchService:
         vec_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
 
         params: dict[str, Any] = {"model_id": model.id, "query_vector": vec_literal}
+        # Nearest neighbours exist for any query, related or not: only chunks at
+        # least this similar count as hits (see similarity_threshold).
+        min_similarity = min_similarity_for(model.model_name)
+        score_filter = ""
+        exact_score_filter = ""
+        if min_similarity is not None:
+            params["min_similarity"] = min_similarity
+            score_filter = "AND n.score >= :min_similarity"
+            exact_score_filter = "AND (1 - (ce.embedding <=> CAST(:query_vector AS vector))) >= :min_similarity"
         project_filter = ""
         if project_ids is not None:
             project_filter = "AND ss.project_id = ANY(:project_ids)"
@@ -1656,6 +1669,7 @@ class SearchService:
                 JOIN search_sources ss0 ON ss0.id = sc0.source_id
                 WHERE ce.model_id = :model_id
                 {exact_scope}
+                {exact_score_filter}
             )"""
             else:
                 dims = SEMANTIC_INDEX_DIMENSIONS
@@ -1738,6 +1752,7 @@ class SearchService:
                 LEFT JOIN projects att_wp_p ON att_wp_p.id = att_w.project_id
                 WHERE 1=1
                 {project_filter}
+                {score_filter}
                 AND {sem_where_or}
                 ORDER BY ss.source_type, ss.entity_id, n.score DESC
             ) deduped
@@ -1747,12 +1762,12 @@ class SearchService:
 
         # Rank the first offset + limit entities; the page is cut in Python.
         # The one-row ``fetched`` side reports how many candidates the round
-        # read, even when none of them is visible.
+        # read and the lowest score among them, even when none is visible.
         def semantic_sql(candidates: int | None) -> str:
             return f"""
             {nearest_cte(candidates)}
-            SELECT fetched.n AS candidate_count, page.*
-            FROM (SELECT count(*) AS n FROM nearest) fetched
+            SELECT fetched.n AS candidate_count, fetched.lowest AS lowest_score, page.*
+            FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
             LEFT JOIN ({ranked_sql}) page ON true
             ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
         """
@@ -1777,6 +1792,11 @@ class SearchService:
                     needed,
                 )
                 if candidates is None or len(rows) >= needed:
+                    break
+                lowest = fetched[0]._mapping["lowest_score"]
+                if min_similarity is not None and lowest is not None and lowest < min_similarity:
+                    # The round already reached chunks below the cut-off; the
+                    # wider rounds would only add chunks further away still.
                     break
                 if fetched[0]._mapping["candidate_count"] < candidates:
                     # The index ran out before the limit: the table holds fewer
@@ -1823,6 +1843,7 @@ class SearchService:
                 LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
                 WHERE ce.model_id = :model_id
                 {project_filter}
+                {exact_score_filter}
                 AND {count_where_or}
             """
             count_result = await session.execute(text(count_sql), params)
@@ -1848,6 +1869,10 @@ class SearchService:
         2. Run semantic query (pgvector cosine similarity) -> ranked list with IDs
         3. Merge using RRF (k=60): score = 1/(k+rank_fts) + 1/(k+rank_semantic)
         4. Sort by combined score, apply offset/limit
+
+        The semantic list holds only hits above the minimum similarity, so a
+        result found by the semantic side alone must clear it, while every
+        keyword hit stays (a keyword hit below it just gets no semantic boost).
 
         Issues the query names by reference (``ACME-42``) are resolved
         directly and placed ahead of the fused ranking, rather than fused:
