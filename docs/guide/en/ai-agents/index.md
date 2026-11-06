@@ -46,6 +46,8 @@ See [Connecting an AI client](connecting.md) for the exact configuration each on
 - **[Connecting an AI client](connecting.md)** — copy-paste config for SSE clients and Codex.
 - **[What agents can do](capabilities.md)** — the tool catalog by area, read vs write, and auditing.
 - **[Common workflows](workflows.md)** — concrete things to ask your agent to do.
+- **[Reporting AI usage to Specivo](reporting-ai-usage.md)** — send the token usage of AI coding
+  tools to Specivo, attributed to issues.
 
 !!! note "The agent works as a teammate"
     An MCP-connected agent is not a separate integration sitting beside Specivo — it logs in as a

@@ -244,6 +244,7 @@ as *Accepted* and outgoing ones as *Pending*, and both are picked up once they r
 | `GIT_HOOK_MAX_BODY_BYTES` | Largest webhook body a repository integration accepts; larger ones are answered 413. Default `5242880` (5 MB), at least `1024`. |
 | `GIT_HOOK_RATE_LIMIT_PER_MINUTE` | Webhook requests per minute one repository integration may receive before Specivo answers 429. Default `120`. |
 | `GIT_HOOK_UNKNOWN_RATE_LIMIT_PER_MINUTE` | Requests per minute one client address may send to hook URLs that match no integration, or with a bad signature. Default `30`. |
+| `AI_USAGE_INGEST_RATE_LIMIT_PER_MINUTE` | Batches per minute one account may send to the [AI usage ingest API](../ai-agents/reporting-ai-usage.md) before Specivo answers 429. Default `60`. |
 | `WEBHOOK_TIMEOUT` | Seconds an outgoing webhook may take for each step of a request (connecting, sending, reading the answer). Default `30`; a whole attempt is always cut off after 60 seconds. |
 
 ## Single sign-on: getting back in
