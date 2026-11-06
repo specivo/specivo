@@ -109,6 +109,7 @@ def _bootstrap_worker(**_kwargs) -> None:
 # (no @celery_app.task) and is imported on demand by cleanup, so it
 # does not need a top-level import here.
 from specivo.tasks import (  # noqa: E402, F401
+    ai_model_prices,
     cleanup,
     embeddings,
     entity_links,

@@ -1,8 +1,8 @@
 # Import all models here so that Alembic's autogenerate sees them
 # when it inspects Base.metadata.
-from specivo.models.agent_cost import AgentTokenLog, ModelCostConfig
 from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPolicy
 from specivo.models.agent_session import AgentSession
+from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
@@ -61,9 +61,8 @@ __all__ = [
     "AgentGroup",
     "AgentGroupMembership",
     "AgentSession",
-    "AgentTokenLog",
+    "AiModelPrice",
     "BillingRate",
-    "ModelCostConfig",
     "Base",
     "LockVersionMixin",
     "TimestampMixin",

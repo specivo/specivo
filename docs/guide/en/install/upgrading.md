@@ -70,6 +70,20 @@ docker compose up -d
 
 ## Upgrading to 0.13.0
 
+### The btree_gist extension
+
+The migration creates the PostgreSQL extension `btree_gist`, for the [AI model
+prices](ai-model-prices.md). The bundled database needs nothing. On an external database the
+migration role needs `CREATE` on the database (it is a trusted extension, no superuser needed); on
+Azure flexible server, add `btree_gist` to `azure.extensions` first. See
+[Configuration](configuration.md).
+
+### AI model prices replace the agent cost tables
+
+The unused `agent_token_logs` and `model_cost_configs` tables are dropped, with their unmounted
+API routes. The new [AI model prices](ai-model-prices.md) table is filled with the bundled price
+list, valid from the list's date.
+
 ### Metadata values are validated
 
 Metadata schemas now refuse values that do not match them, from the issue page, the REST API and AI

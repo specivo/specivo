@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import pagination %}
+{% from "pages/admin/_ai_model_price_macros.html" import error_text, source_label, price_cells, price_head with context %}
+
+{% block title %}{% trans %}AI model prices{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}AI model prices{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}AI model prices{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}Prices per one million tokens that value AI usage at API rates. Each price is valid for a period; a price change starts a new period and keeps the old one, so usage is always priced at the rate of its own time. Prices you enter win over the bundled ones.{% endtrans %}</p>
+
+{% if notice == "seeded" %}<div class="flash flash-success" role="status" data-testid="prices-notice">{% trans inserted=seed_counts.inserted, closed=seed_counts.closed %}Bundled prices loaded: {{ inserted }} new periods, {{ closed }} closed.{% endtrans %}</div>
+{% elif notice == "seed_unchanged" %}<div class="flash flash-info" role="status" data-testid="prices-notice">{% trans %}The bundled prices are already loaded. Nothing changed.{% endtrans %}</div>
+{% elif notice == "deleted" %}<div class="flash flash-success" role="status" data-testid="prices-notice">{% trans %}Price deleted.{% endtrans %}</div>
+{% endif %}
+{% if error %}<div class="flash flash-error" role="alert" data-testid="prices-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="prices-card">
+  <form method="get" action="/admin/ai-model-prices/" class="sp-mp-filters sp-mb-md">
+    <select name="provider" class="form-input" aria-label="{{ _('Provider') }}">
+      <option value="">{% trans %}All providers{% endtrans %}</option>
+      {% for p in providers %}<option value="{{ p }}" {{ 'selected' if p == filters.provider else '' }}>{{ p }}</option>{% endfor %}
+    </select>
+    <input type="search" name="q" class="form-input" value="{{ filters.q }}" placeholder="{{ _('Model or alias') }}" aria-label="{{ _('Model or alias') }}">
+    <select name="source" class="form-input" aria-label="{{ _('Source') }}">
+      <option value="">{% trans %}All sources{% endtrans %}</option>
+      <option value="admin" {{ 'selected' if filters.source == 'admin' else '' }}>{% trans %}Admin{% endtrans %}</option>
+      <option value="seed" {{ 'selected' if filters.source == 'seed' else '' }}>{% trans %}Bundled{% endtrans %}</option>
+    </select>
+    <select name="status" class="form-input" aria-label="{{ _('Status') }}">
+      <option value="active" {{ 'selected' if filters.status == 'active' else '' }}>{% trans %}Active{% endtrans %}</option>
+      <option value="inactive" {{ 'selected' if filters.status == 'inactive' else '' }}>{% trans %}Deactivated{% endtrans %}</option>
+      <option value="all" {{ 'selected' if filters.status == 'all' else '' }}>{% trans %}All{% endtrans %}</option>
+    </select>
+    <select name="current" class="form-input" aria-label="{{ _('Period') }}">
+      <option value="1" {{ 'selected' if filters.current == '1' else '' }}>{% trans %}Valid now{% endtrans %}</option>
+      <option value="0" {{ 'selected' if filters.current == '0' else '' }}>{% trans %}All periods{% endtrans %}</option>
+    </select>
+    <button type="submit" class="sp-btn-sm">{% trans %}Filter{% endtrans %}</button>
+  </form>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="prices-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Model{% endtrans %}</th>
+          {{ price_head() }}
+          <th>{% trans %}Valid{% endtrans %}</th>
+          <th>{% trans %}Source{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in prices %}
+        <tr data-price-id="{{ p.id }}" class="{{ '' if p.is_active else 'sp-mp-inactive' }}">
+          <td>
+            <a href="/admin/ai-model-prices/model/?{{ p.history_query }}"><span class="sp-text-muted-xs">{{ p.provider }}/</span>{{ p.model }}</a>
+            {% if p.long_context_threshold %}<span class="sp-mp-badge" title="{{ _('Long context prices above this many tokens') }}">&gt;{{ p.long_context_threshold }}</span>{% endif %}
+            {% if not p.is_active %}<span class="sp-badge-warning">{% trans %}Deactivated{% endtrans %}</span>{% endif %}
+          </td>
+          {{ price_cells(p) }}
+          <td class="sp-mp-period">{{ p.from }} &rarr; {{ p.to or _('open') }}</td>
+          <td>{{ source_label(p.source) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="sp-text-muted">{% trans %}No prices match.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(total, offset, limit, "/admin/ai-model-prices/", page_query) }}
+</div>
+
+<div class="sp-mp-grid">
+  <div class="card sp-card-pad" id="new-price" data-testid="new-price-card">
+    <h3 class="sp-card-h3">{% trans %}Add a price{% endtrans %}</h3>
+    <p class="sp-text-muted sp-mb-md">{% trans %}For a model without prices, or to override a bundled price. To change the price of a listed model, open it and enter a new price from the instant it changes.{% endtrans %}</p>
+    <datalist id="mp-providers">{% for p in providers %}<option value="{{ p }}">{% endfor %}</datalist>
+    {% set fixed_model = none %}
+    {% include "pages/admin/_ai_model_price_form.html" %}
+  </div>
+
+  <div class="card sp-card-pad" id="bundled" data-testid="bundled-card">
+    <h3 class="sp-card-h3">{% trans %}Bundled prices{% endtrans %}</h3>
+    {% if snapshot.ok %}
+    <p>{% trans count=snapshot.count, as_of=snapshot.as_of %}This version bundles prices of {{ count }} models as of {{ as_of }}.{% endtrans %}</p>
+    {% endif %}
+    <p class="sp-text-muted">{% trans %}They are loaded when Specivo is installed and whenever a worker starts after an upgrade. Loading never changes a period that already started: a changed price ends the old period at the snapshot's date and starts a new one. Usage from before the first bundled period is unpriced unless you enter an earlier price. Prices you entered are never touched.{% endtrans %}</p>
+    <form method="post" action="/admin/ai-model-prices/seed/">
+      <button type="submit" class="sp-btn-sm">{% trans %}Load bundled prices now{% endtrans %}</button>
+    </form>
+    <p class="sp-text-muted-xs sp-mp-attribution" data-testid="litellm-attribution">{% trans %}Source of the bundled prices: LiteLLM's model price list (MIT License, Copyright (c) 2023 Berri AI). Prices are list prices for information; check them against your provider's invoice.{% endtrans %}</p>
+  </div>
+</div>
+{% endblock %}

@@ -23,7 +23,7 @@ The viewer groups event types into categories:
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
-| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
+| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off, AI model prices added, changed or deleted, and bundled prices loaded. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
 | Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
 | Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
@@ -146,6 +146,19 @@ messages and pull request titles are never logged. See
 
 A CSV preview, a refused import and saving unchanged values write nothing. The daily fetch itself is
 not an audit event; its last outcome is shown on the admin page. See [Exchange rates](exchange-rates.md).
+
+### AI model prices
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_model_price_created` | the administrator | `price_id`, `provider`, `model`, `currency`, `effective_from`, `effective_to`, `source` (`admin`), `is_active`, `prices` (each set price per 1M tokens); `closed_price_id` when it ended the previous price of the model |
+| `ai_model_price_updated` | the administrator | the same, plus `changes`: each changed field (`effective_to`, `is_active`, `aliases`, `note`) with `old` and `new` |
+| `ai_model_price_deleted` | the administrator | the deleted price, as for `ai_model_price_created` |
+| `ai_model_prices_seeded` | the administrator, or none when a worker loaded them at start | `as_of` (the bundled list's date), `inserted`, `closed`, `history_inserted`, `aliases_updated`, `unchanged`, `skipped` (counts) |
+
+Saving unchanged values and loading a bundled list that changes nothing write nothing. The
+installation's first load runs in the database migration and is not audited. See
+[AI model prices](ai-model-prices.md).
 
 ## Personal data
 

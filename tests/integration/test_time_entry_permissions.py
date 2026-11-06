@@ -301,7 +301,7 @@ async def test_rest_single_entry_requires_view_time_entries_even_for_own(
 
 async def test_billing_report_endpoint_requires_view_time_entries(db_session: AsyncSession, world: dict) -> None:
     """The billing report handler (its router is not mounted by core) refuses without view_time_entries."""
-    from specivo.api.v1.agent_costs import get_billing_report
+    from specivo.api.v1.billing_rates import get_billing_report
     from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 
     span = {"date_from": date(2026, 1, 1), "date_to": date(2026, 12, 31)}

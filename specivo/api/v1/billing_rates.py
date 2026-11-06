@@ -1,4 +1,4 @@
-"""Agent cost tracking API — token logs, cost summaries, billing rates/reports."""
+"""Billing rates and the billing report (project-scoped). Not mounted by core."""
 
 from __future__ import annotations
 
@@ -13,24 +13,14 @@ from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.schemas.agent_cost import (
-    AgentTokenLogCreate,
-    AgentTokenLogOut,
-    CostSummaryItem,
-    IssueCostOut,
-)
 from specivo.schemas.billing_rate import BillingRateCreate, BillingRateOut, BillingRateUpdate, BillingReportOut
-from specivo.services.agent_cost_service import AgentCostService
 from specivo.services.billing_rate_service import BillingRateService
-from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 
-router = APIRouter(tags=["agent-costs"])
-_cost_service = AgentCostService()
+router = APIRouter(tags=["billing-rates"])
 _billing_service = BillingRateService()
 _project_service = ProjectService()
-_issue_service = IssueService()
 
 
 async def _require_project_permission(
@@ -49,63 +39,6 @@ async def _require_project_permission(
 # ``view_time_entries``, like the billing report that applies them.
 _MANAGE_RATES_DENIED = "You do not have permission to manage billing rates in this project"
 _VIEW_RATES_DENIED = "You do not have permission to view billing rates in this project"
-
-
-# ---------------------------------------------------------------------------
-# Token logging (not project-scoped)
-# ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/agent-token-logs/",
-    response_model=AgentTokenLogOut,
-    status_code=status.HTTP_201_CREATED,
-)
-async def log_tokens(
-    data: AgentTokenLogCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = DB_SESSION,
-) -> AgentTokenLogOut:
-    log = await _cost_service.log_tokens(db, data, current_user)
-    return AgentTokenLogOut.model_validate(log)
-
-
-# ---------------------------------------------------------------------------
-# Cost summaries (project-scoped)
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/projects/{project_key}/agent-costs/",
-    response_model=list[CostSummaryItem],
-)
-async def get_cost_summary(
-    project_key: str,
-    date_from: date | None = Query(None),
-    date_to: date | None = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = DB_SESSION,
-) -> list[CostSummaryItem]:
-    """Agent costs by model over the issues of the project the caller may see."""
-    project = await _project_service.get_by_key(db, project_key)
-    await _project_service.require_project_access(db, project, current_user)
-    items = await _cost_service.get_cost_summary(db, project, current_user, date_from, date_to)
-    return [CostSummaryItem(**item) for item in items]
-
-
-@router.get(
-    "/projects/{project_key}/agent-costs/by-issue/{issue_ref}/",
-    response_model=IssueCostOut,
-)
-async def get_cost_per_issue(
-    project_key: str,
-    issue_ref: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = DB_SESSION,
-) -> IssueCostOut:
-    issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
-    costs = await _cost_service.get_cost_per_issue(db, issue.id)
-    return IssueCostOut(issue_ref=issue_ref, **costs)
 
 
 # ---------------------------------------------------------------------------

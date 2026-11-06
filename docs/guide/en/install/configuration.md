@@ -99,14 +99,18 @@ ships 0.8). Once you
 point the URLs elsewhere, you can remove the `db` and `redis` services from `docker-compose.yml` —
 they are declared as optional dependencies, so the app starts without them.
 
-It also needs the **pg_trgm** extension, which the similar issue suggestions use. The database
-migrations create it, as they do pgvector, and stop if they cannot:
+It also needs the **pg_trgm** extension, which the similar issue suggestions use, and
+**btree_gist**, which keeps the periods of an [AI model price](ai-model-prices.md) from
+overlapping. Both ship with PostgreSQL itself. The database migrations create them, as they do
+pgvector, and stop if they cannot:
 
-- `pg_trgm` is a trusted extension, so a database role with `CREATE` on the database can install it.
-- AWS RDS lists it among its supported extensions.
+- Both are trusted extensions (PostgreSQL 13 and later), so a database role with `CREATE` on the
+  database can install them; no superuser is needed.
+- AWS RDS lists both among its supported extensions.
 - On Google Cloud SQL, the role needs `cloudsqlsuperuser`.
 - On Azure Database for PostgreSQL flexible server, an extension must first be added to the
-  `azure.extensions` server parameter; check that list for `pg_trgm` before you migrate.
+  `azure.extensions` server parameter; check that list for `pg_trgm` and `btree_gist` before you
+  migrate.
 
 ## The data directory
 
