@@ -16,7 +16,9 @@ if TYPE_CHECKING:
 _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
-    "specivo_list_issues": "List issues (with tags); filter by status/sprint/metadata/parent, sort, paginate",
+    "specivo_list_issues": (
+        "List issues (with tags); filter by status/sprint/metadata/parent/assignee/tag/release, sort, paginate"
+    ),
     "specivo_show_issue": (
         "Issue details: parent, children, tags, commits, PRs, links to/from, source number; search= for a section"
     ),
@@ -208,6 +210,14 @@ Diagrams render with Mermaid's strict security level: HTML labels, `click` callb
 `%%{{init}}%%` overrides of security or theme settings are ignored, so keep labels plain text. A
 diagram that fails to parse shows its source and an error instead, so check the syntax. The source
 stays in the text, so search, `specivo_read_wiki` and `specivo_show_issue` return it unchanged.
+
+### Filter issues by assignee, tag or release
+`specivo_list_issues` narrows like the issue list's filters:
+- `assignee="alex"` (login or user id), `assignee="me"`, `assignee="none"` (unassigned)
+- `tag="frontend"` (name, case-insensitive, or tag id)
+- `release="0.13.0"` (version name or id; versions shared with the project count), `release="none"`
+
+An unknown name or id is an error naming the argument, never an empty list.
 
 ### Filter issues by metadata
 `specivo_list_issues` accepts `metadata_filters=["key=value", ...]`. Pairs are

@@ -257,6 +257,28 @@ async def specivo_list_issues(
         str | None,
         Field(description="Only the direct children of this issue (display key, e.g. ACME-12)."),
     ] = None,
+    assignee: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Only issues assigned to this person: a login or numeric user id of someone issues in "
+                "the project can be assigned to, 'me' (you), or 'none' (unassigned)."
+            ),
+        ),
+    ] = None,
+    tag: Annotated[
+        str | None,
+        Field(description="Only issues with this tag: a tag name (case-insensitive) or numeric tag id."),
+    ] = None,
+    release: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Only issues targeting this release: a version name (case-insensitive; versions shared "
+                "with the project count) or numeric version id, or 'none' (no release)."
+            ),
+        ),
+    ] = None,
 ) -> str:
     """List issues for a project with filtering and sorting.
 
@@ -265,6 +287,8 @@ async def specivo_list_issues(
     Pass metadata_filters to narrow by JSONB metadata (e.g. component=frontend).
     Pass parent_ref to list only the direct children of that issue that belong
     to this project.
+    Pass assignee, tag or release to narrow like the issue list's filters. An
+    unknown name or id is an error naming the argument, never an empty list.
     Each issue line carries its tags as '[tags: a, b]' when it has any, so no
     follow-up specivo_tag(op='get') call is needed.
     """
@@ -280,6 +304,9 @@ async def specivo_list_issues(
             sprint_id,
             metadata_filters,
             parent_ref,
+            assignee=assignee,
+            tag=tag,
+            release=release,
         )
 
 
