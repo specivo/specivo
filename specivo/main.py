@@ -64,6 +64,12 @@ async def lifespan(app: FastAPI):
 
     log_startup_warnings(settings)
 
+    # Webhook, SSO, SCIM and email URLs are built from APP_URL: say so when a
+    # production instance still points it at this machine.
+    from specivo.core.app_url import log_app_url_warning
+
+    log_app_url_warning(settings, component="web app")
+
     # Eagerly validate DB and Redis connectivity at startup so the container
     # fails fast rather than surfacing errors on the first request.
     engine = get_engine()

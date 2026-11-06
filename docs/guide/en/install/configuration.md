@@ -52,7 +52,7 @@ docker compose up -d
 | `DATABASE_URL` | `postgresql+asyncpg://specivo:specivo@db:5432/specivo`. Point it at an external database to use your own. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |
-| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails and [single sign-on](single-sign-on/index.md) addresses are built from it. |
+| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails, repository webhook URLs and [single sign-on](single-sign-on/index.md) addresses are built from it. See [Public address (`APP_URL`)](#public-address-app_url). |
 | `SECRET_KEY` | Signs sessions and tokens. **Must** be a strong, unique value in production. Keep in `.env.local`. |
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
@@ -156,6 +156,33 @@ SMTP_MESSAGE_ID_DOMAIN=specivo.example.com
 The value must be a plain host name (letters, digits, hyphens and dots); Specivo refuses to start
 with anything else. If it is not set and the domain of `SMTP_FROM` is not a plain host name, the
 host of `APP_URL` is used.
+
+## Public address (APP_URL)
+
+Specivo builds every address that leaves the instance from `APP_URL`: the links in emails, the
+webhook URL of a [repository integration](../integrations/repositories.md), the redirect and
+back-channel logout URIs of a [single sign-on](single-sign-on/index.md) provider and its
+[SCIM](single-sign-on/scim.md) base URL. It never takes them from the address the browser used,
+which a client can forge. Set it to the scheme, host and port (if not the default) that people and
+other systems use to reach Specivo, without the `STEALTH_PREFIX`, and restart:
+
+```bash
+# .env
+APP_URL=https://specivo.example.com
+```
+
+The default, `http://localhost:8030`, only works on the machine Specivo runs on. While `APP_URL`
+is empty or names this machine (`localhost` or a `*.localhost` name, `127.0.0.1` or another
+loopback address, `::1`, `0.0.0.0`):
+
+- the pages that show these URLs for copying (project **Settings → Repositories**, and the
+  **Connection** and **Provisioning (SCIM)** sections of a single sign-on provider) show a
+  warning with the current value;
+- with `DEBUG=false`, the web app and the background worker each log one warning when they start.
+
+When `APP_URL` is a real address but you opened the page under another host name, the same pages
+say so: the URLs you copy carry the `APP_URL` host, which may not be the one that reaches this
+instance.
 
 ## Client addresses behind a proxy
 
