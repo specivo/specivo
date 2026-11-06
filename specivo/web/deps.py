@@ -316,6 +316,11 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     # Brand name — from DB setting, available in all templates
     templates.env.globals["brand_name"] = _brand_name
 
+    # Bundled avatar icons of built-in system accounts, for the avatar macro
+    from specivo.core.constants import SYSTEM_AVATAR_ICONS
+
+    templates.env.globals["system_avatar_icons"] = SYSTEM_AVATAR_ICONS
+
     # Plugin assets — module-level lists populated by setup_plugin_assets()
     templates.env.globals["plugin_css_files"] = _plugin_css_files
     templates.env.globals["plugin_js_files"] = _plugin_js_files

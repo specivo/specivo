@@ -120,9 +120,14 @@ REPOSITORY_SWEEP_BATCH = 200
 REPOSITORY_COMMIT_BATCH = 500
 # Linked commits listed by specivo_show_issue before "and N more".
 REPOSITORY_MCP_COMMIT_LIMIT = 10
-# Linked commits and pull requests the issue Development panel and API return.
+# Linked commits and pull requests the issue Development tab and API return.
 DEVELOPMENT_COMMIT_LIMIT = 50
 DEVELOPMENT_PULL_REQUEST_LIMIT = 100
+
+# Built-in system accounts (``$`` logins) shown with a bundled icon instead of
+# initials: login -> icon name, served as /static/img/avatars/<name>.svg.
+# The frontend keeps the same map in frontend/js/lib/avatar.js.
+SYSTEM_AVATAR_ICONS: dict[str, str] = {"$git": "git"}
 
 # Entity link graph (links written in issue descriptions, comments and wiki pages)
 # Links stored per source text; anything beyond is dropped with a warning.

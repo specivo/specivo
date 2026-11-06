@@ -10,7 +10,7 @@ Specivo links what it finds to your issues:
 
 - A commit that mentions `ACME-12` in its message, or is pushed to a branch named after it, is
   **linked** to issue ACME-12. The issue gets a note from **Git** and the commit appears in the
-  issue's [Development panel](#the-development-panel).
+  issue's [Development tab](#the-development-tab).
 - A pull request (GitLab: merge request) that mentions an issue in its title, its description or
   its source branch is linked the same way, with its state: open, draft, merged or closed.
 - Optionally, commit messages can **act** on issues (`Fixes ACME-12` moves the issue, `ACME-12 @2h`
@@ -207,7 +207,7 @@ The [Copy branch name](#copy-branch-name) button on each issue gives you a name 
 ### In a pull or merge request
 
 The title, the description and the source branch are read the same way. The link is **closing**
-when the title or description uses a fixing keyword (`Fixes ACME-12`); the Development panel marks
+when the title or description uses a fixing keyword (`Fixes ACME-12`); the Development tab marks
 it *fixes*, and only closing links take part in [merge automation](#merge-automation). Until the
 request is merged, a link follows the current text: remove the keyword and it is no longer closing.
 
@@ -222,7 +222,7 @@ was moved from one project in the scope to another.
 The first time a commit is linked to an issue:
 
 - The issue gets one note from **Git**, the built-in service account that writes repository
-  activity: "Commit `abc1234` on `feat/ACME-12-login-form` by Alex Example: Add the login form",
+  activity (its avatar is a branch icon): "Commit `abc1234` on `feat/ACME-12-login-form` by Alex Example: Add the login form",
   with a link to the commit. A pull request gets "Pull request #14 by `alex-example`: Add the
   login form" (GitLab: "Merge request !14").
 - The commit SHA is added to the issue's `commits` metadata, the branch (for a link from the branch
@@ -241,24 +241,29 @@ The commit author is matched to a Specivo account only through a **verified** em
 match is stored with the commit and used by commit commands; it is not shown anywhere, and commit
 author emails are never displayed.
 
-## The Development panel
+## The Development tab
 
-When an issue has linked commits, pull requests or branches, its page shows a **Development** panel:
+When an issue has linked pull requests or commits, its page has a **Development** tab next to
+Activity (Activity · Development · Time · Relations · Attachments). The tab's count is the number
+of pull requests plus the number of commits. It shows:
 
 - **Pull requests**, open and draft ones first, with their state (*Open*, *Draft*, *Merged*,
   *Closed*), number, title, *fixes* for a closing link, repository, source branch and author.
-- **Branches** the issue was worked on, other than the repository's default branch, linked to the
-  forge.
-- **Commits**, newest first: short SHA, first line, author name, branch and time. Five are shown,
-  with **Show N more** for the rest of the newest 50; the heading counts all of them.
+- **Commits**, newest first: short SHA, first line, author name, branch and time. The branch links
+  to its page on the forge when the repository URL is a web address. Five commits are shown, with
+  **Show N more** for the rest of the newest 50; the heading counts all of them.
 
-![The Development panel on an issue](../../assets/img/issue-development.webp)
+![The Development tab on an issue](../../assets/img/issue-development.webp)
 
-The panel is shown to signed-in people who can see the issue, and hidden when there is nothing to
-show. Visitors without an account never see it. The same data is available from
-`GET /api/v1/issues/{key}/development/` (up to 100 pull requests and the newest 50 commits; the
-panel says when there are more), and AI agents see the newest 10 commits and the pull requests in
-`specivo_show_issue`.
+Activity stays the tab that opens first. To link straight to the Development tab, add
+`#development` to the issue's address (`/issue/ACME-12/#development`); the other tabs work the same
+way (`#time`, `#relations`, `#attachments`). On a narrow screen the tab row scrolls sideways.
+
+The tab is shown to signed-in people who can see the issue, and is not there when no pull request
+or commit is linked. Visitors without an account never see it. The same data, with the branches the
+issue was worked on, is available from `GET /api/v1/issues/{key}/development/` (up to 100 pull
+requests and the newest 50 commits; the tab says when there are more), and AI agents see the newest
+10 commits and the pull requests in `specivo_show_issue`.
 
 ## Copy branch name
 

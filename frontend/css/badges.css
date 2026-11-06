@@ -85,3 +85,10 @@
 .avatar-lg { width: 48px; height: 48px; border-radius: 50%; background: var(--sp-accent); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: var(--sp-font-size-lg); font-weight: 600; flex-shrink: 0; }
 .avatar-img { border-radius: 50%; object-fit: cover; border: 1.5px solid var(--sp-border); }
 
+
+/* Built-in system accounts with a bundled icon (the Git account): the SVG is a
+   mask painted in the avatar's text colour, so the icon takes the theme's
+   avatar colours and keeps the avatar's size and round shape. */
+.sp-avatar-icon { position: relative; }
+.sp-avatar-icon::before { content: ""; position: absolute; inset: 18%; background-color: currentColor; -webkit-mask: var(--sp-avatar-icon) center / contain no-repeat; mask: var(--sp-avatar-icon) center / contain no-repeat; }
+.sp-avatar-icon-git { --sp-avatar-icon: url('/static/img/avatars/git.svg'); }

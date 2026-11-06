@@ -1,13 +1,12 @@
-{# Development panel: the pull requests, branches and commits linked to the
-   issue by a connected repository. Rendered only when there is something to
-   show, and never for a visitor without an account (``development`` is None). #}
+{# Body of the issue's Development tab: the pull requests and commits linked
+   to the issue by a connected repository. detail.html includes it only when
+   there is one of either, and never for a visitor without an account
+   (``development`` is None). A commit's branch is linked to the forge from
+   its meta line; ``development.branches`` stays in the API output only. #}
 {% set dev = development %}
-{% if dev and (dev.commit_count or dev.pull_requests or dev.branches) %}
 {% set web_url = ('http://', 'https://') %}
 {% set pr_states = {"open": _("Open"), "draft": _("Draft"), "merged": _("Merged"), "closed": _("Closed")} %}
-<section class="sp-dev-panel" aria-labelledby="sp-dev-title" data-testid="development-panel" x-data="{ allCommits: false }">
-  <h2 id="sp-dev-title" class="sp-dev-title">{% trans %}Development{% endtrans %}</h2>
-
+<section class="sp-dev-panel" aria-label="{{ _('Development') }}" data-testid="development-panel" x-data="{ allCommits: false }">
   {% if dev.pull_requests %}
   <div class="sp-dev-section">
     <h3 class="sp-dev-heading">{% trans %}Pull requests{% endtrans %} <span class="sp-dev-count">{{ dev.pull_requests | length }}</span></h3>
@@ -32,26 +31,6 @@
   </div>
   {% endif %}
 
-  {% if dev.branches %}
-  <div class="sp-dev-section">
-    <h3 class="sp-dev-heading">{% trans %}Branches{% endtrans %} <span class="sp-dev-count">{{ dev.branches | length }}</span></h3>
-    <ul class="sp-dev-list">
-      {% for b in dev.branches %}
-      <li class="sp-dev-item">
-        <span class="sp-dev-main">
-          {% if b.url %}
-          <a class="sp-dev-branch" href="{{ b.url }}" target="_blank" rel="noopener noreferrer"><code>{{ b.name }}</code></a>
-          {% else %}
-          <code class="sp-dev-branch">{{ b.name }}</code>
-          {% endif %}
-        </span>
-        <span class="sp-dev-meta">{{ b.repository }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-
   {% if dev.commits %}
   <div class="sp-dev-section">
     <h3 class="sp-dev-heading">{% trans %}Commits{% endtrans %} <span class="sp-dev-count">{{ dev.commit_count }}</span></h3>
@@ -66,7 +45,9 @@
           {% endif %}
           <span class="sp-dev-text">{{ c.first_line }}</span>
         </span>
-        <span class="sp-dev-meta">{{ c.author_name }}{% if c.branch %} · <code>{{ c.branch }}</code>{% endif %}{% if c.committed_at %} · {{ c.committed_at | timeago(user.timezone) }}{% endif %}</span>
+        <span class="sp-dev-meta">{{ c.author_name }}
+          {%- if c.branch %} · {% if c.branch_url %}<a class="sp-dev-branch" href="{{ c.branch_url }}" target="_blank" rel="noopener noreferrer"><code>{{ c.branch }}</code></a>{% else %}<code>{{ c.branch }}</code>{% endif %}{% endif %}
+          {%- if c.committed_at %} · {{ c.committed_at | timeago(user.timezone) }}{% endif %}</span>
       </li>
       {% endfor %}
     </ul>
@@ -79,4 +60,3 @@
   </div>
   {% endif %}
 </section>
-{% endif %}
