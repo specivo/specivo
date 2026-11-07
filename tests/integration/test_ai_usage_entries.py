@@ -733,7 +733,7 @@ async def test_reporter_entries_need_a_key_and_lock_their_usage(db_session: Asyn
         db_session, w.alice, entry, {"project_id": w.p.id, "issue_id": w.public_issue.id, "comments": "Login form"}
     )
     assert (entry.project_id, entry.issue_id, entry.comments) == (w.p.id, w.public_issue.id, "Login form")
-    assert entry.attribution_method == "explicit"
+    assert entry.attribution_method == "manual"
     assert entry.revision == 2
 
 

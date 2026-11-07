@@ -53,8 +53,11 @@ MAX_JSON_DEPTH = 16
 SCHEMA_DIR = Path(__file__).resolve().parent.parent / "data" / "contracts" / "ai-usage" / "v1"
 SCHEMA_ID_BASE = "https://specivo.io/schemas/ai-usage/v1/"
 
-#: ``attribution.issue_ref_source`` → ``attribution_method`` of an explicit issue.
-ISSUE_REF_METHODS: dict[str, str] = {"explicit": "explicit", "env": "env"}
+#: ``attribution.issue_ref_source`` → ``attribution_method`` of the issue it names.
+ISSUE_REF_METHODS: dict[str, str] = {"explicit": "explicit", "env": "env", "agent_log": "agent_log"}
+#: Issue sources a person chose: such an ``issue_ref`` rejects the record when it cannot be used.
+#: The others (``agent_log``) are dropped with a warning instead.
+EXPLICIT_ISSUE_METHODS: frozenset[str] = frozenset({"explicit", "env"})
 
 
 # ---------------------------------------------------------------------------
@@ -253,8 +256,18 @@ class Attribution:
     commits: list[str] = field(default_factory=list)
 
     @property
+    def explicit_issue_ref(self) -> str | None:
+        """``issue_ref`` when a person chose it (``explicit``, ``env``), else None."""
+        return self.issue_ref if self.issue_method in EXPLICIT_ISSUE_METHODS else None
+
+    @property
+    def agent_log_issue_ref(self) -> str | None:
+        """``issue_ref`` when the reporter read it from the agent's own Specivo calls, else None."""
+        return self.issue_ref if self.issue_method == "agent_log" else None
+
+    @property
     def is_explicit(self) -> bool:
-        return self.issue_ref is not None or self.project_key is not None
+        return self.explicit_issue_ref is not None or self.project_key is not None
 
 
 @dataclass

@@ -498,10 +498,11 @@ async def test_move_between_projects(client: AsyncClient, w: World, entries: dic
     assert resp.status_code == 404
     resp = await client.patch(unassigned, json={"project_key": None}, headers=w.auth("alice"))
     assert resp.status_code == 200
+    # A person moved it: marked manual, so a reporter's replay never changes it again.
     assert (resp.json()["project_id"], resp.json()["issue_id"], resp.json()["attribution_method"]) == (
         None,
         None,
-        "none",
+        "manual",
     )
     # Someone else's entry into a project where the manager may log for others, but bob is not a member.
     resp = await client.patch(

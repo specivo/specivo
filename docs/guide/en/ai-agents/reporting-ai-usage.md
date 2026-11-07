@@ -141,7 +141,9 @@ a few hours.
 Specivo tries these hints in order and records which one it used:
 
 1. **`attribution.issue_ref`**: the issue you named, for example from the `SPECIVO_ISSUE`
-   environment variable (add `"issue_ref_source": "env"`).
+   environment variable (add `"issue_ref_source": "env"`). A reporter that read the issue from
+   the agent's own Specivo MCP calls sends it with `"issue_ref_source": "agent_log"`; such an
+   issue is tried before the steps below but is skipped, not rejected, when it cannot be used.
 2. **The agent's MCP session**: if an agent connected to Specivo's MCP server was working on an
    issue between `started_at` and `ended_at`, that issue.
 3. **`attribution.commits`**: the issue your commits from the session are linked to.
@@ -152,12 +154,21 @@ Specivo tries these hints in order and records which one it used:
 6. Otherwise the entry is **unassigned**, and can be assigned in Specivo later.
 
 What you name (`issue_ref`, `project_key`) must work: an unknown issue, or a project where the
-usage cannot be logged, rejects the record. What Specivo works out by itself (steps 2 to 5) is
-skipped with the warning `attribution_dropped` when it cannot be used, and the next hint is
-tried.
+usage cannot be logged, rejects the record. An `agent_log` issue and what Specivo works out by
+itself (steps 2 to 5) are skipped with the warning `attribution_dropped` when they cannot be
+used, and the next hint is tried.
 
-Once an entry is attributed, later sends keep its attribution. A send that names a different
-issue or project is rejected with `attribution_conflict`; move the entry in Specivo instead.
+Once an entry is attributed, later sends keep its attribution, with two exceptions that only add
+precision:
+
+- An entry that has a project but no issue (for example because the agent did research before
+  it picked an issue) takes an issue of **that project** found by a later send.
+- An issue that Specivo inferred (from the MCP session, commits or the branch), or an earlier
+  issue from the agent's log, is replaced by the issue from the agent's log.
+
+A send that names a different issue or project is rejected with `attribution_conflict`; move the
+entry in Specivo instead. An entry a person moved in Specivo shows the method `manual`, and later
+sends never change it.
 
 ## Reporting for teammates
 

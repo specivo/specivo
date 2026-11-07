@@ -221,6 +221,7 @@ class AiUsageIngestInfoOut(BaseModel):
     server_time: AwareDatetime
     tools: list[str] = Field(description="Slugs of the active AI tools; other valid slugs are accepted too")
     currencies: list[str] = Field(description="Currency codes accepted in reported_cost")
+    issue_ref_sources: list[str] = Field(description="Values of attribution.issue_ref_source the server knows")
 
 
 class AiUsageIngestProblemOut(BaseModel):

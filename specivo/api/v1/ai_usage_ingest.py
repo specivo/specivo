@@ -1,6 +1,7 @@
 """AI usage ingest API, contract v1 (``docs/contracts/ai-usage/v1/README.md``).
 
-- ``GET /ai-usage/ingest``: the versions, limits, server time, known tools and currencies.
+- ``GET /ai-usage/ingest``: the versions, limits, server time, known tools, currencies and
+  ``issue_ref_source`` values.
 - ``POST /ai-usage/ingest``: a batch of usage records, upserted one by one.
 
 The POST answers 200 with one result per record whenever the envelope is
@@ -20,6 +21,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 
 from specivo.core.ai_usage_ingest import (
+    ISSUE_REF_METHODS,
     MAX_AGE_DAYS,
     MAX_BYTES,
     MAX_RECORDS,
@@ -112,6 +114,7 @@ async def ingest_info(db: DbSession, current_user: User = Depends(get_current_us
         server_time=utcnow(),
         tools=[tool.slug for tool in tools],
         currencies=list(currencies),
+        issue_ref_sources=list(ISSUE_REF_METHODS),
     )
 
 
