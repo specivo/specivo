@@ -11855,3 +11855,117 @@ msgstr "订阅席位"
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr "按量付费 API"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "What this issue cost in AI"
+msgstr "此问题的 AI 成本"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Open in project AI usage"
+msgstr "在项目 AI 使用中打开"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage to count"
+msgstr "计入的使用"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "With sub-issues"
+msgstr "包含子问题"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "This issue only"
+msgstr "仅此问题"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(first)s to %(last)s"
+msgstr "%(first)s 至 %(last)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Usage on %(count)s day (UTC), amounts in %(currency)s."
+msgid_plural "Usage on %(count)s days (UTC), amounts in %(currency)s."
+msgstr[0] "%(count)s 天有使用（UTC），金额以 %(currency)s 计。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Includes the usage logged on its sub-issues."
+msgstr "包括其子问题上记录的使用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Only the last three years of usage are counted."
+msgstr "仅计入最近三年的使用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "API-equivalent value by person"
+msgstr "按人员的 API 等价价值"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(value)s API value"
+msgstr "API 价值 %(value)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per month (UTC)."
+msgstr "按月（UTC）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per week, from Monday (UTC)."
+msgstr "按周，从周一开始（UTC）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per quarter or year (UTC)."
+msgstr "按季度或年（UTC）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per day (UTC)."
+msgstr "按天（UTC）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Periods marked * have entries without a price."
+msgstr "标有 * 的时段有无价格的条目。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "The entries of this issue, newest first"
+msgstr "此问题的条目，最新的在前"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Pages of sessions"
+msgstr "会话分页"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Previous page"
+msgstr "上一页"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Page %(num)d"
+msgstr "第 %(num)d 页"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Next page"
+msgstr "下一页"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Sessions per page"
+msgstr "每页会话数"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(num)d per page"
+msgstr "每页 %(num)d 条"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue or its sub-issues yet."
+msgstr "此问题及其子问题尚未记录 AI 使用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue yet."
+msgstr "此问题尚未记录 AI 使用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage counts for an issue when its reporter names the issue (for example with the SPECIVO_ISSUE environment variable), when the agent marks the issue it works on through Specivo's MCP server, when the session's commits are linked to it, or when the branch name holds its key. You can also log usage by hand or move entries here from My AI usage."
+msgstr "当报告方指明问题（例如通过 SPECIVO_ISSUE 环境变量）、代理通过 Specivo 的 MCP 服务器标记其正在处理的问题、会话的提交关联到该问题，或分支名包含其键时，使用量计入该问题。您也可以手动记录使用，或从“我的 AI 使用”将条目移到这里。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "How usage is attributed to an issue"
+msgstr "使用量如何归属到问题"

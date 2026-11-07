@@ -11830,3 +11830,118 @@ msgstr ""
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "What this issue cost in AI"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Open in project AI usage"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage to count"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "With sub-issues"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "This issue only"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(first)s to %(last)s"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Usage on %(count)s day (UTC), amounts in %(currency)s."
+msgid_plural "Usage on %(count)s days (UTC), amounts in %(currency)s."
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Includes the usage logged on its sub-issues."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Only the last three years of usage are counted."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "API-equivalent value by person"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(value)s API value"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per month (UTC)."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per week, from Monday (UTC)."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per quarter or year (UTC)."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per day (UTC)."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Periods marked * have entries without a price."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "The entries of this issue, newest first"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Pages of sessions"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Previous page"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Page %(num)d"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Next page"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Sessions per page"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(num)d per page"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue or its sub-issues yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage counts for an issue when its reporter names the issue (for example with the SPECIVO_ISSUE environment variable), when the agent marks the issue it works on through Specivo's MCP server, when the session's commits are linked to it, or when the branch name holds its key. You can also log usage by hand or move entries here from My AI usage."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "How usage is attributed to an issue"
+msgstr ""

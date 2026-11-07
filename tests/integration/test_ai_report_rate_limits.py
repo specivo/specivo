@@ -18,12 +18,16 @@ from dataclasses import dataclass
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_report_limits import ai_report_allowed
 from specivo.core.config import get_settings
+from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.auth_service import _make_access_token
+from tests.factories.issue import IssueFactory
+from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
 
@@ -120,6 +124,32 @@ async def test_the_project_ai_usage_tab_is_metered(client: AsyncClient, live: Li
     """The tab draws charts of the project's usage, so it spends the same budget as the report."""
     url = f"/projects/{live.project_key}/ai-usage/"
     assert await _codes(client, live.member, url, USER_LIMIT + 1) == [200] * USER_LIMIT + [429]
+
+
+async def test_the_issue_ai_usage_tab_is_metered(client: AsyncClient, db_session: AsyncSession, live: Live) -> None:
+    """The issue tab totals the issue's usage like a report, so it spends the same budget, page or partial."""
+    status = StatusFactory.build(name="airl Open")
+    db_session.add(status)
+    await db_session.flush()
+    tracker = TrackerFactory.build(name="airl Task", default_status_id=status.id)
+    priority = PriorityFactory.build(name="airl Normal")
+    db_session.add_all([tracker, priority])
+    await db_session.flush()
+    project_id = (await db_session.execute(select(Project.id).where(Project.key == live.project_key))).scalar_one()
+    issue = IssueFactory.build(
+        project_id=project_id,
+        project_key=live.project_key,
+        tracker_id=tracker.id,
+        status_id=status.id,
+        priority_id=priority.id,
+        author_id=live.admin.id,
+        sequence_number=1,
+    )
+    db_session.add(issue)
+    await db_session.commit()
+    partial = f"/partials/issues/{live.project_key}-1/ai-usage/"
+    assert await _codes(client, live.member, partial, USER_LIMIT) == [200] * USER_LIMIT
+    assert (await _codes(client, live.member, f"/issue/{live.project_key}-1/ai-usage/", 1)) == [429]
 
 
 async def test_administrators_have_a_higher_budget(client: AsyncClient, live: Live) -> None:

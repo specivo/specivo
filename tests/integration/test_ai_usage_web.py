@@ -267,13 +267,19 @@ async def test_totals_and_rows_include_long_context_tokens(client: AsyncClient, 
     assert summary.tokens["input"] == 1_500_000 and summary.tokens["output"] == 150_000
     assert summary.total_tokens == 1_650_000
 
-    for url in ("/projects/AUWA/ai-usage/", "/partials/issues/AUWA-1/ai-usage/", "/my/ai-usage/"):
+    for url in ("/projects/AUWA/ai-usage/", "/my/ai-usage/"):
         resp = await _get(client, w.users["alice"], url)
         assert resp.status_code == 200, url
         assert 'data-testid="aiu-total-tokens">1,650,000<' in resp.text, url
         assert "1,500,000 in · 150,000 out" in resp.text, url
         assert "1,500,000 in, 150,000 out" in resp.text, url  # the row's tooltip
         assert "including 550,000 at long-context prices" in resp.text, url
+
+    # The issue tab: the token total (in short form, the full count in its title) and the session's tooltip.
+    resp = await _get(client, w.users["alice"], "/partials/issues/AUWA-1/ai-usage/")
+    assert resp.status_code == 200
+    assert 'data-testid="aiu-issue-tokens" title="1,650,000">1.6M<' in resp.text
+    assert "1,500,000 in, 150,000 out" in resp.text
 
     resp = await _get(client, w.users["alice"], f"/ai-usage/{entry.id}/edit/")
     assert resp.status_code == 200

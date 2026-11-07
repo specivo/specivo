@@ -64,9 +64,10 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, exists, false, func, or_, select
+from sqlalchemy import and_, exists, false, func, literal, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.ai_pricing import TOKEN_CLASSES, TokenCounts, normalize_provider
@@ -84,6 +85,7 @@ from specivo.core.ai_usage import (
     priced_at_for,
     token_counts,
 )
+from specivo.core.constants import MAX_HIERARCHY_DEPTH
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.money import Money, MoneyError, format_decimal_plain
 from specivo.core.utils import utcnow
@@ -175,6 +177,27 @@ def _invalid(message: str, field_name: str, code: str = "ai_usage_invalid") -> A
 #: for others gets it for every target, existing or not, active or not, member
 #: or not, so the answer never tells which logins exist.
 ON_BEHALF_REFUSED = "You cannot log AI usage for this user here"
+
+
+def issue_subtree_clause(issue_id: int) -> ColumnElement[bool]:
+    """Entries on issue *issue_id* or on any issue below it (sub-issues, their sub-issues, ...).
+
+    One recursive CTE down ``parent_id`` (the nested-set columns are not
+    trusted for this), stopped at ``MAX_HIERARCHY_DEPTH`` levels so a corrupted
+    cycle cannot run forever. Visibility is not part of it: callers add the
+    usual visibility conditions, so entries on sub-issues the reader cannot see
+    stay hidden.
+    """
+    child = aliased(Issue)
+    tree = (
+        select(Issue.id.label("id"), literal(0).label("level"))
+        .where(Issue.id == issue_id)
+        .cte("ai_usage_issue_tree", recursive=True)
+    )
+    tree = tree.union_all(
+        select(child.id, tree.c.level + 1).where(child.parent_id == tree.c.id, tree.c.level < MAX_HIERARCHY_DEPTH)
+    )
+    return AiUsageEntry.issue_id.in_(select(tree.c.id))
 
 
 def on_behalf_refused() -> PermissionDeniedError:
@@ -443,6 +466,7 @@ class AiUsageService:
         without_branch: bool = False,
         excluded: bool | None = None,
         unassigned: bool | None = None,
+        issue_tree_id: int | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
@@ -453,7 +477,8 @@ class AiUsageService:
         ``without_branch`` keep entries without one); *excluded* ``True`` /
         ``False`` keeps only excluded / counted entries (None: both);
         *unassigned* ``True`` / ``False`` keeps only entries without / with a
-        project.
+        project; *issue_tree_id* keeps the entries of that issue and of every
+        issue below it (:func:`issue_subtree_clause`).
         """
         conditions = await self._list_conditions(
             session,
@@ -473,6 +498,7 @@ class AiUsageService:
             without_branch=without_branch,
             excluded=excluded,
             unassigned=unassigned,
+            issue_tree_id=issue_tree_id,
         )
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
@@ -588,6 +614,7 @@ class AiUsageService:
         without_branch: bool = False,
         excluded: bool | None = None,
         unassigned: bool | None = None,
+        issue_tree_id: int | None = None,
     ) -> list[ColumnElement[bool]]:
         """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
@@ -620,6 +647,8 @@ class AiUsageService:
             conditions.append(AiUsageEntry.issue_id == issue_id)
         if without_issue:
             conditions.append(AiUsageEntry.issue_id.is_(None))
+        if issue_tree_id is not None:
+            conditions.append(issue_subtree_clause(issue_tree_id))
         if provider and provider.strip():
             conditions.append(AiUsageEntry.provider == (normalize_provider(provider) or provider.strip().lower()))
         if branch and branch.strip():

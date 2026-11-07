@@ -1,0 +1,111 @@
+/* The AI usage tab of an issue (pages/ai_usage/_issue_tab.html): what the feature cost.
+   Built from the spend report's pieces (ai-spend-drill.css: tiles, bars, person cards,
+   sessions table, palette slots); only the tab's own layout is here. */
+
+.sp-aiu-issue-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+  margin-bottom: var(--sp-space-md);
+}
+.sp-aiu-issue-title { font-size: var(--sp-font-size-lg); margin: 0; }
+.sp-aiu-issue-head .sp-aiu-issue-actions { margin-bottom: 0; }
+.sp-aiu-issue-title:focus,
+.sp-aiu-issue-card-title:focus { outline: none; }
+.sp-aiu-issue-title:focus-visible,
+.sp-aiu-issue-card-title:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 4px; border-radius: 4px; }
+.sp-aiu-issue-scope { display: inline-flex; margin-bottom: var(--sp-space-md); }
+.sp-aiu-issue-notes { margin: 0 0 var(--sp-space-md); }
+.sp-aiu-issue-notes > span + span,
+.sp-aiu-issue-notes > span + a { margin-left: 0.25em; }
+
+.sp-aiu-issue-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-space-md);
+  align-items: start;
+  margin-bottom: var(--sp-space-md);
+}
+@media (min-width: 1100px) {
+  .sp-aiu-issue-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+}
+.sp-aiu-issue-side { display: grid; gap: var(--sp-space-md); min-width: 0; }
+.sp-aiu-issue-people { margin-bottom: 0; }
+.sp-aiu-issue-person { grid-template-columns: auto minmax(0, 1fr); padding: var(--sp-space-sm) 0; }
+.sp-aiu-issue-card { padding: var(--sp-space-lg); min-width: 0; }
+.sp-aiu-issue-card-title { font-size: var(--sp-font-size-base, 1rem); margin: 0 0 var(--sp-space-sm); }
+.sp-aiu-issue-card .sp-drill-bars { margin-bottom: 0; }
+.sp-aiu-issue-card .sp-drill-bars-item { grid-template-columns: minmax(0, 9rem) minmax(3rem, 1fr) auto; }
+.sp-aiu-issue-other .sp-drill-bars-label { font-style: italic; }
+
+.sp-aiu-issue-chart { margin-bottom: var(--sp-space-md); }
+.sp-aiu-issue-chart .sp-aiu-chart-head .sp-aiu-issue-card-title { margin: 0; }
+
+.sp-aiu-issue-sessions { margin-top: var(--sp-space-lg); }
+.sp-aiu-issue-sessions-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-space-sm);
+}
+.sp-aiu-issue-pages { flex-wrap: wrap; gap: var(--sp-space-sm); margin-top: var(--sp-space-sm); padding-top: 0; }
+.sp-aiu-issue-pages:empty { display: none; }
+.sp-aiu-issue-pages a.sp-page-link:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 1px; }
+.sp-aiu-issue-sizes { margin-left: auto; }
+
+/* Sessions: one line per entry on wide screens; names and models never broken mid-word. */
+.sp-aiu-s-table td { white-space: nowrap; }
+.sp-aiu-s-model { display: block; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-aiu-s-table .sp-aiu-model,
+.sp-aiu-s-table .sp-drill-branch { overflow-wrap: normal; }
+.sp-aiu-s-branch .sp-drill-branch,
+.sp-aiu-s-model {
+  display: inline-block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.sp-aiu-s-model { display: block; }
+
+.sp-aiu-issue-empty { padding: var(--sp-space-lg); }
+.sp-aiu-issue-empty-title { margin: 0 0 var(--sp-space-sm); font-weight: 600; }
+.sp-aiu-issue-empty p:last-child { margin-bottom: 0; }
+
+@media (max-width: 720px) {
+  .sp-aiu-issue-head .sp-aiu-issue-actions { justify-content: flex-start; }
+  .sp-aiu-issue-card { padding: var(--sp-space-md); }
+  .sp-aiu-issue-card .sp-drill-bars-item { grid-template-columns: minmax(0, 6.5rem) minmax(2rem, 1fr) auto; }
+  .sp-aiu-issue-sizes { margin-left: 0; }
+  /* Phones: each session is a compact card (date and spend, person and tokens, tool and model,
+     cost type and issue, branch), not one labelled line per column. */
+  .sp-drill .sp-aiu-s-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "date spend"
+      "person tokens"
+      "tool tool"
+      "type issue"
+      "branch actions";
+    gap: 2px var(--sp-space-sm);
+    align-items: center;
+  }
+  .sp-drill .sp-aiu-s-table td { width: auto; padding: 0; text-align: left; white-space: normal; }
+  .sp-drill .sp-aiu-s-table td::before { content: none !important; }
+  .sp-aiu-s-date { grid-area: date; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+  .sp-aiu-s-spend { grid-area: spend; text-align: right !important; }
+  .sp-aiu-s-person { grid-area: person; }
+  .sp-aiu-s-tokens { grid-area: tokens; text-align: right !important; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+  .sp-aiu-s-tool { grid-area: tool; font-size: var(--sp-font-size-sm); }
+  .sp-aiu-s-tool .sp-aiu-s-model { display: inline; max-width: none; margin-left: var(--sp-space-xs, 4px); }
+  .sp-aiu-s-type { grid-area: type; }
+  .sp-aiu-s-issue { grid-area: issue; text-align: right !important; }
+  .sp-aiu-s-branch { grid-area: branch; min-width: 0; }
+  .sp-aiu-s-branch .sp-drill-branch { max-width: 100%; }
+  .sp-aiu-s-actions { grid-area: actions; text-align: right !important; }
+  .sp-drill .sp-aiu-s-table td:empty { display: block; }
+}

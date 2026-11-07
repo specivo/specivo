@@ -12306,3 +12306,117 @@ msgstr "ที่นั่งการสมัครใช้งาน"
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr "API แบบจ่ายตามการใช้งาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "What this issue cost in AI"
+msgstr "ค่าใช้จ่าย AI ของงานนี้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Open in project AI usage"
+msgstr "เปิดในการใช้ AI ของโปรเจกต์"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage to count"
+msgstr "การใช้งานที่นับ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "With sub-issues"
+msgstr "รวมงานย่อย"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "This issue only"
+msgstr "เฉพาะงานนี้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(first)s to %(last)s"
+msgstr "%(first)s ถึง %(last)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Usage on %(count)s day (UTC), amounts in %(currency)s."
+msgid_plural "Usage on %(count)s days (UTC), amounts in %(currency)s."
+msgstr[0] "มีการใช้งาน %(count)s วัน (UTC) จำนวนเงินเป็น %(currency)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Includes the usage logged on its sub-issues."
+msgstr "รวมการใช้งานที่บันทึกในงานย่อย"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Only the last three years of usage are counted."
+msgstr "นับเฉพาะการใช้งานสามปีล่าสุด"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "API-equivalent value by person"
+msgstr "มูลค่าเทียบเท่า API ตามบุคคล"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(value)s API value"
+msgstr "มูลค่า API %(value)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per month (UTC)."
+msgstr "รายเดือน (UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per week, from Monday (UTC)."
+msgstr "รายสัปดาห์ เริ่มวันจันทร์ (UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per quarter or year (UTC)."
+msgstr "รายไตรมาสหรือรายปี (UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per day (UTC)."
+msgstr "รายวัน (UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Periods marked * have entries without a price."
+msgstr "ช่วงที่มีเครื่องหมาย * มีรายการที่ไม่มีราคา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "The entries of this issue, newest first"
+msgstr "รายการของงานนี้ ล่าสุดก่อน"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Pages of sessions"
+msgstr "หน้าของเซสชัน"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Previous page"
+msgstr "หน้าก่อนหน้า"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Page %(num)d"
+msgstr "หน้า %(num)d"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Next page"
+msgstr "หน้าถัดไป"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Sessions per page"
+msgstr "เซสชันต่อหน้า"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(num)d per page"
+msgstr "%(num)d ต่อหน้า"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue or its sub-issues yet."
+msgstr "ยังไม่มีการใช้ AI ที่บันทึกในงานนี้หรืองานย่อย"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue yet."
+msgstr "ยังไม่มีการใช้ AI ที่บันทึกในงานนี้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage counts for an issue when its reporter names the issue (for example with the SPECIVO_ISSUE environment variable), when the agent marks the issue it works on through Specivo's MCP server, when the session's commits are linked to it, or when the branch name holds its key. You can also log usage by hand or move entries here from My AI usage."
+msgstr "การใช้งานจะนับให้งานเมื่อผู้รายงานระบุงานนั้น (เช่น ด้วยตัวแปรสภาพแวดล้อม SPECIVO_ISSUE) เมื่อเอเจนต์ทำเครื่องหมายงานที่กำลังทำผ่านเซิร์ฟเวอร์ MCP ของ Specivo เมื่อคอมมิตของเซสชันเชื่อมโยงกับงานนั้น หรือเมื่อชื่อสาขามีคีย์ของงาน คุณยังบันทึกการใช้งานเองหรือย้ายรายการมาที่นี่จากการใช้ AI ของฉันได้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "How usage is attributed to an issue"
+msgstr "วิธีนับการใช้งานให้กับงาน"
