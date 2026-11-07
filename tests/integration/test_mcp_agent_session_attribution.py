@@ -4,8 +4,10 @@ Each tool is called through the server's own entry point, so the key is
 authenticated and the agent session tracked exactly as for a real client. The
 client is published the way ``ClientInfoMiddleware`` publishes it.
 
-An issue is recorded when the session's account moves it into an ``active``
-status, assigns it to itself, or starts a timer on it; the latest one wins.
+An issue is recorded when the session's account creates it in an ``active``
+status or assigned to itself, moves it into an ``active`` status, assigns it
+to itself, updates it while it is ``active`` and its own (resuming it), or
+starts a timer on it; the latest one wins.
 """
 
 from __future__ import annotations
@@ -53,6 +55,8 @@ class World:
     issue: Issue
     second: Issue
     hidden: Issue
+    tracker_id: int
+    priority_id: int
 
 
 @pytest.fixture
@@ -89,7 +93,7 @@ async def world(db_session: AsyncSession, use_test_session) -> World:
 
     role = Role(
         name="Msa Developer",
-        permissions=["view_issues", "edit_issues", "log_time"],
+        permissions=["view_issues", "add_issues", "edit_issues", "log_time"],
         builtin=0,
         issues_visibility="default",
         assignable=True,
@@ -121,7 +125,7 @@ async def world(db_session: AsyncSession, use_test_session) -> World:
     await db_session.commit()
     clear_role_cache(db_session)
     mcp_raw_key_var.set(raw_key)
-    yield World(agent, peer, key.id, raw_key, backlog, active, done, issue, second, hidden)
+    yield World(agent, peer, key.id, raw_key, backlog, active, done, issue, second, hidden, tracker.id, priority.id)
     clear_role_cache(db_session)
 
 
@@ -191,6 +195,61 @@ async def test_assigning_an_issue_to_itself(db_session: AsyncSession, world: Wor
 
 async def test_assigning_an_issue_to_someone_else_does_not(db_session: AsyncSession, world: World) -> None:
     await server.specivo_update_issue(issue_ref=world.issue.display_key, assigned_to_id=world.peer.id)
+
+    assert (await _agent_session(db_session, world)).issue_id is None
+
+
+async def test_resuming_an_issue_that_is_active_and_its_own(db_session: AsyncSession, world: World) -> None:
+    world.issue.status_id = world.active.id
+    world.issue.assigned_to_id = world.agent.id
+    await db_session.commit()
+    await server.specivo_timer(op="start", issue_ref=world.second.display_key)
+    assert (await _agent_session(db_session, world)).issue_id == world.second.id
+
+    # Nothing changes on the issue, yet the agent is back on it.
+    await server.specivo_update_issue(issue_ref=world.issue.display_key, notes="Back on it")
+
+    assert (await _agent_session(db_session, world)).issue_id == world.issue.id
+
+
+async def test_updating_an_own_issue_that_is_not_active_does_not(db_session: AsyncSession, world: World) -> None:
+    world.issue.assigned_to_id = world.agent.id
+    await db_session.commit()
+
+    await server.specivo_update_issue(issue_ref=world.issue.display_key, notes="Later")
+
+    assert (await _agent_session(db_session, world)).issue_id is None
+
+
+async def _create(world: World, **kw) -> str:
+    return await server.specivo_create_issue(
+        project_key="MSAPRJ", tracker_id=world.tracker_id, priority_id=world.priority_id, subject="Msa new", **kw
+    )
+
+
+async def _created(db: AsyncSession, text: str) -> Issue:
+    ref = text.split()[2].rstrip(":")
+    project_key, number = ref.rsplit("-", 1)
+    stmt = select(Issue).where(Issue.project_key == project_key, Issue.sequence_number == int(number))
+    return (await db.execute(stmt)).scalar_one()
+
+
+async def test_creating_an_issue_in_an_active_status(db_session: AsyncSession, world: World) -> None:
+    created = await _created(db_session, await _create(world, status_id=world.active.id))
+
+    assert (await _agent_session(db_session, world)).issue_id == created.id
+
+
+async def test_creating_an_issue_assigned_to_itself(db_session: AsyncSession, world: World) -> None:
+    created = await _created(db_session, await _create(world, assigned_to_id=world.agent.id))
+
+    assert created.status_id == world.backlog.id
+    assert (await _agent_session(db_session, world)).issue_id == created.id
+
+
+async def test_creating_an_issue_for_later_or_for_someone_else_does_not(db_session: AsyncSession, world: World) -> None:
+    await _create(world)
+    await _create(world, assigned_to_id=world.peer.id)
 
     assert (await _agent_session(db_session, world)).issue_id is None
 

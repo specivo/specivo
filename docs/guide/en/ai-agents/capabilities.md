@@ -64,9 +64,11 @@ Specivo also groups each key's calls into **agent sessions**: calls less than 30
 
 - **the client** that made the calls, by the name and version it announces when it connects (for
   example `claude-code` and `2.1.0`), or else the first product in its `User-Agent` header;
-- **the issue the agent is working on**: the issue it last moved into an *in progress* status
-  (any status in the active group), assigned to its own account, or started a timer on, over MCP.
-  The latest one wins. Only an issue the key's account can see is ever recorded.
+- **the issue the agent is working on**: over MCP, the issue it last created in an *in progress*
+  status (any status in the active group) or assigned to its own account, moved into such a
+  status, assigned to its own account, updated while it is in progress and assigned to its own
+  account (so an agent resuming its issue marks it again, even when nothing changes), or started a
+  timer on. The latest one wins. Only an issue the key's account can see is ever recorded.
 
 The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
 an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about

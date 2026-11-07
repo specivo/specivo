@@ -636,6 +636,8 @@ async def _create_issue(
         {"project_key": project_key, "subject": subject, "issue_ref": issue.display_key},
         project_id=project.id,
     )
+    if await _works_on(session, user, issue):
+        await record_working_issue(session, user, issue)
     result = (
         f"Created issue {issue.display_key}: {issue.subject}\nStatus: {issue.status_id}, Priority: {issue.priority_id}"
     )
@@ -705,9 +707,30 @@ async def _update_issue(
     updated = await _issue_svc.update(session, issue, data, user, notes=notes)
     await session.flush()
     await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "update_issue", {"issue_ref": issue_ref})
-    if await _starts_work(session, user, updated, status_before, assignee_before):
+    if await _starts_work(session, user, updated, status_before, assignee_before) or await _resumes_work(
+        session, user, updated
+    ):
         await record_working_issue(session, user, updated)
     return f"Updated issue {updated.display_key}: {updated.subject}\nLock version: {updated.lock_version}"
+
+
+async def _is_active(session: AsyncSession, issue: Issue) -> bool:
+    status = await session.get(IssueStatus, issue.status_id)
+    return status is not None and status.category == "active"
+
+
+async def _works_on(session: AsyncSession, user: User, issue: Issue) -> bool:
+    """Whether *user* creating *issue* means working on it: it is assigned to them or in an ``active`` status."""
+    return issue.assigned_to_id == user.id or await _is_active(session, issue)
+
+
+async def _resumes_work(session: AsyncSession, user: User, issue: Issue) -> bool:
+    """Whether *issue* is, after an update, in an ``active`` status and assigned to *user*.
+
+    Marks an issue the agent resumes even when the update changed nothing
+    (it was already In Progress and theirs).
+    """
+    return issue.assigned_to_id == user.id and await _is_active(session, issue)
 
 
 async def _starts_work(
@@ -721,8 +744,7 @@ async def _starts_work(
     if issue.assigned_to_id == user.id and assignee_before != user.id:
         return True
     if issue.status_id != status_before:
-        status = await session.get(IssueStatus, issue.status_id)
-        return status is not None and status.category == "active"
+        return await _is_active(session, issue)
     return False
 
 

@@ -469,6 +469,8 @@ async def specivo_create_issue(
     limit, returns an error string and nothing is created.
     Pass tags to tag the issue in the same call; invalid names return an
     error string and nothing is created.
+    An issue created in an in-progress status or assigned to you becomes the
+    issue this agent session works on (an AI usage attribution hint).
     """
     async with _get_session_and_user() as (session, user):
         return await _create_issue(
@@ -522,6 +524,8 @@ async def specivo_update_issue(
     parent or one you may not see, a parent that is the issue itself or one
     of its descendants (a cycle), or one that would exceed the hierarchy
     depth limit returns an error string and nothing is changed.
+    An issue that ends up in progress and assigned to you becomes the issue
+    this agent session works on, even when the call changes nothing.
     """
     async with _get_session_and_user() as (session, user):
         return await _update_issue(

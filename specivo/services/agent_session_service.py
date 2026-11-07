@@ -140,9 +140,11 @@ class AgentSessionService:
     async def record_issue(self, session: AsyncSession, agent_session_id: int, user: User, issue: Issue) -> bool:
         """Make *issue* the issue agent session *agent_session_id* is working on.
 
-        Called when, through MCP, the session's account moves *issue* into an
-        ``active`` status, assigns it to itself or starts a timer on it; the
-        latest such issue wins. Nothing is recorded (and ``False`` returned)
+        Called when, through MCP, the session's account creates *issue* in an
+        ``active`` status or assigned to itself, moves it into an ``active``
+        status, assigns it to itself, updates it while it is ``active`` and
+        its own (resuming it), or starts a timer on it; the latest such issue
+        wins. Nothing is recorded (and ``False`` returned)
         when the session is not *user*'s or *user* may not see *issue*, so a
         session never names an issue its account cannot see.
         """
