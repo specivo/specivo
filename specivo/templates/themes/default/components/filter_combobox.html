@@ -12,8 +12,12 @@
    kind      "user" | "tag" | "version"
    chip      None, or {value, label, clear_url, [login, display_name, avatar_url, avatar_color], [color]}
    specials  fixed options listed first: [{value, label, [user]}]
+   text_name when set, the text field is submitted under this name too, so the
+             field works without JS: the server reads it (e.g. a login) when
+             no suggestion was picked
+   input_id  id of the text field, for a visible <label for>
 #}
-{% macro filter_combobox(name, label, placeholder, endpoint, kind, chip=none, specials=[], project_key='') %}
+{% macro filter_combobox(name, label, placeholder, endpoint, kind, chip=none, specials=[], project_key='', text_name='', input_id='') %}
 {% set list_id = "sp-filter-" ~ name ~ "-list" %}
 {% if chip %}
 <span class="sp-filter-chip" data-filter-chip="{{ name }}">
@@ -41,7 +45,7 @@
        projectKey: {{ project_key | tojson }}
      })'>
   <input type="text"
-         class="filter-select sp-filter-combo-input"
+         {% if text_name %}name="{{ text_name }}" {% endif %}{% if input_id %}id="{{ input_id }}" {% endif %}class="filter-select sp-filter-combo-input"
          role="combobox"
          aria-autocomplete="list"
          aria-haspopup="listbox"

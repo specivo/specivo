@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any
@@ -541,6 +541,26 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
                 }
                 for p in charts.people
             ],
+            people_others=(
+                {
+                    "count": charts.people_others_count,
+                    "fee": money(charts.people_others.fee),
+                    "api": money(charts.people_others.api),
+                    "leverage": _leverage_text(charts.people_others.leverage, locale),
+                }
+                if charts.people_others is not None
+                else None
+            ),
+            leverage_others=(
+                {
+                    "count": charts.leverage_others_count,
+                    "fee": money(charts.leverage_others.fee),
+                    "api": money(charts.leverage_others.api),
+                    "leverage": _leverage_text(charts.leverage_others.leverage, locale),
+                }
+                if charts.leverage_others is not None
+                else None
+            ),
             leverage_total=(
                 {
                     "fee": money(charts.leverage_total.fee),
@@ -712,6 +732,33 @@ async def _project_charts_view(
     return await cached_chart_payload(db, f"aiu:project-charts:{project.id}:{user.id}", parts, version, build)
 
 
+async def sees_everyone(db: AsyncSession, user: User, project: Project) -> bool:
+    """Whether *user* may read everyone's AI usage in *project*: the pages then offer the person filter."""
+    return bool(user.is_admin) or await ai_usage_visibility(db, user, project) == AI_USAGE_VISIBILITY_ALL
+
+
+async def person_filter_chip(
+    db: AsyncSession, viewer: User, project: Project | None, user_id: str, login: str, clear_url: str
+) -> dict[str, Any] | None:
+    """The chip of the person filter (``filter_combobox``): the person by name, or what was typed.
+
+    The person is named only when the filter may name them for *viewer*
+    (``AiUsageService.people_clause``: people with entries the reader may see
+    in *project*, everyone with usage or a plan on the instance report), so
+    an id in a shared link never tells more than the list does.
+    """
+    from specivo.web.pages.issues import person_chip
+
+    if not user_id:
+        return None
+    person = None
+    if user_id != "0":
+        person = await _service.person_in_scope(db, viewer, project, user_id=int(user_id))
+    chip = person_chip(person) if person is not None else {"label": login or _("Unknown person")}
+    chip.update(value=user_id, clear_url=clear_url)
+    return chip
+
+
 async def _filter_choices(db: AsyncSession) -> dict[str, Any]:
     return {
         "tools": [{"slug": t.slug, "name": t.name} for t in await _tools.list_tools(db, active_only=False)],
@@ -738,6 +785,7 @@ async def project_ai_usage(
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
     user_id: str = Query(""),
+    person: str = Query("", alias="user", max_length=255),
     tool: str = Query(""),
     model: str = Query(""),
     cost_type: str = Query(""),
@@ -759,10 +807,15 @@ async def project_ai_usage(
     from the spend report's drill-through. The charts group the project's
     usage, so the page spends the reader's AI report budget
     (specivo.core.ai_report_limits); the bucket asked for is only a wish.
+    ``user`` is a login typed into the person filter without JS: the person
+    when the filter may name them, else nobody.
     """
     project = await _project_for(db, user, project_key)
     await enforce_ai_report_rate_limit(request, response, user)
     chosen = bucket if bucket in CHOSEN_SIZES else ""
+    if person.strip() and not user_id.strip().isdigit():
+        found = await _service.person_in_scope(db, user, project, login=person)
+        user_id = str(found.id) if found is not None else "0"
     filters = _filters(
         user_id=user_id,
         tool=tool,
@@ -798,8 +851,15 @@ async def project_ai_usage(
     charts_view = await _project_charts_view(db, user, project, currency, filters, issue_id, chosen)
     base_url = f"/projects/{project.key}/ai-usage/"
     page_query = "&".join(q for q in (filters.query(), urlencode({"bucket": chosen}) if chosen else "") if q)
-    sees_all = user.is_admin or await ai_usage_visibility(db, user, project) == AI_USAGE_VISIBILITY_ALL
-    members = await _projects.list_members(db, project) if sees_all else []
+    bucket_query = urlencode({"bucket": chosen}) if chosen else ""
+    clear = "&".join(q for q in (replace(filters, user_id="").query(), bucket_query) if q)
+    person_filter = {
+        "offered": await sees_everyone(db, user, project),
+        "endpoint": f"/api/v1/projects/{project.key}/ai-usage/report/people/",
+        "chip": await person_filter_chip(
+            db, user, project, filters.user_id, person.strip(), base_url + (f"?{clear}" if clear else "")
+        ),
+    }
     can_log = await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
     return get_templates().TemplateResponse(
         request,
@@ -820,7 +880,7 @@ async def project_ai_usage(
             "chart_bucket": chosen,
             "bucket_links": _bucket_links(filters, chosen, base_url),
             "issue_unknown": issue_id == -1,
-            "members": [{"id": m["user_id"], "name": m["display_name"] or m["login"]} for m in members],
+            "person_filter": person_filter,
             "can_log": can_log,
             "return_to": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
             "notice": notice if notice in _NOTICES else "",

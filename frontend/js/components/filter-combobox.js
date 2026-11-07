@@ -272,6 +272,9 @@ export function filterCombobox(config) {
             if (!input) return;
             input.value = item.value;
             input.disabled = false;
+            // A field that also takes typed text without JS (text_name) sends only the pick.
+            var text = this.$root.querySelector('input[role="combobox"]');
+            if (text) text.removeAttribute('name');
             this.close();
             var form = this.$el.closest('form');
             if (!form) return;

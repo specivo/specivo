@@ -789,6 +789,72 @@ class AiUsageService:
         stmt = select(User).where(func.lower(User.login) == login.strip().lower())
         return (await session.execute(stmt)).scalar_one_or_none()
 
+    # -- people of a report ------------------------------------------------------------
+
+    async def people_clause(self, session: AsyncSession, viewer: User, project: Project | None) -> ColumnElement[bool]:
+        """The users a report's person filter may name for *viewer*: never a system account.
+
+        With *project*: the people with an entry there that *viewer* may read
+        (excluded ones too, the AI usage tab lists them), so the filter never
+        names more people than the report or the entry list could show. Without
+        one (the instance report, administrators only): everyone with an entry
+        or a subscription, whose fee the instance report counts.
+        """
+        from specivo.models.ai_subscription import AiSubscription
+        from specivo.services.anonymous_user_service import real_users_clause
+
+        if project is None:
+            if not is_global_admin(viewer):
+                raise PermissionDeniedError("Only administrators can see the instance AI spend report")
+            held = or_(
+                exists().where(AiUsageEntry.user_id == User.id),
+                exists().where(AiSubscription.user_id == User.id),
+            )
+            return and_(real_users_clause(), held)
+        conditions = await self._list_conditions(session, viewer, project=project)
+        return and_(real_users_clause(), exists().where(AiUsageEntry.user_id == User.id, *conditions))
+
+    async def search_people(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        query: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[User]:
+        """A page of :meth:`people_clause`'s users, by display name; *query* matches login or name (substring)."""
+        stmt = select(User).where(await self.people_clause(session, viewer, project))
+        q = (query or "").strip()
+        if q:
+            pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            stmt = stmt.where(
+                or_(User.login.ilike(pattern, escape="\\"), User.display_name.ilike(pattern, escape="\\"))
+            )
+        display = func.lower(func.coalesce(func.nullif(User.display_name, ""), User.login))
+        stmt = stmt.order_by(display, func.lower(User.login), User.id).offset(offset).limit(limit)
+        return list((await session.execute(stmt)).scalars().all())
+
+    async def person_in_scope(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        *,
+        user_id: int | None = None,
+        login: str = "",
+    ) -> User | None:
+        """The user *user_id* (or *login*, any case) when the person filter may name them for *viewer*, else None."""
+        stmt = select(User).where(await self.people_clause(session, viewer, project))
+        if user_id is not None:
+            stmt = stmt.where(User.id == user_id)
+        elif login.strip():
+            stmt = stmt.where(func.lower(User.login) == login.strip().lower())
+        else:
+            return None
+        return (await session.execute(stmt.limit(1))).scalar_one_or_none()
+
     async def can_edit(self, session: AsyncSession, actor: User, entry: AiUsageEntry) -> bool:
         """Whether *actor* may change, exclude or include *entry*: its user, ``manage_ai_usage`` or an admin."""
         from specivo.services.permission_service import Permission, check_permission

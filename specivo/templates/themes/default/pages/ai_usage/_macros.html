@@ -1,4 +1,21 @@
 {# Shared pieces of the AI usage pages: labels, messages, the totals box and the entry table. #}
+{% from "components/filter_combobox.html" import filter_combobox %}
+
+{#
+  The person filter of the spend reports and the project's AI usage tab: a search
+  field (filterCombobox) over the people the reader may see there, never a list of
+  everyone; the chosen person shows as a chip with a clear link. Without JS the
+  field takes a login (sent as "user"). pf: {offered, endpoint, chip}.
+#}
+{% macro person_filter_field(pf) -%}
+{% if pf and (pf.offered or pf.chip) %}
+<div class="sp-aiu-filter" data-testid="aiu-person-filter">
+  {% if pf.chip %}<span class="filter-label">{% trans %}User{% endtrans %}</span>
+  {% else %}<label class="filter-label" for="sp-aiu-person">{% trans %}User{% endtrans %}</label>{% endif %}
+  {{ filter_combobox("user_id", _("User"), _("Everyone"), pf.endpoint, "user", chip=pf.chip, text_name="user", input_id="sp-aiu-person") }}
+</div>
+{% endif %}
+{%- endmacro %}
 
 {% macro cost_type_label(value) -%}
 {% if value == "subscription" %}{% trans %}Subscription{% endtrans %}
@@ -269,6 +286,14 @@
           <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
         </tr>
       {%- endfor %}
+      {%- if charts.leverage_others %}
+        <tr class="sp-drill-other" data-testid="spend-leverage-plan-others">
+          <td colspan="2">{% trans count=charts.leverage_others.count %}Others ({{ count }} plan){% pluralize %}Others ({{ count }} plans){% endtrans %}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_others.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_others.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ charts.leverage_others.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endif %}
       </tbody>
     </table>
     </div>
@@ -291,6 +316,14 @@
           <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
         </tr>
       {%- endfor %}
+      {%- if charts.people_others %}
+        <tr class="sp-drill-other" data-testid="spend-leverage-person-others">
+          <td>{% trans count=charts.people_others.count %}Others ({{ count }} person){% pluralize %}Others ({{ count }} people){% endtrans %}</td>
+          <td class="sp-aiu-num">{{ charts.people_others.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ charts.people_others.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ charts.people_others.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endif %}
       </tbody>
       <tfoot>
         <tr class="sp-spend-total-row" data-testid="spend-leverage-total">

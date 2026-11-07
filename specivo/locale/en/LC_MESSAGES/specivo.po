@@ -11830,3 +11830,39 @@ msgstr ""
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s group is summed into \"Other\". The CSV lists every row."
+msgid_plural "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s groups are summed into \"Other\". The CSV lists every row."
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person"
+msgid_plural "%(count)s more people"
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Their spend together; the Person level lists each of them."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Show all"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s plan)"
+msgid_plural "Others (%(count)s plans)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s person)"
+msgid_plural "Others (%(count)s people)"
+msgstr[0] ""
+msgstr[1] ""

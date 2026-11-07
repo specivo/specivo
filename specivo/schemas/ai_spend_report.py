@@ -104,13 +104,18 @@ class SpendReportOut(BaseModel):
     unallocated_shown: bool
     sort: str
     hidden_issue_key: int = HIDDEN_ISSUE
-    rows: list[ReportRowOut]
+    rows: list[ReportRowOut] = Field(description="A page of the rows (`offset`, `limit`); the CSV has every row")
+    row_count: int = Field(description="Every row of the report; more than `rows` holds when it is a page")
+    offset: int = 0
+    limit: int | None = None
     totals: ReportRowOut
     rate_dates: list[date]
     rates_used: list[RateUsedOut]
 
     @classmethod
-    def from_report(cls, report: SpendReport) -> SpendReportOut:
+    def from_report(cls, report: SpendReport, *, offset: int = 0, limit: int | None = None) -> SpendReportOut:
+        """The report, its rows from *offset* (*limit* of them; all with None), the totals of every row."""
+        page = report.rows[offset : offset + limit if limit is not None else None]
         return cls(
             scope=report.scope,
             project_key=report.project.key if report.project is not None else None,
@@ -125,7 +130,10 @@ class SpendReportOut(BaseModel):
             seat_cost_hidden=report.seat_cost_hidden,
             unallocated_shown=report.unallocated_shown,
             sort=report.sort,
-            rows=[ReportRowOut.from_row(r) for r in report.rows],
+            rows=[ReportRowOut.from_row(r) for r in page],
+            row_count=len(report.rows),
+            offset=offset,
+            limit=limit,
             totals=ReportRowOut.from_row(report.totals),
             rate_dates=list(report.rate_dates),
             rates_used=[RateUsedOut.from_used(r) for r in report.rates_used],

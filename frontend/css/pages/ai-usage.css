@@ -9,6 +9,9 @@
 .sp-aiu-filter { display: flex; flex-direction: column; gap: 2px; margin: 0; }
 .sp-aiu-filter .filter-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
 .sp-aiu-filter-actions { display: flex; gap: var(--sp-space-sm); }
+/* The person search (filterCombobox) in the column of a filter: its width, not a flex height. */
+.sp-aiu-filter .sp-filter-combo { flex: none; width: 13rem; }
+.sp-aiu-filter .sp-filter-chip { min-height: 2.5rem; }
 /* The filter row and the Move form: selects, inputs and buttons one height,
    buttons level with the controls (not with the labels), and selects white
    like the inputs (the grey filter-select fill read as disabled). See the

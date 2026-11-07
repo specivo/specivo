@@ -625,6 +625,14 @@ async def _ai_usage_report(
     for row in report.rows[:REPORT_MAX_ROWS]:
         lines.append(f"  {_report_line(row, report)}")
     if len(report.rows) > REPORT_MAX_ROWS:
-        lines.append(f"  ... and {len(report.rows) - REPORT_MAX_ROWS} more rows; narrow the period or the grouping")
+        from specivo.services.ai_spend_report_service import fold_rows
+
+        rest = report.rows[REPORT_MAX_ROWS:]
+        summed = fold_rows(rest, report.currency, report.seat_cost_shown)
+        measures = _report_line(summed, report).split(": ", 1)[1]
+        lines.append(
+            f"  ... and {len(rest)} more rows, together: {measures} "
+            "(narrow the period or the grouping, sort=spend for the largest first, or use the CSV export)"
+        )
     lines.append(f"Total: {_report_line(report.totals, report).split(': ', 1)[1]}")
     return "\n".join(lines)

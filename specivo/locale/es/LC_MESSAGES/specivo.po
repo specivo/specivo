@@ -12622,3 +12622,39 @@ msgstr "Licencia de suscripción"
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr "API de pago por uso"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s group is summed into \"Other\". The CSV lists every row."
+msgid_plural "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s groups are summed into \"Other\". The CSV lists every row."
+msgstr[0] "Cada periodo muestra los %(shown)s grupos con mayor gasto en todo el intervalo; el %(count)s grupo restante se suma en \"Otros\". El CSV incluye todas las filas."
+msgstr[1] "Cada periodo muestra los %(shown)s grupos con mayor gasto en todo el intervalo; los otros %(count)s grupos se suman en \"Otros\". El CSV incluye todas las filas."
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person"
+msgid_plural "%(count)s more people"
+msgstr[0] "%(count)s persona más"
+msgstr[1] "%(count)s personas más"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Their spend together; the Person level lists each of them."
+msgstr "Su gasto en conjunto; el nivel Persona muestra a cada una."
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Show all"
+msgstr "Mostrar todo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s plan)"
+msgid_plural "Others (%(count)s plans)"
+msgstr[0] "Otros (%(count)s plan)"
+msgstr[1] "Otros (%(count)s planes)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s person)"
+msgid_plural "Others (%(count)s people)"
+msgstr[0] "Otros (%(count)s persona)"
+msgstr[1] "Otros (%(count)s personas)"

@@ -74,14 +74,15 @@ from __future__ import annotations
 import csv
 import io
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.ai_pricing import TOKEN_CLASSES, normalize_provider
 from specivo.core.ai_subscriptions import month_first, month_last, months_between, prorated_fee
@@ -641,13 +642,19 @@ class AiSpendReportService:
         date_to: date,
         filters: ReportFilters,
         dim: str | None,
+        keys: Collection[Any] | None = None,
+        users: Collection[int] = (),
     ) -> DrillFacts:
         """Who used what in a report's entries: the people, per *dim* value and per person.
 
-        Three grouped queries over the same counted entries the report counts:
-        the number of people and of days, the number of people per value of *dim* (not
-        for ``user``), and per person the tools, cost types and plans used.
-        Plan ids stay here; the caller decides who may see plan names.
+        Grouped queries over the same counted entries the report counts: the
+        number of people and of days; the number of people per value of *dim*
+        (not for ``user``), for the values in *keys* only (the rows a page
+        shows; None: every value); and per person in *users* (the people a
+        page names) the tools, cost types and plans used
+        (:meth:`person_usage`). Each is bounded by what the page shows, never
+        by the number of people. Plan ids stay here; the caller decides who
+        may see plan names.
         """
         conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
         facts = DrillFacts()
@@ -659,30 +666,65 @@ class AiSpendReportService:
             )
         ).one()
         facts.people, facts.days = int(people or 0), int(days or 0)
-        if dim is not None and dim != "user" and dim in _COLUMNS:
+        if dim is not None and dim != "user" and dim in _COLUMNS and (keys is None or keys):
             column = _COLUMNS[dim]
             stmt = select(column, func.count(func.distinct(AiUsageEntry.user_id))).where(*conditions).group_by(column)
+            if keys is not None:
+                values = [k for k in keys if k is not None and k != HIDDEN_ISSUE]
+                wanted: ColumnElement[bool] | None = column.in_(values) if values else None
+                if None in keys:
+                    wanted = column.is_(None) if wanted is None else (wanted | column.is_(None))
+                if wanted is None:
+                    wanted = false()
+                stmt = stmt.where(wanted)
             facts.people_by_key = {key: int(n) for key, n in (await session.execute(stmt)).all()}
-        stmt_u = (
+        if users:
+            facts.usage = await self._person_usage(session, conditions, users)
+        return facts
+
+    async def person_usage(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None,
+        date_from: date,
+        date_to: date,
+        filters: ReportFilters,
+        users: Collection[int],
+    ) -> dict[int, PersonUsage]:
+        """Per person in *users*: the tools, cost types and plans their counted entries in the report used."""
+        if not users:
+            return {}
+        conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
+        return await self._person_usage(session, conditions, users)
+
+    @staticmethod
+    async def _person_usage(
+        session: AsyncSession, conditions: list[Any], users: Collection[int]
+    ) -> dict[int, PersonUsage]:
+        stmt = (
             select(
                 AiUsageEntry.user_id,
                 AiUsageEntry.tool_slug,
                 AiUsageEntry.cost_type,
                 AiUsageEntry.subscription_id,
             )
-            .where(*conditions)
+            .where(*conditions, AiUsageEntry.user_id.in_(list(users)))
             .group_by(
                 AiUsageEntry.user_id, AiUsageEntry.tool_slug, AiUsageEntry.cost_type, AiUsageEntry.subscription_id
             )
+            .order_by(AiUsageEntry.user_id, AiUsageEntry.tool_slug)
         )
-        for user_id, tool, cost_type, sub_id in (await session.execute(stmt_u)).all():
-            usage = facts.usage.setdefault(user_id, PersonUsage())
+        out: dict[int, PersonUsage] = {}
+        for user_id, tool, cost_type, sub_id in (await session.execute(stmt)).all():
+            usage = out.setdefault(user_id, PersonUsage())
             if tool not in usage.tools:
                 usage.tools.append(tool)
             usage.cost_types.add(cost_type)
             if sub_id is not None and cost_type == "subscription":
                 usage.subscription_ids.add(sub_id)
-        return facts
+        return out
 
     async def sees_every_entry(
         self, session: AsyncSession, viewer: User, project: Project, date_from: date, date_to: date
