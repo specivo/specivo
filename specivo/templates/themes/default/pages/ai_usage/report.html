@@ -223,6 +223,7 @@
   {% trans first=report.date_from.isoformat(), last=report.date_to.isoformat(), currency=report.currency %}{{ first }} to {{ last }} (UTC days), amounts in {{ currency }}.{% endtrans %}
   {% if rates_used %}{% trans %}Exchange rates used:{% endtrans %}
   {% for r in rates_used %}1 {{ r.from }} = {{ r.rate }} {{ r.to }} ({{ r.date }}){% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}
+  {% if report.requested_period %}<span data-testid="spend-period-coarsened">{% trans asked=period_label(report.requested_period) | lower, shown=period_label(report.period) | lower %}Grouped by {{ shown }} instead of {{ asked }}: the range would have too many periods.{% endtrans %}</span>{% endif %}
   {% if report.seat_cost_hidden %}<span data-testid="spend-seat-hidden">{% trans %}Seat cost is left out: subscription fees are shown only to administrators and to people who can see every entry of this project in the period.{% endtrans %}</span>{% endif %}
 </p>
 

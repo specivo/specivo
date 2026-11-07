@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.exchange import ConversionSummary
@@ -429,6 +430,7 @@ async def _run(
 async def project_spend_report(
     project_key: str,
     request: Request,
+    response: Response,
     user: Annotated[User, Depends(require_user)],
     form: Annotated[ReportForm, Depends(_form_params)],
     db: AsyncSession = DB_SESSION,
@@ -436,6 +438,7 @@ async def project_spend_report(
     """The project's AI spend report: rows from the entries the reader may see."""
     project = await _projects.get_by_key(db, project_key.upper())
     await _projects.require_project_access(db, project, user)
+    await enforce_ai_report_rate_limit(request, response, user)
     report, error = await _run(db, user, project, form)
     members = await _projects.list_members(db, project) if report is not None and report.seat_cost_shown else []
     return get_templates().TemplateResponse(
@@ -460,6 +463,7 @@ async def project_spend_report(
 @router.get(ADMIN_URL, response_class=HTMLResponse)
 async def admin_spend_report(
     request: Request,
+    response: Response,
     user: Annotated[User, Depends(require_admin)],
     form: Annotated[ReportForm, Depends(_form_params)],
     db: AsyncSession = DB_SESSION,
@@ -467,6 +471,7 @@ async def admin_spend_report(
     """The instance's AI spend report, unallocated seat cost included."""
     from sqlalchemy import select
 
+    await enforce_ai_report_rate_limit(request, response, user)
     report, error = await _run(db, user, None, form)
     people = (await db.execute(select(User.id, User.login, User.display_name).where(User.status == "active"))).all()
     return get_templates().TemplateResponse(

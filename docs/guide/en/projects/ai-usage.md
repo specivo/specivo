@@ -99,6 +99,25 @@ To move entries:
 You can move entries only to projects where you may log AI usage. A move is all or nothing: if one
 entry cannot be moved, none is.
 
+### Charts
+
+Under the totals, **Charts** show the entries the filters select (counted ones, or the excluded ones
+when **Show** is set to excluded):
+
+- **API-equivalent value over time**, split **by tool** or **by model**, with your spend as a line
+  when any entry has spend.
+- **Tokens over time**: input and output in one chart, cache reads and writes in another, since
+  cache tokens are usually far more numerous.
+- The value **by project** and **by model**: the eight largest, the rest as **Other**.
+- **Subscription leverage**, when no project, tool or model filter is set: for each of your plans,
+  the API-equivalent value of the usage it covered divided by its fee for the same days.
+
+The charts run from your first to your last entry in the filtered range, one point per day, week,
+month, quarter or year depending on how long that is. **Day**, **Week** and **Month** pick a size
+yourself; a size that would draw more than 120 points falls back to **Auto**. Entries without a
+price count as nothing, so a period that has some is marked with an asterisk, and its tooltip says
+how many.
+
 ## Log usage by hand
 
 Click **Log AI usage** on the project's AI usage list, on an issue's AI usage tab, or on My AI

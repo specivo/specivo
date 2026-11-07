@@ -1389,7 +1389,9 @@ async def specivo_ai_usage_report(
     group_by: Annotated[
         str | None, Field(description="Comma list: user, project, issue, tool, provider, model, cost_type, branch.")
     ] = None,
-    period: Annotated[str | None, Field(description="day, week or month buckets.")] = None,
+    period: Annotated[
+        str | None, Field(description="day, week or month buckets; coarsened when the range would need over 120.")
+    ] = None,
     date_from: Annotated[str | None, Field(description="First UTC day, YYYY-MM-DD.")] = None,
     date_to: Annotated[str | None, Field(description="Last UTC day, YYYY-MM-DD (included).")] = None,
     preset: Annotated[str | None, Field(description="7d, 30d, this_month or last_month (without dates).")] = None,

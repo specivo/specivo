@@ -17,6 +17,8 @@ with what was typed and the error, a successful write redirects with a
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -26,15 +28,19 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from babel.numbers import format_decimal
 from fastapi import APIRouter, Depends, Form, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_pricing import TOKEN_CLASSES
+from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
+from specivo.core.config import get_settings
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.exchange import ConversionSummary
 from specivo.core.i18n import format_date, get_locale, ngettext
 from specivo.core.i18n import gettext as _
 from specivo.core.money import Money, MoneyError, currency_display_name, format_decimal_plain
+from specivo.core.redis import get_redis
 from specivo.core.utils import utcnow
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
 from specivo.models.issue import Issue
@@ -43,7 +49,14 @@ from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
 from specivo.services.ai_model_price_service import AiModelPriceService
 from specivo.services.ai_subscription_service import AiSubscriptionService, AiToolService
-from specivo.services.ai_usage_chart_service import NO_PROJECT, OTHER, AiUsageChartService, Share, UsageCharts
+from specivo.services.ai_usage_chart_service import (
+    CHOSEN_SIZES,
+    NO_PROJECT,
+    OTHER,
+    AiUsageChartService,
+    Share,
+    UsageCharts,
+)
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences, UsageSummary
 from specivo.services.currency_service import CurrencyService
 from specivo.services.exchange_rate_service import ExchangeRateService
@@ -359,7 +372,11 @@ def _period_views(charts: UsageCharts) -> list[dict[str, str]]:
     """Axis label, tooltip heading and warning note of every bucket, in the reader's language."""
     out = []
     for b in charts.buckets:
-        if charts.bucket == "month":
+        if charts.bucket == "year":
+            label = title = format_date(b.start, "y")
+        elif charts.bucket == "quarter":
+            label, title = format_date(b.start, "yQQQ"), format_date(b.start, "yQQQQ")
+        elif charts.bucket == "month":
             label, title = format_date(b.start, "yMMM"), format_date(b.start, "yMMMM")
         elif charts.bucket == "week":
             label = format_date(b.start, "MMMd")
@@ -413,6 +430,8 @@ def _leverage_text(value: Decimal | None, locale: str) -> str:
 
 def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
     """The data of each chart of the page (``None`` when there is nothing to draw)."""
+    if charts.too_long:
+        return {"too_long": True}
     if charts.empty:
         return None
     locale = get_locale()
@@ -478,6 +497,71 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
         "unconverted": charts.unconverted,
         "leverage": leverage,
     }
+
+
+def _bucket_links(filters: Filters, chosen: str) -> list[dict[str, Any]]:
+    """The chart's bucket switch: automatic, or a size the reader picks (the server still caps the points)."""
+    base = filters.query()
+    out = []
+    for value, label in (("", _("Auto")), ("day", _("Day")), ("week", _("Week")), ("month", _("Month"))):
+        query = "&".join(q for q in (base, urlencode({"bucket": value}) if value else "") if q)
+        out.append(
+            {"value": value, "label": label, "url": MY_URL + (f"?{query}" if query else ""), "active": value == chosen}
+        )
+    return out
+
+
+def _chart_cache_key(user: User, currency: str, args: dict[str, Any], version: tuple[Any, ...]) -> str:
+    """Redis key of one chart payload: the user, the language, the currency, the filters and the data version."""
+    parts = {
+        "locale": get_locale(),
+        "currency": currency,
+        "version": [str(v) for v in version],
+        **{
+            k: (v.id if isinstance(v, Project) else (v.isoformat() if isinstance(v, date) else v))
+            for k, v in args.items()
+        },
+    }
+    digest = hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:32]
+    return f"aiu:charts:{user.id}:{digest}"
+
+
+async def _cached_charts_view(
+    db: AsyncSession, user: User, currency: str, args: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The chart payload of the page, from Redis when the same view was built in the last minute.
+
+    The key holds the number of the user's entries and their latest change,
+    so logging, editing, excluding or deleting an entry shows at once; what
+    the key cannot see (exchange rates, prices, plans) is at most
+    ``ai_usage_chart_cache_seconds`` old. Without Redis the payload is built
+    each time.
+    """
+    ttl = get_settings().ai_usage_chart_cache_seconds
+    key = ""
+    if ttl:
+        version = (
+            await db.execute(
+                select(func.count(), func.max(AiUsageEntry.updated_at)).where(AiUsageEntry.user_id == user.id)
+            )
+        ).one()
+        key = _chart_cache_key(user, currency, args, tuple(version))
+        try:
+            redis = await get_redis()
+            cached = await redis.get(key)
+            if cached:
+                payload: dict[str, Any] | None = json.loads(cached)
+                return payload
+        except Exception:
+            key = ""
+    charts = await AiUsageChartService().charts(db, user, currency=currency, tool_names=await _tool_names(db), **args)
+    view = _charts_view(charts)
+    if key:
+        try:
+            await redis.set(key, json.dumps(view), ex=ttl)
+        except Exception:
+            pass
+    return view
 
 
 async def _filter_choices(db: AsyncSession) -> dict[str, Any]:
@@ -637,6 +721,7 @@ async def issue_ai_usage_partial(
 @router.get(MY_URL, response_class=HTMLResponse)
 async def my_ai_usage(
     request: Request,
+    response: Response,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
     project: str = Query(""),
@@ -646,12 +731,20 @@ async def my_ai_usage(
     from_date: str = Query(""),
     to_date: str = Query(""),
     status: str = Query(""),
+    bucket: str = Query(""),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     notice: str = Query(""),
     error: str = Query(""),
 ) -> Response:
-    """The entries logged in the reader's name, across projects and unassigned, with bulk reassignment."""
+    """The entries logged in the reader's name, across projects and unassigned, with bulk reassignment.
+
+    The charts group the reader's whole usage, so the page spends the
+    reader's AI report budget (specivo.core.ai_report_limits); the bucket
+    asked for is only a wish, the chart service caps the points.
+    """
+    await enforce_ai_report_rate_limit(request, response, user)
+    chosen = bucket if bucket in CHOSEN_SIZES else ""
     filters = _filters(
         tool=tool,
         model=model,
@@ -687,14 +780,10 @@ async def my_ai_usage(
     currency = await CurrencyService().reporting_currency_for(db, selected_project)
     summary = await _service.summarize_entries(db, user, **common)
     loggable = await _service.loggable_projects(db, user)
-    charts = await AiUsageChartService().charts(
-        db,
-        user,
-        currency=currency,
-        excluded=filters.status == "excluded",
-        tool_names=await _tool_names(db),
-        **{k: v for k, v in common.items() if k != "user_id"},
-    )
+    chart_args: dict[str, Any] = {k: v for k, v in common.items() if k != "user_id"}
+    chart_args.update(excluded=filters.status == "excluded", bucket=chosen or None)
+    charts_view = await _cached_charts_view(db, user, currency, chart_args)
+    page_query = "&".join(q for q in (filters.query(), urlencode({"bucket": chosen}) if chosen else "") if q)
     return get_templates().TemplateResponse(
         request,
         "pages/ai_usage/my.html",
@@ -703,12 +792,14 @@ async def my_ai_usage(
             "active_page": "ai-usage",
             "rows": await _rows(db, user, entries, refs),
             "totals": await _totals(db, summary, currency),
-            "charts": _charts_view(charts),
+            "charts": charts_view,
+            "chart_bucket": chosen,
+            "bucket_links": _bucket_links(filters, chosen),
             "total": total,
             "offset": offset,
             "limit": limit,
             "filters": filters,
-            "page_query": filters.query(),
+            "page_query": page_query,
             "projects": [{"key": p.key, "name": p.name} for p in loggable],
             "return_to": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
             "notice": notice if notice in _NOTICES else "",

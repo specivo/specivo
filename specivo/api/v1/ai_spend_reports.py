@@ -15,8 +15,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 
+from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
 from specivo.core.database import DbSession
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
@@ -46,6 +47,8 @@ _GROUP_BY = Query(
 
 
 async def _report(
+    request: Request,
+    response: Response,
     db: DbSession,
     user: User,
     project: Project | None,
@@ -66,6 +69,7 @@ async def _report(
     sort: str,
     fmt: str,
 ) -> SpendReportOut | Response:
+    await enforce_ai_report_rate_limit(request, response, user)
     first, last = default_range(preset)
     report = await _service.report(
         db,
@@ -92,15 +96,23 @@ async def _report(
     return SpendReportOut.from_report(report)
 
 
-@router.get("/projects/{project_key}/ai-usage/report/", response_model=SpendReportOut)
+@router.get(
+    "/projects/{project_key}/ai-usage/report/",
+    response_model=SpendReportOut,
+    responses={429: {"description": "rate_limit_exceeded: the per-user AI report budget is spent; see Retry-After"}},
+)
 async def project_ai_spend_report(
     project_key: str,
+    request: Request,
+    response: Response,
     db: DbSession,
     from_date: date | None = Query(None, description="First UTC day; default from the preset"),
     to_date: date | None = Query(None, description="Last UTC day (included)"),
     preset: Preset | None = Query(None, description="Period preset when no dates are given; default 30d"),
     group_by: str = _GROUP_BY,
-    period: Period | None = Query(None, description="Also group by day, ISO week or month"),
+    period: Period | None = Query(
+        None, description="Also group by day, ISO week or month (coarsened past 120 periods; see `period`)"
+    ),
     currency: str | None = Query(None, max_length=3, description="Default: the project's reporting currency"),
     rate_policy: str | None = Query(None, description="'entry_date' (default), 'latest' or a date YYYY-MM-DD"),
     include_seat_cost: bool = Query(True, description="Allocate subscription fees (if you may see them)"),
@@ -122,6 +134,8 @@ async def project_ai_spend_report(
     project = await _projects.get_by_key(db, project_key.upper())
     await _projects.require_project_access(db, project, current_user)
     return await _report(
+        request,
+        response,
         db,
         current_user,
         project,
@@ -143,8 +157,14 @@ async def project_ai_spend_report(
     )
 
 
-@router.get("/ai-usage/report/", response_model=SpendReportOut)
+@router.get(
+    "/ai-usage/report/",
+    response_model=SpendReportOut,
+    responses={429: {"description": "rate_limit_exceeded: the per-user AI report budget is spent; see Retry-After"}},
+)
 async def instance_ai_spend_report(
+    request: Request,
+    response: Response,
     db: DbSession,
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
@@ -169,6 +189,8 @@ async def instance_ai_spend_report(
     or provider filter (or a cost type other than subscription) is applied.
     """
     return await _report(
+        request,
+        response,
         db,
         current_user,
         None,

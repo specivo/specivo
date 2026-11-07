@@ -12380,3 +12380,30 @@ msgstr[1] "%(num)d importes sin tipo de cambio"
 #: specivo/web/pages/ai_usage.py:401
 msgid "Other"
 msgstr "Otros"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:129
+msgid "These entries span too many years to chart. Narrow the dates to see the charts."
+msgstr "Estas entradas abarcan demasiados años para graficarlas. Acota las fechas para ver los gráficos."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:134
+#, python-format
+msgid "Per year, %(first)s to %(last)s (UTC days)."
+msgstr "Por año, del %(first)s al %(last)s (días UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:135
+#, python-format
+msgid "Per quarter, %(first)s to %(last)s (UTC days)."
+msgstr "Por trimestre, del %(first)s al %(last)s (días UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:151
+msgid "Time buckets"
+msgstr "Intervalos de tiempo"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:226
+#, python-format
+msgid "Grouped by %(shown)s instead of %(asked)s: the range would have too many periods."
+msgstr "Agrupado por %(shown)s en lugar de %(asked)s: el rango tendría demasiados periodos."
+
+#: specivo/web/pages/ai_usage.py:506
+msgid "Auto"
+msgstr "Auto"

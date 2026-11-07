@@ -558,6 +558,7 @@ async def _ai_usage_report(
     sort: str,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
+    from specivo.core.ai_report_limits import ai_report_allowed
     from specivo.services.ai_spend_report_service import (
         PRESETS,
         AiSpendReportService,
@@ -568,6 +569,14 @@ async def _ai_usage_report(
 
     if preset and preset not in PRESETS[:-1]:
         raise ValidationError(message=f"preset must be one of {', '.join(PRESETS[:-1])}", field="preset")
+    allowed, retry_after = await ai_report_allowed(user)
+    if not allowed:
+        raise AppError(
+            code="rate_limit_exceeded",
+            message=f"Too many AI reports in the last minute. Try again in {retry_after} second(s).",
+            status_code=429,
+            details={"retry_after": retry_after},
+        )
     first, last = default_range(preset)
     project = await _project(session, user, project_key) if project_key and project_key.strip() else None
     user_id: int | None = None

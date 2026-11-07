@@ -121,14 +121,19 @@
   The charts of My AI usage (see web/pages/ai_usage.py, _charts_view): value
   over time (stacked by tool or model), tokens over time, and the value by
   project and by model, drawn by the shared chart bundle (spend-chart.min.js).
-  charts: None when nothing is counted; has_rows: whether the table lists entries.
+  charts: None when nothing is counted, {too_long: True} when the entries span too long
+  a period; has_rows: whether the table lists entries.
 #}
-{% macro usage_charts(charts, has_rows=False) -%}
-{%- if charts %}
+{% macro usage_charts(charts, has_rows=False, bucket_links=[]) -%}
+{%- if charts and charts.too_long %}
+<p class="sp-text-muted sp-aiu-charts-empty" data-testid="aiu-charts-too-long">{% trans %}These entries span too many years to chart. Narrow the dates to see the charts.{% endtrans %}</p>
+{%- elif charts %}
 <section class="sp-aiu-charts" aria-labelledby="aiu-charts-title" data-testid="aiu-charts">
   <h2 id="aiu-charts-title" class="sp-aiu-charts-title">{% trans %}Charts{% endtrans %}</h2>
   <p class="sp-text-muted-xs sp-aiu-charts-intro" data-testid="aiu-charts-scope">
-    {%- if charts.bucket == "month" %}{% trans first=charts.first, last=charts.last %}Per month, {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- if charts.bucket == "year" %}{% trans first=charts.first, last=charts.last %}Per year, {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- elif charts.bucket == "quarter" %}{% trans first=charts.first, last=charts.last %}Per quarter, {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- elif charts.bucket == "month" %}{% trans first=charts.first, last=charts.last %}Per month, {{ first }} to {{ last }} (UTC days).{% endtrans %}
     {%- elif charts.bucket == "week" %}{% trans first=charts.first, last=charts.last %}Per week (from Monday), {{ first }} to {{ last }} (UTC days).{% endtrans %}
     {%- else %}{% trans first=charts.first, last=charts.last %}Per day, {{ first }} to {{ last }} (UTC days).{% endtrans %}{% endif %}
     {% trans currency=charts.time.currency %}Amounts in {{ currency }}.{% endtrans %}
@@ -141,11 +146,20 @@
   <div class="card sp-aiu-chart-card">
     <div class="sp-aiu-chart-head">
       <h3 class="sp-aiu-chart-title" id="aiu-chart-time-title">{% if charts.has_spend %}{% trans %}API-equivalent value and spend over time{% endtrans %}{% else %}{% trans %}API-equivalent value over time{% endtrans %}{% endif %}</h3>
+      <div class="sp-aiu-chart-controls">
+      {%- if bucket_links %}
+      <nav class="sp-aiu-chart-switch" aria-label="{{ _('Time buckets') }}" data-testid="aiu-chart-buckets">
+        {%- for b in bucket_links %}
+        <a class="sp-aiu-chart-switch-option{{ ' active' if b.active }}" href="{{ b.url }}"{% if b.active %} aria-current="true"{% endif %} data-bucket="{{ b.value or 'auto' }}">{{ b.label }}</a>
+        {%- endfor %}
+      </nav>
+      {%- endif %}
       <fieldset class="sp-aiu-chart-switch" data-testid="aiu-chart-switch">
         <legend class="sp-visually-hidden">{% trans %}Split the value by{% endtrans %}</legend>
         <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-chart-stack" value="tool" checked data-sp-chart-switch="aiu-chart-time"> {% trans %}By tool{% endtrans %}</label>
         <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-chart-stack" value="model" data-sp-chart-switch="aiu-chart-time"> {% trans %}By model{% endtrans %}</label>
       </fieldset>
+      </div>
     </div>
     <div id="aiu-chart-time" class="sp-spend-chart" data-testid="aiu-chart-time" role="img"
          aria-label="{{ _('API-equivalent value over time; the totals and the table hold the numbers') }}"

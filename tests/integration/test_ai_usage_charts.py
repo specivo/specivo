@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -24,7 +25,8 @@ from specivo.models.ai_subscription import AiSubscription
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.user import User
 from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput
-from specivo.services.ai_usage_chart_service import NO_PROJECT, OTHER, TOP_N, AiUsageChartService
+from specivo.services.ai_spend_report_service import AiSpendReportService
+from specivo.services.ai_usage_chart_service import MAX_BUCKETS, NO_PROJECT, OTHER, TOP_N, AiUsageChartService
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
 from specivo.services.auth_service import _make_access_token
 from tests.integration.test_ai_usage_api import World, build_world
@@ -69,6 +71,12 @@ async def _log(
     )
     await db.commit()
     return entry
+
+
+async def _backdate(db: AsyncSession, entry: AiUsageEntry, day: date) -> None:
+    """Move *entry* to *day*, past what the service accepts (old data, or data written around it)."""
+    await db.execute(update(AiUsageEntry).where(AiUsageEntry.id == entry.id).values(usage_date=day))
+    await db.commit()
 
 
 async def _price(db: AsyncSession, w: World, model: str, input_price: str = "2") -> None:
@@ -129,11 +137,40 @@ async def test_day_buckets_list_empty_days_and_sum_per_day(db_session: AsyncSess
     assert [b.start for b in charts.buckets] == [DAY + timedelta(days=i) for i in range(4)]
     assert [b.api for b in charts.buckets] == [Decimal("6"), 0, 0, Decimal("3")]
     assert [b.tokens["input"] for b in charts.buckets] == [2_000_000, 0, 0, 1_000_000]
-    # The page dates set the range, not the data.
+    # The page dates filter the entries; the range is the days with entries.
     charts = await _chart(
         db_session, w.users["alice"], date_from=DAY - timedelta(days=2), date_to=DAY + timedelta(days=5)
     )
-    assert len(charts.buckets) == 8 and charts.first == DAY - timedelta(days=2)
+    assert len(charts.buckets) == 4 and (charts.first, charts.last) == (DAY, DAY + timedelta(days=3))
+
+
+async def test_extreme_date_ranges_stay_bounded(db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice")
+    alice = w.users["alice"]
+    charts = await _chart(db_session, alice, date_from=date.min, date_to=date.max)
+    assert charts.bucket == "day" and len(charts.buckets) == 1 and charts.entries == 1
+    # No matching entry: no buckets at all, whatever the range.
+    assert (await _chart(db_session, alice, date_from=date(9999, 1, 1), date_to=date.max)).buckets == []
+    # Decades of entries: one point per year, whatever bucket is asked for.
+    await _backdate(db_session, await _log(db_session, w, "alice"), date(1990, 1, 1))
+    for chosen in (None, "day", "week", "month", "hour"):
+        charts = await _chart(db_session, alice, date_from=date.min, date_to=date.max, bucket=chosen)
+        assert charts.bucket == "year" and len(charts.buckets) == 37 <= MAX_BUCKETS, chosen
+    # Entries spread over more than MAX_BUCKETS years are not charted.
+    await _backdate(db_session, await _log(db_session, w, "alice"), date(1850, 1, 1))
+    charts = await _chart(db_session, alice, date_from=date.min, date_to=date.max, bucket="day")
+    assert charts.too_long and charts.buckets == [] and charts.leverage == []
+
+
+async def test_a_chosen_bucket_is_kept_only_within_the_cap(db_session: AsyncSession, w: World):
+    alice = w.users["alice"]
+    await _log(db_session, w, "alice", day=date(2025, 1, 6))
+    await _log(db_session, w, "alice", day=date(2026, 3, 10))
+    assert (await _chart(db_session, alice)).bucket == "month"  # 14 months
+    assert (await _chart(db_session, alice, bucket="week")).bucket == "week"  # 62 weeks
+    assert (await _chart(db_session, alice, bucket="day")).bucket == "month"  # 429 days: too many
+    charts = await _chart(db_session, alice, bucket="week")
+    assert len(charts.buckets) == 62 and sum(b.entries for b in charts.buckets) == 2
 
 
 async def test_long_ranges_use_weeks_then_months(db_session: AsyncSession, w: World):
@@ -143,9 +180,16 @@ async def test_long_ranges_use_weeks_then_months(db_session: AsyncSession, w: Wo
     assert charts.bucket == "week"
     assert charts.buckets[0].start == date(2026, 1, 5) and charts.buckets[-1].start == date(2026, 3, 9)
     assert sum(b.entries for b in charts.buckets) == 2
-    charts = await _chart(db_session, w.users["alice"], date_from=date(2023, 1, 1), date_to=date(2026, 3, 31))
+    await _log(db_session, w, "alice", day=date(2023, 1, 20))
+    charts = await _chart(db_session, w.users["alice"])
     assert charts.bucket == "month"
     assert charts.buckets[0].start == date(2023, 1, 1) and len(charts.buckets) == 39
+    # Past ten years of months: quarters (entries from before the service's own limits).
+    await _backdate(db_session, await _log(db_session, w, "alice"), date(2012, 5, 1))
+    charts = await _chart(db_session, w.users["alice"])
+    assert charts.bucket == "quarter"
+    assert charts.buckets[0].start == date(2012, 4, 1) and len(charts.buckets) == 56
+    assert sum(b.entries for b in charts.buckets) == 4
 
 
 async def test_stacks_by_tool_and_by_model(db_session: AsyncSession, w: World):
@@ -289,10 +333,20 @@ async def test_page_follows_the_filters(client: AsyncClient, db_session: AsyncSe
     await _log(db_session, w, "alice", tool="codex", day=DAY + timedelta(days=1))
     html = await _page(client, w.users["alice"], "?tool=codex&from_date=2026-03-01&to_date=2026-03-31")
     time = _chart_data(html, "aiu-chart-time")
-    assert len(time["periods"]) == 31
+    assert [p["label"] for p in time["periods"]] == ["Mar 11"]
     assert time["stacks"]["tool"]["names"] == ["Codex"]
+    await _log(db_session, w, "alice", day=date(2026, 1, 1))
     html = await _page(client, w.users["alice"], "?from_date=2026-01-01&to_date=2026-06-30")
     assert _chart_data(html, "aiu-chart-time")["periods"][0]["title"] == "Week of Dec 29, 2025"
+
+
+async def test_page_with_an_extreme_range(client: AsyncClient, db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice")
+    html = await _page(client, w.users["alice"], "?from_date=0001-01-01&to_date=9999-12-31")
+    assert len(_chart_data(html, "aiu-chart-time")["periods"]) == 1
+    await _backdate(db_session, await _log(db_session, w, "alice"), date(1850, 1, 1))
+    html = await _page(client, w.users["alice"], "?from_date=0001-01-01&to_date=9999-12-31&bucket=day")
+    assert 'data-testid="aiu-charts-too-long"' in html and "spend-chart.min" not in html
 
 
 async def test_page_without_counted_usage(client: AsyncClient, db_session: AsyncSession, w: World):
@@ -330,3 +384,40 @@ async def test_page_lists_leverage_per_plan(client: AsyncClient, db_session: Asy
     assert 'data-testid="aiu-leverage"' in html
     row = re.search(r'data-testid="aiu-leverage-row">(.*?)</tr>', html, re.S)
     assert row and "Lab Plan" in row.group(1) and "$20.00" in row.group(1) and "0.15×" in row.group(1)
+
+
+async def test_page_bucket_switch(client: AsyncClient, db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice", day=date(2025, 1, 6))
+    await _log(db_session, w, "alice", day=date(2026, 3, 10))
+    html = await _page(client, w.users["alice"], "?bucket=week")
+    assert len(_chart_data(html, "aiu-chart-time")["periods"]) == 62
+    assert 'aria-current="true" data-bucket="week"' in html
+    assert '<input type="hidden" name="bucket" value="week">' in html
+    # A size that would draw too many points is not honoured; nor is a made-up one.
+    for query in ("?bucket=day", "?bucket=hour"):
+        html = await _page(client, w.users["alice"], query)
+        assert len(_chart_data(html, "aiu-chart-time")["periods"]) == 15, query
+        assert _chart_data(html, "aiu-chart-time")["periods"][0]["label"] == "Jan 2025"
+
+
+async def test_cached_charts_follow_new_entries(client: AsyncClient, db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice")
+    first = _chart_data(await _page(client, w.users["alice"]), "aiu-chart-time")
+    assert first == _chart_data(await _page(client, w.users["alice"]), "aiu-chart-time")
+    await _log(db_session, w, "alice", tool="codex")
+    again = _chart_data(await _page(client, w.users["alice"]), "aiu-chart-time")
+    assert again["stacks"]["tool"]["names"] == ["Claude Code", "Codex"]
+
+
+async def test_spend_report_periods_are_capped_whoever_asks(client: AsyncClient, db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice")
+    report = await AiSpendReportService().report(
+        db_session, w.users["mgr"], project=w.a, date_from=date(2024, 1, 1), date_to=date(2026, 12, 31), period="day"
+    )
+    assert (report.period, report.requested_period) == ("month", "day")
+    cookies = {"access_token": _make_access_token(w.users["mgr"], get_settings())}
+    resp = await client.get(
+        f"/projects/{w.a.key}/ai-usage/report/?from_date=2026-01-01&to_date=2026-06-30&period=day", cookies=cookies
+    )
+    assert resp.status_code == 200
+    assert "Grouped by week instead of day: the range would have too many periods." in resp.text

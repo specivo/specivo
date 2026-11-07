@@ -258,6 +258,16 @@ class Settings(BaseSettings):
     # Seconds a query's embedding is kept in Redis, so a repeated or paged
     # query does not run the model again. 0 turns the cache off.
     search_query_embedding_cache_seconds: int = Field(default=300, ge=0)
+    # AI usage charts and spend reports per minute one user may load (the My
+    # AI usage page, the report pages, the report API and CSV, the MCP report
+    # tool; specivo.core.ai_report_limits). Each one groups and converts a
+    # user's or a project's whole usage, so a script cannot loop on them.
+    # Administrators, who read the instance report, get the higher budget.
+    ai_report_rate_limit_per_minute: int = Field(default=30, ge=1)
+    ai_report_rate_limit_admin_per_minute: int = Field(default=120, ge=1)
+    # Seconds the My AI usage chart data is kept in Redis per user and
+    # filters (refreshed at once when the user's entries change). 0: off.
+    ai_usage_chart_cache_seconds: int = Field(default=60, ge=0)
 
     # CPU seconds one Markdown field may use to render before it is abandoned
     # and shown as plain text; the wall-clock ceiling is 4x this. A backstop:

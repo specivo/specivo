@@ -11587,3 +11587,30 @@ msgstr[1] ""
 #: specivo/web/pages/ai_usage.py:401
 msgid "Other"
 msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:129
+msgid "These entries span too many years to chart. Narrow the dates to see the charts."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:134
+#, python-format
+msgid "Per year, %(first)s to %(last)s (UTC days)."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:135
+#, python-format
+msgid "Per quarter, %(first)s to %(last)s (UTC days)."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:151
+msgid "Time buckets"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:226
+#, python-format
+msgid "Grouped by %(shown)s instead of %(asked)s: the range would have too many periods."
+msgstr ""
+
+#: specivo/web/pages/ai_usage.py:506
+msgid "Auto"
+msgstr ""
