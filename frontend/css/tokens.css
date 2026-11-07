@@ -148,5 +148,17 @@
   --sp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --sp-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
   --sp-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* Chart series colours, in order. Charts read them at runtime
+     (frontend/js/modules/spend-chart.js), so a theme that redefines
+     them recolours the charts too. */
+  --sp-chart-1: #c49a3c;
+  --sp-chart-2: #2563EB;
+  --sp-chart-3: #16A34A;
+  --sp-chart-4: #7C3AED;
+  --sp-chart-5: #EA580C;
+  --sp-chart-6: #0891B2;
+  --sp-chart-7: #DB2777;
+  --sp-chart-8: #6B7280;
 }
 
