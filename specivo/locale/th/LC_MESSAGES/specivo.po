@@ -11943,3 +11943,132 @@ msgstr "ยังไม่มีหน้าวิกิ งาน หรือ�
 msgid "No wiki page, issue or comment links here yet."
 msgstr "ยังไม่มีหน้าวิกิ งาน หรือความคิดเห็นใดลิงก์มาที่นี่"
 
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:129
+msgid "Charts"
+msgstr "แผนภูมิ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:131
+#, python-format
+msgid "Per month, %(first)s to %(last)s (UTC days)."
+msgstr "รายเดือน ตั้งแต่ %(first)s ถึง %(last)s (วันตาม UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:132
+#, python-format
+msgid "Per week (from Monday), %(first)s to %(last)s (UTC days)."
+msgstr "รายสัปดาห์ (เริ่มวันจันทร์) ตั้งแต่ %(first)s ถึง %(last)s (วันตาม UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:133
+#, python-format
+msgid "Per day, %(first)s to %(last)s (UTC days)."
+msgstr "รายวัน ตั้งแต่ %(first)s ถึง %(last)s (วันตาม UTC)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:134
+#, python-format
+msgid "Amounts in %(currency)s."
+msgstr "จำนวนเงินเป็น %(currency)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:135
+msgid "Amounts without a usable exchange rate are left out of the charts; the totals above list them."
+msgstr "จำนวนเงินที่ไม่มีอัตราแลกเปลี่ยนที่ใช้ได้จะไม่แสดงในแผนภูมิ ยอดรวมด้านบนแสดงรายการเหล่านี้ไว้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:138
+#, python-format
+msgid "%(count)s entry has no price, so it adds nothing to the value shown. Periods marked * have such entries."
+msgid_plural "%(count)s entries have no price, so they add nothing to the value shown. Periods marked * have such entries."
+msgstr[0] "%(count)s รายการไม่มีราคา จึงไม่ถูกนับรวมในมูลค่าที่แสดง ช่วงเวลาที่มีรายการเช่นนี้มีเครื่องหมาย *"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:143
+msgid "API-equivalent value and spend over time"
+msgstr "มูลค่าเทียบเท่า API และค่าใช้จ่ายตามช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:143
+msgid "API-equivalent value over time"
+msgstr "มูลค่าเทียบเท่า API ตามช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:145
+msgid "Split the value by"
+msgstr "แยกมูลค่าตาม"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:146
+msgid "By tool"
+msgstr "ตามเครื่องมือ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:147
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:184
+msgid "By model"
+msgstr "ตามโมเดล"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:151
+msgid "API-equivalent value over time; the totals and the table hold the numbers"
+msgstr "มูลค่าเทียบเท่า API ตามช่วงเวลา ตัวเลขอยู่ในยอดรวมและตาราง"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:158
+msgid "Tokens over time"
+msgstr "โทเค็นตามช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:160
+msgid "Input and output"
+msgstr "อินพุตและเอาต์พุต"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:162
+msgid "Input, output and reasoning tokens over time"
+msgstr "โทเค็นอินพุต เอาต์พุต และการให้เหตุผลตามช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:166
+msgid "Cache"
+msgstr "แคช"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:168
+msgid "Cache read and cache write tokens over time"
+msgstr "โทเค็นการอ่านและเขียนแคชตามช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:176
+msgid "By project"
+msgstr "ตามโครงการ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:178
+msgid "API-equivalent value by project"
+msgstr "มูลค่าเทียบเท่า API ตามโครงการ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:186
+msgid "API-equivalent value by model"
+msgstr "มูลค่าเทียบเท่า API ตามโมเดล"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:195
+msgid "Subscription leverage"
+msgstr "ความคุ้มค่าของการสมัครสมาชิก"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:196
+msgid "The API-equivalent value of the usage each of your plans covered in this period, divided by the plan's fee for the same days."
+msgstr "มูลค่าเทียบเท่า API ของการใช้งานที่แต่ละแผนของคุณครอบคลุมในช่วงนี้ หารด้วยค่าธรรมเนียมของแผนสำหรับวันเดียวกัน"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:201
+msgid "Fee for the period"
+msgstr "ค่าธรรมเนียมของช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:221
+msgid "No counted usage matches these filters, so there is nothing to chart."
+msgstr "ไม่มีการใช้งานที่นับรวมตรงกับตัวกรองเหล่านี้ จึงไม่มีข้อมูลสำหรับแผนภูมิ"
+
+#: specivo/web/pages/ai_usage.py:366
+#, python-format
+msgid "Week of %(date)s"
+msgstr "สัปดาห์ของ %(date)s"
+
+#: specivo/web/pages/ai_usage.py:372
+#, python-format
+msgid "%(num)d entry without a price"
+msgid_plural "%(num)d entries without a price"
+msgstr[0] "%(num)d รายการที่ไม่มีราคา"
+
+#: specivo/web/pages/ai_usage.py:378
+#, python-format
+msgid "%(num)d amount without an exchange rate"
+msgid_plural "%(num)d amounts without an exchange rate"
+msgstr[0] "%(num)d จำนวนเงินที่ไม่มีอัตราแลกเปลี่ยน"
+
+#: specivo/web/pages/ai_usage.py:393
+#: specivo/web/pages/ai_usage.py:401
+msgid "Other"
+msgstr "อื่น ๆ"

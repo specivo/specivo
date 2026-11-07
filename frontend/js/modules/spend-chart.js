@@ -10,6 +10,11 @@
    - with a period: spend per period bucket, stacked by group;
    - without: spend and API-equivalent value side by side per group.
 
+   Other chart shapes register themselves with registerShape() (see
+   modules/usage-charts.js, the My AI usage charts): their data carries a
+   "kind", and they share this module's theme, formatters, tooltips, sizing,
+   theme and htmx handling, so there is one chart setup.
+
    Colours, text and font come from the app's CSS custom properties, read at
    draw time, so the charts follow the theme and redraw when it changes. The
    table under the chart holds the same numbers, so a chart that fails to draw
@@ -50,15 +55,35 @@ const THEME_ATTRS = ['class', 'style', 'data-theme', 'data-bs-theme'];
  * @property {string} muted
  * @property {string} border
  * @property {string} surface
+ * @property {string} warning
  * @property {string} font
  * @property {string[]} palette
  */
+
+/**
+ * @typedef {Object} Shape
+ * @property {(data: Object) => boolean} valid  Whether *data* has something to draw.
+ * @property {(state: Mounted, theme: ChartTheme, width: number, fmt: ReturnType<typeof moneyFormatters>) => {height: number, option: Object}} build
+ */
+
+/** @type {Map<string, Shape>} Chart shapes by the "kind" of their data. */
+const shapes = new Map();
+
+/**
+ * Register a chart shape for data of the given kind.
+ * @param {string} kind
+ * @param {Shape} shape
+ */
+export function registerShape(kind, shape) {
+    shapes.set(kind, shape);
+}
 
 /**
  * @typedef {Object} Mounted
  * @property {import('echarts/core').ECharts} chart
  * @property {ChartData} data
  * @property {{spend: string, api: string}} labels
+ * @property {string} mode  The view a chart with a switch shows ('' by default).
  * @property {string} description  The element's aria-label, kept as the chart's aria description.
  * @property {Object<string, boolean>} selected  Legend selection, kept across redraws.
  * @property {string} themeKey
@@ -95,6 +120,7 @@ export function readTheme(el) {
         muted: cssVar(style, '--sp-text-secondary', '#4a4a5a'),
         border: cssVar(style, '--sp-border', '#e5e3dc'),
         surface: cssVar(style, '--sp-bg-elevated', '#ffffff'),
+        warning: cssVar(style, '--sp-warning', '#b45309'),
         font: cssVar(style, '--sp-font-body', 'system-ui, sans-serif'),
         palette: DEFAULT_PALETTE.map((fallback, i) => cssVar(style, `--sp-chart-${i + 1}`, fallback)),
     };
@@ -129,7 +155,7 @@ export function moneyFormatters(locale, currency) {
  * @param {string[]} values
  * @returns {string[]}
  */
-function unique(values) {
+export function unique(values) {
     return Array.from(new Set(values));
 }
 
@@ -140,7 +166,7 @@ function unique(values) {
  * @param {string} amount
  * @returns {HTMLElement}
  */
-function tooltipRow(color, name, amount) {
+export function tooltipRow(color, name, amount) {
     const row = document.createElement('div');
     row.className = 'sp-chart-tooltip-row';
     const marker = document.createElement('span');
@@ -162,7 +188,7 @@ function tooltipRow(color, name, amount) {
  * @param {HTMLElement[]} rows
  * @returns {HTMLElement}
  */
-function tooltipBox(heading, rows) {
+export function tooltipBox(heading, rows) {
     const box = document.createElement('div');
     box.className = 'sp-chart-tooltip';
     const head = document.createElement('div');
@@ -176,7 +202,7 @@ function tooltipBox(heading, rows) {
  * Axis settings both chart shapes share.
  * @param {ChartTheme} theme
  */
-function axisStyle(theme) {
+export function axisStyle(theme) {
     return {
         axisLine: { lineStyle: { color: theme.border } },
         axisTick: { lineStyle: { color: theme.border } },
@@ -246,9 +272,11 @@ function periodOption(data, theme, width, fmt) {
  * @param {number} width
  * @param {ReturnType<typeof moneyFormatters>} fmt
  */
-function groupOption(data, labels, theme, width, fmt) {
+export function groupOption(data, labels, theme, width, fmt) {
     const points = data.points;
     const axis = axisStyle(theme);
+    // Spend is left out when the data says so (nothing in the view has any).
+    const measures = data.no_spend ? ['api'] : ['spend', 'api'];
     return {
         height: Math.max(160, points.length * 52 + 72),
         option: {
@@ -271,10 +299,7 @@ function groupOption(data, labels, theme, width, fmt) {
                 axisLabel: { ...axis.axisLabel, width: Math.min(220, Math.round(width * 0.35)), overflow: 'truncate' },
                 splitLine: { show: false },
             },
-            series: [
-                { type: 'bar', name: labels.spend, encode: { y: 'label', x: 'spend' }, barMaxWidth: 18 },
-                { type: 'bar', name: labels.api, encode: { y: 'label', x: 'api' }, barMaxWidth: 18 },
-            ],
+            series: measures.map((m) => ({ type: 'bar', name: labels[m], encode: { y: 'label', x: m }, barMaxWidth: 18 })),
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
@@ -286,7 +311,7 @@ function groupOption(data, labels, theme, width, fmt) {
                     return tooltipBox(point.label, items.map((item) => tooltipRow(
                         item.color,
                         item.seriesName,
-                        fmt.full(item.seriesIndex === 0 ? point.spend : point.api),
+                        fmt.full(point[measures[item.seriesIndex]]),
                     )));
                 },
             },
@@ -305,7 +330,11 @@ function groupOption(data, labels, theme, width, fmt) {
 export function buildOption(state, theme, width, animate) {
     const { data, labels } = state;
     const fmt = moneyFormatters(data.locale, data.currency);
-    const shape = data.period ? periodOption(data, theme, width, fmt) : groupOption(data, labels, theme, width, fmt);
+    const custom = data.kind ? shapes.get(data.kind) : null;
+    let shape;
+    if (custom) shape = custom.build(state, theme, width, fmt);
+    else if (data.period) shape = periodOption(data, theme, width, fmt);
+    else shape = groupOption(data, labels, theme, width, fmt);
     const option = {
         ...shape.option,
         animation: animate,
@@ -383,7 +412,12 @@ function readData(el) {
     } catch (e) {
         return null;
     }
-    if (!data || !Array.isArray(data.points) || !data.points.length || !data.currency) return null;
+    if (!data || !data.currency) return null;
+    if (data.kind) {
+        const shape = shapes.get(data.kind);
+        return shape && shape.valid(data) ? data : null;
+    }
+    if (!Array.isArray(data.points) || !data.points.length) return null;
     return data;
 }
 
@@ -403,6 +437,7 @@ export function mountSpendChart(el) {
                 spend: el.getAttribute('data-label-spend') || 'Spend',
                 api: el.getAttribute('data-label-api') || 'API-equivalent value',
             },
+            mode: el.getAttribute('data-sp-chart-mode') || '',
             description: el.getAttribute('aria-label') || '',
             selected: {},
             themeKey: '',
@@ -460,6 +495,34 @@ function watchSize(el, state) {
         state.onWindowResize = onResize;
         window.addEventListener('resize', onResize);
     }
+}
+
+/**
+ * Show another view of a chart with a switch (e.g. stacked by tool or by model).
+ * @param {Element} el
+ * @param {string} mode
+ */
+export function setChartMode(el, mode) {
+    el.setAttribute('data-sp-chart-mode', mode);
+    const state = mounted.get(el);
+    if (!state || state.mode === mode) return;
+    state.mode = mode;
+    state.selected = {};
+    render(el, state, false);
+}
+
+/**
+ * Wire the chart switches once per page: a radio input with
+ * data-sp-chart-switch="<chart element id>" sets that chart's mode to its value.
+ */
+export function watchSwitches() {
+    document.addEventListener('change', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || !input.checked) return;
+        const id = input.getAttribute('data-sp-chart-switch');
+        const el = id ? document.getElementById(id) : null;
+        if (el) setChartMode(el, input.value);
+    });
 }
 
 /** Redraw every chart whose theme colours changed. */

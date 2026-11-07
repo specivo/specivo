@@ -32,7 +32,8 @@ from specivo.core.ai_pricing import TOKEN_CLASSES
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.exchange import ConversionSummary
-from specivo.core.i18n import get_locale
+from specivo.core.i18n import format_date, get_locale, ngettext
+from specivo.core.i18n import gettext as _
 from specivo.core.money import Money, MoneyError, currency_display_name, format_decimal_plain
 from specivo.core.utils import utcnow
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
@@ -42,6 +43,7 @@ from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
 from specivo.services.ai_model_price_service import AiModelPriceService
 from specivo.services.ai_subscription_service import AiSubscriptionService, AiToolService
+from specivo.services.ai_usage_chart_service import NO_PROJECT, OTHER, AiUsageChartService, Share, UsageCharts
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences, UsageSummary
 from specivo.services.currency_service import CurrencyService
 from specivo.services.exchange_rate_service import ExchangeRateService
@@ -333,6 +335,151 @@ async def _totals(db: AsyncSession, summary: UsageSummary, currency: str) -> dic
     }
 
 
+# ---------------------------------------------------------------------------
+# Charts (My AI usage)
+# ---------------------------------------------------------------------------
+
+#: Token classes of the two token charts: the fresh tokens, and the cache.
+_FRESH_TOKENS = ("input", "output", "reasoning")
+_CACHE_TOKENS = ("cache_read", "cache_write_5m", "cache_write_1h")
+
+
+def _token_label(token_class: str) -> str:
+    return {
+        "input": _("Input"),
+        "output": _("Output"),
+        "reasoning": _("Reasoning"),
+        "cache_read": _("Cache read"),
+        "cache_write_5m": _("Cache write 5m"),
+        "cache_write_1h": _("Cache write 1h"),
+    }[token_class]
+
+
+def _period_views(charts: UsageCharts) -> list[dict[str, str]]:
+    """Axis label, tooltip heading and warning note of every bucket, in the reader's language."""
+    out = []
+    for b in charts.buckets:
+        if charts.bucket == "month":
+            label, title = format_date(b.start, "yMMM"), format_date(b.start, "yMMMM")
+        elif charts.bucket == "week":
+            label = format_date(b.start, "MMMd")
+            title = _("Week of %(date)s") % {"date": format_date(b.start, "yMMMd")}
+        else:
+            label, title = format_date(b.start, "MMMd"), format_date(b.start, "yMMMEd")
+        notes = []
+        if b.unpriced:
+            notes.append(
+                ngettext("%(num)d entry without a price", "%(num)d entries without a price", b.unpriced)
+                % {"num": b.unpriced}
+            )
+        if b.unconverted:
+            notes.append(
+                ngettext(
+                    "%(num)d amount without an exchange rate", "%(num)d amounts without an exchange rate", b.unconverted
+                )
+                % {"num": b.unconverted}
+            )
+        out.append({"label": label, "title": title, "note": " · ".join(notes)})
+    return out
+
+
+def _float(value: Decimal) -> float:
+    """An amount as a float rounded to cents, for the charts only (the totals show exact amounts)."""
+    return round(float(value), 2)
+
+
+def _group_label(labels: dict[str, str], key: str) -> str:
+    if key == OTHER:
+        return _("Other")
+    return labels.get(key, key) or "–"
+
+
+def _share_points(charts: UsageCharts, shares: list[Share], projects: bool) -> list[dict[str, Any]]:
+    points = []
+    for s in shares:
+        if s.key == OTHER:
+            label = _("Other")
+        elif projects:
+            label = _("Unassigned") if s.key == NO_PROJECT else (s.label or "–")
+        else:
+            label = s.label or "–"
+        points.append({"label": label, "spend": _float(s.spend), "api": _float(s.api)})
+    return points
+
+
+def _leverage_text(value: Decimal | None, locale: str) -> str:
+    return f"{format_decimal(value, format='#,##0.00', locale=locale)}×" if value is not None else ""
+
+
+def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
+    """The data of each chart of the page (``None`` when there is nothing to draw)."""
+    if charts.empty:
+        return None
+    locale = get_locale()
+    periods = _period_views(charts)
+    base = {"currency": charts.currency, "locale": locale}
+
+    def stack(keys: list[str], attr: str, labels: dict[str, str]) -> dict[str, Any]:
+        return {
+            "names": [_group_label(labels, k) for k in keys],
+            "values": [[_float(getattr(b, attr).get(k, Decimal(0))) for b in charts.buckets] for k in keys],
+        }
+
+    has_spend = charts.has_spend
+    time = {
+        **base,
+        "kind": "usage-time",
+        "periods": periods,
+        "stacks": {
+            "tool": stack(charts.tools, "api_by_tool", charts.tool_labels),
+            "model": stack(charts.models, "api_by_model", {}),
+        },
+        "spend": [_float(b.spend) for b in charts.buckets] if has_spend else None,
+        "spend_label": _("Spend"),
+        "total_label": _("API-equivalent value"),
+    }
+
+    def tokens(classes: tuple[str, ...]) -> dict[str, Any] | None:
+        series = [
+            {"name": _token_label(c), "values": [b.tokens[c] for b in charts.buckets]}
+            for c in classes
+            if any(b.tokens[c] for b in charts.buckets)
+        ]
+        if not series:
+            return None
+        return {**base, "kind": "usage-tokens", "periods": periods, "series": series, "total_label": _("Total")}
+
+    def share(points: list[dict[str, Any]]) -> dict[str, Any]:
+        return {**base, "kind": "usage-share", "points": points, "no_spend": not has_spend}
+
+    leverage = [
+        {
+            "plan": p.plan_name,
+            "fee": Money(p.fee, charts.currency).format(locale) if p.fee is not None else "",
+            "api": Money(p.api, charts.currency).format(locale),
+            "leverage": f"{format_decimal(p.leverage, format='#,##0.00', locale=locale)}×"
+            if p.leverage is not None
+            else "",
+        }
+        for p in charts.leverage
+    ]
+    return {
+        "time": time,
+        "tokens_fresh": tokens(_FRESH_TOKENS),
+        "tokens_cache": tokens(_CACHE_TOKENS),
+        "by_project": share(_share_points(charts, charts.by_project, projects=True)),
+        "by_model": share(_share_points(charts, charts.by_model, projects=False)),
+        "bucket": charts.bucket,
+        "first": charts.first.isoformat() if charts.first else "",
+        "last": charts.last.isoformat() if charts.last else "",
+        "has_spend": has_spend,
+        "unpriced": charts.unpriced,
+        "entries": charts.entries,
+        "unconverted": charts.unconverted,
+        "leverage": leverage,
+    }
+
+
 async def _filter_choices(db: AsyncSession) -> dict[str, Any]:
     return {
         "tools": [{"slug": t.slug, "name": t.name} for t in await _tools.list_tools(db, active_only=False)],
@@ -540,6 +687,14 @@ async def my_ai_usage(
     currency = await CurrencyService().reporting_currency_for(db, selected_project)
     summary = await _service.summarize_entries(db, user, **common)
     loggable = await _service.loggable_projects(db, user)
+    charts = await AiUsageChartService().charts(
+        db,
+        user,
+        currency=currency,
+        excluded=filters.status == "excluded",
+        tool_names=await _tool_names(db),
+        **{k: v for k, v in common.items() if k != "user_id"},
+    )
     return get_templates().TemplateResponse(
         request,
         "pages/ai_usage/my.html",
@@ -548,6 +703,7 @@ async def my_ai_usage(
             "active_page": "ai-usage",
             "rows": await _rows(db, user, entries, refs),
             "totals": await _totals(db, summary, currency),
+            "charts": _charts_view(charts),
             "total": total,
             "offset": offset,
             "limit": limit,

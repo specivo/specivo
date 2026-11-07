@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import pagination %}
-{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label with context %}
+{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label, usage_charts with context %}
 
 {% block title %}{% trans %}My AI usage{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -78,6 +78,8 @@
 
 {{ totals_box(totals) }}
 
+{{ usage_charts(charts, has_rows=(rows | length > 0)) }}
+
 {% if rows %}
 <form method="post" action="/my/ai-usage/reassign/" id="aiu-reassign" class="card sp-card-pad sp-mb-md" data-testid="aiu-reassign-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -110,3 +112,5 @@
 </div>
 {% endif %}
 {% endblock %}
+
+{% block chart_js %}{% if charts %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

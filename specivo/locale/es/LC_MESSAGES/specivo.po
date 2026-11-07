@@ -12248,3 +12248,135 @@ msgstr ""
 msgid "No wiki page, issue or comment links here yet."
 msgstr "Ninguna página wiki, incidencia o comentario enlaza aquí todavía."
 
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:129
+msgid "Charts"
+msgstr "Gráficos"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:131
+#, python-format
+msgid "Per month, %(first)s to %(last)s (UTC days)."
+msgstr "Por mes, del %(first)s al %(last)s (días UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:132
+#, python-format
+msgid "Per week (from Monday), %(first)s to %(last)s (UTC days)."
+msgstr "Por semana (desde el lunes), del %(first)s al %(last)s (días UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:133
+#, python-format
+msgid "Per day, %(first)s to %(last)s (UTC days)."
+msgstr "Por día, del %(first)s al %(last)s (días UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:134
+#, python-format
+msgid "Amounts in %(currency)s."
+msgstr "Importes en %(currency)s."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:135
+msgid "Amounts without a usable exchange rate are left out of the charts; the totals above list them."
+msgstr "Los importes sin un tipo de cambio utilizable quedan fuera de los gráficos; los totales de arriba los enumeran."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:138
+#, python-format
+msgid "%(count)s entry has no price, so it adds nothing to the value shown. Periods marked * have such entries."
+msgid_plural "%(count)s entries have no price, so they add nothing to the value shown. Periods marked * have such entries."
+msgstr[0] "%(count)s entrada no tiene precio, así que no suma nada al valor mostrado. Los periodos marcados con * tienen entradas así."
+msgstr[1] "%(count)s entradas no tienen precio, así que no suman nada al valor mostrado. Los periodos marcados con * tienen entradas así."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:143
+msgid "API-equivalent value and spend over time"
+msgstr "Valor equivalente en API y gasto a lo largo del tiempo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:143
+msgid "API-equivalent value over time"
+msgstr "Valor equivalente en API a lo largo del tiempo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:145
+msgid "Split the value by"
+msgstr "Desglosar el valor por"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:146
+msgid "By tool"
+msgstr "Por herramienta"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:147
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:184
+msgid "By model"
+msgstr "Por modelo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:151
+msgid "API-equivalent value over time; the totals and the table hold the numbers"
+msgstr "Valor equivalente en API a lo largo del tiempo; los totales y la tabla contienen las cifras"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:158
+msgid "Tokens over time"
+msgstr "Tokens a lo largo del tiempo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:160
+msgid "Input and output"
+msgstr "Entrada y salida"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:162
+msgid "Input, output and reasoning tokens over time"
+msgstr "Tokens de entrada, salida y razonamiento a lo largo del tiempo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:166
+msgid "Cache"
+msgstr "Caché"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:168
+msgid "Cache read and cache write tokens over time"
+msgstr "Tokens de lectura y escritura de caché a lo largo del tiempo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:176
+msgid "By project"
+msgstr "Por proyecto"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:178
+msgid "API-equivalent value by project"
+msgstr "Valor equivalente en API por proyecto"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:186
+msgid "API-equivalent value by model"
+msgstr "Valor equivalente en API por modelo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:195
+msgid "Subscription leverage"
+msgstr "Rendimiento de las suscripciones"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:196
+msgid "The API-equivalent value of the usage each of your plans covered in this period, divided by the plan's fee for the same days."
+msgstr "El valor equivalente en API del uso que cubrió cada uno de tus planes en este periodo, dividido entre la cuota del plan para los mismos días."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:201
+msgid "Fee for the period"
+msgstr "Cuota del periodo"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:221
+msgid "No counted usage matches these filters, so there is nothing to chart."
+msgstr "Ningún uso contabilizado coincide con estos filtros, así que no hay nada que graficar."
+
+#: specivo/web/pages/ai_usage.py:366
+#, python-format
+msgid "Week of %(date)s"
+msgstr "Semana del %(date)s"
+
+#: specivo/web/pages/ai_usage.py:372
+#, python-format
+msgid "%(num)d entry without a price"
+msgid_plural "%(num)d entries without a price"
+msgstr[0] "%(num)d entrada sin precio"
+msgstr[1] "%(num)d entradas sin precio"
+
+#: specivo/web/pages/ai_usage.py:378
+#, python-format
+msgid "%(num)d amount without an exchange rate"
+msgid_plural "%(num)d amounts without an exchange rate"
+msgstr[0] "%(num)d importe sin tipo de cambio"
+msgstr[1] "%(num)d importes sin tipo de cambio"
+
+#: specivo/web/pages/ai_usage.py:393
+#: specivo/web/pages/ai_usage.py:401
+msgid "Other"
+msgstr "Otros"
