@@ -14,7 +14,17 @@ import { avatarIconClass, avatarInitials } from '../lib/avatar';
      specials   fixed options listed first, e.g. Unassigned / Me / No release:
                 [{value, label, user?}]
      projectKey the current project, to mark versions shared from elsewhere
-     pageSize   rows per request (default 20) */
+     pageSize   rows per request (default 20)
+     freeText   true for a plain form field rather than a filter: the text
+                input itself carries the form value (so typing a value works
+                without JS), and picking a suggestion fills it in instead of
+                submitting the form. Used by the issue picker.
+     value      freeText only: the field's current value
+     scopeField name of another field of the same form whose value is sent as
+                `project`, so the suggestions follow e.g. a project select.
+
+   Kind 'issue' rows come from an issue search answering
+   [{key, subject, project_key, status}]: the key is the value. */
 export function filterCombobox(config) {
     var cfg = config || {};
     return {
@@ -24,8 +34,11 @@ export function filterCombobox(config) {
         specials: cfg.specials || [],
         projectKey: cfg.projectKey || '',
         pageSize: cfg.pageSize || 20,
+        freeText: !!cfg.freeText,
+        scopeField: cfg.scopeField || '',
 
-        query: '',
+        // A free-text field starts with the value the server rendered into it.
+        query: cfg.freeText && cfg.value ? String(cfg.value) : '',
         items: [],
         open: false,
         loading: false,
@@ -35,10 +48,13 @@ export function filterCombobox(config) {
         debounceTimer: null,
         requestSeq: 0,
         _lastQuery: null,
+        _picked: false,
 
         init() {
             var self = this;
             this.$watch('query', function () {
+                // Filling in a picked value is not a new search.
+                if (self._picked) { self._picked = false; return; }
                 self.open = true;
                 self.search();
             });
@@ -106,6 +122,17 @@ export function filterCombobox(config) {
 
         _row(item) {
             if (this.kind === 'user') return this._userRow(item, item.id, '');
+            if (this.kind === 'issue') {
+                return {
+                    key: 'v-' + item.key,
+                    value: String(item.key),
+                    label: item.key,
+                    secondary: item.subject || '',
+                    isUser: false,
+                    color: '',
+                    special: false
+                };
+            }
             var row = {
                 key: 'v-' + item.id,
                 value: String(item.id),
@@ -145,10 +172,19 @@ export function filterCombobox(config) {
 
         /* ---- Fetching ---- */
 
+        _scope() {
+            if (!this.scopeField) return '';
+            var form = this.$el.closest('form');
+            var field = form && form.elements[this.scopeField];
+            return field && field.value ? String(field.value) : '';
+        },
+
         _url(q, offset) {
             var sep = this.endpoint.indexOf('?') === -1 ? '?' : '&';
             var url = this.endpoint + sep + 'limit=' + this.pageSize + '&offset=' + offset;
             if (q) url += '&q=' + encodeURIComponent(q);
+            var scope = this._scope();
+            if (scope) url += '&project=' + encodeURIComponent(scope);
             return url;
         },
 
@@ -186,8 +222,10 @@ export function filterCombobox(config) {
 
         search() {
             var q = (this.query || '').trim();
-            if (q === this._lastQuery) return;
-            this._lastQuery = q;
+            // The scope is part of the key: another project, other suggestions.
+            var key = q + '\u0000' + this._scope();
+            if (key === this._lastQuery) return;
+            this._lastQuery = key;
             clearTimeout(this.debounceTimer);
             var self = this;
             this.debounceTimer = setTimeout(function () { self.fetchPage(false); }, q ? 200 : 0);
@@ -207,7 +245,7 @@ export function filterCombobox(config) {
 
         onFocus() {
             this.open = true;
-            if (this._lastQuery === null) this.search();
+            this.search();
         },
 
         onBlur() {
@@ -232,8 +270,8 @@ export function filterCombobox(config) {
         moveDown() {
             if (!this.open) {
                 this.open = true;
-                if (this._lastQuery === null) this.search();
-                else if (this.items.length) this.activeIndex = 0;
+                this.search();
+                if (this.items.length) this.activeIndex = 0;
                 return;
             }
             if (this.activeIndex < this.items.length - 1) {
@@ -253,10 +291,11 @@ export function filterCombobox(config) {
         onEnter(event) {
             // With the list open Enter picks; otherwise it submits the form as usual.
             if (!this.open) return;
+            var hasActive = this.activeIndex >= 0 && this.activeIndex < this.items.length;
+            // A free-text field with nothing to pick lets Enter submit what was typed.
+            if (this.freeText && !hasActive) { this.close(); return; }
             event.preventDefault();
-            if (this.activeIndex >= 0 && this.activeIndex < this.items.length) {
-                this.choose(this.items[this.activeIndex]);
-            }
+            if (hasActive) this.choose(this.items[this.activeIndex]);
         },
 
         onEscape() {
@@ -268,6 +307,12 @@ export function filterCombobox(config) {
         },
 
         choose(item) {
+            if (this.freeText) {
+                this._picked = this.query !== item.value;
+                this.query = item.value;
+                this.close();
+                return;
+            }
             var input = this.$refs.value;
             if (!input) return;
             input.value = item.value;

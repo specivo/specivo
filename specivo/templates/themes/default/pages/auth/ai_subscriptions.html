@@ -65,7 +65,7 @@
       {% for p in presets %}<option value="{{ p.key }}" {{ 'selected' if p.key == form.plan_key else '' }}>{{ p.name }} · {{ p.hint }}</option>{% endfor %}
       <option value="custom" {{ 'selected' if form.plan_key == 'custom' else '' }}>{% trans %}Custom{% endtrans %}</option>
     </select>
-    <button type="submit" class="sp-btn-sm">{% trans %}Fill in{% endtrans %}</button>
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Fill in{% endtrans %}</button>
   </form>
   <p class="sp-text-muted-xs sp-mb-md">{% trans %}Plan prices are suggestions from the providers' published list prices and may be out of date. Enter what you actually pay, in the currency you pay in.{% endtrans %}</p>
   {% set submit_label = _("Add subscription") %}

@@ -83,11 +83,11 @@
               <form method="post" action="/admin/ai-model-prices/{{ p.id }}/details/" class="sp-mp-inline">
                 <label>{% trans %}Aliases{% endtrans %}<input type="text" name="aliases" class="form-input" value="{{ p.aliases|join(' ') }}"></label>
                 <label>{% trans %}Note{% endtrans %}<input type="text" name="note" class="form-input" maxlength="1000" value="{{ p.note }}"></label>
-                <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+                <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save{% endtrans %}</button>
               </form>
               <form method="post" action="/admin/ai-model-prices/{{ p.id }}/end/" class="sp-mp-inline">
                 <label>{% trans %}Valid until (UTC){% endtrans %}<input type="datetime-local" step="1" name="effective_to" class="form-input" value="{{ p.to_input }}"></label>
-                <button type="submit" class="sp-btn-sm">{% trans %}Save end{% endtrans %}</button>
+                <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save end{% endtrans %}</button>
               </form>
               <div class="sp-mp-inline">
                 <form method="post" action="/admin/ai-model-prices/{{ p.id }}/active/">

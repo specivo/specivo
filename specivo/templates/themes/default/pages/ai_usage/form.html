@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "pages/ai_usage/_macros.html" import error_text, cost_type_label, source_label with context %}
+{% from "components/filter_combobox.html" import issue_combobox %}
 
 {% block title %}{{ _("Edit AI usage") if entry else _("Log AI usage") }}{% if project %} - {{ project.name }}{% endif %} - {{ brand_name }}{% endblock %}
 
@@ -49,7 +50,10 @@
     {% endif %}
     <div class="sp-aiu-field">
       <label class="form-label" for="aiu-issue">{% trans %}Issue (optional){% endtrans %}</label>
-      <input id="aiu-issue" type="text" name="issue" class="form-input" maxlength="50" value="{{ form.issue }}" placeholder="{{ _('e.g. %(key)s-1') % {'key': project.key} if project else _('e.g. PROJ-42') }}" data-testid="aiu-form-issue">
+      {{ issue_combobox("issue", "aiu-issue", _("Issue (optional)"),
+           _('e.g. %(key)s-1') % {'key': project.key} if project else _('e.g. PROJ-42'),
+           "/my/ai-usage/issues/", scope_field="project", testid="aiu-form-issue",
+           value=form.issue, input_class="form-input") }}
     </div>
     {% if can_log_for_others %}
     <div class="sp-aiu-field">

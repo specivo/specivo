@@ -11,20 +11,11 @@
 .sp-aiu-filter-actions { display: flex; gap: var(--sp-space-sm); }
 /* The person search (filterCombobox) in the column of a filter: its width, not a flex height. */
 .sp-aiu-filter .sp-filter-combo { flex: none; width: 13rem; }
-.sp-aiu-filter .sp-filter-chip { min-height: 2.5rem; }
-/* The filter row and the Move form: selects, inputs and buttons one height,
-   buttons level with the controls (not with the labels), and selects white
-   like the inputs (the grey filter-select fill read as disabled). See the
-   UI Form Style Guide wiki page. */
-.sp-aiu-filter .filter-select,
-.sp-aiu-filter .filter-input,
+/* Control heights, padding and the white select fill come from
+   --sp-control-height and the shared form styles (see the UI Form Style Guide
+   wiki page); here only the buttons sit level with the controls, not with the labels. */
 .sp-aiu-filter-actions .sp-btn,
-.sp-aiu-reassign .sp-btn { min-height: 2.5rem; }
-.sp-aiu-filter .filter-select,
-.sp-aiu-filter .filter-input { padding-top: 4px; padding-bottom: 4px; font-size: var(--sp-font-size-sm); line-height: 1.5; }
-.sp-aiu-filter .filter-select { background-color: var(--sp-bg-surface); }
-.sp-aiu-filter-actions .sp-btn,
-.sp-aiu-reassign .sp-btn { align-self: auto; justify-content: center; }
+.sp-aiu-reassign .sp-btn { align-self: auto; }
 
 .sp-aiu-totals {
   display: grid;
@@ -113,9 +104,9 @@
 @media (max-width: 640px) {
   .sp-aiu-filters,
   .sp-aiu-reassign { flex-direction: column; align-items: stretch; }
+  .sp-aiu-reassign .sp-btn { align-self: flex-start; }
   .sp-aiu-filter .filter-input,
   .sp-aiu-filter .filter-select { width: 100%; }
-  .sp-aiu-reassign .sp-btn { align-self: flex-start; }
   .sp-aiu-form { grid-template-columns: 1fr; }
   .sp-aiu-cost-row { flex-direction: column; }
 }

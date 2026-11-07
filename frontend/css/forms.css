@@ -1,0 +1,64 @@
+/* ============================================================
+   FORM CONTROLS — shared sizing and the select arrow
+   ============================================================
+   Heights come from --sp-control-height (tokens.css), set on .form-input,
+   the .filter-* controls and .sp-btn where they are defined. This partial
+   holds what applies to every control whatever its class, so it is imported
+   last and wins over the older per-component rules. Conventions: the "UI
+   Form Style Guide" wiki page. */
+
+/* Every single-line <select> draws the same arrow, inset from the right
+   border, and keeps its text clear of it. The native arrow sat against the
+   border and differed per browser. The selector outranks the per-component
+   rules (".x select", ".filter-select") on purpose: they set the padding
+   shorthand, and this padding-right must survive it; !important also beats
+   the inline `padding:`/`background:` styles some older templates still put
+   on a select, which would otherwise drop the arrow or run text under it.
+   List boxes (multiple, size) keep their native look. */
+select:not([multiple]):not([size]),
+select[size="1"]:not([multiple]) {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  padding-right: var(--sp-select-padding-right) !important;
+  background-image: var(--sp-select-arrow) !important;
+  background-repeat: no-repeat !important;
+  background-position: right var(--sp-select-arrow-inset) center !important;
+  background-size: 12px 12px !important;
+}
+select:not([multiple]):not([size]):disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* An inline form row: fields (optionally labelled above) and buttons on one
+   line, bottom-aligned so a button lines up with the controls rather than
+   with the labels. Wraps on narrow screens. */
+.sp-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+/* .sp-btn pins itself to flex-start for column layouts; in a row it follows
+   the row's alignment. */
+.sp-form-row .sp-btn,
+.filter-bar .sp-btn { align-self: auto; }
+/* A labelled field inside a row: the label above, the control below. */
+.sp-form-field { display: flex; flex-direction: column; gap: 2px; margin: 0; min-width: 0; }
+.sp-form-field > .filter-label,
+.sp-form-field > .form-label { margin: 0; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+
+
+/* Issue picker (issue_combobox macro): a text field wide enough for a key
+   and the start of a subject; the list shows the subject next to the key. */
+/* Sized by width, not flex-basis: it sits in column-direction fields too. */
+.sp-issue-combo { flex: none; width: 14rem; max-width: 100%; min-width: 0; }
+.sp-issue-combo-block { width: 100%; }
+.sp-issue-combo .sp-filter-combo-input { width: 100%; }
+.sp-issue-combo .sp-filter-combo-menu { min-width: min(22rem, calc(100vw - 32px)); }
+.sp-issue-combo .sp-ac-name { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); flex: none; }
+.sp-issue-combo .sp-ac-suffix { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .sp-form-row { flex-direction: column; align-items: stretch; }
+  .sp-form-row .sp-btn { align-self: flex-start; }
+  .sp-form-row .sp-issue-combo { width: 100%; }
+}

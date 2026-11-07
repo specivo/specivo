@@ -1,5 +1,39 @@
 {% from "components/macros.html" import avatar %}
 
+{# The suggestion list both comboboxes below share (filterCombobox rows). #}
+{% macro _combo_menu(list_id, label) %}
+  <ul class="sp-ac-menu sp-filter-combo-menu" id="{{ list_id }}" role="listbox" aria-label="{{ label }}"
+      x-show="open" x-cloak @mousedown.prevent @scroll="onScroll($event)">
+    <template x-for="(item, idx) in items" :key="item.key">
+      <li class="sp-ac-row" role="option"
+          :id="optionId(idx)"
+          :aria-selected="isActive(idx)"
+          :class="{ 'sp-ac-row-active': idx === activeIndex, 'sp-filter-combo-special': item.special }"
+          @mouseenter="activeIndex = idx"
+          @click="choose(item)">
+        <template x-if="item.isUser && item.avatarIcon">
+          <span class="avatar-xs" :class="item.avatarIcon" aria-hidden="true"></span>
+        </template>
+        <template x-if="item.isUser && !item.avatarIcon && item.avatarUrl">
+          <img class="avatar-xs avatar-img" :src="item.avatarUrl" alt="">
+        </template>
+        <template x-if="item.isUser && !item.avatarIcon && !item.avatarUrl">
+          <span class="avatar-xs" :style="item.avatarStyle" x-text="item.initials" aria-hidden="true"></span>
+        </template>
+        <template x-if="item.color">
+          <span class="sp-tag-ac-color" :style="item.color" aria-hidden="true"></span>
+        </template>
+        <span class="sp-ac-name" x-text="item.label"></span>
+        <template x-if="item.secondary">
+          <span class="sp-ac-suffix" x-text="item.secondary"></span>
+        </template>
+      </li>
+    </template>
+    <li class="sp-ac-empty" role="presentation" x-show="loading">{% trans %}Searching…{% endtrans %}</li>
+    <li class="sp-ac-empty" role="presentation" x-show="!loading && items.length === 0">{% trans %}No matches{% endtrans %}</li>
+  </ul>
+{% endmacro %}
+
 {# --- Searchable filter field (filterCombobox Alpine component) ---
    One field of a GET filter form. With a value chosen it renders the value as
    a chip, server-side: the label, a hidden input that keeps the value in the
@@ -65,36 +99,64 @@
          @keydown.enter="onEnter($event)"
          @keydown.escape.prevent="onEscape()">
   <input type="hidden" name="{{ name }}" value="" disabled x-ref="value">
-  <ul class="sp-ac-menu sp-filter-combo-menu" id="{{ list_id }}" role="listbox" aria-label="{{ label }}"
-      x-show="open" x-cloak @mousedown.prevent @scroll="onScroll($event)">
-    <template x-for="(item, idx) in items" :key="item.key">
-      <li class="sp-ac-row" role="option"
-          :id="optionId(idx)"
-          :aria-selected="isActive(idx)"
-          :class="{ 'sp-ac-row-active': idx === activeIndex, 'sp-filter-combo-special': item.special }"
-          @mouseenter="activeIndex = idx"
-          @click="choose(item)">
-        <template x-if="item.isUser && item.avatarIcon">
-          <span class="avatar-xs" :class="item.avatarIcon" aria-hidden="true"></span>
-        </template>
-        <template x-if="item.isUser && !item.avatarIcon && item.avatarUrl">
-          <img class="avatar-xs avatar-img" :src="item.avatarUrl" alt="">
-        </template>
-        <template x-if="item.isUser && !item.avatarIcon && !item.avatarUrl">
-          <span class="avatar-xs" :style="item.avatarStyle" x-text="item.initials" aria-hidden="true"></span>
-        </template>
-        <template x-if="item.color">
-          <span class="sp-tag-ac-color" :style="item.color" aria-hidden="true"></span>
-        </template>
-        <span class="sp-ac-name" x-text="item.label"></span>
-        <template x-if="item.secondary">
-          <span class="sp-ac-suffix" x-text="item.secondary"></span>
-        </template>
-      </li>
-    </template>
-    <li class="sp-ac-empty" role="presentation" x-show="loading">{% trans %}Searching…{% endtrans %}</li>
-    <li class="sp-ac-empty" role="presentation" x-show="!loading && items.length === 0">{% trans %}No matches{% endtrans %}</li>
-  </ul>
+  {{ _combo_menu(list_id, label) }}
 </div>
 {% endif %}
+{% endmacro %}
+
+{# --- Issue picker (filterCombobox with freeText) ---
+   A form field for an issue key that suggests issues while the user types.
+   The text input itself carries the value, so typing a key works without JS;
+   picking a suggestion fills the key in. Unlike filter_combobox it never
+   submits the form.
+
+   name         form field name, e.g. "target_issue"
+   input_id     id of the text input, for the <label for>
+   label        accessible name of the suggestion list
+   endpoint     issue search URL answering [{key, subject, project_key, status}]
+   scope_field  optional name of a field in the same form whose value is sent
+                as `project` (suggestions follow a project select)
+   testid       optional data-testid of the text input
+   value        the field's current value
+   input_class  class of the text input: "filter-input" in filter rows,
+                "form-input" in a stacked form
+#}
+{% macro issue_combobox(name, input_id, label, placeholder, endpoint, scope_field='', testid='', maxlength=50, value='', input_class='filter-input') %}
+{% set list_id = "sp-issue-" ~ input_id ~ "-list" %}
+<div class="sp-filter-combo sp-issue-combo{{ ' sp-issue-combo-block' if input_class == 'form-input' else '' }}"
+     data-issue-combo="{{ name }}"
+     x-data='filterCombobox({
+       endpoint: {{ endpoint | tojson }},
+       kind: "issue",
+       listId: {{ list_id | tojson }},
+       freeText: true,
+       value: {{ value | tojson }},
+       scopeField: {{ scope_field | tojson }}
+     })'>
+  <input type="text"
+         id="{{ input_id }}"
+         name="{{ name }}"
+         class="{{ input_class }} sp-filter-combo-input"
+         role="combobox"
+         aria-autocomplete="list"
+         aria-haspopup="listbox"
+         aria-expanded="false"
+         :aria-expanded="expanded()"
+         aria-controls="{{ list_id }}"
+         :aria-activedescendant="activeId()"
+         placeholder="{{ placeholder }}"
+         maxlength="{{ maxlength }}"
+         value="{{ value }}"
+         autocomplete="off"
+         spellcheck="false"
+         {% if testid %}data-testid="{{ testid }}"{% endif %}
+         x-model="query"
+         @focus="onFocus()"
+         @blur="onBlur()"
+         @keydown.down.prevent="moveDown()"
+         @keydown.up.prevent="moveUp()"
+         @keydown.enter="onEnter($event)"
+         @keydown.escape.prevent="onEscape()">
+  {{ _combo_menu(list_id, label) }}
+</div>
 {% endmacro %}
