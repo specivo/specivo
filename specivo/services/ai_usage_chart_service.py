@@ -27,7 +27,9 @@ Each returns plain numbers:
   where the reader may see seat cost: the seat cost the report counts per plan
   (instance only: plan names are private to their holder and administrators),
   per person and in total, against the value of the subscription usage. A
-  project report counts only the shares the project's entries carry.
+  project report counts only the shares the project's entries carry. Each of
+  those tables lists the :data:`LEVERAGE_TOP` largest by fee, then by value,
+  and sums the rest into one "others" row (exact sums, its own ratio).
 
 Visibility and filters are those of the page the charts sit on
 (``AiUsageService._list_conditions``): on My AI usage counted entries by
@@ -99,6 +101,8 @@ AUTO_MAX_BUCKETS = 120
 MAX_BUCKETS = AUTO_MAX_BUCKETS
 #: Groups shown by name in a breakdown or a stack; the rest are summed as one "other" group.
 TOP_N = 8
+#: Plans and people a leverage table of the spend reports names; the rest are summed into one row.
+LEVERAGE_TOP = 10
 #: Key of the "other" group (the page translates it).
 OTHER = "\x00other"
 #: Key of entries without a project (the page translates it).
@@ -301,8 +305,14 @@ class UsageCharts:
     #: Per plan. My AI usage: the reader's plans; instance report: every plan; project report: none
     #: (plan details stay with their holder and administrators).
     leverage: list[PlanLeverage] = field(default_factory=list)
-    #: Spend reports: per person, and all of them together (None without seat cost).
+    #: Spend reports: the plans past the first LEVERAGE_TOP, summed (``plan_name`` empty), and how many.
+    leverage_others: PlanLeverage | None = None
+    leverage_others_count: int = 0
+    #: Spend reports: per person (the first LEVERAGE_TOP), and all of them together (None without seat cost).
     people: list[PersonLeverage] = field(default_factory=list)
+    #: The people past the first LEVERAGE_TOP, summed, and how many.
+    people_others: PersonLeverage | None = None
+    people_others_count: int = 0
     leverage_total: PersonLeverage | None = None
     #: Whether seat cost is part of the numbers (spend reports, readers who may see it).
     seat_shown: bool = False
@@ -344,6 +354,21 @@ class _Fees:
         fee = None if self.broken or not self.fee else self.fee
         ratio = (self.api / fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if fee else None
         return PersonLeverage(user_id=self.user_id, label="", fee=fee, api=self.api, leverage=ratio)
+
+
+def _top_and_rest[T](ranked: list[T]) -> tuple[list[T], list[T]]:
+    """The first :data:`LEVERAGE_TOP` of *ranked* and the rest; all of them when only one would be left."""
+    if len(ranked) <= LEVERAGE_TOP + 1:
+        return ranked, []
+    return ranked[:LEVERAGE_TOP], ranked[LEVERAGE_TOP:]
+
+
+def _summed(items: Iterable[_Fees]) -> _Fees:
+    """One :class:`_Fees` adding up *items* (an "others" row): exact sums, and broken if any of them is."""
+    out = _Fees(user_id=None)
+    for item in items:
+        out.add(item)
+    return out
 
 
 class AiUsageChartService:
@@ -488,10 +513,10 @@ class AiUsageChartService:
         if not self._frame(out, first, last, bucket):
             return out
         out.seat_shown = seat_shown and out.bucket in CHOSEN_SIZES
-        raw, _converted = await self._fill(session, out, conditions, rate_policy, tool_names)
+        await self._fill(session, out, conditions, rate_policy, tool_names)
         if out.seat_shown:
             await self._seats(session, viewer, out, reports, project, rate_policy, filters)
-        await self._label_people(session, out, raw)
+        await self._label_people(session, out)
         return out
 
     # -- range and buckets -------------------------------------------------------------
@@ -645,9 +670,10 @@ class AiUsageChartService:
             out.by_user = self._top_shares(shares["user"])
         return raw, converted
 
-    async def _label_people(self, session: AsyncSession, out: UsageCharts, raw: list[dict[str, Any]]) -> None:
-        """Name the users of the stacks, breakdown and leverage (one query)."""
-        ids = {r["user_id"] for r in raw} | {p.user_id for p in out.people if p.user_id is not None}
+    async def _label_people(self, session: AsyncSession, out: UsageCharts) -> None:
+        """Name the users the stacks, breakdown and leverage tables show (one query, bounded by what they show)."""
+        shown = {k for k in out.users if k != OTHER} | {s.key for s in out.by_user if s.key != OTHER}
+        ids = {int(k) for k in shown if k.isdigit()} | {p.user_id for p in out.people if p.user_id is not None}
         ids |= {p.user_id for p in out.leverage if p.user_id is not None}
         if not ids:
             return
@@ -816,15 +842,28 @@ class AiUsageChartService:
         for plan in plans.values():
             people.setdefault(plan.user_id, _Fees(user_id=plan.user_id)).add(plan)
             total.add(plan)
-        out.people = sorted(
-            (p.person() for p in people.values()), key=lambda p: (-(p.fee or Decimal(0)), -p.api, p.user_id or 0)
-        )
         out.leverage_total = total.person()
+
+        def rank(fees: _Fees, tie: int) -> tuple[Decimal, Decimal, int]:
+            shown = fees.person()
+            return (-(shown.fee or Decimal(0)), -shown.api, tie)
+
+        ranked_people = sorted(people.values(), key=lambda f: rank(f, f.user_id or 0))
+        kept_people, rest_people = _top_and_rest(ranked_people)
+        out.people = [p.person() for p in kept_people]
+        if rest_people:
+            out.people_others = _summed(rest_people).person()
+            out.people_others_count = len(rest_people)
         if project is None:
-            stmt = select(AiSubscription.id, AiSubscription.plan_name).where(AiSubscription.id.in_(list(plans)))
+            ranked_plans = sorted(plans.items(), key=lambda item: rank(item[1], item[0]))
+            kept_plans, rest_plans = _top_and_rest(ranked_plans)
+            # Plan names only for the plans listed.
+            stmt = select(AiSubscription.id, AiSubscription.plan_name).where(
+                AiSubscription.id.in_([sub_id for sub_id, _plan in kept_plans])
+            )
             names = {sid: name for sid, name in (await session.execute(stmt)).all()}
             listed = []
-            for sub_id, plan in plans.items():
+            for sub_id, plan in kept_plans:
                 person = plan.person()
                 listed.append(
                     PlanLeverage(
@@ -836,7 +875,13 @@ class AiUsageChartService:
                         user_id=plan.user_id,
                     )
                 )
-            out.leverage = sorted(listed, key=lambda p: (-(p.fee or Decimal(0)), -p.api, p.subscription_id))
+            out.leverage = listed
+            if rest_plans:
+                summed = _summed([plan for _sub_id, plan in rest_plans]).person()
+                out.leverage_others = PlanLeverage(
+                    subscription_id=0, plan_name="", fee=summed.fee, api=summed.api, leverage=summed.leverage
+                )
+                out.leverage_others_count = len(rest_plans)
 
     # -- leverage --------------------------------------------------------------------
 

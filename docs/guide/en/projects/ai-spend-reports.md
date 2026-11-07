@@ -44,9 +44,11 @@ link to someone. They see it with their own rights: the same filters, only the e
 
 ## Spend by person
 
-Under the drill-down, **Spend by person** lists everyone in the current selection: their spend, the
-tools they used and how their usage is paid. The colour of a person is the same as in the charts on
-the page. **Show** opens that person in the drill-down.
+Under the drill-down, **Spend by person** shows the ten people with the largest spend in the current
+selection: their spend, the tools they used and how their usage is paid. The colour of a person is
+the same as in the charts on the page. **Show** opens that person in the drill-down. When there are
+more, a last card says how many and what they spent together; **Show all** opens the person level,
+largest spend first.
 
 How usage is paid follows the rules for seat cost below. The AI spend page names each person's plans
 (*Claude Max 20x*, *Pay-per-use API*). A project report that shows seat cost says **Subscription
@@ -107,8 +109,11 @@ The period buttons are always shown; the other settings are under **Dates, filte
 - **Group by** and **Then by**: person, project (on the AI spend page), issue, tool, provider, model,
   cost type or branch. Choose **Nothing (totals)** for one line.
 - **Per**: split each group per **day**, **week** (from Monday) or **month**. Opening such a row
-  opens its group for that period's dates.
-- **User**, **Tool**, **Model**, **Cost type**: narrow the usage. Unallocated seat cost has no tool
+  opens its group for that period's dates. Each period lists the ten groups with the largest spend
+  over the whole range and sums the rest into **Other**; the CSV lists every row.
+- **User**: type part of a name or login and pick the person. It finds only people whose usage you
+  may see there; without JavaScript, type the exact login.
+- **Tool**, **Model**, **Cost type**: narrow the usage. Unallocated seat cost has no tool
   or model, so it is left out when you filter by one, and likewise when you open a project, an issue
   or a branch.
 - **Currency**: the [reporting currency](../install/currencies.md#reporting-currency) of the project
@@ -131,10 +136,11 @@ currency and exchange rates, so they add up to the totals:
 - The value **by user**, **by project** (AI spend page), **by model** and **by tool**: the eight
   largest, the rest as **Other**. These show pay-per-use spend, since seat cost is not split by
   model or tool; the table holds it.
-- **Subscription leverage**, only where you may see seat cost. The AI spend page lists every plan
-  with its holder, every person and the instance total: the fees counted in the period against the
+- **Subscription leverage**, only where you may see seat cost. The AI spend page lists the plans
+  with their holders, the people and the instance total: the fees counted in the period against the
   API-equivalent value of the usage they covered. A project report lists people only, each with the
-  share of their fees carried by the project's usage, never plan names or whole fees.
+  share of their fees carried by the project's usage, never plan names or whole fees. Each table
+  lists the ten largest fees; an **Others** row sums the rest, so the total still adds up.
 
 The charts run from the first to the last day with usage in the chosen period (on the AI spend page,
 also the days of plans whose fee nobody's usage carried), one point per day, week or month

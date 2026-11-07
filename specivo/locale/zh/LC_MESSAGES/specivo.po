@@ -11855,3 +11855,35 @@ msgstr "订阅席位"
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr "按量付费 API"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s group is summed into \"Other\". The CSV lists every row."
+msgid_plural "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s groups are summed into \"Other\". The CSV lists every row."
+msgstr[0] "每个周期列出整个区间内支出最多的 %(shown)s 个组；其余 %(count)s 个组合并为“其他”。CSV 包含所有行。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person"
+msgid_plural "%(count)s more people"
+msgstr[0] "另外 %(count)s 人"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Their spend together; the Person level lists each of them."
+msgstr "他们的合计支出；成员层级会逐一列出。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Show all"
+msgstr "全部显示"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s plan)"
+msgid_plural "Others (%(count)s plans)"
+msgstr[0] "其他（%(count)s 个套餐）"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s person)"
+msgid_plural "Others (%(count)s people)"
+msgstr[0] "其他（%(count)s 人）"

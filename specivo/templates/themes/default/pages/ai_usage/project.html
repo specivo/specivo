@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, pagination %}
-{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label, usage_charts with context %}
+{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label, usage_charts, person_filter_field with context %}
 
 {% block title %}{% trans %}AI usage{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -31,15 +31,7 @@
 {% if error %}<div class="flash flash-error" role="alert" data-testid="aiu-error">{{ list_error_text(error) }}</div>{% endif %}
 
 <form method="get" action="/projects/{{ project.key }}/ai-usage/" class="sp-aiu-filters" data-testid="aiu-filters">
-  {% if members %}
-  <label class="sp-aiu-filter">
-    <span class="filter-label">{% trans %}User{% endtrans %}</span>
-    <select name="user_id" class="filter-select">
-      <option value="">{% trans %}Everyone{% endtrans %}</option>
-      {% for m in members %}<option value="{{ m.id }}" {{ 'selected' if filters.user_id == m.id | string else '' }}>{{ m.name }}</option>{% endfor %}
-    </select>
-  </label>
-  {% endif %}
+  {{ person_filter_field(person_filter) }}
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}Tool{% endtrans %}</span>
     <select name="tool" class="filter-select">

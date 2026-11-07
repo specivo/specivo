@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, pagination %}
-{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts with context %}
+{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts, person_filter_field with context %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
@@ -8,7 +8,7 @@
   drill-down: path, title, tiles, group switch, table rows and the "Spend by ..." card, see
   ai_spend_reports._drill_view), sessions (the entries of the sessions level), people (the
   person cards), charts (the AI usage charts, see ai_usage._charts_view), bucket_links,
-  members, tools, currencies.
+  person_filter (the person search field: offered, endpoint, chip), tools, currencies.
 #}
 
 {% macro dim_label(dim) -%}
@@ -157,15 +157,7 @@
       {% for p in periods %}<option value="{{ p }}" {{ 'selected' if form.period == p else '' }}>{{ period_label(p) }}</option>{% endfor %}
     </select>
   </label>
-  {% if members %}
-  <label class="sp-aiu-filter">
-    <span class="filter-label">{% trans %}User{% endtrans %}</span>
-    <select name="user_id" class="filter-select">
-      <option value="">{% trans %}Everyone{% endtrans %}</option>
-      {% for m in members %}<option value="{{ m.id }}" {{ 'selected' if form.user_id == m.id | string else '' }}>{{ m.name }}</option>{% endfor %}
-    </select>
-  </label>
-  {% elif form.user_id %}<input type="hidden" name="user_id" value="{{ form.user_id }}">{% endif %}
+  {{ person_filter_field(person_filter) }}
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}Tool{% endtrans %}</span>
     <select name="tool" class="filter-select">
@@ -386,6 +378,27 @@
         </thead>
         <tbody>
           {% for r in drill.rows %}
+          {% if r.is_other %}
+          <tr class="sp-drill-row sp-drill-other" data-testid="spend-period-other">
+            <td class="sp-aiu-date" data-label="{{ period_label(report.period) }}">{{ r.period }}</td>
+            <th scope="row" class="sp-drill-namecell" colspan="{{ report.group_by | length or 1 }}" data-label="">
+              <span class="sp-drill-name"><span class="sp-swatch sp-slot-7" aria-hidden="true"></span>{% trans count=r.groups %}Other ({{ count }} group){% pluralize %}Other ({{ count }} groups){% endtrans %}</span>
+            </th>
+            <td class="sp-aiu-num" data-label="{{ _('Entries') }}">{{ r.entries }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ r.tokens }}">{{ r.tokens_short }}</td>
+            {% if detail and seats %}
+            <td class="sp-aiu-num" data-label="{{ _('Pay-per-use') }}">{{ amount_cell(r.marginal) }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Seat cost') }}">{{ amount_cell(r.seat_allocated) }}</td>
+            {% endif %}
+            <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ amount_cell(r.total_spend) }}</strong></td>
+            {% if detail %}
+            <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(r.api_equivalent) }}</td>
+            {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ r.leverage or "–" }}</td>{% endif %}
+            {% endif %}
+            <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-7" style="width:{{ r.share.width }}%"></span><span class="sp-drill-share-pct">{{ r.share.label }}</span></span></td>
+            {% if detail %}<td></td>{% endif %}
+          </tr>
+          {% else %}
           <tr class="sp-drill-row{{ ' is-link' if r.open else '' }}{{ ' sp-spend-seat-row' if r.seat_only else '' }}" data-testid="spend-row">
             {% if report.period %}<td class="sp-aiu-date" data-label="{{ period_label(report.period) }}">{{ r.period }}</td>{% endif %}
             {% for c in r.cells %}
@@ -416,6 +429,7 @@
             <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-{{ r.slot }}" style="width:{{ r.share.width }}%"></span><span class="sp-drill-share-pct">{{ r.share.label }}</span></span></td>
             {% if detail %}<td class="sp-aiu-actions" data-label="">{% if r.drill %}<a class="sp-btn-sm" href="{{ r.drill }}" data-testid="spend-drill">{% if r.seat_only %}{% trans %}Subscriptions{% endtrans %}{% else %}{% trans %}Entries{% endtrans %}{% endif %}</a>{% endif %}</td>{% endif %}
           </tr>
+          {% endif %}
           {% endfor %}
           {% if drill.other %}
           {% set o = drill.other %}
@@ -461,6 +475,7 @@
         </tfoot>
       </table>
       </div>
+      {% if drill.period_note %}<p class="sp-text-muted-xs sp-drill-hint" data-testid="spend-period-note">{% trans shown=drill.period_note.shown, count=drill.period_note.folded %}Each period lists the {{ shown }} groups with the largest spend over the whole range; the other {{ count }} group is summed into "Other". The CSV lists every row.{% pluralize %}Each period lists the {{ shown }} groups with the largest spend over the whole range; the other {{ count }} groups are summed into "Other". The CSV lists every row.{% endtrans %}</p>{% endif %}
       {% if drill.single %}<p class="sp-text-muted-xs sp-drill-hint">{% trans %}Select a row to open it. Every row leads down to the entries behind it.{% endtrans %}</p>{% endif %}
     {% else %}
       <div class="card sp-aiu-empty" data-testid="spend-empty">{% trans %}No AI usage in this period.{% endtrans %}</div>
@@ -506,8 +521,17 @@
       <a class="sp-btn-sm sp-person-open" href="{{ c.url }}" aria-label="{{ _('Open %(name)s in the report') % {'name': c.name} }}" data-testid="spend-person-open">{% trans %}Show{% endtrans %} <span aria-hidden="true">→</span></a>
     </li>
     {% endfor %}
+    {% if people.more %}
+    <li class="sp-person sp-person--more" data-testid="spend-people-more">
+      <span class="sp-person-avatar sp-slot-7" aria-hidden="true">+{{ people.more.count }}</span>
+      <div class="sp-person-main">
+        <div class="sp-person-head"><strong class="sp-person-name">{% trans count=people.more.count %}{{ count }} more person{% pluralize %}{{ count }} more people{% endtrans %}</strong><span class="sp-person-spend" data-testid="spend-people-more-spend">{{ people.more.spend }}</span></div>
+        <div class="sp-person-meta"><span class="sp-text-muted-xs">{% trans %}Their spend together; the Person level lists each of them.{% endtrans %}</span></div>
+      </div>
+      <a class="sp-btn-sm sp-person-open" href="{{ people.more.url }}" data-testid="spend-people-more-open">{% trans %}Show all{% endtrans %} <span aria-hidden="true">→</span></a>
+    </li>
+    {% endif %}
   </ol>
-  {% if people.more %}<p class="sp-text-muted-xs">{% trans count=people.more %}{{ count }} more person not shown.{% pluralize %}{{ count }} more people not shown.{% endtrans %}</p>{% endif %}
 </section>
 {% endif %}
 

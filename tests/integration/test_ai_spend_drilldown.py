@@ -243,10 +243,11 @@ async def test_person_cards_on_the_admin_page_name_plans(client: AsyncClient, w:
     html = await _page(client, w.admin, ADMIN, **MARCH)
     people = _section(html, "spend-people")
     names = re.findall(r'class="sp-person-name">([^<]+)<', people)
-    assert names[:2] == ["Rep Alice", "Rep Bob"]
-    payments = re.findall(r'data-testid="spend-person-payment">([^<]+)<', people)
-    assert payments[0] == "Secret plan"  # alice: her plan, administrators only
-    assert "Pay-per-use API" in payments[1]
+    # Largest spend first: alice's plan, dave's idle plan (unallocated on the instance), then bob.
+    assert names == ["Rep Alice", "Rep Dave", "Rep Bob"]
+    payments = dict(zip(names, re.findall(r'data-testid="spend-person-payment">([^<]+)<', people), strict=True))
+    assert payments["Rep Alice"] == "Secret plan"  # alice: her plan, administrators only
+    assert "Pay-per-use API" in payments["Rep Bob"]
     opened = _links(people, "spend-person-open")
     assert opened[0]["user_id"] == str(w.alice.id) and opened[0]["group"] == "issue"
     # The avatar has the colour of the person in the chart on the same page.

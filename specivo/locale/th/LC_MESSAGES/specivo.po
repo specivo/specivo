@@ -12306,3 +12306,35 @@ msgstr "ที่นั่งการสมัครใช้งาน"
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr "API แบบจ่ายตามการใช้งาน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s group is summed into \"Other\". The CSV lists every row."
+msgid_plural "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s groups are summed into \"Other\". The CSV lists every row."
+msgstr[0] "แต่ละช่วงเวลาแสดง %(shown)s กลุ่มที่มีค่าใช้จ่ายสูงสุดตลอดทั้งช่วง ส่วนอีก %(count)s กลุ่มรวมไว้ใน \"อื่น ๆ\" ไฟล์ CSV มีทุกแถว"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person"
+msgid_plural "%(count)s more people"
+msgstr[0] "อีก %(count)s คน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Their spend together; the Person level lists each of them."
+msgstr "ค่าใช้จ่ายรวมของพวกเขา ระดับบุคคลแสดงรายละเอียดของแต่ละคน"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Show all"
+msgstr "แสดงทั้งหมด"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s plan)"
+msgid_plural "Others (%(count)s plans)"
+msgstr[0] "อื่น ๆ (%(count)s แผน)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s person)"
+msgid_plural "Others (%(count)s people)"
+msgstr[0] "อื่น ๆ (%(count)s คน)"

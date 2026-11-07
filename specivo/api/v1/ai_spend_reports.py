@@ -3,8 +3,11 @@
 - ``GET /projects/{key}/ai-usage/report/``: the project's AI usage the caller
   may read, grouped and totalled in one currency.
 - ``GET /ai-usage/report/``: the whole instance; administrators only.
+- ``GET /projects/{key}/ai-usage/report/people/`` and ``GET /ai-usage/report/people/``:
+  a page of the people the report's person filter may name (the search behind it).
 
-Both take ``format=csv`` for a CSV file of the same rows. Included before the
+Both reports take ``format=csv`` for a CSV file of every row; the JSON answer
+is a page of the rows (``offset``, ``limit``) with the totals of all of them. Included before the
 AI usage router, so ``/ai-usage/report/`` is matched before
 ``/ai-usage/{entry_id}/``. See :mod:`specivo.services.ai_spend_report_service`
 for the measures, the seat allocation and who sees seat cost.
@@ -25,6 +28,7 @@ from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.ai_spend_report import SpendReportOut
 from specivo.schemas.ai_usage import AiUsageCostType
+from specivo.schemas.project import AssigneeSuggestionOut
 from specivo.services.ai_spend_report_service import (
     AiSpendReportService,
     ReportFilters,
@@ -32,6 +36,7 @@ from specivo.services.ai_spend_report_service import (
     parse_group_by,
     report_csv,
 )
+from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 
@@ -44,6 +49,13 @@ NONE_VALUE = "-"
 
 Period = Literal["day", "week", "month"]
 Preset = Literal["7d", "30d", "this_month", "last_month"]
+
+#: Rows of a JSON report page by default, and at most (the CSV has every row).
+JSON_ROWS_DEFAULT = 500
+JSON_ROWS_MAX = 5000
+
+_OFFSET = Query(0, ge=0, description="JSON: rows to skip (the totals always cover every row)")
+_LIMIT = Query(JSON_ROWS_DEFAULT, ge=1, le=JSON_ROWS_MAX, description="JSON: rows per page; `row_count` has them all")
 
 _GROUP_BY = Query(
     "user",
@@ -76,6 +88,8 @@ async def _report(
     project_filter: str | None = None,
     issue: str | None = None,
     branch: str | None = None,
+    offset: int = 0,
+    limit: int = JSON_ROWS_DEFAULT,
 ) -> SpendReportOut | Response:
     await enforce_ai_report_rate_limit(request, response, user)
     first, last = default_range(preset)
@@ -104,7 +118,7 @@ async def _report(
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
-    return SpendReportOut.from_report(report)
+    return SpendReportOut.from_report(report, offset=offset, limit=limit)
 
 
 async def _narrowing(
@@ -184,6 +198,8 @@ async def project_ai_spend_report(
     branch: str | None = _BRANCH,
     sort: Literal["key", "spend"] = Query("key", description="By the grouping key (default), or by total spend"),
     format: Literal["json", "csv"] = Query("json"),  # noqa: A002
+    offset: int = _OFFSET,
+    limit: int = _LIMIT,
     current_user: User = Depends(get_current_user),
 ) -> SpendReportOut | Response:
     """The project's AI spend: rows from the entries you may read, in one reporting currency.
@@ -217,6 +233,8 @@ async def project_ai_spend_report(
         fmt=format,
         issue=issue,
         branch=branch,
+        offset=offset,
+        limit=limit,
     )
 
 
@@ -247,6 +265,8 @@ async def instance_ai_spend_report(
     branch: str | None = _BRANCH,
     sort: Literal["key", "spend"] = Query("key"),
     format: Literal["json", "csv"] = Query("json"),  # noqa: A002
+    offset: int = _OFFSET,
+    limit: int = _LIMIT,
     current_user: User = Depends(get_current_user),
 ) -> SpendReportOut | Response:
     """The whole instance's AI spend; administrators only (403 otherwise).
@@ -278,4 +298,60 @@ async def instance_ai_spend_report(
         project_filter=project,
         issue=issue,
         branch=branch,
+        offset=offset,
+        limit=limit,
     )
+
+
+# ---------------------------------------------------------------------------
+# The person filter's search
+# ---------------------------------------------------------------------------
+
+_Q = Query(None, max_length=100, description="Substring of the login or display name")
+_PEOPLE_OFFSET = Query(0, ge=0, description="Matches to skip, to page through them")
+_PEOPLE_LIMIT = Query(20, ge=1, le=50)
+
+
+def _people_out(users: list[User]) -> list[AssigneeSuggestionOut]:
+    return [
+        AssigneeSuggestionOut(
+            id=u.id,
+            login=u.login,
+            display_name=u.display_name,
+            avatar_url=u.avatar_url,
+            avatar_color=str((u.preferences or {}).get("avatar_color") or ""),
+        )
+        for u in users
+    ]
+
+
+@router.get("/projects/{project_key}/ai-usage/report/people/", response_model=list[AssigneeSuggestionOut])
+async def project_ai_spend_people(
+    project_key: str,
+    db: DbSession,
+    q: str | None = _Q,
+    offset: int = _PEOPLE_OFFSET,
+    limit: int = _PEOPLE_LIMIT,
+    current_user: User = Depends(get_current_user),
+) -> list[AssigneeSuggestionOut]:
+    """Search the people with AI usage in the project that you may read: the report's person filter.
+
+    Never a system account, never someone whose entries you cannot see.
+    Ordered by display name and paged with ``offset``/``limit``; a page
+    shorter than ``limit`` is the last.
+    """
+    project = await _projects.get_by_key(db, project_key.upper())
+    await _projects.require_project_access(db, project, current_user)
+    return _people_out(await AiUsageService().search_people(db, current_user, project, q, offset=offset, limit=limit))
+
+
+@router.get("/ai-usage/report/people/", response_model=list[AssigneeSuggestionOut])
+async def instance_ai_spend_people(
+    db: DbSession,
+    q: str | None = _Q,
+    offset: int = _PEOPLE_OFFSET,
+    limit: int = _PEOPLE_LIMIT,
+    current_user: User = Depends(get_current_user),
+) -> list[AssigneeSuggestionOut]:
+    """Search everyone with AI usage or a subscription: the instance report's person filter (administrators only)."""
+    return _people_out(await AiUsageService().search_people(db, current_user, None, q, offset=offset, limit=limit))

@@ -12591,3 +12591,43 @@ msgstr "Место в подписке"
 #: specivo/web/pages/ai_spend_reports.py
 msgid "Pay-per-use API"
 msgstr "API с оплатой за использование"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s group is summed into \"Other\". The CSV lists every row."
+msgid_plural "Each period lists the %(shown)s groups with the largest spend over the whole range; the other %(count)s groups are summed into \"Other\". The CSV lists every row."
+msgstr[0] "В каждом периоде показаны %(shown)s групп с наибольшими расходами за весь диапазон; остальная %(count)s группа сложена в «Прочее». В CSV есть все строки."
+msgstr[1] "В каждом периоде показаны %(shown)s групп с наибольшими расходами за весь диапазон; остальные %(count)s группы сложены в «Прочее». В CSV есть все строки."
+msgstr[2] "В каждом периоде показаны %(shown)s групп с наибольшими расходами за весь диапазон; остальные %(count)s групп сложены в «Прочее». В CSV есть все строки."
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person"
+msgid_plural "%(count)s more people"
+msgstr[0] "Ещё %(count)s человек"
+msgstr[1] "Ещё %(count)s человека"
+msgstr[2] "Ещё %(count)s человек"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Their spend together; the Person level lists each of them."
+msgstr "Их расходы вместе; на уровне «Сотрудник» виден каждый."
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Show all"
+msgstr "Показать всех"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s plan)"
+msgid_plural "Others (%(count)s plans)"
+msgstr[0] "Прочие (%(count)s тариф)"
+msgstr[1] "Прочие (%(count)s тарифа)"
+msgstr[2] "Прочие (%(count)s тарифов)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+#, python-format
+msgid "Others (%(count)s person)"
+msgid_plural "Others (%(count)s people)"
+msgstr[0] "Прочие (%(count)s человек)"
+msgstr[1] "Прочие (%(count)s человека)"
+msgstr[2] "Прочие (%(count)s человек)"

@@ -91,6 +91,8 @@ from specivo.web.pages.ai_usage import (
     _rows,
     _tool_names,
     cached_chart_payload,
+    person_filter_chip,
+    sees_everyone,
 )
 
 router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
@@ -137,10 +139,13 @@ DRILL_NEXT: dict[str, tuple[str, ...]] = {
 }
 #: Rows of a drill-down table; the rest are summed into one "other" row (the CSV has them all).
 DRILL_MAX_ROWS = 30
+#: Groups a drill-down table with a period ("Per week") shows in each period, the largest by
+#: spend over the whole range; the rest are summed into one "other" row per period.
+DRILL_PERIOD_GROUPS = 10
 #: Bars of the "Spend by ..." card.
 SIDE_BARS = 8
-#: Person cards at most; the rest are counted.
-PEOPLE_MAX = 60
+#: Person cards: the largest by spend; one more card sums the rest and opens the Person level.
+PEOPLE_TOP = 10
 #: Page sizes of the sessions level.
 SESSION_LIMITS = (10, 25, 50)
 
@@ -175,6 +180,8 @@ class ReportForm:
     seats: str = "on"
     sort: str = "key"
     user_id: str = ""
+    #: A login typed into the person filter without JS; the page resolves it into ``user_id``.
+    user: str = ""
     tool: str = ""
     model: str = ""
     cost_type: str = ""
@@ -210,6 +217,7 @@ class ReportForm:
             seats="off" if text("seats") == "off" else "on",
             sort="spend" if text("sort") == "spend" else "key",
             user_id=text("user_id") if text("user_id").isdigit() else "",
+            user=text("user")[:255],
             tool=text("tool").lower()[:50],
             model=text("model")[:200],
             cost_type=text("cost_type") if text("cost_type") in AI_USAGE_COST_TYPES else "",
@@ -284,6 +292,8 @@ class ReportForm:
             "limit": str(self.limit) if self.limit != 25 else "",
             **override,
         }
+        # An unknown login typed into the person filter stays in the links, to be named again.
+        values["user"] = self.user if values.get("user_id") == "0" else ""
         if values.get("group") != SESSIONS:
             values["offset"] = values["limit"] = ""
         return urlencode({k: v for k, v in values.items() if v})
@@ -328,6 +338,7 @@ def _form_params(
     seats: str = Query(""),
     sort: str = Query(""),
     user_id: str = Query(""),
+    user: str = Query(""),
     tool: str = Query(""),
     model: str = Query(""),
     cost_type: str = Query(""),
@@ -352,6 +363,7 @@ def _form_params(
         seats=seats,
         sort=sort,
         user_id=user_id,
+        user=user,
         tool=tool,
         model=model,
         cost_type=cost_type,
@@ -416,7 +428,8 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         scope.labels["issue"] = form.issue
     if form.user_id:
         person = await db.get(User, int(form.user_id))
-        scope.labels["user"] = (person.display_name or person.login) if person is not None else form.user_id
+        named = (person.display_name or person.login) if person is not None else ""
+        scope.labels["user"] = named or form.user or form.user_id
     if form.tool:
         scope.labels["tool"] = (await _tool_names(db)).get(form.tool, form.tool)
     if form.model:
@@ -856,21 +869,69 @@ def _tabs(base_url: str, form: ReportForm, instance: bool) -> list[dict[str, Any
     ]
 
 
-def _fold(report: SpendReport) -> tuple[list[ReportRow], ReportRow | None, int]:
-    """The rows a drill-down table shows: all of them, or the largest by spend and one "other" row.
+@dataclass
+class Folded:
+    """The rows a drill-down table shows, and what it sums into "other" rows."""
 
-    Only without a period bucket (a row per period and group is the report's
-    time view). Returns ``(rows, other, groups folded)``; the kept rows keep
-    the report's order.
+    #: The rows shown, in table order.
+    rows: list[ReportRow]
+    #: Without a period: one row summing the smaller groups.
+    other: ReportRow | None = None
+    #: The groups summed into "other" (with a period: over the whole range).
+    groups: int = 0
+    #: With a period: per period, the row summing the smaller groups there and how many it sums.
+    period_other: dict[date, tuple[ReportRow, int]] = field(default_factory=dict)
+
+
+def _group_of(report: SpendReport, row: ReportRow) -> tuple[Any, ...]:
+    return (row.seat_only, *(row.key.get(d) for d in report.group_by))
+
+
+def _fold(report: SpendReport) -> Folded:
+    """The rows a drill-down table shows: all of them, or the largest by spend and "other" rows.
+
+    Without a period, at most :data:`DRILL_MAX_ROWS` rows: the largest and
+    one "other" row; the kept rows keep the report's order. With one (a row
+    per period and group), the :data:`DRILL_PERIOD_GROUPS` groups with the
+    largest spend over the whole range, in each period, and one "other" row
+    per period summing the rest there; rows go by period, then the report's
+    order. Every amount stays exact: an "other" row is the sum of its rows.
     """
     rows = report.rows
-    if report.period or len(rows) <= DRILL_MAX_ROWS:
-        return rows, None, 0
+    if report.period:
+        return _fold_periods(report)
+    if len(rows) <= DRILL_MAX_ROWS:
+        return Folded(rows=rows)
     ranked = sorted(range(len(rows)), key=lambda i: -_spend(rows[i]))
     keep = set(ranked[: DRILL_MAX_ROWS - 1])
     kept = [r for i, r in enumerate(rows) if i in keep]
     rest = [r for i, r in enumerate(rows) if i not in keep]
-    return kept, fold_rows(rest, report.currency, report.seat_cost_shown), len(rest)
+    return Folded(rows=kept, other=fold_rows(rest, report.currency, report.seat_cost_shown), groups=len(rest))
+
+
+def _fold_periods(report: SpendReport) -> Folded:
+    totals: dict[tuple[Any, ...], Decimal] = {}
+    for row in report.rows:
+        group = _group_of(report, row)
+        totals[group] = totals.get(group, Decimal(0)) + _spend(row)
+    # An "other" group of one is no help.
+    if len(totals) <= DRILL_PERIOD_GROUPS + 1:
+        return Folded(rows=report.rows)
+    keep = set(sorted(totals, key=lambda g: -totals[g])[:DRILL_PERIOD_GROUPS])
+    kept: list[ReportRow] = []
+    rest: dict[date, list[ReportRow]] = {}
+    for row in report.rows:
+        if _group_of(report, row) in keep:
+            kept.append(row)
+        else:
+            rest.setdefault(row.period or date.min, []).append(row)
+    period_other: dict[date, tuple[ReportRow, int]] = {}
+    for period, items in rest.items():
+        other = fold_rows(items, report.currency, report.seat_cost_shown)
+        other.period = period
+        period_other[period] = (other, len({_group_of(report, r) for r in items}))
+    kept.sort(key=lambda r: r.period or date.min)
+    return Folded(rows=kept, groups=len(totals) - len(keep), period_other=period_other)
 
 
 def _plural_people(count: int) -> str:
@@ -952,6 +1013,7 @@ async def _drill_view(
     facts: DrillFacts,
     charts: dict[str, Any] | None,
     base_url: str,
+    folded: Folded,
 ) -> dict[str, Any]:
     """The drill-down: path, title, tiles, the group switch, the table (or the entries) and the side card."""
     locale = get_locale()
@@ -973,7 +1035,7 @@ async def _drill_view(
     }
     dim = report.group_by[0] if report.group_by else ""
     slots = _slot_map(dim, charts, report.rows) if dim else ({}, False)
-    shown, other_row, folded = _fold(report)
+    shown, other_row = folded.rows, folded.other
     subjects = await _issue_subjects(db, shown) if dim == "issue" else {}
 
     def money_text(row: ReportRow) -> str:
@@ -993,16 +1055,30 @@ async def _drill_view(
             open=_open_url(base_url, report, row, form),
         )
         views.append(item)
-    other = None
-    if other_row is not None:
-        other = _row_view(report, other_row, form, locale)
-        other.update(
-            groups=folded,
-            share=_share(_spend(other_row), total_spend),
-            spend_value=_spend(other_row),
-            spend_text=money_text(other_row),
+
+    def other_view(row: ReportRow, groups: int) -> dict[str, Any]:
+        item = _row_view(report, row, form, locale)
+        item.update(
+            is_other=True,
+            groups=groups,
+            share=_share(_spend(row), total_spend),
+            spend_value=_spend(row),
+            spend_text=money_text(row),
         )
-    view.update(rows=views, other=other)
+        return item
+
+    other = other_view(other_row, folded.groups) if other_row is not None else None
+    period_note = None
+    if folded.period_other:
+        # Each period: its rows of the largest groups, then its "other" row.
+        by_period: dict[date, list[dict[str, Any]]] = {}
+        for row, item in zip(shown, views, strict=True):
+            by_period.setdefault(row.period or date.min, []).append(item)
+        for period, (row, groups) in folded.period_other.items():
+            by_period.setdefault(period, []).append(other_view(row, groups))
+        views = [item for period in sorted(by_period) for item in by_period[period]]
+        period_note = {"shown": DRILL_PERIOD_GROUPS, "folded": folded.groups}
+    view.update(rows=views, other=other, period_note=period_note)
     if form.sessions:
         view["side"] = _side_card("model", views, other, total_spend)
         view["side"]["summary"] = _sessions_summary(report, facts)
@@ -1153,11 +1229,16 @@ async def _people_view(
     form: ReportForm,
     report: SpendReport,
     scope: Scope,
-    facts: DrillFacts,
     charts: dict[str, Any] | None,
     base_url: str,
 ) -> dict[str, Any] | None:
     """The "Spend by person" cards of the current level, from Redis when built in the last minute.
+
+    The :data:`PEOPLE_TOP` people with the largest spend, and one summary
+    card with how many more there are and their spend (exact: the sum of
+    their rows), which opens the Person level of the drill-down, ordered by
+    spend (that table folds past :data:`DRILL_MAX_ROWS` rows). Tools, cost
+    types and plans are looked up for the people shown only.
 
     Cached with the same key parts as the charts (scope, reader, what the
     reader may see, every filter, the data version), so readers never share it.
@@ -1185,21 +1266,36 @@ async def _people_view(
         rows = [r for r in by_user.rows if r.key.get("user") is not None]
         if not rows:
             return None
+        # The largest by spend (ties by name); the rest are summed into one card.
+        ranked = sorted(rows, key=lambda r: (-_spend(r), r.labels.get("user", "").lower(), r.key["user"]))
+        top, rest = ranked[:PEOPLE_TOP], ranked[PEOPLE_TOP:]
+        if len(rest) == 1:
+            top, rest = ranked, []
         instance = project is None
         seat_shown = by_user.seat_cost_shown
+        ids = [r.key["user"] for r in top]
+        usage = await _reports.person_usage(
+            db,
+            user,
+            project=project,
+            date_from=report.date_from,
+            date_to=report.date_to,
+            filters=scope.filters,
+            users=ids,
+        )
         plans: dict[int, list[str]] = {}
         if seat_shown and instance:
-            plans = await _plan_names(db, by_user, rows, facts)
+            plans = await _plan_names(db, by_user, ids, usage)
         tool_names = await _tool_names(db)
         locale = get_locale()
         slots = _slot_map("user", charts, rows)
-        largest = max((_spend(r) for r in rows), default=Decimal(0))
+        largest = max((_spend(r) for r in top), default=Decimal(0))
+        filtered = set(form.filtered()) | {"user"}
         cards = []
-        for row in rows[:PEOPLE_MAX]:
+        for row in top:
             uid = row.key["user"]
             name = row.labels.get("user", "") or str(uid)
-            usage = facts.usage.get(uid)
-            filtered = set(form.filtered()) | {"user"}
+            used = usage.get(uid)
             cards.append(
                 {
                     "name": name,
@@ -1207,12 +1303,20 @@ async def _people_view(
                     "slot": _slot(slots, "user", uid),
                     "spend": row.total_spend.total.format(locale) if row.total_spend is not None else "–",
                     "width": _share(_spend(row), largest)["width"],
-                    "tools": [tool_names.get(t, t) for t in usage.tools] if usage else [],
-                    "payment": _payment(usage, plans.get(uid, []), instance, seat_shown),
+                    "tools": [tool_names.get(t, t) for t in used.tools] if used else [],
+                    "payment": _payment(used, plans.get(uid, []), instance, seat_shown),
                     "url": base_url + "?" + form.level_query(next_group("user", filtered, instance), user_id=str(uid)),
                 }
             )
-        return {"cards": cards, "more": max(0, len(rows) - PEOPLE_MAX)}
+        more = None
+        if rest:
+            summed = fold_rows(rest, by_user.currency, seat_shown)
+            more = {
+                "count": len(rest),
+                "spend": summed.total_spend.total.format(locale) if summed.total_spend is not None else "–",
+                "url": base_url + "?" + form.level_query("user", sort="spend"),
+            }
+        return {"cards": cards, "more": more}
 
     parts = await _cache_parts(db, user, project, report)
     parts.update(sort=form.sort, level=form.query(offset="", limit="", bucket="", detail=""))
@@ -1221,11 +1325,10 @@ async def _people_view(
 
 
 async def _plan_names(
-    db: AsyncSession, report: SpendReport, rows: list[ReportRow], facts: DrillFacts
+    db: AsyncSession, report: SpendReport, users: list[int], usage: dict[int, PersonUsage]
 ) -> dict[int, list[str]]:
-    """Plan names per person (instance report only): plans their entries used, and idle plans whose fee counts."""
-    used = {sid for u in facts.usage.values() for sid in u.subscription_ids}
-    users = [r.key["user"] for r in rows]
+    """Plan names of *users* (instance report only): plans their entries used, and idle plans whose fee counts."""
+    used = {sid for u in usage.values() for sid in u.subscription_ids}
     condition: Any = AiSubscription.id.in_(used) if used else None
     if report.unallocated_shown:
         idle = (
@@ -1261,16 +1364,23 @@ async def _page(
     instance = project is None
     form.for_scope(instance)
     await enforce_ai_report_rate_limit(request, response, user)
+    if form.user and not form.user_id:
+        # A login typed without JS: the person when the filter may name them, else nobody (id 0).
+        found = await _usage.person_in_scope(db, user, project, login=form.user)
+        form.user_id = str(found.id) if found is not None else "0"
     scope = await _resolve(db, user, project, form)
     report, error = await _run(db, user, project, form, scope)
     if project is not None and form.user_id and (report is None or not report.totals.entries):
         # A person is named on a project report only through entries the reader may see.
-        scope.labels["user"] = form.user_id
+        scope.labels["user"] = form.user or form.user_id
     base_url = ADMIN_URL if instance else f"/projects/{project.key}/ai-usage/report/"  # type: ignore[union-attr]
     charts = drill = people = sessions = None
     if report is not None:
         charts = await _charts(db, user, project, form, report)
         dim = None if form.sessions or len(report.group_by) != 1 or report.period else report.group_by[0]
+        folded = _fold(report)
+        # Facts only for the rows the table shows: never a query per person of a long report.
+        keys = [r.key.get(dim) for r in folded.rows if not r.seat_only] if dim else None
         facts = await _reports.drill_facts(
             db,
             user,
@@ -1279,23 +1389,26 @@ async def _page(
             date_to=report.date_to,
             filters=scope.filters,
             dim=dim,
+            keys=keys,
+            users=[k for k in keys or () if k is not None] if dim == "user" else (),
         )
-        drill = await _drill_view(db, user, project, form, report, scope, facts, charts, base_url)
+        drill = await _drill_view(db, user, project, form, report, scope, facts, charts, base_url, folded)
         if form.sessions:
             sessions = await _sessions(db, user, project, form, report, scope, charts, request)
-        people = await _people_view(db, user, project, form, report, scope, facts, charts, base_url)
+        people = await _people_view(db, user, project, form, report, scope, charts, base_url)
     if instance:
-        active = (await db.execute(select(User.id, User.login, User.display_name).where(User.status == "active"))).all()
-        members: list[dict[str, Any]] = sorted(
-            ({"id": uid, "name": str(name or login)} for uid, login, name in active), key=lambda m: m["name"].lower()
-        )
-    elif report is not None and report.seat_cost_shown:
-        members = [
-            {"id": m["user_id"], "name": m["display_name"] or m["login"]}
-            for m in await _projects.list_members(db, project)  # type: ignore[arg-type]
-        ]
+        offer_people = True
+        people_endpoint = "/api/v1/ai-usage/report/people/"
     else:
-        members = []
+        offer_people = await sees_everyone(db, user, project)  # type: ignore[arg-type]
+        people_endpoint = f"/api/v1/projects/{project.key}/ai-usage/report/people/"  # type: ignore[union-attr]
+    person_filter = {
+        "offered": offer_people,
+        "endpoint": people_endpoint,
+        "chip": await person_filter_chip(
+            db, user, project, form.user_id, form.user, base_url + "?" + form.query(user_id="")
+        ),
+    }
     context: dict[str, Any] = {
         "user": user,
         "active_page": "admin" if instance else "ai_usage",
@@ -1309,7 +1422,7 @@ async def _page(
         "csv_base": "/api/v1/ai-usage/report/" if instance else f"/api/v1/projects/{project.key}/ai-usage/report/",  # type: ignore[union-attr]
         "entries_url": ADMIN_ENTRIES_URL if instance else f"/projects/{project.key}/ai-usage/",  # type: ignore[union-attr]
         "level_entries_url": _entries_url(report, form) if report is not None else "",
-        "members": members,
+        "person_filter": person_filter,
         "error": error,
         **await _context(db, report, form),
     }

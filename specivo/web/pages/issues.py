@@ -155,7 +155,7 @@ async def _get_lookups(db: AsyncSession) -> dict:
     }
 
 
-def _person_chip(person: User, label: str | None = None) -> dict:
+def person_chip(person: User, label: str | None = None) -> dict:
     """Chip data for a person: label plus what the avatar macro needs."""
     return {
         "label": label or person.display_name or person.login,
@@ -185,14 +185,14 @@ async def _filter_chips(db: AsyncSession, project: Project, user: User, params: 
     if assignee == NO_VALUE:
         chips["assigned_to_id"] = {"label": _("Unassigned")}
     elif assignee == ME:
-        chips["assigned_to_id"] = _person_chip(user, _("Me"))
+        chips["assigned_to_id"] = person_chip(user, _("Me"))
     elif assignee:
         stmt = select(UserModel).where(UserModel.id == int(assignee), real_users_clause())
         visible = await visible_users_clause(db, user)
         if visible is not None:
             stmt = stmt.where(visible)
         person = (await db.execute(stmt)).scalar_one_or_none()
-        chips["assigned_to_id"] = _person_chip(person) if person else {"label": _("Unknown person")}
+        chips["assigned_to_id"] = person_chip(person) if person else {"label": _("Unknown person")}
 
     tag_value = params.get("tag_id", "")
     if tag_value:
