@@ -18,6 +18,7 @@ from specivo.mcp import server
 from specivo.mcp.ai_usage_tools import _ai_usage_report
 from specivo.models.user import User
 from specivo.services.permission_service import clear_role_cache
+from tests.factories.issue import IssueFactory
 from tests.services.test_ai_spend_reports import World, build_world, entry
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -99,3 +100,41 @@ async def test_bad_arguments(db_session: AsyncSession, w: World) -> None:
     for kw in ({"group_by": "salary"}, {"preset": "forever"}, {"date_from": "March"}, {"sort": "rank"}):
         with pytest.raises(AppError):
             await _report(db_session, w.mgr, project_key="RMA", **kw)
+
+
+async def test_issue_report_with_and_without_sub_issues(db_session: AsyncSession, w: World) -> None:
+    parent = w.public_issue
+    child = IssueFactory.build(
+        project_id=parent.project_id,
+        project_key=parent.project_key,
+        tracker_id=parent.tracker_id,
+        status_id=parent.status_id,
+        priority_id=parent.priority_id,
+        author_id=parent.author_id,
+        parent_id=parent.id,
+        sequence_number=3,
+    )
+    db_session.add(child)
+    await db_session.flush()
+    await entry(db_session, w.bob, project=w.p, issue=parent, day=date(2026, 3, 8), api="6")
+    await entry(db_session, w.bob, project=w.p, issue=child, day=date(2026, 3, 9), api="2")
+    await db_session.commit()
+
+    # No project_key: the issue's project report, narrowed to the issue.
+    text = await _report(db_session, w.mgr, issue_ref=parent.display_key, group_by="")
+    assert text.startswith(f"AI spend report for issue {parent.display_key} in project RMA")
+    assert text.splitlines()[-1].startswith("Total: entries=1")
+    assert "api_equivalent=6.00 USD" in text.splitlines()[-1]
+
+    tree = await _report(db_session, w.mgr, issue_ref=parent.display_key, include_sub_issues=True, group_by="")
+    assert f"issue {parent.display_key} and its sub-issues" in tree
+    assert tree.splitlines()[-1].startswith("Total: entries=2")
+    assert "api_equivalent=8.00 USD" in tree.splitlines()[-1]
+
+
+async def test_issue_report_checks_the_project_and_visibility(db_session: AsyncSession, w: World) -> None:
+    with pytest.raises(AppError, match="is not in project RMB"):
+        await _report(db_session, w.admin, project_key="RMB", issue_ref=w.public_issue.display_key)
+    # Bob may not see the private issue: it is not found rather than reported empty.
+    with pytest.raises(AppError):
+        await _report(db_session, w.bob, issue_ref=w.private_issue.display_key)

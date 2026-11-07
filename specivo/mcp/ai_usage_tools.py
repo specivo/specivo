@@ -89,7 +89,12 @@ def _login(refs: EntryReferences, user_id: int) -> str:
     return user.login if user is not None else f"#{user_id}"
 
 
-def _line(entry: AiUsageEntry, refs: EntryReferences) -> str:
+def _session(entry: AiUsageEntry, viewer: User) -> str | None:
+    """The agent session id of *entry*, for its owner only (it is the owner's client session)."""
+    return entry.external_session_id if entry.user_id == viewer.id else None
+
+
+def _line(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     flags = []
     if entry.is_excluded:
         flags.append("excluded")
@@ -99,11 +104,12 @@ def _line(entry: AiUsageEntry, refs: EntryReferences) -> str:
         f"#{entry.id} {entry.usage_date.isoformat()} {_where(entry, refs)} {entry.tool_slug}/{entry.model} "
         f"user={_login(refs, entry.user_id)} {_tokens(entry)} cost_type={entry.cost_type} "
         f"marginal={_money(entry.marginal)} api_equivalent={_money(entry.api_equivalent)} source={entry.source}"
+        + (f" session={session_id}" if (session_id := _session(entry, viewer)) else "")
         + (f" [{', '.join(flags)}]" if flags else "")
     )
 
 
-def _details(entry: AiUsageEntry, refs: EntryReferences) -> str:
+def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     lines = [
         f"AI usage entry #{entry.id} (revision {entry.revision})",
         f"Where: {_where(entry, refs)} (attribution: {entry.attribution_method})",
@@ -119,6 +125,9 @@ def _details(entry: AiUsageEntry, refs: EntryReferences) -> str:
         f"Requests: {entry.request_count}",
         f"Tokens: {_tokens(entry)}",
     ]
+    session_id = _session(entry, viewer)
+    if session_id:
+        lines.insert(3, f"Session: {session_id}")
     long = " ".join(f"{k}={v}" for k, v in entry.long_context_tokens().items() if v)
     if long:
         lines.append(f"Long-context tokens (included above): {long}")
@@ -140,7 +149,7 @@ def _details(entry: AiUsageEntry, refs: EntryReferences) -> str:
 async def _show(session: AsyncSession, user: User, entry: AiUsageEntry) -> str:
     await session.flush()
     await session.refresh(entry)
-    return _details(entry, await _usage.references(session, user, [entry]))
+    return _details(entry, await _usage.references(session, user, [entry]), user)
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +333,7 @@ async def _ai_usage(
     usage_date: str | None = None,
     excluded: bool | None = None,
     unassigned: bool | None = None,
+    session_id: str | None = None,
     tokens: dict[str, int] | None = None,
     request_count: int | None = None,
     cost_amount: Any = None,
@@ -349,6 +359,7 @@ async def _ai_usage(
             date_to=date_to,
             excluded=excluded,
             unassigned=unassigned,
+            session_id=session_id,
             offset=offset,
             limit=limit,
         )
@@ -432,8 +443,13 @@ async def _list(
     unassigned: bool | None,
     offset: int,
     limit: int,
+    session_id: str | None = None,
 ) -> str:
-    """A project's entries the caller may read; without a project, the entries logged in the caller's name."""
+    """A project's entries the caller may read; without a project, the entries logged in the caller's name.
+
+    *session_id* keeps the caller's own entries of that agent session (the
+    id the reporter sends, shown on the caller's entries), in any project.
+    """
     if limit < 1 or limit > _MAX_LIMIT:
         raise ValidationError(message=f"limit must be between 1 and {_MAX_LIMIT}", field="limit")
     if offset < 0:
@@ -445,8 +461,10 @@ async def _list(
         issue_id = issue.id
         if project is None:
             project = await session.get(Project, issue.project_id)
+    session_id = session_id.strip() if session_id else None
     user_id: int | None
-    if project is None:
+    if project is None or session_id:
+        # A session is one person's client session: only the caller's own entries match.
         user_id = user.id
     elif user_login and user_login.strip():
         # An unknown login simply matches nothing: listing never says whether a login exists.
@@ -467,6 +485,7 @@ async def _list(
         issue_id=issue_id,
         excluded=excluded,
         unassigned=unassigned if project is None else None,
+        external_session_id=session_id,
         offset=offset,
         limit=limit,
     )
@@ -479,12 +498,14 @@ async def _list(
         project_id=project.id if project is not None else None,
     )
     scope = f"in {project.key}" if project is not None else "logged in your name"
+    if session_id:
+        scope += f" from session {session_id}"
     shown = f"{offset + 1}-{offset + len(entries)}" if entries else "none"
     lines = [f"AI usage entries {scope} ({total} total, showing {shown}):"]
     if not entries:
         lines.append("  (none)")
     refs = await _usage.references(session, user, entries)
-    lines.extend(f"  {_line(entry, refs)}" for entry in entries)
+    lines.extend(f"  {_line(entry, refs, user)}" for entry in entries)
     return "\n".join(lines)
 
 
@@ -556,6 +577,8 @@ async def _ai_usage_report(
     model: str | None,
     cost_type: str | None,
     sort: str,
+    issue_ref: str | None = None,
+    include_sub_issues: bool = False,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
     from specivo.core.ai_report_limits import ai_report_allowed
@@ -579,6 +602,16 @@ async def _ai_usage_report(
         )
     first, last = default_range(preset)
     project = await _project(session, user, project_key) if project_key and project_key.strip() else None
+    issue: Issue | None = None
+    if issue_ref and issue_ref.strip():
+        issue = await _issue(session, user, issue_ref)
+        if project is None:
+            # An issue's report is its project's report narrowed to the issue.
+            project = await session.get(Project, issue.project_id)
+        elif issue.project_id != project.id:
+            raise ValidationError(
+                message=f"Issue {issue.display_key} is not in project {project.key}", field="issue_ref"
+            )
     user_id: int | None = None
     if user_login and user_login.strip():
         # Like listing: an unknown login matches nothing rather than saying it does not exist.
@@ -595,7 +628,14 @@ async def _ai_usage_report(
         currency=currency or None,
         rate_policy=rate_policy or None,
         include_seat_cost=include_seat_cost,
-        filters=ReportFilters(user_id=user_id, tool=tool or None, model=model or None, cost_type=cost_type or None),
+        filters=ReportFilters(
+            user_id=user_id,
+            tool=tool or None,
+            model=model or None,
+            cost_type=cost_type or None,
+            issue_id=issue.id if issue is not None and not include_sub_issues else None,
+            issue_tree_id=issue.id if issue is not None and include_sub_issues else None,
+        ),
         sort=sort or "key",
     )
     await _log_tool(
@@ -607,6 +647,8 @@ async def _ai_usage_report(
         project_id=project.id if project is not None else None,
     )
     scope = f"project {project.key}" if project is not None else "the whole instance"
+    if issue is not None:
+        scope = f"issue {issue.display_key}" + (" and its sub-issues" if include_sub_issues else "") + f" in {scope}"
     lines = [
         f"AI spend report for {scope}, {report.date_from} to {report.date_to} (UTC days), "
         f"amounts in {report.currency}, rate policy {report.rate_policy}.",

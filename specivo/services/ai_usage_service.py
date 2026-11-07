@@ -467,6 +467,7 @@ class AiUsageService:
         excluded: bool | None = None,
         unassigned: bool | None = None,
         issue_tree_id: int | None = None,
+        external_session_id: str | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
@@ -478,7 +479,8 @@ class AiUsageService:
         ``False`` keeps only excluded / counted entries (None: both);
         *unassigned* ``True`` / ``False`` keeps only entries without / with a
         project; *issue_tree_id* keeps the entries of that issue and of every
-        issue below it (:func:`issue_subtree_clause`).
+        issue below it (:func:`issue_subtree_clause`); *external_session_id*
+        keeps the entries of one agent session (the id the reporter sends).
         """
         conditions = await self._list_conditions(
             session,
@@ -499,6 +501,7 @@ class AiUsageService:
             excluded=excluded,
             unassigned=unassigned,
             issue_tree_id=issue_tree_id,
+            external_session_id=external_session_id,
         )
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
@@ -615,6 +618,7 @@ class AiUsageService:
         excluded: bool | None = None,
         unassigned: bool | None = None,
         issue_tree_id: int | None = None,
+        external_session_id: str | None = None,
     ) -> list[ColumnElement[bool]]:
         """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
@@ -649,6 +653,8 @@ class AiUsageService:
             conditions.append(AiUsageEntry.issue_id.is_(None))
         if issue_tree_id is not None:
             conditions.append(issue_subtree_clause(issue_tree_id))
+        if external_session_id is not None and external_session_id.strip():
+            conditions.append(AiUsageEntry.external_session_id == external_session_id.strip())
         if provider and provider.strip():
             conditions.append(AiUsageEntry.provider == (normalize_provider(provider) or provider.strip().lower()))
         if branch and branch.strip():
