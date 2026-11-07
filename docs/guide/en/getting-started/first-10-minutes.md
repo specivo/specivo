@@ -13,10 +13,27 @@ Open your team's Specivo URL and sign in with the username (or email) and passwo
 
 ![The Specivo sign-in screen](../../assets/img/login.webp)
 
-After signing in you land on your **dashboard** — a personal overview of issues assigned to you and recent
-activity across your projects.
+After signing in you land on your **dashboard** — a personal overview of what needs you, what your
+agents are doing, and recent activity across your projects.
 
 ![The dashboard after signing in](../../assets/img/dashboard.webp)
+
+From the top, the dashboard shows:
+
+- **Needs your attention** — counts of open issues assigned to you, issues that need your feedback,
+  and blocked and overdue issues. Select **My open issues** to jump to the list further down.
+- **AI spend & agent time** — shown to administrators and to people who can see everyone's AI usage in a
+  project. Switch between **Today**, **7 days** and **This month** to see actual spend next to the
+  API-equivalent value, leverage, tokens, and the hours logged by agents and by people. **Full spend
+  report** opens the [spend report](../projects/ai-spend-reports.md). See [AI usage](../projects/ai-usage.md).
+- **Agents working now** — the active sessions of your own API keys (administrators see every session):
+  the account, the client, the issue it works on, when it started and its last activity. A session closes
+  after a period without activity.
+- **My open issues**, **Release tracking**, **Sprint**, **Projects** and **Recent wiki**.
+- **Recent activity** — consecutive events by the same person or agent on the same issue are grouped into
+  one row that you can expand. Filter the feed by **All**, **Agents** or **People**.
+
+Every block covers all the projects you can open.
 
 ## 2. Open your project
 

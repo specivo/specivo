@@ -53,6 +53,15 @@ A fifth role, **Automation**, is not offered when adding members: it is the role
 **Git** account gets by default (a manager may pick another) when a project turns on
 [merge automation](../integrations/repositories.md#merge-automation) for a connected repository.
 
+### Adding members
+
+Open **Settings → Members**, choose a role, type a name in the **Add Member** field and pick the
+user or group from the suggestions, then select **Add**. A member must be an existing user or group, so
+a name you typed but did not pick from the list is not added, and the form tells you so. When nobody
+matches, the list says so. Administrators also get **Create user "…"**, which opens the New User form
+with the typed name filled in; the new account is selected afterwards, so only the role and **Add** are
+left. A manager who is not an administrator is told to ask an administrator to create the account.
+
 !!! note "Roles are per project"
     A person can be a Manager in one project and a Reporter in another. Membership and role are set on
     each project, not globally.
