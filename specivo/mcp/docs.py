@@ -202,14 +202,18 @@ and corrections.
    cache_read_tokens=N, issue_ref="ACME-12")` -- without `issue_ref` / `project_key` the entry goes to
    the issue this agent session works on, else stays unassigned; the server prices it
 2. `specivo_ai_usage(op="list")` -- the entries logged in your name (unassigned ones included);
-   `project_key="ACME"` for a project's entries you may read
+   `project_key="ACME"` for a project's entries you may read. Your own entries show the agent
+   session they came from (`session=`); `session_id="..."` lists just that session's entries, to
+   check which issue each part of a session went to
 3. `specivo_ai_usage(op="update", entry_id=N, issue_ref="ACME-12")` -- attribute or correct an entry;
    entries from the reporter only take a project, issue and comments
 4. `specivo_ai_usage(op="exclude", entry_id=N)` -- leave an entry out of reports (`include` undoes it)
 5. `specivo_ai_usage_report(project_key="ACME", group_by="user,model", preset="last_month")` -- spend and
    API-equivalent value per group in the reporting currency; `period="week"` adds buckets, no
    `project_key` reports the whole instance (administrators). Spend includes seat cost (subscription
-   fees spread over the entries that used them) when you read every entry of the project
+   fees spread over the entries that used them) when you read every entry of the project.
+   `issue_ref="ACME-12"` (with `include_sub_issues=true` for the issues below it) totals one issue,
+   e.g. for the spend line of a closing note
 
 ### Register AI subscriptions from invoices
 When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):

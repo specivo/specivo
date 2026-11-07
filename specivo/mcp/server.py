@@ -1285,7 +1285,9 @@ async def specivo_log_ai_usage(
     description=(
         "Read and manage AI usage entries. Ops: list (a project's entries you may read with project_key, or "
         "issue_ref; without either, the entries logged in your name, unassigned ones included; filters "
-        "user_login, tool, model, cost_type, date_from, date_to, excluded, unassigned, offset, limit); get "
+        "user_login, tool, model, cost_type, date_from, date_to, excluded, unassigned, session_id, offset, limit; "
+        "your own entries show the agent session they came from as session=, and session_id lists just that "
+        "session's entries, to check what was attributed where); get "
         "(entry_id); update (entry_id plus the fields to change: project_key moves the entry, '' makes it "
         "unassigned; issue_ref, '' clears it; comments; and for entries not from the reporter the usage: tool, "
         "model, provider, usage_date, the token counts, request_count, cost_type, cost_amount + cost_currency); "
@@ -1318,6 +1320,10 @@ async def specivo_ai_usage(
         bool | None, Field(description="list: true for excluded entries only, false for counted ones only.")
     ] = None,
     unassigned: Annotated[bool | None, Field(description="list without a project: true for unassigned only.")] = None,
+    session_id: Annotated[
+        str | None,
+        Field(description="list: only your own entries from this agent session (the session= value on your entries)."),
+    ] = None,
     input_tokens: Annotated[int | None, Field(ge=0, description="update: new input token count.")] = None,
     output_tokens: Annotated[int | None, Field(ge=0, description="update: new output token count.")] = None,
     cache_write_tokens: Annotated[int | None, Field(ge=0, description="update: cache writes (5-minute).")] = None,
@@ -1360,6 +1366,7 @@ async def specivo_ai_usage(
             usage_date=usage_date,
             excluded=excluded,
             unassigned=unassigned,
+            session_id=session_id,
             tokens=tokens or None,
             request_count=request_count,
             cost_amount=cost_amount,
@@ -1381,7 +1388,8 @@ async def specivo_ai_usage(
         "value), API-equivalent value (the same tokens at pay-per-use prices, not a bill) and leverage. "
         "Amounts without an exchange rate are listed apart, never dropped. Seat cost shows only to "
         "administrators and to whoever reads every entry of the project. Rows are sorted by the grouping key; "
-        "sort='spend' orders by spend."
+        "sort='spend' orders by spend. issue_ref narrows the report to one issue (its project's report; "
+        "include_sub_issues adds the issues below it), e.g. for the spend total of a closing note."
     )
 )
 async def specivo_ai_usage_report(
@@ -1405,6 +1413,12 @@ async def specivo_ai_usage_report(
     model: Annotated[str | None, Field(description="Only this model.")] = None,
     cost_type: Annotated[str | None, Field(description="subscription, api, local, free or unknown.")] = None,
     sort: Annotated[str, Field(description="key (default) or spend.")] = "key",
+    issue_ref: Annotated[
+        str | None, Field(description="Only this issue's usage, e.g. ACME-12 (project_key may be left out).")
+    ] = None,
+    include_sub_issues: Annotated[
+        bool, Field(description="With issue_ref: also the usage of the issues below it.")
+    ] = False,
 ) -> str:
     async with _get_session_and_user() as (session, user):
         return await _ai_usage_report(
@@ -1424,6 +1438,8 @@ async def specivo_ai_usage_report(
             model=model,
             cost_type=cost_type,
             sort=sort,
+            issue_ref=issue_ref,
+            include_sub_issues=include_sub_issues,
         )
 
 

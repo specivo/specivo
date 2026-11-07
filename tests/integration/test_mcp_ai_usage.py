@@ -311,3 +311,51 @@ async def test_token_counts_include_the_long_context_bucket(db_session: AsyncSes
     detail = await server.specivo_ai_usage(op="get", entry_id=entry_id)
     assert "Tokens: in=510 out=1 cache_read=70 (long_context=570)" in detail
     assert "Long-context tokens (included above): input=500 cache_read=70" in detail
+
+
+async def _reported(db: AsyncSession, user: Any, project_id: int | None, session_id: str, key: str) -> int:
+    outcome = await AiUsageService().upsert(
+        db,
+        user,
+        AiUsageInput(
+            tool="claude-code",
+            provider="testlab",
+            model="lab-model-1",
+            usage_date=date(2026, 3, 10),
+            tokens={"input": 10, "output": 1},
+            project_id=project_id,
+            external_session_id=session_id,
+            idempotency_key=key,
+        ),
+        source="reporter",
+    )
+    await db.commit()
+    return outcome.entry.id
+
+
+async def test_own_entries_show_and_filter_by_their_session(db_session: AsyncSession, w: World) -> None:
+    alice, bob = w.users["alice"], w.users["bob"]
+    in_project = await _reported(db_session, alice, w.a.id, "sess-one", "mau-sess-1")
+    unassigned = await _reported(db_session, alice, None, "sess-one", "mau-sess-2")
+    other_session = await _reported(db_session, alice, w.a.id, "sess-two", "mau-sess-3")
+    bobs = await _reported(db_session, bob, w.a.id, "sess-one", "mau-sess-4")
+
+    _as(w, "alice")
+    mine = await server.specivo_ai_usage(op="list")
+    assert "session=sess-one" in mine and "session=sess-two" in mine
+    assert "Session: sess-one" in await server.specivo_ai_usage(op="get", entry_id=in_project)
+
+    # One session's entries, in any project, and only the caller's own (Bob used the same id).
+    session = await server.specivo_ai_usage(op="list", session_id="sess-one")
+    assert "from session sess-one (2 total" in session
+    assert f"#{in_project} " in session and f"#{unassigned} " in session
+    assert f"#{other_session} " not in session and f"#{bobs} " not in session
+    in_a = await server.specivo_ai_usage(op="list", project_key="MAUA", session_id="sess-one")
+    assert f"#{in_project} " in in_a and f"#{unassigned} " not in in_a and f"#{bobs} " not in in_a
+
+    # Someone else reading the project sees the entries, not their session ids, and cannot filter by them.
+    _as(w, "carol")
+    everyone = await server.specivo_ai_usage(op="list", project_key="MAUA")
+    assert f"#{in_project} " in everyone and "session=" not in everyone
+    assert "Session:" not in await server.specivo_ai_usage(op="get", entry_id=in_project)
+    assert "(0 total" in await server.specivo_ai_usage(op="list", project_key="MAUA", session_id="sess-one")
