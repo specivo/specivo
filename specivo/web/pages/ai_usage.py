@@ -25,7 +25,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from babel.numbers import format_decimal
 from fastapi import APIRouter, Depends, Form, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_pricing import TOKEN_CLASSES
@@ -598,6 +598,29 @@ async def my_ai_usage_reassign(
         return _redirect(back, {"error": code})
     await savepoint.commit()
     return _redirect(back, {"notice": "reassigned"})
+
+
+@router.get(MY_URL + "issues/", response_model=None)
+async def my_ai_usage_issue_search(
+    user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = DB_SESSION,
+    q: str = Query("", max_length=100),
+    project: str = Query("", max_length=50),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+) -> JSONResponse:
+    """Issue suggestions for the Move form: issues in projects where the reader may log AI usage.
+
+    ``project`` narrows them to one of those projects (the form's project
+    field); an unknown or not loggable key matches nothing. An empty ``q``
+    lists the most recently updated issues.
+    """
+    keys = {p.key for p in await _service.loggable_projects(db, user)}
+    wanted = project.strip().upper()
+    if wanted:
+        keys = keys & {wanted}
+    rows = await _issues.autocomplete(db, q, user, limit=limit, project_keys=keys, offset=offset)
+    return JSONResponse(rows)
 
 
 async def _target(

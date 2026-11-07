@@ -34,7 +34,7 @@
       <option value="0" {{ 'selected' if filters.current == '0' else '' }}>{% trans %}All{% endtrans %}</option>
       <option value="1" {{ 'selected' if filters.current == '1' else '' }}>{% trans %}Running today{% endtrans %}</option>
     </select>
-    <button type="submit" class="sp-btn-sm">{% trans %}Filter{% endtrans %}</button>
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
   </form>
   <div class="sp-table-scroll">
     <table class="issue-table" data-testid="subscriptions-table">
@@ -79,7 +79,7 @@
         {% for p in presets %}<option value="{{ p.key }}" {{ 'selected' if p.key == form.plan_key else '' }}>{{ p.name }} · {{ p.hint }}</option>{% endfor %}
         <option value="custom" {{ 'selected' if form.plan_key == 'custom' else '' }}>{% trans %}Custom{% endtrans %}</option>
       </select>
-      <button type="submit" class="sp-btn-sm">{% trans %}Fill in{% endtrans %}</button>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Fill in{% endtrans %}</button>
     </form>
     <p class="sp-text-muted-xs sp-mb-md">{% trans %}Plan prices are suggestions from the providers' published list prices and may be out of date. Enter what is actually paid, in the currency it is paid in.{% endtrans %}</p>
     {% set submit_label = _("Add subscription") %}
@@ -92,7 +92,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="sp-sub-check"><input type="checkbox" name="self_service" value="1" {{ 'checked' if self_service else '' }}> {% trans %}People can add and change their own subscriptions{% endtrans %}</label>
       <p class="sp-text-muted-xs sp-mb-md">{% trans %}When this is off, only administrators change subscriptions. People still see their own.{% endtrans %}</p>
-      <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save{% endtrans %}</button>
     </form>
   </div>
 </div>

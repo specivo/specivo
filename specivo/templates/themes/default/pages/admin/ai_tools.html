@@ -46,7 +46,7 @@
               <input type="text" name="default_provider" class="form-input" maxlength="50" value="{{ t.default_provider }}" placeholder="{{ _('none') }}" aria-label="{{ _('Default provider') }}">
               <input type="number" name="position" class="form-input sp-sub-position" value="{{ t.position }}" aria-label="{{ _('Position') }}">
               <label class="sp-sub-check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if t.is_active else '' }}> <span class="sp-sub-sr">{% trans %}Active{% endtrans %}</span></label>
-              <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+              <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save{% endtrans %}</button>
             </form>
           </td>
         </tr>

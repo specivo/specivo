@@ -69,8 +69,8 @@
                 {% endfor %}
               </select>
               <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);">
-                <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="showComplete = false">{% trans %}Cancel{% endtrans %}</button>
-                <button type="button" class="sp-btn sp-btn-primary sp-btn-sm"
+                <button type="button" class="sp-btn sp-btn-ghost" @click="showComplete = false">{% trans %}Cancel{% endtrans %}</button>
+                <button type="button" class="sp-btn sp-btn-primary"
                         hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
                         :hx-vals="getHxVals()"
                         hx-headers='{"Content-Type": "application/json"}'

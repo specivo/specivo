@@ -7,7 +7,7 @@
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-xl); }
 .form-hint { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); }
 .form-label { display: block; font-size: var(--sp-font-size-sm); font-weight: 500; color: var(--sp-text-primary); margin-bottom: var(--sp-space-xs); }
-.form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-base); color: var(--sp-text-primary); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.form-input { width: 100%; min-height: var(--sp-control-height); padding: 6px var(--sp-control-padding-x); line-height: 1.5; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-base); color: var(--sp-text-primary); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .form-input:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
 .form-input::placeholder { color: var(--sp-text-muted); }
 /* A field that failed validation: aria-invalid="true" is the one switch, so

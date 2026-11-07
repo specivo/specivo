@@ -27,6 +27,7 @@ from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.user import User
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
 from specivo.services.auth_service import _make_access_token
+from tests.factories.issue import IssueFactory
 from tests.integration.test_ai_usage_api import World, build_world
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -461,6 +462,61 @@ async def test_bulk_reassign_is_all_or_nothing(client: AsyncClient, db_session: 
 
     page = await _get(client, alice, "/my/ai-usage/?error=project_unknown")
     assert "No project with that key, or you cannot reach it." in page.text
+
+
+async def test_move_form_picks_the_issue_with_a_search(client: AsyncClient, db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice", project=None, comments="loose")
+    resp = await _get(client, w.users["alice"], "/my/ai-usage/")
+    assert 'data-issue-combo="target_issue"' in resp.text
+    assert 'name="target_issue"' in resp.text and 'data-testid="aiu-reassign-issue"' in resp.text
+    assert '"/my/ai-usage/issues/"' in resp.text and '"target_project"' in resp.text
+    form = await _get(client, w.users["alice"], "/my/ai-usage/new/")
+    assert 'data-issue-combo="issue"' in form.text and 'data-testid="aiu-form-issue"' in form.text
+
+
+async def _issue_keys(client: AsyncClient, user: User, query: str = "") -> list[str]:
+    resp = await _get(client, user, "/my/ai-usage/issues/" + query)
+    assert resp.status_code == 200, resp.text
+    return [row["key"] for row in resp.json()]
+
+
+async def test_issue_search_covers_projects_where_one_may_log(client: AsyncClient, db_session: AsyncSession, w: World):
+    b_issue = IssueFactory.build(
+        project_id=w.b.id,
+        project_key=w.b.key,
+        tracker_id=w.public_issue.tracker_id,
+        status_id=w.public_issue.status_id,
+        priority_id=w.public_issue.priority_id,
+        author_id=w.users["mgr"].id,
+        sequence_number=1,
+        subject="Other project work",
+    )
+    db_session.add(b_issue)
+    await db_session.flush()
+    a1, a2, b1 = f"{w.a.key}-1", f"{w.a.key}-2", f"{w.b.key}-1"
+
+    alice = w.users["alice"]
+    # An empty query lists suggestions; the private issue stays hidden; AUWB is not hers.
+    assert await _issue_keys(client, alice) == [a1]
+    assert await _issue_keys(client, alice, "?q=work+item") == [a1]
+    assert await _issue_keys(client, alice, "?q=other") == []
+    assert await _issue_keys(client, alice, f"?project={w.b.key}") == []
+    assert await _issue_keys(client, alice, "?project=nope") == []
+
+    mgr = w.users["mgr"]
+    assert set(await _issue_keys(client, mgr)) == {a1, a2, b1}
+    assert await _issue_keys(client, mgr, f"?project={w.b.key.lower()}") == [b1]
+    assert len(await _issue_keys(client, mgr, "?limit=2")) == 2
+    assert len(await _issue_keys(client, mgr, "?limit=2&offset=2")) == 1
+
+    # Seeing issues is not enough: carol and dave may not log AI usage.
+    assert await _issue_keys(client, w.users["carol"]) == []
+    assert await _issue_keys(client, w.users["dave"]) == []
+
+
+async def test_issue_search_needs_a_login(client: AsyncClient, w: World):
+    resp = await client.get("/my/ai-usage/issues/", follow_redirects=False)
+    assert resp.status_code in (302, 303, 401)
 
 
 # ---------------------------------------------------------------------------

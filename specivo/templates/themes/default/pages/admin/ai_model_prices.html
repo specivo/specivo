@@ -43,7 +43,7 @@
       <option value="1" {{ 'selected' if filters.current == '1' else '' }}>{% trans %}Valid now{% endtrans %}</option>
       <option value="0" {{ 'selected' if filters.current == '0' else '' }}>{% trans %}All periods{% endtrans %}</option>
     </select>
-    <button type="submit" class="sp-btn-sm">{% trans %}Filter{% endtrans %}</button>
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
   </form>
   <div class="sp-table-scroll">
     <table class="issue-table" data-testid="prices-table">
@@ -92,7 +92,7 @@
     {% endif %}
     <p class="sp-text-muted">{% trans %}They are loaded when Specivo is installed and whenever a worker starts after an upgrade. Loading never changes a period that already started: a changed price ends the old period at the snapshot's date and starts a new one. Usage from before the first bundled period is unpriced unless you enter an earlier price. Prices you entered are never touched.{% endtrans %}</p>
     <form method="post" action="/admin/ai-model-prices/seed/">
-      <button type="submit" class="sp-btn-sm">{% trans %}Load bundled prices now{% endtrans %}</button>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Load bundled prices now{% endtrans %}</button>
     </form>
     <p class="sp-text-muted-xs sp-mp-attribution" data-testid="litellm-attribution">{% trans %}Source of the bundled prices: LiteLLM's model price list (MIT License, Copyright (c) 2023 Berri AI). Prices are list prices for information; check them against your provider's invoice.{% endtrans %}</p>
   </div>

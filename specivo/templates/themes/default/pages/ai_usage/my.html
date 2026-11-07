@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import pagination %}
+{% from "components/filter_combobox.html" import issue_combobox %}
 {% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label with context %}
 
 {% block title %}{% trans %}My AI usage{% endtrans %} - {{ brand_name }}{% endblock %}
@@ -82,20 +83,21 @@
 <form method="post" action="/my/ai-usage/reassign/" id="aiu-reassign" class="card sp-card-pad sp-mb-md" data-testid="aiu-reassign-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="next" value="{{ return_to }}">
-  <div class="sp-aiu-reassign">
+  <div class="sp-aiu-reassign sp-form-row">
   <span class="sp-aiu-reassign-title">{% trans %}Move the selected entries to{% endtrans %}</span>
-  <label class="sp-aiu-filter">
-    <span class="filter-label">{% trans %}Project{% endtrans %}</span>
-    <select name="target_project" class="filter-select" data-testid="aiu-reassign-project">
+  <div class="sp-form-field">
+    <label class="filter-label" for="aiu-reassign-project">{% trans %}Project{% endtrans %}</label>
+    <select id="aiu-reassign-project" name="target_project" class="filter-select" data-testid="aiu-reassign-project">
       <option value="">{% trans %}No project (unassigned){% endtrans %}</option>
       {% for p in projects %}<option value="{{ p.key }}">{{ p.name }} ({{ p.key }})</option>{% endfor %}
     </select>
-  </label>
-  <label class="sp-aiu-filter">
-    <span class="filter-label">{% trans %}Issue (optional){% endtrans %}</span>
-    <input type="text" name="target_issue" class="filter-input" maxlength="50" placeholder="{{ _('e.g. PROJ-42') }}" data-testid="aiu-reassign-issue">
-  </label>
-  <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto" data-testid="aiu-reassign-submit">{% trans %}Move{% endtrans %}</button>
+  </div>
+  <div class="sp-form-field">
+    <label class="filter-label" for="aiu-reassign-issue">{% trans %}Issue (optional){% endtrans %}</label>
+    {{ issue_combobox("target_issue", "aiu-reassign-issue", _("Issue (optional)"), _("Search issues..."),
+         "/my/ai-usage/issues/", scope_field="target_project", testid="aiu-reassign-issue") }}
+  </div>
+  <button type="submit" class="sp-btn sp-btn-primary" data-testid="aiu-reassign-submit">{% trans %}Move{% endtrans %}</button>
   <p class="sp-text-muted-xs sp-aiu-reassign-hint">{% trans %}An issue alone also sets its project. You can move entries only to projects where you may log AI usage.{% endtrans %}</p>
   </div>
 </form>

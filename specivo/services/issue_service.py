@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import Any
 
@@ -1528,14 +1528,24 @@ class IssueService:
         query: str,
         user: User,
         limit: int = 10,
+        *,
+        project_keys: Collection[str] | None = None,
+        offset: int = 0,
     ) -> list[dict]:
         """Search issues by key or subject for autocomplete.
 
         Returns only issues *user* may see, filtered by ``visible_issues_clause``
         so autocomplete never exposes more than issue listing does.
+
+        *project_keys* narrows the search to those projects (an empty
+        collection matches nothing); with it an empty *query* lists the most
+        recently updated issues, so a picker can show suggestions before the
+        user types. *offset* pages through the matches.
         """
         q = query.strip()
-        if not q:
+        if project_keys is not None and not project_keys:
+            return []
+        if not q and project_keys is None:
             return []
 
         # Escape LIKE wildcards in user input
@@ -1553,15 +1563,19 @@ class IssueService:
                 IssueStatus.name.label("status_name"),
             )
             .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(
+            .order_by(Issue.updated_at.desc(), Issue.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        if q:
+            stmt = stmt.where(
                 or_(
                     display_key_expr.ilike(f"%{escaped}%", escape="\\"),
                     Issue.subject.ilike(f"%{escaped}%", escape="\\"),
                 )
             )
-            .order_by(Issue.updated_at.desc())
-            .limit(limit)
-        )
+        if project_keys is not None:
+            stmt = stmt.where(Issue.project_key.in_(sorted(project_keys)))
 
         visibility = await self.visible_issues_clause(session, user)
         if visibility is not None:
