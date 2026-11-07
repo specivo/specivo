@@ -212,8 +212,10 @@ export function groupOption(data, labels, theme, width, fmt) {
     const axis = axisStyle(theme);
     // Spend is left out when the data says so (nothing in the view has any).
     const measures = data.no_spend ? ['api'] : ['spend', 'api'];
+    // A row per group; past a dozen (a spend report breakdown set to show more), thinner rows keep it readable.
+    const row = points.length > 12 ? 30 : 52;
     return {
-        height: Math.max(160, points.length * 52 + 72),
+        height: Math.max(160, points.length * row + 72),
         option: {
             dataset: {
                 dimensions: ['label', 'spend', 'api'],

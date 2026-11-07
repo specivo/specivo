@@ -54,6 +54,7 @@ from specivo.services.ai_usage_chart_service import (
     CHOSEN_SIZES,
     NO_PROJECT,
     OTHER,
+    TOP_N,
     AiUsageChartService,
     Share,
     UsageCharts,
@@ -419,13 +420,50 @@ def _share_points(charts: UsageCharts, shares: list[Share], projects: bool) -> l
     points = []
     for s in shares:
         if s.key == OTHER:
-            label = _("Other")
-        elif projects:
+            points.append({"label": _("Other"), "spend": _float(s.spend), "api": _float(s.api), "other": s.groups})
+            continue
+        if projects:
             label = _("Unassigned") if s.key == NO_PROJECT else (s.label or "–")
         else:
             label = s.label or "–"
         points.append({"label": label, "spend": _float(s.spend), "api": _float(s.api)})
     return points
+
+
+#: The breakdown charts of a chart payload, by the name of their per-chart choice.
+BREAKDOWNS = {"user": "by_user", "project": "by_project", "model": "by_model", "tool": "by_tool"}
+
+
+def fold_share_points(points: list[dict[str, Any]], show: int) -> list[dict[str, Any]]:
+    """The first *show* groups of a breakdown by name, the rest (and its "other" point) summed into one.
+
+    All of them when only one would be left over: an "other" of one group is no help.
+    """
+    named = [p for p in points if not p.get("other")]
+    others = [p for p in points if p.get("other")]
+    rest = named[show:] + others
+    groups = len(named[show:]) + sum(int(p["other"]) for p in others)
+    if len(named) <= show or groups <= 1:
+        return points
+    folded = {
+        "label": _("Other"),
+        "spend": round(sum(p["spend"] for p in rest), 6),
+        "api": round(sum(p["api"] for p in rest), 6),
+        "other": groups,
+    }
+    return [*named[:show], folded]
+
+
+def fold_breakdowns(view: dict[str, Any] | None, shows: dict[str, int] | None = None) -> dict[str, Any] | None:
+    """Fold each breakdown chart of *view* to its chosen number of groups (``TOP_N`` unless *shows* says)."""
+    if not view:
+        return view
+    view = dict(view)
+    for name, key in BREAKDOWNS.items():
+        chart = view.get(key)
+        if chart and chart.get("points"):
+            view[key] = {**chart, "points": fold_share_points(chart["points"], (shows or {}).get(name, TOP_N))}
+    return view
 
 
 def _project_label(key: str, labels: dict[str, str]) -> str:
@@ -653,7 +691,7 @@ async def _cached_charts_view(
 
     version = select(func.count(), func.max(AiUsageEntry.updated_at)).where(AiUsageEntry.user_id == user.id)
     parts = {"currency": currency, **{k: _cache_value(v) for k, v in args.items()}}
-    return await cached_chart_payload(db, f"aiu:charts:{user.id}", parts, version, build)
+    return fold_breakdowns(await cached_chart_payload(db, f"aiu:charts:{user.id}", parts, version, build))
 
 
 async def _project_charts_view(
@@ -729,7 +767,8 @@ async def _project_charts_view(
         "bucket": chosen,
         **{k: _cache_value(v) for k, v in args.items()},
     }
-    return await cached_chart_payload(db, f"aiu:project-charts:{project.id}:{user.id}", parts, version, build)
+    view = await cached_chart_payload(db, f"aiu:project-charts:{project.id}:{user.id}", parts, version, build)
+    return fold_breakdowns(view)
 
 
 async def sees_everyone(db: AsyncSession, user: User, project: Project) -> bool:

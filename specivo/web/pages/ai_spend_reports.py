@@ -67,9 +67,11 @@ from specivo.services.ai_spend_report_service import (
 )
 from specivo.services.ai_subscription_service import AiToolService
 from specivo.services.ai_usage_chart_service import (
+    BREAKDOWN_SHOWS,
     CHOSEN_SIZES,
     NEUTRAL_SLOT,
     NO_PROJECT,
+    TOP_N,
     AiUsageChartService,
     color_slots,
 )
@@ -81,6 +83,7 @@ from specivo.services.project_service import ProjectService
 from specivo.web.deps import get_templates, require_user
 from specivo.web.pages.admin import require_admin
 from specivo.web.pages.ai_usage import (
+    BREAKDOWNS,
     NONE_VALUE,
     _charts_view,
     _filters,
@@ -91,6 +94,7 @@ from specivo.web.pages.ai_usage import (
     _rows,
     _tool_names,
     cached_chart_payload,
+    fold_breakdowns,
     person_filter_chip,
     sees_everyone,
 )
@@ -106,6 +110,10 @@ ADMIN_URL = "/admin/ai-spend/"
 ADMIN_ENTRIES_URL = "/admin/ai-spend/entries/"
 #: Rows the chart draws at most (the table shows them all).
 CHART_MAX_ROWS = 40
+#: The query parameter of each breakdown chart's "Show" choice: show_user, show_project, ...
+SHOW_PARAMS = {name: f"show_{name}" for name in BREAKDOWNS}
+#: A query override that leaves every chart's "Show" choice out (cache keys that do not depend on it).
+NO_SHOWS = dict.fromkeys(SHOW_PARAMS.values(), "")
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +202,8 @@ class ReportForm:
     offset: int = 0
     limit: int = 25
     detail: str = ""
+    #: Groups each breakdown chart shows by name (``BREAKDOWN_SHOWS``), by chart (``BREAKDOWNS``).
+    show: dict[str, int] = field(default_factory=dict)
     #: No grouping was asked for: the page picks its own (project on the instance report, user on a project's).
     group_missing: bool = False
 
@@ -229,6 +239,11 @@ class ReportForm:
             offset=int(offset) if offset.isdigit() and int(offset) < 10_000_000 else 0,
             limit=int(limit) if limit.isdigit() and int(limit) in SESSION_LIMITS else 25,
             detail="1" if text("detail") == "1" else "",
+            show={
+                name: int(text(param))
+                for name, param in SHOW_PARAMS.items()
+                if text(param).isdigit() and int(text(param)) in BREAKDOWN_SHOWS
+            },
             group_missing=group_raw is None,
         )
         if form.group2 == form.group or form.group == SESSIONS:
@@ -290,6 +305,7 @@ class ReportForm:
             "detail": self.detail,
             "offset": str(self.offset) if self.offset else "",
             "limit": str(self.limit) if self.limit != 25 else "",
+            **{param: str(n) for name, param in SHOW_PARAMS.items() if (n := self.show.get(name, TOP_N)) != TOP_N},
             **override,
         }
         # An unknown login typed into the person filter stays in the links, to be named again.
@@ -297,6 +313,10 @@ class ReportForm:
         if values.get("group") != SESSIONS:
             values["offset"] = values["limit"] = ""
         return urlencode({k: v for k, v in values.items() if v})
+
+    def shows(self) -> dict[str, int]:
+        """Groups each breakdown chart shows by name: the reader's choice, else ``TOP_N``."""
+        return {name: self.show.get(name, TOP_N) for name in BREAKDOWNS}
 
     def level_query(self, group: str, **override: Any) -> str:
         """The query of another level: *group*, without "then by", period bucket or page."""
@@ -350,6 +370,10 @@ def _form_params(
     offset: str = Query(""),
     limit: str = Query(""),
     detail: str = Query(""),
+    show_user: str = Query(""),
+    show_project: str = Query(""),
+    show_model: str = Query(""),
+    show_tool: str = Query(""),
 ) -> ReportForm:
     return ReportForm.read(
         preset=preset,
@@ -375,6 +399,10 @@ def _form_params(
         offset=offset,
         limit=limit,
         detail=detail,
+        show_user=show_user,
+        show_project=show_project,
+        show_model=show_model,
+        show_tool=show_tool,
     )
 
 
@@ -623,6 +651,19 @@ def _bucket_links(base_url: str, form: ReportForm) -> list[dict[str, Any]]:
     return out
 
 
+def _show_links(base_url: str, form: ReportForm) -> dict[str, list[dict[str, Any]]]:
+    """Each breakdown chart's "Show" switch: how many groups it names before "Other" (a link per choice)."""
+    shows = form.shows()
+    out: dict[str, list[dict[str, Any]]] = {}
+    for name, param in SHOW_PARAMS.items():
+        links = []
+        for n in BREAKDOWN_SHOWS:
+            query = form.query(**{param: str(n) if n != TOP_N else ""})
+            links.append({"value": n, "url": base_url + (f"?{query}" if query else ""), "active": n == shows[name]})
+        out[name] = links
+    return out
+
+
 def _version_stmt(project: Project | None) -> Any:
     """What changes when the reported data does: the scope's entries and the plans (count and latest change)."""
     version = select(
@@ -686,7 +727,9 @@ async def _charts(
     parts = await _cache_parts(db, user, project, report)
     parts["bucket"] = form.bucket
     prefix = f"aiu:spend-charts:{report.scope}:{project.id if project is not None else 0}:{user.id}"
-    return await cached_chart_payload(db, prefix, parts, _version_stmt(project), build)
+    # The payload keeps up to BREAKDOWN_MAX groups per breakdown; each chart shows the reader's choice.
+    view = await cached_chart_payload(db, prefix, parts, _version_stmt(project), build)
+    return fold_breakdowns(view, form.shows())
 
 
 async def _context(db: AsyncSession, report: SpendReport | None, form: ReportForm) -> dict[str, Any]:
@@ -1319,7 +1362,7 @@ async def _people_view(
         return {"cards": cards, "more": more}
 
     parts = await _cache_parts(db, user, project, report)
-    parts.update(sort=form.sort, level=form.query(offset="", limit="", bucket="", detail=""))
+    parts.update(sort=form.sort, level=form.query(offset="", limit="", bucket="", detail="", **NO_SHOWS))
     prefix = f"aiu:spend-people:{report.scope}:{project.id if project is not None else 0}:{user.id}"
     return await cached_chart_payload(db, prefix, parts, _version_stmt(project), build)
 
@@ -1402,6 +1445,16 @@ async def _page(
     else:
         offer_people = await sees_everyone(db, user, project)  # type: ignore[arg-type]
         people_endpoint = f"/api/v1/projects/{project.key}/ai-usage/report/people/"  # type: ignore[union-attr]
+    model_filter = {
+        "endpoint": "/api/v1/ai-usage/report/models/"
+        if instance
+        else f"/api/v1/projects/{project.key}/ai-usage/report/models/",  # type: ignore[union-attr]
+        "chip": (
+            {"value": form.model, "label": form.model, "clear_url": base_url + "?" + form.query(model="")}
+            if form.model
+            else None
+        ),
+    }
     person_filter = {
         "offered": offer_people,
         "endpoint": people_endpoint,
@@ -1419,10 +1472,12 @@ async def _page(
         "people": people,
         "sessions": sessions,
         "bucket_links": _bucket_links(base_url, form),
+        "show_links": _show_links(base_url, form),
         "csv_base": "/api/v1/ai-usage/report/" if instance else f"/api/v1/projects/{project.key}/ai-usage/report/",  # type: ignore[union-attr]
         "entries_url": ADMIN_ENTRIES_URL if instance else f"/projects/{project.key}/ai-usage/",  # type: ignore[union-attr]
         "level_entries_url": _entries_url(report, form) if report is not None else "",
         "person_filter": person_filter,
+        "model_filter": model_filter,
         "error": error,
         **await _context(db, report, form),
     }

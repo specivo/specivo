@@ -29,6 +29,7 @@ from specivo.services.ai_spend_report_service import AiSpendReportService
 from specivo.services.ai_usage_chart_service import MAX_BUCKETS, NO_PROJECT, OTHER, TOP_N, AiUsageChartService
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
 from specivo.services.auth_service import _make_access_token
+from specivo.web.pages.ai_usage import _charts_view, fold_breakdowns
 from tests.integration.test_ai_usage_api import World, build_world
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -218,9 +219,15 @@ async def test_top_models_plus_other(db_session: AsyncSession, w: World):
     assert charts.models == [*expected, OTHER]
     # The three smallest: (1 + 2 + 3) USD of input plus 1 USD of output each.
     assert charts.buckets[0].api_by_model[OTHER] == Decimal("9")
-    assert [s.key for s in charts.by_model] == [*expected, OTHER]
-    assert charts.by_model[-1].api == Decimal("9") and charts.by_model[-1].label == OTHER
+    # A breakdown keeps every group (up to BREAKDOWN_MAX): the page folds it to TOP_N, or to the reader's choice.
+    everyone = [f"lab-top-{i:02d}" for i in range(count - 1, -1, -1)]
+    assert [s.key for s in charts.by_model] == everyone
     assert sum(s.api for s in charts.by_model) == charts.buckets[0].api
+    view = fold_breakdowns(_charts_view(charts))
+    assert view is not None
+    points = view["by_model"]["points"]
+    assert [p["label"] for p in points[:-1]] == expected
+    assert points[-1]["other"] == 3 and points[-1]["api"] == 9.0
     # Two projects only (AUCA and none): no "other".
     assert {s.key for s in charts.by_project} == {str(w.a.id), NO_PROJECT}
     assert {s.label for s in charts.by_project} == {w.a.key, NO_PROJECT}

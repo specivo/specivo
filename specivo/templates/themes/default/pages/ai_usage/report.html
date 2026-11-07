@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, pagination %}
 {% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts, person_filter_field with context %}
+{% from "components/filter_combobox.html" import filter_combobox %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
@@ -165,10 +166,12 @@
       {% for t in tools %}<option value="{{ t.slug }}" {{ 'selected' if form.tool == t.slug else '' }}>{{ t.name }}</option>{% endfor %}
     </select>
   </label>
-  <label class="sp-aiu-filter">
-    <span class="filter-label">{% trans %}Model{% endtrans %}</span>
-    <input type="text" name="model" value="{{ form.model }}" class="filter-input" maxlength="200">
-  </label>
+  {# Suggests models of the price list and the usage in view; Enter on typed text filters by it (a model nobody priced). #}
+  <div class="sp-aiu-filter" data-testid="spend-model-filter">
+    {% if model_filter.chip %}<span class="filter-label">{% trans %}Model{% endtrans %}</span>
+    {% else %}<label class="filter-label" for="sp-spend-model">{% trans %}Model{% endtrans %}</label>{% endif %}
+    {{ filter_combobox("model", _("Model"), _("All models"), model_filter.endpoint, "model", chip=model_filter.chip, text_name="model", input_id="sp-spend-model") }}
+  </div>
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}Cost type{% endtrans %}</span>
     <select name="cost_type" class="filter-select">
@@ -535,7 +538,7 @@
 </section>
 {% endif %}
 
-{{ usage_charts(charts, has_rows=drill.rows | length > 0, bucket_links=bucket_links) }}
+{{ usage_charts(charts, has_rows=drill.rows | length > 0, bucket_links=bucket_links, show_links=show_links) }}
 {% endif %}
 </div>
 {% endblock %}

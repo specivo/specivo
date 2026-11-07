@@ -152,7 +152,29 @@
   charts: None when nothing is counted, {too_long: True} when the entries span too long
   a period; has_rows: whether the table lists entries.
 #}
-{% macro usage_charts(charts, has_rows=False, bucket_links=[]) -%}
+{# A breakdown chart's "Show" switch: how many groups it names before "Other" (spend reports only). #}
+{% macro _show_switch(links, name) -%}
+{%- if links %}
+<nav class="sp-aiu-chart-switch" aria-label="{{ _('Groups shown') }}" data-testid="aiu-chart-show-{{ name }}">
+  {%- for l in links %}
+  <a class="sp-aiu-chart-switch-option{{ ' active' if l.active }}" href="{{ l.url }}"{% if l.active %} aria-current="true"{% endif %} data-show="{{ l.value }}">{{ l.value }}</a>
+  {%- endfor %}
+</nav>
+{%- endif %}
+{%- endmacro %}
+
+{% macro _breakdown_title(title, links, name) -%}
+{%- if links %}
+<div class="sp-aiu-chart-head">
+  <h3 class="sp-aiu-chart-title">{{ title }}</h3>
+  <div class="sp-aiu-chart-controls">{{ _show_switch(links, name) }}</div>
+</div>
+{%- else %}
+<h3 class="sp-aiu-chart-title">{{ title }}</h3>
+{%- endif %}
+{%- endmacro %}
+
+{% macro usage_charts(charts, has_rows=False, bucket_links=[], show_links={}) -%}
 {%- if charts and charts.too_long %}
 <p class="sp-text-muted sp-aiu-charts-empty" data-testid="aiu-charts-too-long">{% trans %}These entries span too many years to chart. Narrow the dates to see the charts.{% endtrans %}</p>
 {%- elif charts %}
@@ -220,7 +242,7 @@
   <div class="sp-aiu-chart-grid">
     {%- if charts.by_user %}
     <div class="card sp-aiu-chart-card">
-      <h3 class="sp-aiu-chart-title">{% trans %}By user{% endtrans %}</h3>
+      {{ _breakdown_title(_("By user"), show_links.get("user"), "user") }}
       <div class="sp-spend-chart" data-testid="aiu-chart-users" role="img"
            aria-label="{{ _('API-equivalent value by user') }}"
            data-sp-spend-chart='{{ charts.by_user | tojson }}'
@@ -230,7 +252,7 @@
     {%- endif %}
     {%- if charts.by_project %}
     <div class="card sp-aiu-chart-card">
-      <h3 class="sp-aiu-chart-title">{% trans %}By project{% endtrans %}</h3>
+      {{ _breakdown_title(_("By project"), show_links.get("project"), "project") }}
       <div class="sp-spend-chart" data-testid="aiu-chart-projects" role="img"
            aria-label="{{ _('API-equivalent value by project') }}"
            data-sp-spend-chart='{{ charts.by_project | tojson }}'
@@ -239,7 +261,7 @@
     </div>
     {%- endif %}
     <div class="card sp-aiu-chart-card">
-      <h3 class="sp-aiu-chart-title">{% trans %}By model{% endtrans %}</h3>
+      {{ _breakdown_title(_("By model"), show_links.get("model"), "model") }}
       <div class="sp-spend-chart" data-testid="aiu-chart-models" role="img"
            aria-label="{{ _('API-equivalent value by model') }}"
            data-sp-spend-chart='{{ charts.by_model | tojson }}'
@@ -248,7 +270,7 @@
     </div>
     {%- if charts.by_tool %}
     <div class="card sp-aiu-chart-card">
-      <h3 class="sp-aiu-chart-title">{% trans %}By tool{% endtrans %}</h3>
+      {{ _breakdown_title(_("By tool"), show_links.get("tool"), "tool") }}
       <div class="sp-spend-chart" data-testid="aiu-chart-tools" role="img"
            aria-label="{{ _('API-equivalent value by tool') }}"
            data-sp-spend-chart='{{ charts.by_tool | tojson }}'

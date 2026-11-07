@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-07 22:41+0100\n"
+"POT-Creation-Date: 2026-11-07 23:18+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.app>\n"
 "Language: fr\n"
@@ -963,8 +963,8 @@ msgstr "%(first)s–%(last)s sur %(total)s"
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:201
 #: specivo/templates/themes/default/pages/ai_usage/my.html:67
 #: specivo/templates/themes/default/pages/ai_usage/project.html:66
-#: specivo/templates/themes/default/pages/ai_usage/report.html:208
-#: specivo/templates/themes/default/pages/ai_usage/report.html:521
+#: specivo/templates/themes/default/pages/ai_usage/report.html:211
+#: specivo/templates/themes/default/pages/ai_usage/report.html:524
 #: specivo/templates/themes/default/pages/search.html:311
 msgid "Show"
 msgstr "Afficher"
@@ -1100,7 +1100,7 @@ msgstr "Feuille de route"
 #: specivo/templates/themes/default/pages/ai_usage/project.html:5
 #: specivo/templates/themes/default/pages/ai_usage/project.html:11
 #: specivo/templates/themes/default/pages/ai_usage/project.html:15
-#: specivo/templates/themes/default/pages/ai_usage/report.html:83
+#: specivo/templates/themes/default/pages/ai_usage/report.html:84
 #: specivo/templates/themes/default/pages/issues/detail.html:289
 #: specivo/templates/themes/default/pages/projects/detail.html:54
 #: specivo/web/pages/admin.py:1137
@@ -1191,8 +1191,8 @@ msgstr "Administration"
 #: specivo/templates/themes/default/pages/admin/workflows.html:9
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:7
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:12
-#: specivo/templates/themes/default/pages/ai_usage/report.html:76
-#: specivo/templates/themes/default/pages/ai_usage/report.html:89
+#: specivo/templates/themes/default/pages/ai_usage/report.html:77
+#: specivo/templates/themes/default/pages/ai_usage/report.html:90
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:11
 msgid "Admin"
 msgstr "Administration"
@@ -1716,14 +1716,14 @@ msgstr "Type"
 #: specivo/templates/themes/default/pages/admin/group_detail.html:109
 #: specivo/templates/themes/default/pages/admin/projects.html:38
 #: specivo/templates/themes/default/pages/admin/versions.html:81
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:388
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:410
 #: specivo/templates/themes/default/pages/ai_usage/form.html:44
 #: specivo/templates/themes/default/pages/ai_usage/my.html:33
 #: specivo/templates/themes/default/pages/ai_usage/my.html:92
-#: specivo/templates/themes/default/pages/ai_usage/report.html:16
-#: specivo/templates/themes/default/pages/ai_usage/report.html:27
-#: specivo/templates/themes/default/pages/ai_usage/report.html:319
-#: specivo/templates/themes/default/pages/ai_usage/report.html:335
+#: specivo/templates/themes/default/pages/ai_usage/report.html:17
+#: specivo/templates/themes/default/pages/ai_usage/report.html:28
+#: specivo/templates/themes/default/pages/ai_usage/report.html:322
+#: specivo/templates/themes/default/pages/ai_usage/report.html:338
 msgid "Project"
 msgstr "Projet"
 
@@ -1774,8 +1774,8 @@ msgstr[1] "Vous pourrez réessayer dans %(num)s secondes."
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:27
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
 #: specivo/templates/themes/default/pages/ai_usage/project.html:74
-#: specivo/templates/themes/default/pages/ai_usage/report.html:19
-#: specivo/templates/themes/default/pages/ai_usage/report.html:30
+#: specivo/templates/themes/default/pages/ai_usage/report.html:20
+#: specivo/templates/themes/default/pages/ai_usage/report.html:31
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:25
 #: specivo/templates/themes/default/pages/projects/settings.html:1525
 msgid "Provider"
@@ -1788,11 +1788,13 @@ msgstr "Fournisseur"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:85
 #: specivo/templates/themes/default/pages/ai_usage/my.html:48
 #: specivo/templates/themes/default/pages/ai_usage/project.html:43
-#: specivo/templates/themes/default/pages/ai_usage/report.html:20
-#: specivo/templates/themes/default/pages/ai_usage/report.html:31
-#: specivo/templates/themes/default/pages/ai_usage/report.html:169
-#: specivo/templates/themes/default/pages/ai_usage/report.html:321
-#: specivo/templates/themes/default/pages/ai_usage/report.html:337
+#: specivo/templates/themes/default/pages/ai_usage/report.html:21
+#: specivo/templates/themes/default/pages/ai_usage/report.html:32
+#: specivo/templates/themes/default/pages/ai_usage/report.html:171
+#: specivo/templates/themes/default/pages/ai_usage/report.html:172
+#: specivo/templates/themes/default/pages/ai_usage/report.html:173
+#: specivo/templates/themes/default/pages/ai_usage/report.html:324
+#: specivo/templates/themes/default/pages/ai_usage/report.html:340
 msgid "Model"
 msgstr "Modèle"
 
@@ -1801,7 +1803,7 @@ msgstr "Modèle"
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
 #: specivo/templates/themes/default/pages/ai_usage/form.html:147
-#: specivo/templates/themes/default/pages/ai_usage/report.html:180
+#: specivo/templates/themes/default/pages/ai_usage/report.html:183
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
 msgid "Currency"
 msgstr "Devise"
@@ -1821,14 +1823,14 @@ msgstr "Prix par million de tokens"
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:35
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:47
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
-#: specivo/web/pages/ai_usage.py:365
+#: specivo/web/pages/ai_usage.py:366
 msgid "Input"
 msgstr "Entrée"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:36
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:48
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
-#: specivo/web/pages/ai_usage.py:366
+#: specivo/web/pages/ai_usage.py:367
 msgid "Output"
 msgstr "Sortie"
 
@@ -1847,7 +1849,7 @@ msgstr "Écriture en cache, 1 heure"
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:39
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:51
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:36
-#: specivo/web/pages/ai_usage.py:368
+#: specivo/web/pages/ai_usage.py:369
 msgid "Cache read"
 msgstr "Lecture du cache"
 
@@ -1857,7 +1859,7 @@ msgstr "= sortie"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:40
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:71
-#: specivo/web/pages/ai_usage.py:367
+#: specivo/web/pages/ai_usage.py:368
 msgid "Reasoning"
 msgstr "Raisonnement"
 
@@ -1897,8 +1899,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:23
-#: specivo/web/pages/ai_spend_reports.py:463
-#: specivo/web/pages/ai_spend_reports.py:1220
+#: specivo/web/pages/ai_spend_reports.py:491
+#: specivo/web/pages/ai_spend_reports.py:1265
 msgid "Local model"
 msgstr "Modèle local"
 
@@ -2011,12 +2013,12 @@ msgid "Bundled"
 msgstr "Fourni"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
-#: specivo/web/pages/ai_usage.py:369
+#: specivo/web/pages/ai_usage.py:370
 msgid "Cache write 5m"
 msgstr "Écriture cache 5 min"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
-#: specivo/web/pages/ai_usage.py:370
+#: specivo/web/pages/ai_usage.py:371
 msgid "Cache write 1h"
 msgstr "Écriture cache 1 h"
 
@@ -2349,7 +2351,7 @@ msgstr "Activer"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:89
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:456
 #: specivo/templates/themes/default/pages/admin/versions.html:128
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:440
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:462
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:36
 #: specivo/templates/themes/default/pages/auth/api_keys.html:139
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
@@ -2424,7 +2426,7 @@ msgstr "Toutes les sources"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:42
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:33
-#: specivo/templates/themes/default/pages/ai_usage/report.html:116
+#: specivo/templates/themes/default/pages/ai_usage/report.html:117
 msgid "Period"
 msgstr "Période"
 
@@ -2556,10 +2558,10 @@ msgstr "Seuls les administrateurs peuvent désormais modifier les abonnements."
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:43
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:159
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:173
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:305
-#: specivo/templates/themes/default/pages/ai_usage/report.html:26
-#: specivo/templates/themes/default/pages/ai_usage/report.html:318
-#: specivo/templates/themes/default/pages/ai_usage/report.html:334
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:327
+#: specivo/templates/themes/default/pages/ai_usage/report.html:27
+#: specivo/templates/themes/default/pages/ai_usage/report.html:321
+#: specivo/templates/themes/default/pages/ai_usage/report.html:337
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:6
 #: specivo/templates/themes/default/pages/dashboard/_activity.html:33
 msgid "Person"
@@ -2575,8 +2577,8 @@ msgid "Running today"
 msgstr "En cours aujourd'hui"
 
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:44
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:273
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:346
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:295
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:368
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:14
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:33
 msgid "Plan"
@@ -2607,8 +2609,8 @@ msgstr "Jours"
 #: specivo/templates/themes/default/pages/admin/settings.html:176
 #: specivo/templates/themes/default/pages/admin/versions.html:125
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:180
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:425
-#: specivo/templates/themes/default/pages/ai_usage/report.html:343
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:447
+#: specivo/templates/themes/default/pages/ai_usage/report.html:346
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:49
 #: specivo/templates/themes/default/pages/issues/detail.html:82
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:86
@@ -2648,7 +2650,7 @@ msgstr "Partir d'un forfait"
 
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:80
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:54
-#: specivo/templates/themes/default/pages/ai_usage/report.html:59
+#: specivo/templates/themes/default/pages/ai_usage/report.html:60
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:17
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:66
 msgid "Custom"
@@ -2859,7 +2861,7 @@ msgstr "Clé du projet"
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:125
 #: specivo/templates/themes/default/pages/ai_usage/my.html:59
 #: specivo/templates/themes/default/pages/ai_usage/project.html:58
-#: specivo/templates/themes/default/pages/ai_usage/report.html:131
+#: specivo/templates/themes/default/pages/ai_usage/report.html:132
 #: specivo/templates/themes/default/pages/time/list.html:27
 msgid "From"
 msgstr "Du"
@@ -2869,7 +2871,7 @@ msgstr "Du"
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:126
 #: specivo/templates/themes/default/pages/ai_usage/my.html:63
 #: specivo/templates/themes/default/pages/ai_usage/project.html:62
-#: specivo/templates/themes/default/pages/ai_usage/report.html:135
+#: specivo/templates/themes/default/pages/ai_usage/report.html:136
 #: specivo/templates/themes/default/pages/time/list.html:29
 msgid "To"
 msgstr "À"
@@ -2905,8 +2907,8 @@ msgstr "Événement"
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:13
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:14
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:15
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:382
-#: specivo/templates/themes/default/pages/ai_usage/report.html:15
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:404
+#: specivo/templates/themes/default/pages/ai_usage/report.html:16
 #: specivo/templates/themes/default/pages/issues/detail.html:463
 #: specivo/templates/themes/default/pages/projects/settings.html:133
 #: specivo/templates/themes/default/pages/time/list.html:58
@@ -2953,7 +2955,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/currencies.html:23
 #: specivo/templates/themes/default/pages/admin/currencies.html:26
 #: specivo/templates/themes/default/pages/admin/currencies.html:70
-#: specivo/templates/themes/default/pages/ai_usage/report.html:182
+#: specivo/templates/themes/default/pages/ai_usage/report.html:185
 #: specivo/templates/themes/default/pages/projects/settings.html:79
 msgid "Reporting currency"
 msgstr "Devise de rapport"
@@ -2973,7 +2975,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:4
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:30
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:33
-#: specivo/templates/themes/default/pages/ai_usage/report.html:187
+#: specivo/templates/themes/default/pages/ai_usage/report.html:190
 msgid "Exchange rates"
 msgstr "Taux de change"
 
@@ -3224,9 +3226,9 @@ msgstr "Forfaits IA à prix fixe que chacun paie, et la liste des outils IA."
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:163
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:13
-#: specivo/templates/themes/default/pages/ai_usage/report.html:76
-#: specivo/templates/themes/default/pages/ai_usage/report.html:90
-#: specivo/templates/themes/default/pages/ai_usage/report.html:102
+#: specivo/templates/themes/default/pages/ai_usage/report.html:77
+#: specivo/templates/themes/default/pages/ai_usage/report.html:91
+#: specivo/templates/themes/default/pages/ai_usage/report.html:103
 msgid "AI spend"
 msgstr "Dépenses IA"
 
@@ -3428,9 +3430,9 @@ msgstr "Saisissez une date valide."
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:188
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:158
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:172
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:381
-#: specivo/templates/themes/default/pages/ai_usage/report.html:317
-#: specivo/templates/themes/default/pages/ai_usage/report.html:333
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:403
+#: specivo/templates/themes/default/pages/ai_usage/report.html:320
+#: specivo/templates/themes/default/pages/ai_usage/report.html:336
 #: specivo/templates/themes/default/pages/issues/description_diff.html:73
 #: specivo/templates/themes/default/pages/issues/detail.html:438
 #: specivo/templates/themes/default/pages/issues/detail.html:462
@@ -3568,7 +3570,7 @@ msgid "Rate of that date"
 msgstr "Taux de cette date"
 
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:82
-#: specivo/templates/themes/default/pages/ai_usage/report.html:190
+#: specivo/templates/themes/default/pages/ai_usage/report.html:193
 msgid "Latest rate"
 msgstr "Dernier taux"
 
@@ -3848,7 +3850,7 @@ msgstr "Ajout…"
 #: specivo/templates/themes/default/pages/admin/user_detail.html:232
 #: specivo/templates/themes/default/pages/admin/users.html:49
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:166
-#: specivo/templates/themes/default/pages/ai_usage/report.html:327
+#: specivo/templates/themes/default/pages/ai_usage/report.html:330
 #: specivo/templates/themes/default/pages/auth/api_keys.html:103
 #: specivo/templates/themes/default/pages/issues/_development_items.html:55
 #: specivo/templates/themes/default/pages/issues/description_diff.html:75
@@ -3935,7 +3937,7 @@ msgstr "Description"
 #: specivo/templates/themes/default/pages/admin/groups.html:51
 #: specivo/templates/themes/default/pages/admin/projects.html:41
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:82
-#: specivo/templates/themes/default/pages/ai_usage/report.html:251
+#: specivo/templates/themes/default/pages/ai_usage/report.html:254
 #: specivo/templates/themes/default/pages/dashboard/_activity.html:6
 #: specivo/templates/themes/default/pages/projects/detail.html:129
 msgid "People"
@@ -5566,7 +5568,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:25
-#: specivo/web/pages/ai_spend_reports.py:1022
+#: specivo/web/pages/ai_spend_reports.py:1067
 msgid "All projects"
 msgstr "Tous les projets"
 
@@ -5910,13 +5912,13 @@ msgid "%(count)s closed"
 msgstr "%(count)s fermé(s)"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:330
-#: specivo/templates/themes/default/pages/ai_usage/report.html:460
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:352
+#: specivo/templates/themes/default/pages/ai_usage/report.html:463
 #: specivo/templates/themes/default/pages/issues/detail.html:489
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
-#: specivo/web/pages/ai_usage.py:496
+#: specivo/web/pages/ai_usage.py:536
 msgid "Total"
 msgstr "Total"
 
@@ -5997,8 +5999,8 @@ msgstr ""
 "travail."
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:36
-#: specivo/templates/themes/default/pages/ai_usage/report.html:385
-#: specivo/templates/themes/default/pages/ai_usage/report.html:439
+#: specivo/templates/themes/default/pages/ai_usage/report.html:388
+#: specivo/templates/themes/default/pages/ai_usage/report.html:442
 #, python-format
 msgid "Other (%(count)s group)"
 msgid_plural "Other (%(count)s groups)"
@@ -6025,7 +6027,7 @@ msgstr "Ouvrir dans l'utilisation de l'IA du projet"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:53
 #: specivo/templates/themes/default/pages/ai_usage/project.html:19
-#: specivo/templates/themes/default/pages/ai_usage/report.html:84
+#: specivo/templates/themes/default/pages/ai_usage/report.html:85
 msgid "Spend report"
 msgstr "Rapport de dépenses"
 
@@ -6045,58 +6047,58 @@ msgstr "Ce ticket seulement"
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:163
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:177
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:117
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:237
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:246
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:386
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:259
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:268
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:408
 #: specivo/templates/themes/default/pages/ai_usage/form.html:30
-#: specivo/templates/themes/default/pages/ai_usage/report.html:237
-#: specivo/templates/themes/default/pages/ai_usage/report.html:324
-#: specivo/templates/themes/default/pages/ai_usage/report.html:340
-#: specivo/templates/themes/default/pages/ai_usage/report.html:358
-#: specivo/templates/themes/default/pages/ai_usage/report.html:370
-#: specivo/templates/themes/default/pages/ai_usage/report.html:393
-#: specivo/templates/themes/default/pages/ai_usage/report.html:424
-#: specivo/templates/themes/default/pages/ai_usage/report.html:448
-#: specivo/templates/themes/default/pages/ai_usage/report.html:467
-#: specivo/web/pages/ai_usage.py:481
+#: specivo/templates/themes/default/pages/ai_usage/report.html:240
+#: specivo/templates/themes/default/pages/ai_usage/report.html:327
+#: specivo/templates/themes/default/pages/ai_usage/report.html:343
+#: specivo/templates/themes/default/pages/ai_usage/report.html:361
+#: specivo/templates/themes/default/pages/ai_usage/report.html:373
+#: specivo/templates/themes/default/pages/ai_usage/report.html:396
+#: specivo/templates/themes/default/pages/ai_usage/report.html:427
+#: specivo/templates/themes/default/pages/ai_usage/report.html:451
+#: specivo/templates/themes/default/pages/ai_usage/report.html:470
+#: specivo/web/pages/ai_usage.py:521
 msgid "Spend"
 msgstr "Dépense"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:69
-#: specivo/templates/themes/default/pages/ai_usage/report.html:239
+#: specivo/templates/themes/default/pages/ai_usage/report.html:242
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:59
 msgid "Pay-per-use plus seat cost"
 msgstr "Facturation à l'usage plus licences"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:69
-#: specivo/templates/themes/default/pages/ai_usage/report.html:239
+#: specivo/templates/themes/default/pages/ai_usage/report.html:242
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:60
 msgid "Pay-per-use charges"
 msgstr "Facturation à l'usage"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:72
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:122
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:228
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:238
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:247
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:256
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:276
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:307
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:348
-#: specivo/templates/themes/default/pages/ai_usage/report.html:272
-#: specivo/templates/themes/default/pages/ai_usage/report.html:372
-#: specivo/templates/themes/default/pages/ai_usage/report.html:395
-#: specivo/templates/themes/default/pages/ai_usage/report.html:426
-#: specivo/templates/themes/default/pages/ai_usage/report.html:450
-#: specivo/templates/themes/default/pages/ai_usage/report.html:469
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:250
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:260
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:269
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:278
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:298
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:329
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:370
+#: specivo/templates/themes/default/pages/ai_usage/report.html:275
+#: specivo/templates/themes/default/pages/ai_usage/report.html:375
+#: specivo/templates/themes/default/pages/ai_usage/report.html:398
+#: specivo/templates/themes/default/pages/ai_usage/report.html:429
+#: specivo/templates/themes/default/pages/ai_usage/report.html:453
+#: specivo/templates/themes/default/pages/ai_usage/report.html:472
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:64
-#: specivo/web/pages/ai_usage.py:482
+#: specivo/web/pages/ai_usage.py:522
 msgid "API-equivalent value"
 msgstr "Valeur équivalente API"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:74
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:124
-#: specivo/templates/themes/default/pages/ai_usage/report.html:274
+#: specivo/templates/themes/default/pages/ai_usage/report.html:277
 msgid "The same tokens at pay-per-use prices"
 msgstr "Les mêmes jetons aux prix à l'usage"
 
@@ -6104,16 +6106,16 @@ msgstr "Les mêmes jetons aux prix à l'usage"
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:161
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:175
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:112
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:384
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:406
 #: specivo/templates/themes/default/pages/ai_usage/form.html:72
-#: specivo/templates/themes/default/pages/ai_usage/report.html:247
-#: specivo/templates/themes/default/pages/ai_usage/report.html:322
-#: specivo/templates/themes/default/pages/ai_usage/report.html:338
-#: specivo/templates/themes/default/pages/ai_usage/report.html:365
-#: specivo/templates/themes/default/pages/ai_usage/report.html:388
-#: specivo/templates/themes/default/pages/ai_usage/report.html:419
-#: specivo/templates/themes/default/pages/ai_usage/report.html:443
-#: specivo/templates/themes/default/pages/ai_usage/report.html:462
+#: specivo/templates/themes/default/pages/ai_usage/report.html:250
+#: specivo/templates/themes/default/pages/ai_usage/report.html:325
+#: specivo/templates/themes/default/pages/ai_usage/report.html:341
+#: specivo/templates/themes/default/pages/ai_usage/report.html:368
+#: specivo/templates/themes/default/pages/ai_usage/report.html:391
+#: specivo/templates/themes/default/pages/ai_usage/report.html:422
+#: specivo/templates/themes/default/pages/ai_usage/report.html:446
+#: specivo/templates/themes/default/pages/ai_usage/report.html:465
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:76
 msgid "Tokens"
 msgstr "Jetons"
@@ -6127,7 +6129,7 @@ msgstr[0] "%(count)s entrée"
 msgstr[1] "%(count)s entrées"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:79
-#: specivo/templates/themes/default/pages/ai_usage/report.html:244
+#: specivo/templates/themes/default/pages/ai_usage/report.html:247
 #, python-format
 msgid "%(count)s not priced"
 msgid_plural "%(count)s not priced"
@@ -6155,7 +6157,7 @@ msgid "Only the last three years of usage are counted."
 msgstr "Seules les trois dernières années d'utilisation sont comptées."
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:91
-#: specivo/templates/themes/default/pages/ai_usage/report.html:292
+#: specivo/templates/themes/default/pages/ai_usage/report.html:295
 msgid ""
 "Seat cost is left out: subscription fees are shown only to administrators"
 " and to people who can see every entry of this project in the period."
@@ -6178,8 +6180,8 @@ msgid "API-equivalent value by person"
 msgstr "Valeur équivalente API par personne"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:99
-#: specivo/templates/themes/default/pages/ai_usage/report.html:38
-#: specivo/templates/themes/default/pages/ai_usage/report.html:506
+#: specivo/templates/themes/default/pages/ai_usage/report.html:39
+#: specivo/templates/themes/default/pages/ai_usage/report.html:509
 msgid "Spend by person"
 msgstr "Dépenses par personne"
 
@@ -6196,61 +6198,61 @@ msgstr[0] "%(count)s autre personne non affichée."
 msgstr[1] "%(count)s autres personnes non affichées."
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:119
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:253
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:275
 msgid "API-equivalent value by tool"
 msgstr "Valeur équivalente API par outil"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:119
-#: specivo/templates/themes/default/pages/ai_usage/report.html:41
+#: specivo/templates/themes/default/pages/ai_usage/report.html:42
 msgid "Spend by tool"
 msgstr "Dépenses par outil"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:120
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:244
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:266
 msgid "API-equivalent value by model"
 msgstr "Valeur équivalente API par modèle"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:120
-#: specivo/templates/themes/default/pages/ai_usage/report.html:45
+#: specivo/templates/themes/default/pages/ai_usage/report.html:46
 msgid "Spend by model"
 msgstr "Dépenses par modèle"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:127
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:176
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:198
 msgid "API-equivalent value and spend over time"
 msgstr "Valeur équivalente API et dépenses au fil du temps"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:127
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:176
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:198
 msgid "API-equivalent value over time"
 msgstr "Valeur équivalente API au fil du temps"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:129
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:186
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:208
 msgid "Split the value by"
 msgstr "Répartir la valeur par"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:131
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:138
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:223
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:245
 msgid "By user"
 msgstr "Par utilisateur"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:131
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:139
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:251
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:273
 msgid "By tool"
 msgstr "Par outil"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:131
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:140
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:242
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:264
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:97
 msgid "By model"
 msgstr "Par modèle"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:136
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:194
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:216
 msgid "API-equivalent value over time; the totals and the table hold the numbers"
 msgstr ""
 "Valeur équivalente API au fil du temps ; les totaux et le tableau donnent"
@@ -6273,7 +6275,7 @@ msgid "Per day (UTC)."
 msgstr "Par jour (UTC)."
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:141
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:198
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:220
 msgid ""
 "The spend line is pay-per-use charges plus seat cost; the dashed line is "
 "the seat cost alone."
@@ -6286,7 +6288,7 @@ msgid "Periods marked * have entries without a price."
 msgstr "Les périodes marquées * ont des entrées sans prix."
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:149
-#: specivo/templates/themes/default/pages/ai_usage/report.html:34
+#: specivo/templates/themes/default/pages/ai_usage/report.html:35
 #: specivo/templates/themes/default/pages/auth/preferences.html:82
 #: specivo/web/pages/admin.py:1136
 msgid "Sessions"
@@ -6302,42 +6304,42 @@ msgstr "Les entrées de ce ticket, les plus récentes d'abord"
 #: specivo/templates/themes/default/pages/ai_usage/form.html:79
 #: specivo/templates/themes/default/pages/ai_usage/my.html:41
 #: specivo/templates/themes/default/pages/ai_usage/project.html:36
-#: specivo/templates/themes/default/pages/ai_usage/report.html:18
-#: specivo/templates/themes/default/pages/ai_usage/report.html:29
-#: specivo/templates/themes/default/pages/ai_usage/report.html:162
-#: specivo/templates/themes/default/pages/ai_usage/report.html:320
-#: specivo/templates/themes/default/pages/ai_usage/report.html:336
+#: specivo/templates/themes/default/pages/ai_usage/report.html:19
+#: specivo/templates/themes/default/pages/ai_usage/report.html:30
+#: specivo/templates/themes/default/pages/ai_usage/report.html:163
+#: specivo/templates/themes/default/pages/ai_usage/report.html:323
+#: specivo/templates/themes/default/pages/ai_usage/report.html:339
 msgid "Tool"
 msgstr "Outil"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:162
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:176
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:385
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:407
 #: specivo/templates/themes/default/pages/ai_usage/form.html:73
 #: specivo/templates/themes/default/pages/ai_usage/form.html:133
 #: specivo/templates/themes/default/pages/ai_usage/my.html:52
 #: specivo/templates/themes/default/pages/ai_usage/project.html:47
-#: specivo/templates/themes/default/pages/ai_usage/report.html:21
-#: specivo/templates/themes/default/pages/ai_usage/report.html:32
-#: specivo/templates/themes/default/pages/ai_usage/report.html:173
-#: specivo/templates/themes/default/pages/ai_usage/report.html:323
-#: specivo/templates/themes/default/pages/ai_usage/report.html:339
+#: specivo/templates/themes/default/pages/ai_usage/report.html:22
+#: specivo/templates/themes/default/pages/ai_usage/report.html:33
+#: specivo/templates/themes/default/pages/ai_usage/report.html:176
+#: specivo/templates/themes/default/pages/ai_usage/report.html:326
+#: specivo/templates/themes/default/pages/ai_usage/report.html:342
 msgid "Cost type"
 msgstr "Type de coût"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:165
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:179
 #: specivo/templates/themes/default/pages/ai_usage/project.html:76
-#: specivo/templates/themes/default/pages/ai_usage/report.html:22
-#: specivo/templates/themes/default/pages/ai_usage/report.html:33
-#: specivo/templates/themes/default/pages/ai_usage/report.html:326
-#: specivo/templates/themes/default/pages/ai_usage/report.html:342
+#: specivo/templates/themes/default/pages/ai_usage/report.html:23
+#: specivo/templates/themes/default/pages/ai_usage/report.html:34
+#: specivo/templates/themes/default/pages/ai_usage/report.html:329
+#: specivo/templates/themes/default/pages/ai_usage/report.html:345
 msgid "Branch"
 msgstr "Branche"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:175
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:417
-#: specivo/templates/themes/default/pages/ai_usage/report.html:338
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:439
+#: specivo/templates/themes/default/pages/ai_usage/report.html:341
 #, python-format
 msgid "%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning"
 msgstr ""
@@ -6371,7 +6373,7 @@ msgid "%(num)d per page"
 msgstr "%(num)d par page"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:209
-#: specivo/templates/themes/default/pages/ai_usage/report.html:353
+#: specivo/templates/themes/default/pages/ai_usage/report.html:356
 msgid ""
 "Each entry is one tool's usage of one model on one day, as reported. "
 "Spend includes the entry's share of its subscription where you may see "
@@ -6411,19 +6413,19 @@ msgid "How usage is attributed to an issue"
 msgstr "Comment l'utilisation est attribuée à un ticket"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:21
-#: specivo/web/pages/ai_spend_reports.py:461
-#: specivo/web/pages/ai_spend_reports.py:1219
+#: specivo/web/pages/ai_spend_reports.py:489
+#: specivo/web/pages/ai_spend_reports.py:1264
 msgid "Subscription"
 msgstr "Abonnement"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:22
-#: specivo/web/pages/ai_spend_reports.py:462
+#: specivo/web/pages/ai_spend_reports.py:490
 msgid "API (pay per use)"
 msgstr "API (paiement à l'usage)"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:24
-#: specivo/web/pages/ai_spend_reports.py:464
-#: specivo/web/pages/ai_spend_reports.py:1220
+#: specivo/web/pages/ai_spend_reports.py:492
+#: specivo/web/pages/ai_spend_reports.py:1265
 msgid "Free"
 msgstr "Gratuit"
 
@@ -6432,7 +6434,7 @@ msgstr "Gratuit"
 #: specivo/templates/themes/default/pages/issues/_activity.html:119
 #: specivo/templates/themes/default/pages/issues/detail.html:476
 #: specivo/templates/themes/default/pages/wiki/history.html:52
-#: specivo/web/pages/ai_spend_reports.py:465
+#: specivo/web/pages/ai_spend_reports.py:493
 msgid "Unknown"
 msgstr "Inconnu"
 
@@ -6633,15 +6635,15 @@ msgstr "Ce que l'utilisation a coûté en plus des forfaits"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:127
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:14
-#: specivo/templates/themes/default/pages/ai_usage/report.html:104
-#: specivo/templates/themes/default/pages/ai_usage/report.html:242
-#: specivo/templates/themes/default/pages/ai_usage/report.html:364
-#: specivo/templates/themes/default/pages/ai_usage/report.html:376
-#: specivo/templates/themes/default/pages/ai_usage/report.html:387
-#: specivo/templates/themes/default/pages/ai_usage/report.html:418
-#: specivo/templates/themes/default/pages/ai_usage/report.html:430
-#: specivo/templates/themes/default/pages/ai_usage/report.html:442
-#: specivo/templates/themes/default/pages/ai_usage/report.html:461
+#: specivo/templates/themes/default/pages/ai_usage/report.html:105
+#: specivo/templates/themes/default/pages/ai_usage/report.html:245
+#: specivo/templates/themes/default/pages/ai_usage/report.html:367
+#: specivo/templates/themes/default/pages/ai_usage/report.html:379
+#: specivo/templates/themes/default/pages/ai_usage/report.html:390
+#: specivo/templates/themes/default/pages/ai_usage/report.html:421
+#: specivo/templates/themes/default/pages/ai_usage/report.html:433
+#: specivo/templates/themes/default/pages/ai_usage/report.html:445
+#: specivo/templates/themes/default/pages/ai_usage/report.html:464
 msgid "Entries"
 msgstr "Entrées"
 
@@ -6652,12 +6654,16 @@ msgid "Amounts in %(currency)s"
 msgstr "Montants en %(currency)s"
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:141
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:233
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:255
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:96
 msgid "By project"
 msgstr "Par projet"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:157
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:158
+msgid "Groups shown"
+msgstr "Groupes affichés"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:179
 msgid ""
 "These entries span too many years to chart. Narrow the dates to see the "
 "charts."
@@ -6665,41 +6671,41 @@ msgstr ""
 "Ces entrées couvrent trop d’années pour être tracées. Réduisez les dates "
 "pour voir les graphiques."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:160
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:182
 msgid "Charts"
 msgstr "Graphiques"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:162
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:184
 #, python-format
 msgid "Per year, %(first)s to %(last)s (UTC days)."
 msgstr "Par année, du %(first)s au %(last)s (jours UTC)."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:163
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:185
 #, python-format
 msgid "Per quarter, %(first)s to %(last)s (UTC days)."
 msgstr "Par trimestre, du %(first)s au %(last)s (jours UTC)."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:164
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:186
 #, python-format
 msgid "Per month, %(first)s to %(last)s (UTC days)."
 msgstr "Par mois, du %(first)s au %(last)s (jours UTC)."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:165
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:187
 #, python-format
 msgid "Per week (from Monday), %(first)s to %(last)s (UTC days)."
 msgstr "Par semaine (à partir du lundi), du %(first)s au %(last)s (jours UTC)."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:166
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:188
 #, python-format
 msgid "Per day, %(first)s to %(last)s (UTC days)."
 msgstr "Par jour, du %(first)s au %(last)s (jours UTC)."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:167
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:189
 #, python-format
 msgid "Amounts in %(currency)s."
 msgstr "Montants en %(currency)s."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:168
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:190
 msgid ""
 "Amounts without a usable exchange rate are left out of the charts; the "
 "totals above list them."
@@ -6707,7 +6713,7 @@ msgstr ""
 "Les montants sans taux de change utilisable sont exclus des graphiques ; "
 "les totaux ci-dessus les indiquent."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:171
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:193
 #, python-format
 msgid ""
 "%(count)s entry has no price, so it adds nothing to the value shown. "
@@ -6722,51 +6728,51 @@ msgstr[1] ""
 "%(count)s entrées n’ont pas de prix et n’ajoutent donc rien à la valeur "
 "affichée. Les périodes marquées * en contiennent."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:179
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:201
 msgid "Time buckets"
 msgstr "Intervalles de temps"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:204
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:226
 msgid "Tokens over time"
 msgstr "Jetons au fil du temps"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:206
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:228
 msgid "Input and output"
 msgstr "Entrée et sortie"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:208
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:230
 msgid "Input, output and reasoning tokens over time"
 msgstr "Jetons d’entrée, de sortie et de raisonnement au fil du temps"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:212
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:234
 msgid "Cache"
 msgstr "Cache"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:214
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:236
 msgid "Cache read and cache write tokens over time"
 msgstr "Jetons de lecture et d’écriture du cache au fil du temps"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:225
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:247
 msgid "API-equivalent value by user"
 msgstr "Valeur équivalente API par utilisateur"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:227
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:237
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:246
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:255
-#: specivo/templates/themes/default/pages/ai_usage/report.html:367
-#: specivo/templates/themes/default/pages/ai_usage/report.html:390
-#: specivo/templates/themes/default/pages/ai_usage/report.html:421
-#: specivo/templates/themes/default/pages/ai_usage/report.html:445
-#: specivo/templates/themes/default/pages/ai_usage/report.html:464
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:249
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:259
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:268
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:277
+#: specivo/templates/themes/default/pages/ai_usage/report.html:370
+#: specivo/templates/themes/default/pages/ai_usage/report.html:393
+#: specivo/templates/themes/default/pages/ai_usage/report.html:424
+#: specivo/templates/themes/default/pages/ai_usage/report.html:448
+#: specivo/templates/themes/default/pages/ai_usage/report.html:467
 msgid "Pay-per-use"
 msgstr "À l'usage"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:235
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:257
 msgid "API-equivalent value by project"
 msgstr "Valeur équivalente API par projet"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:261
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:283
 msgid ""
 "The breakdowns show pay-per-use charges; seat cost is not split by group "
 "here, the table below holds it."
@@ -6774,12 +6780,12 @@ msgstr ""
 "Les répartitions montrent les frais à l'usage ; le coût des licences "
 "n'est pas réparti par groupe ici, le tableau ci-dessous l'indique."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:266
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:341
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:288
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:363
 msgid "Subscription leverage"
 msgstr "Rendement des abonnements"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:267
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:289
 msgid ""
 "Per person: the seat cost their usage in this project carries, against "
 "the API-equivalent value of that subscription usage. Plan details stay "
@@ -6789,7 +6795,7 @@ msgstr ""
 "face à la valeur équivalente API de cet usage d'abonnement. Le détail des"
 " abonnements reste réservé à leurs titulaires et aux administrateurs."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:267
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:289
 msgid ""
 "Per plan and per person: the plans' fees counted in this period, against "
 "the API-equivalent value of the usage they covered."
@@ -6798,67 +6804,67 @@ msgstr ""
 "cette période, face à la valeur équivalente API de l'usage qu'ils ont "
 "couvert."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:269
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:291
 msgid "Per plan"
 msgstr "Par abonnement"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:274
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:296
 msgid "Holder"
 msgstr "Titulaire"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:275
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:347
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:297
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:369
 msgid "Fee for the period"
 msgstr "Prix pour la période"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:277
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:308
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:349
-#: specivo/templates/themes/default/pages/ai_usage/report.html:278
-#: specivo/templates/themes/default/pages/ai_usage/report.html:373
-#: specivo/templates/themes/default/pages/ai_usage/report.html:396
-#: specivo/templates/themes/default/pages/ai_usage/report.html:427
-#: specivo/templates/themes/default/pages/ai_usage/report.html:451
-#: specivo/templates/themes/default/pages/ai_usage/report.html:470
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:299
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:330
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:371
+#: specivo/templates/themes/default/pages/ai_usage/report.html:281
+#: specivo/templates/themes/default/pages/ai_usage/report.html:376
+#: specivo/templates/themes/default/pages/ai_usage/report.html:399
+#: specivo/templates/themes/default/pages/ai_usage/report.html:430
+#: specivo/templates/themes/default/pages/ai_usage/report.html:454
+#: specivo/templates/themes/default/pages/ai_usage/report.html:473
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:70
 msgid "Leverage"
 msgstr "Effet de levier"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:291
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:313
 #, python-format
 msgid "Others (%(count)s plan)"
 msgid_plural "Others (%(count)s plans)"
 msgstr[0] "Autres (%(count)s offre)"
 msgstr[1] "Autres (%(count)s offres)"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:301
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:323
 msgid "Per person"
 msgstr "Par personne"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:306
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:328
 msgid "Fees for the period"
 msgstr "Prix pour la période"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:306
-#: specivo/templates/themes/default/pages/ai_usage/report.html:194
-#: specivo/templates/themes/default/pages/ai_usage/report.html:259
-#: specivo/templates/themes/default/pages/ai_usage/report.html:368
-#: specivo/templates/themes/default/pages/ai_usage/report.html:391
-#: specivo/templates/themes/default/pages/ai_usage/report.html:422
-#: specivo/templates/themes/default/pages/ai_usage/report.html:446
-#: specivo/templates/themes/default/pages/ai_usage/report.html:465
-#: specivo/web/pages/ai_usage.py:486
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:328
+#: specivo/templates/themes/default/pages/ai_usage/report.html:197
+#: specivo/templates/themes/default/pages/ai_usage/report.html:262
+#: specivo/templates/themes/default/pages/ai_usage/report.html:371
+#: specivo/templates/themes/default/pages/ai_usage/report.html:394
+#: specivo/templates/themes/default/pages/ai_usage/report.html:425
+#: specivo/templates/themes/default/pages/ai_usage/report.html:449
+#: specivo/templates/themes/default/pages/ai_usage/report.html:468
+#: specivo/web/pages/ai_usage.py:526
 msgid "Seat cost"
 msgstr "Coût des licences"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:321
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:343
 #, python-format
 msgid "Others (%(count)s person)"
 msgid_plural "Others (%(count)s people)"
 msgstr[0] "Autres (%(count)s personne)"
 msgstr[1] "Autres (%(count)s personnes)"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:342
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:364
 msgid ""
 "The API-equivalent value of the usage each of your plans covered in this "
 "period, divided by the plan's fee for the same days."
@@ -6867,95 +6873,95 @@ msgstr ""
 "forfaits sur la période, divisée par le prix du forfait pour les mêmes "
 "jours."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:367
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:389
 msgid "No counted usage matches these filters, so there is nothing to chart."
 msgstr ""
 "Aucune utilisation comptée ne correspond à ces filtres : il n’y a rien à "
 "tracer."
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:380
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:402
 msgid "Select all"
 msgstr "Tout sélectionner"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:383
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:405
 msgid "Tool and model"
 msgstr "Outil et modèle"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:387
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:409
 #: specivo/templates/themes/default/pages/ai_usage/form.html:30
 msgid "API value"
 msgstr "Valeur API"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:396
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:418
 #, python-format
 msgid "Select entry %(id)s"
 msgstr "Sélectionner l'entrée %(id)s"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:403
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:413
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:425
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:435
 #: specivo/templates/themes/default/pages/ai_usage/form.html:29
 #, python-format
 msgid "logged by %(reporter)s via key %(key)s"
 msgstr "consigné par %(reporter)s avec la clé %(key)s"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:403
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:413
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:425
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:435
 #: specivo/templates/themes/default/pages/ai_usage/form.html:29
 #, python-format
 msgid "logged by %(reporter)s"
 msgstr "consigné par %(reporter)s"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:411
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:433
 msgid "Tokens, model and tool are reported and cannot be changed"
 msgstr ""
 "Les jetons, le modèle et l'outil sont rapportés et ne peuvent pas être "
 "modifiés"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:411
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:433
 msgid "locked"
 msgstr "verrouillé"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:412
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:434
 #: specivo/templates/themes/default/pages/ai_usage/form.html:31
 msgid "Excluded"
 msgstr "Exclue"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:417
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:439
 #: specivo/templates/themes/default/pages/ai_usage/form.html:72
 #, python-format
 msgid "including %(count)s at long-context prices"
 msgstr "dont %(count)s aux tarifs de contexte long"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:421
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:443
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:24
 #: specivo/templates/themes/default/pages/ai_usage/my.html:36
-#: specivo/templates/themes/default/pages/ai_usage/report.html:65
-#: specivo/templates/themes/default/pages/ai_usage/report.html:335
+#: specivo/templates/themes/default/pages/ai_usage/report.html:66
+#: specivo/templates/themes/default/pages/ai_usage/report.html:338
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:23
 #: specivo/templates/themes/default/pages/issues/form.html:146
 #: specivo/templates/themes/default/pages/issues/list.html:61
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
-#: specivo/web/pages/ai_spend_reports.py:407
-#: specivo/web/pages/ai_spend_reports.py:562 specivo/web/pages/ai_usage.py:424
-#: specivo/web/pages/ai_usage.py:432 specivo/web/pages/issues.py:186
+#: specivo/web/pages/ai_spend_reports.py:435
+#: specivo/web/pages/ai_spend_reports.py:590 specivo/web/pages/ai_usage.py:428
+#: specivo/web/pages/ai_usage.py:472 specivo/web/pages/issues.py:186
 msgid "Unassigned"
 msgstr "Non assigné"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:430
-#: specivo/templates/themes/default/pages/ai_usage/report.html:196
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:452
+#: specivo/templates/themes/default/pages/ai_usage/report.html:199
 msgid "Include"
 msgstr "Inclure"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:432
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:454
 msgid "Leave this entry out of totals and reports"
 msgstr "Exclure cette entrée des totaux et des rapports"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:432
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:454
 msgid "Exclude"
 msgstr "Exclure"
 
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:440
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:462
 msgid "Delete this AI usage entry?"
 msgstr "Supprimer cette entrée d'utilisation de l'IA ?"
 
@@ -6969,17 +6975,17 @@ msgid "Filtered by:"
 msgstr "Filtré par :"
 
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:25
-#: specivo/templates/themes/default/pages/ai_usage/report.html:65
-#: specivo/web/pages/ai_spend_reports.py:417
-#: specivo/web/pages/ai_spend_reports.py:562
+#: specivo/templates/themes/default/pages/ai_usage/report.html:66
+#: specivo/web/pages/ai_spend_reports.py:445
+#: specivo/web/pages/ai_spend_reports.py:590
 msgid "No issue"
 msgstr "Sans ticket"
 
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:29
 #: specivo/templates/themes/default/pages/ai_usage/project.html:76
-#: specivo/templates/themes/default/pages/ai_usage/report.html:65
-#: specivo/web/pages/ai_spend_reports.py:442
-#: specivo/web/pages/ai_spend_reports.py:562
+#: specivo/templates/themes/default/pages/ai_usage/report.html:66
+#: specivo/web/pages/ai_spend_reports.py:470
+#: specivo/web/pages/ai_spend_reports.py:590
 msgid "No branch"
 msgstr "Sans branche"
 
@@ -7138,7 +7144,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:43
 #: specivo/templates/themes/default/pages/ai_usage/project.html:38
-#: specivo/templates/themes/default/pages/ai_usage/report.html:164
+#: specivo/templates/themes/default/pages/ai_usage/report.html:165
 msgid "All tools"
 msgstr "Tous les outils"
 
@@ -7207,84 +7213,84 @@ msgstr ""
 msgid "No AI usage yet."
 msgstr "Pas encore d'utilisation de l'IA."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:28
+#: specivo/templates/themes/default/pages/ai_usage/report.html:29
 msgid "Feature"
 msgstr "Fonctionnalité"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:39
+#: specivo/templates/themes/default/pages/ai_usage/report.html:40
 msgid "Spend by project"
 msgstr "Dépenses par projet"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:40
+#: specivo/templates/themes/default/pages/ai_usage/report.html:41
 msgid "Spend by feature"
 msgstr "Dépenses par fonctionnalité"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:42
+#: specivo/templates/themes/default/pages/ai_usage/report.html:43
 msgid "Spend by provider"
 msgstr "Dépenses par fournisseur"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:43
+#: specivo/templates/themes/default/pages/ai_usage/report.html:44
 msgid "Spend by cost type"
 msgstr "Dépenses par type de coût"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:44
+#: specivo/templates/themes/default/pages/ai_usage/report.html:45
 msgid "Spend by branch"
 msgstr "Dépenses par branche"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:49
-#: specivo/web/pages/ai_spend_reports.py:613 specivo/web/pages/ai_usage.py:583
+#: specivo/templates/themes/default/pages/ai_usage/report.html:50
+#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
 msgid "Day"
 msgstr "Jour"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:50
-#: specivo/web/pages/ai_spend_reports.py:613 specivo/web/pages/ai_usage.py:583
+#: specivo/templates/themes/default/pages/ai_usage/report.html:51
+#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
 msgid "Week"
 msgstr "Semaine"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:51
-#: specivo/web/pages/ai_spend_reports.py:613 specivo/web/pages/ai_usage.py:583
+#: specivo/templates/themes/default/pages/ai_usage/report.html:52
+#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
 msgid "Month"
 msgstr "Mois"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:55
+#: specivo/templates/themes/default/pages/ai_usage/report.html:56
 msgid "Last 7 days"
 msgstr "7 derniers jours"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:56
+#: specivo/templates/themes/default/pages/ai_usage/report.html:57
 msgid "Last 30 days"
 msgstr "30 derniers jours"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:57
+#: specivo/templates/themes/default/pages/ai_usage/report.html:58
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:6
 msgid "This month"
 msgstr "Ce mois-ci"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:58
+#: specivo/templates/themes/default/pages/ai_usage/report.html:59
 msgid "Last month"
 msgstr "Mois dernier"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:63
-#: specivo/templates/themes/default/pages/ai_usage/report.html:265
-#: specivo/templates/themes/default/pages/ai_usage/report.html:417
-#: specivo/web/pages/ai_spend_reports.py:558
+#: specivo/templates/themes/default/pages/ai_usage/report.html:64
+#: specivo/templates/themes/default/pages/ai_usage/report.html:268
+#: specivo/templates/themes/default/pages/ai_usage/report.html:420
+#: specivo/web/pages/ai_spend_reports.py:586
 msgid "Unallocated seat cost"
 msgstr "Coût de licences non réparti"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:64
-#: specivo/web/pages/ai_spend_reports.py:560
+#: specivo/templates/themes/default/pages/ai_usage/report.html:65
+#: specivo/web/pages/ai_spend_reports.py:588
 msgid "An issue you cannot see"
 msgstr "Un ticket que vous ne pouvez pas voir"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:76
-#: specivo/templates/themes/default/pages/ai_usage/report.html:102
+#: specivo/templates/themes/default/pages/ai_usage/report.html:77
+#: specivo/templates/themes/default/pages/ai_usage/report.html:103
 msgid "AI spend report"
 msgstr "Rapport des dépenses IA"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:105
+#: specivo/templates/themes/default/pages/ai_usage/report.html:106
 msgid "Download CSV"
 msgstr "Télécharger le CSV"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:110
+#: specivo/templates/themes/default/pages/ai_usage/report.html:111
 msgid ""
 "Spend is what AI usage cost: pay-per-use charges plus the share of flat-"
 "rate subscriptions carried by the usage. API-equivalent value is what the"
@@ -7296,7 +7302,7 @@ msgstr ""
 "utilisation. La valeur équivalente API est ce qu'auraient coûté les mêmes"
 " tokens au prix à l'usage ; c'est une estimation, pas une facture."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:111
+#: specivo/templates/themes/default/pages/ai_usage/report.html:112
 msgid ""
 "Subscription fees nobody's usage carried are shown as unallocated seat "
 "cost."
@@ -7304,99 +7310,103 @@ msgstr ""
 "Les abonnements qu'aucune utilisation n'a portés apparaissent comme coût "
 "de licences non réparti."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:114
+#: specivo/templates/themes/default/pages/ai_usage/report.html:115
 msgid "Choose an active currency."
 msgstr "Choisissez une devise active."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:114
+#: specivo/templates/themes/default/pages/ai_usage/report.html:115
 msgid "Choose a last day on or after the first day, at most three years later."
 msgstr ""
 "Choisissez un dernier jour égal ou postérieur au premier, au plus trois "
 "ans après."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:114
+#: specivo/templates/themes/default/pages/ai_usage/report.html:115
 msgid "The report could not be built with these settings."
 msgstr "Le rapport n'a pas pu être établi avec ces paramètres."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:123
+#: specivo/templates/themes/default/pages/ai_usage/report.html:124
 msgid "Dates, filters and options"
 msgstr "Dates, filtres et options"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:139
-#: specivo/templates/themes/default/pages/ai_usage/report.html:296
-#: specivo/templates/themes/default/pages/ai_usage/report.html:297
+#: specivo/templates/themes/default/pages/ai_usage/report.html:140
+#: specivo/templates/themes/default/pages/ai_usage/report.html:299
+#: specivo/templates/themes/default/pages/ai_usage/report.html:300
 msgid "Group by"
 msgstr "Regrouper par"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:141
+#: specivo/templates/themes/default/pages/ai_usage/report.html:142
 msgid "Nothing (totals)"
 msgstr "Rien (totaux)"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:143
+#: specivo/templates/themes/default/pages/ai_usage/report.html:144
 msgid "Sessions (entries)"
 msgstr "Sessions (entrées)"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:147
+#: specivo/templates/themes/default/pages/ai_usage/report.html:148
 msgid "Then by"
 msgstr "Puis par"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:154
+#: specivo/templates/themes/default/pages/ai_usage/report.html:155
 msgid "Per"
 msgstr "Par"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:156
+#: specivo/templates/themes/default/pages/ai_usage/report.html:157
 msgid "Whole range"
 msgstr "Toute la période"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:189
+#: specivo/templates/themes/default/pages/ai_usage/report.html:173
+msgid "All models"
+msgstr "Tous les modèles"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:192
 msgid "Rate of each day"
 msgstr "Taux de chaque jour"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:197
+#: specivo/templates/themes/default/pages/ai_usage/report.html:200
 msgid "Leave out"
 msgstr "Exclure"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:201
+#: specivo/templates/themes/default/pages/ai_usage/report.html:204
 msgid "Order"
 msgstr "Ordre"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:203
+#: specivo/templates/themes/default/pages/ai_usage/report.html:206
 msgid "By group"
 msgstr "Par groupe"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:204
+#: specivo/templates/themes/default/pages/ai_usage/report.html:207
 msgid "By spend"
 msgstr "Par dépense"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:219
+#: specivo/templates/themes/default/pages/ai_usage/report.html:222
 msgid "Report path"
 msgstr "Chemin du rapport"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:261
+#: specivo/templates/themes/default/pages/ai_usage/report.html:264
 msgid "Subscription fees carried by this usage"
 msgstr "Abonnements portés par cette utilisation"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:267
-#: specivo/web/pages/ai_spend_reports.py:951
+#: specivo/templates/themes/default/pages/ai_usage/report.html:270
+#: specivo/web/pages/ai_spend_reports.py:996
 msgid "Fees of subscriptions without priced usage"
 msgstr "Abonnements sans utilisation valorisée"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:280
+#: specivo/templates/themes/default/pages/ai_usage/report.html:283
 msgid "API-equivalent value of subscription usage per unit of seat cost"
 msgstr ""
 "Valeur équivalente API de l'utilisation sous abonnement par unité de coût"
 " de licence"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:288
+#: specivo/templates/themes/default/pages/ai_usage/report.html:291
 #, python-format
 msgid "%(first)s to %(last)s (UTC days), amounts in %(currency)s."
 msgstr "Du %(first)s au %(last)s (jours UTC), montants en %(currency)s."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:289
+#: specivo/templates/themes/default/pages/ai_usage/report.html:292
 msgid "Exchange rates used:"
 msgstr "Taux de change utilisés :"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:291
+#: specivo/templates/themes/default/pages/ai_usage/report.html:294
 #, python-format
 msgid ""
 "Grouped by %(shown)s instead of %(asked)s: the range would have too many "
@@ -7405,48 +7415,48 @@ msgstr ""
 "Regroupé par %(shown)s au lieu de %(asked)s : la plage aurait trop de "
 "périodes."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:299
+#: specivo/templates/themes/default/pages/ai_usage/report.html:302
 msgid "Already filtered by this"
 msgstr "Déjà filtré par ce critère"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:304
+#: specivo/templates/themes/default/pages/ai_usage/report.html:307
 msgid "Fewer columns"
 msgstr "Moins de colonnes"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:304
+#: specivo/templates/themes/default/pages/ai_usage/report.html:307
 msgid "All amount columns"
 msgstr "Toutes les colonnes de montants"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:314
+#: specivo/templates/themes/default/pages/ai_usage/report.html:317
 msgid "The entries of this selection, newest first"
 msgstr "Les entrées de cette sélection, les plus récentes d'abord"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:351
-#: specivo/templates/themes/default/pages/ai_usage/report.html:481
+#: specivo/templates/themes/default/pages/ai_usage/report.html:354
+#: specivo/templates/themes/default/pages/ai_usage/report.html:484
 msgid "No AI usage in this period."
 msgstr "Aucune utilisation de l'IA sur cette période."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:354
+#: specivo/templates/themes/default/pages/ai_usage/report.html:357
 msgid "Open in the entry list"
 msgstr "Ouvrir dans la liste des entrées"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:375
-#: specivo/templates/themes/default/pages/ai_usage/report.html:398
-#: specivo/templates/themes/default/pages/ai_usage/report.html:429
-#: specivo/templates/themes/default/pages/ai_usage/report.html:453
+#: specivo/templates/themes/default/pages/ai_usage/report.html:378
+#: specivo/templates/themes/default/pages/ai_usage/report.html:401
+#: specivo/templates/themes/default/pages/ai_usage/report.html:432
+#: specivo/templates/themes/default/pages/ai_usage/report.html:456
 msgid "Share"
 msgstr "Part"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:417
-#: specivo/web/pages/ai_spend_reports.py:1047
+#: specivo/templates/themes/default/pages/ai_usage/report.html:420
+#: specivo/web/pages/ai_spend_reports.py:1092
 msgid "All usage"
 msgstr "Toute l'utilisation"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:418
+#: specivo/templates/themes/default/pages/ai_usage/report.html:421
 msgid "Entries without a price"
 msgstr "Entrées sans prix"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:419
+#: specivo/templates/themes/default/pages/ai_usage/report.html:422
 #, python-format
 msgid ""
 "%(input)s in, %(output)s out, %(cache)s cache read, %(reasoning)s "
@@ -7455,20 +7465,20 @@ msgstr ""
 "%(input)s en entrée, %(output)s en sortie, %(cache)s lus en cache, "
 "%(reasoning)s de raisonnement"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:422
-#: specivo/templates/themes/default/pages/ai_usage/report.html:465
+#: specivo/templates/themes/default/pages/ai_usage/report.html:425
+#: specivo/templates/themes/default/pages/ai_usage/report.html:468
 msgid "unallocated:"
 msgstr "non réparti :"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:430
+#: specivo/templates/themes/default/pages/ai_usage/report.html:433
 msgid "Subscriptions"
 msgstr "Abonnements"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:440
+#: specivo/templates/themes/default/pages/ai_usage/report.html:443
 msgid "The smaller groups, summed; the CSV lists each"
 msgstr "Les plus petits groupes, additionnés ; le CSV les détaille un par un"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:478
+#: specivo/templates/themes/default/pages/ai_usage/report.html:481
 #, python-format
 msgid ""
 "Each period lists the %(shown)s groups with the largest spend over the "
@@ -7487,33 +7497,33 @@ msgstr[1] ""
 "élevées sur toute la plage ; les %(count)s autres groupes sont "
 "additionnés dans « Autres ». Le CSV contient toutes les lignes."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:479
+#: specivo/templates/themes/default/pages/ai_usage/report.html:482
 msgid "Select a row to open it. Every row leads down to the entries behind it."
 msgstr ""
 "Sélectionnez une ligne pour l'ouvrir. Chaque ligne mène aux entrées qui "
 "la composent."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:487
+#: specivo/templates/themes/default/pages/ai_usage/report.html:490
 msgid "Spend by model in these entries"
 msgstr "Dépenses par modèle dans ces entrées"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:521
+#: specivo/templates/themes/default/pages/ai_usage/report.html:524
 #, python-format
 msgid "Open %(name)s in the report"
 msgstr "Ouvrir %(name)s dans le rapport"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:528
+#: specivo/templates/themes/default/pages/ai_usage/report.html:531
 #, python-format
 msgid "%(count)s more person"
 msgid_plural "%(count)s more people"
 msgstr[0] "%(count)s personne de plus"
 msgstr[1] "%(count)s personnes de plus"
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:529
+#: specivo/templates/themes/default/pages/ai_usage/report.html:532
 msgid "Their spend together; the Person level lists each of them."
 msgstr "Leurs dépenses cumulées ; le niveau Personne les détaille une par une."
 
-#: specivo/templates/themes/default/pages/ai_usage/report.html:531
+#: specivo/templates/themes/default/pages/ai_usage/report.html:534
 msgid "Show all"
 msgstr "Tout afficher"
 
@@ -9934,8 +9944,8 @@ msgstr "Créez votre premier ticket pour commencer."
 #: specivo/templates/themes/default/pages/ai_usage/issue.html:12
 #: specivo/templates/themes/default/pages/ai_usage/my.html:10
 #: specivo/templates/themes/default/pages/ai_usage/project.html:9
-#: specivo/templates/themes/default/pages/ai_usage/report.html:81
-#: specivo/templates/themes/default/pages/ai_usage/report.html:88
+#: specivo/templates/themes/default/pages/ai_usage/report.html:82
+#: specivo/templates/themes/default/pages/ai_usage/report.html:89
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
 #: specivo/templates/themes/default/pages/auth/api_keys.html:7
@@ -12582,7 +12592,7 @@ msgstr "Mot-clé"
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
 #: specivo/templates/themes/default/pages/ai_usage/my.html:54
 #: specivo/templates/themes/default/pages/ai_usage/project.html:49
-#: specivo/templates/themes/default/pages/ai_usage/report.html:175
+#: specivo/templates/themes/default/pages/ai_usage/report.html:178
 #: specivo/templates/themes/default/pages/dashboard/_activity.html:6
 #: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/list.html:43
@@ -12652,11 +12662,11 @@ msgstr "Commentaire sur %(title)s"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:164
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:178
-#: specivo/templates/themes/default/pages/ai_usage/_macros.html:389
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:411
 #: specivo/templates/themes/default/pages/ai_usage/project.html:54
-#: specivo/templates/themes/default/pages/ai_usage/report.html:17
-#: specivo/templates/themes/default/pages/ai_usage/report.html:325
-#: specivo/templates/themes/default/pages/ai_usage/report.html:341
+#: specivo/templates/themes/default/pages/ai_usage/report.html:18
+#: specivo/templates/themes/default/pages/ai_usage/report.html:328
+#: specivo/templates/themes/default/pages/ai_usage/report.html:344
 #: specivo/templates/themes/default/pages/issues/detail.html:368
 #: specivo/templates/themes/default/pages/search.html:219
 #: specivo/templates/themes/default/pages/time/list.html:56
@@ -13048,94 +13058,95 @@ msgstr "La date de fin n'est pas une date valide."
 msgid "The IP address is too long."
 msgstr "L'adresse IP est trop longue."
 
-#: specivo/web/pages/ai_spend_reports.py:613 specivo/web/pages/ai_usage.py:583
+#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
 msgid "Auto"
 msgstr "Auto"
 
-#: specivo/web/pages/ai_spend_reports.py:938
+#: specivo/web/pages/ai_spend_reports.py:983
 #, python-format
 msgid "%(num)d person"
 msgid_plural "%(num)d people"
 msgstr[0] "%(num)d personne"
 msgstr[1] "%(num)d personnes"
 
-#: specivo/web/pages/ai_spend_reports.py:993
+#: specivo/web/pages/ai_spend_reports.py:1038
 #, python-format
 msgid "%(num)d group."
 msgid_plural "%(num)d groups."
 msgstr[0] "%(num)d groupe."
 msgstr[1] "%(num)d groupes."
 
-#: specivo/web/pages/ai_spend_reports.py:995
+#: specivo/web/pages/ai_spend_reports.py:1040
 #, python-format
 msgid "Largest: %(name)s with %(amount)s (%(share)s)."
 msgstr "Le plus important : %(name)s avec %(amount)s (%(share)s)."
 
-#: specivo/web/pages/ai_spend_reports.py:1002
+#: specivo/web/pages/ai_spend_reports.py:1047
 #, python-format
 msgid "%(num)d more in the table."
 msgid_plural "%(num)d more in the table."
 msgstr[0] "%(num)d de plus dans le tableau."
 msgstr[1] "%(num)d de plus dans le tableau."
 
-#: specivo/web/pages/ai_spend_reports.py:1093
+#: specivo/web/pages/ai_spend_reports.py:1138
 #, python-format
 msgid "%(num)d entry"
 msgid_plural "%(num)d entries"
 msgstr[0] "%(num)d entrée"
 msgstr[1] "%(num)d entrées"
 
-#: specivo/web/pages/ai_spend_reports.py:1094
+#: specivo/web/pages/ai_spend_reports.py:1139
 #, python-format
 msgid "%(num)d day"
 msgid_plural "%(num)d days"
 msgstr[0] "%(num)d jour"
 msgstr[1] "%(num)d jours"
 
-#: specivo/web/pages/ai_spend_reports.py:1095
+#: specivo/web/pages/ai_spend_reports.py:1140
 #, python-format
 msgid "%(num)d model"
 msgid_plural "%(num)d models"
 msgstr[0] "%(num)d modèle"
 msgstr[1] "%(num)d modèles"
 
-#: specivo/web/pages/ai_spend_reports.py:1096
+#: specivo/web/pages/ai_spend_reports.py:1141
 #, python-format
 msgid "%(entries)s over %(days)s, %(models)s."
 msgstr "%(entries)s sur %(days)s, %(models)s."
 
-#: specivo/web/pages/ai_spend_reports.py:1217
+#: specivo/web/pages/ai_spend_reports.py:1262
 msgid "Subscription seat"
 msgstr "Licence d'abonnement"
 
-#: specivo/web/pages/ai_spend_reports.py:1220
+#: specivo/web/pages/ai_spend_reports.py:1265
 msgid "Pay-per-use API"
 msgstr "API en paiement à l'usage"
 
-#: specivo/web/pages/ai_usage.py:386
+#: specivo/web/pages/ai_usage.py:387
 #, python-format
 msgid "Week of %(date)s"
 msgstr "Semaine du %(date)s"
 
-#: specivo/web/pages/ai_usage.py:392
+#: specivo/web/pages/ai_usage.py:393
 #, python-format
 msgid "%(num)d entry without a price"
 msgid_plural "%(num)d entries without a price"
 msgstr[0] "%(num)d entrée sans prix"
 msgstr[1] "%(num)d entrées sans prix"
 
-#: specivo/web/pages/ai_usage.py:398
+#: specivo/web/pages/ai_usage.py:399
 #, python-format
 msgid "%(num)d amount without an exchange rate"
 msgid_plural "%(num)d amounts without an exchange rate"
 msgstr[0] "%(num)d montant sans taux de change"
 msgstr[1] "%(num)d montants sans taux de change"
 
-#: specivo/web/pages/ai_usage.py:413 specivo/web/pages/ai_usage.py:422
+#: specivo/web/pages/ai_usage.py:414 specivo/web/pages/ai_usage.py:424
+#: specivo/web/pages/ai_usage.py:451
 msgid "Other"
 msgstr "Autres"
 
-#: specivo/web/pages/ai_usage.py:757 specivo/web/pages/issues.py:195
+#: specivo/web/pages/ai_usage.py:798 specivo/web/pages/issues.py:195
 msgid "Unknown person"
 msgstr "Personne inconnue"
 

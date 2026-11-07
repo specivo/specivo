@@ -138,3 +138,17 @@ class SpendReportOut(BaseModel):
             rate_dates=list(report.rate_dates),
             rates_used=[RateUsedOut.from_used(r) for r in report.rates_used],
         )
+
+
+class SpendModelSuggestionOut(BaseModel):
+    """A model name for a spend report's model filter: from the price list or the usage the caller may read.
+
+    ``id`` and ``name`` both hold the model name (the filter's value); the
+    other names the price list knows it by are in ``aliases``, which the
+    filter matches too.
+    """
+
+    id: str
+    name: str
+    provider: str = ""
+    aliases: list[str] = Field(default_factory=list)

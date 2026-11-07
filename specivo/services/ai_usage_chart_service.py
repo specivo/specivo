@@ -101,6 +101,11 @@ AUTO_MAX_BUCKETS = 120
 MAX_BUCKETS = AUTO_MAX_BUCKETS
 #: Groups shown by name in a breakdown or a stack; the rest are summed as one "other" group.
 TOP_N = 8
+#: Groups a breakdown keeps by name, so a page can show more than ``TOP_N`` (the spend reports'
+#: per-chart choice, :data:`BREAKDOWN_SHOWS`) and fold the rest itself.
+BREAKDOWN_MAX = 100
+#: How many groups a spend report's breakdown chart may show by name; the first is the default.
+BREAKDOWN_SHOWS = (TOP_N, 25, 50, BREAKDOWN_MAX)
 #: Plans and people a leverage table of the spend reports names; the rest are summed into one row.
 LEVERAGE_TOP = 10
 #: Key of the "other" group (the page translates it).
@@ -242,6 +247,8 @@ class Share:
     api: Decimal = Decimal(0)
     spend: Decimal = Decimal(0)
     entries: int = 0
+    #: How many groups the share stands for: more than one only for ``OTHER``.
+    groups: int = 1
 
 
 @dataclass
@@ -764,12 +771,16 @@ class AiUsageChartService:
 
     @staticmethod
     def _top_shares(shares: dict[str, Share]) -> list[Share]:
-        """The largest shares by API-equivalent value, the rest summed into one ``OTHER`` share."""
-        keep = top_groups({k: s.api for k, s in shares.items()})
+        """The :data:`BREAKDOWN_MAX` largest shares by API-equivalent value, the rest summed into one ``OTHER`` share.
+
+        Pages show :data:`TOP_N` of them unless the reader asks for more
+        (``fold_share_points`` in the AI usage pages).
+        """
+        keep = top_groups({k: s.api for k, s in shares.items()}, BREAKDOWN_MAX)
         out = [shares[k] for k in keep]
         rest = [s for k, s in shares.items() if k not in set(keep)]
         if rest:
-            other = Share(key=OTHER, label=OTHER)
+            other = Share(key=OTHER, label=OTHER, groups=len(rest))
             for s in rest:
                 other.api += s.api
                 other.spend += s.spend
