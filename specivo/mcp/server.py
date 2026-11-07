@@ -23,6 +23,7 @@ from pydantic import Field
 
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
+from specivo.mcp.ai_subscription_tools import SubscriptionPeriod, _ai_subscriptions
 from specivo.mcp.ai_usage_tools import _ai_usage, _ai_usage_report, _log_ai_usage
 from specivo.mcp.auth import authenticate_mcp_tool
 from specivo.mcp.client_context import (
@@ -1417,6 +1418,82 @@ async def specivo_ai_usage_report(
             model=model,
             cost_type=cost_type,
             sort=sort,
+        )
+
+
+@mcp.tool(
+    description=(
+        "Manage the personal flat-rate AI subscriptions (Claude Pro/Max, ChatGPT Plus/Pro, Cursor, Copilot, "
+        "Google AI) of the person behind your API key, e.g. registered from their invoices. Ops: list (your "
+        "subscriptions; administrators may pass user, a login, for someone else's; active_on, offset, limit); "
+        "presets (the plan presets with suggested US list prices, to map an invoice to a plan_key); add "
+        "(periods: one or more periods in one call, each with plan_key, or a custom plan with provider and "
+        "plan_name, plus amount, currency, billing_period, starts_on, ends_on, notes; all or nothing: when "
+        "any period is invalid nothing is added and every problem is listed; administrators may pass user); "
+        "update (subscription_id plus the fields to change; ends_on='' reopens it); end (subscription_id, "
+        "ends_on, default today UTC); delete (subscription_id; prefer end: deleting removes the plan from "
+        "past spend reports). One invoice period is one subscription period: register the amount actually "
+        "charged, tax included, in its currency, and set ends_on on each period that was followed by "
+        "another. Days are UTC and both ends count. Results show the plan, amount, dates and the tools "
+        "covered, and warn when periods of one plan family (same provider and tools) overlap or leave a "
+        "gap; warnings never refuse anything. Needs an unlimited personal API key: a project-limited key "
+        "and a service account are refused. Changing needs self-service on (the default) unless you are an "
+        "administrator."
+    )
+)
+async def specivo_ai_subscriptions(
+    op: Annotated[str, Field(description="One of: list, presets, add, update, end, delete.")],
+    user: Annotated[str | None, Field(description="list, add: another person's login (administrators only).")] = None,
+    periods: Annotated[
+        list[SubscriptionPeriod] | None, Field(description="add: the periods to register (1-50).")
+    ] = None,
+    subscription_id: Annotated[int | None, Field(description="update, end, delete: the subscription ID.")] = None,
+    plan_key: Annotated[str | None, Field(description="update: a preset key or 'custom'.")] = None,
+    provider: Annotated[str | None, Field(description="update: the provider.")] = None,
+    plan_name: Annotated[str | None, Field(description="update: the plan name.")] = None,
+    tool_slugs: Annotated[
+        list[str] | None, Field(description="update: the tools covered ([] = the tools of the provider).")
+    ] = None,
+    amount: Annotated[
+        str | int | float | None, Field(description="update: the fee per period as a string, e.g. '112.00'.")
+    ] = None,
+    currency: Annotated[str | None, Field(description="update: ISO currency code.")] = None,
+    billing_period: Annotated[str | None, Field(description="update: month or year.")] = None,
+    starts_on: Annotated[str | None, Field(description="update: first day, YYYY-MM-DD.")] = None,
+    ends_on: Annotated[
+        str | None,
+        Field(description="update, end: last day, YYYY-MM-DD (update: '' reopens; end: default today UTC)."),
+    ] = None,
+    notes: Annotated[str | None, Field(description="update: new notes ('' clears them).")] = None,
+    active_on: Annotated[str | None, Field(description="list: only subscriptions running on this UTC day.")] = None,
+    offset: Annotated[int, Field(description="list: subscriptions to skip.")] = 0,
+    limit: Annotated[int, Field(description="list: max subscriptions (1-200).")] = 50,
+) -> str:
+    changes = {
+        "plan_key": plan_key,
+        "provider": provider,
+        "plan_name": plan_name,
+        "tool_slugs": tool_slugs,
+        "amount": amount,
+        "currency": currency,
+        "billing_period": billing_period,
+        "starts_on": starts_on,
+        "ends_on": ends_on,
+        "notes": notes,
+    }
+    async with _get_session_and_user() as (session, caller):
+        return await _ai_subscriptions(
+            session,
+            caller,
+            op,
+            user_login=user,
+            periods=periods,
+            subscription_id=subscription_id,
+            changes=changes,
+            ends_on=ends_on,
+            active_on=active_on,
+            offset=offset,
+            limit=limit,
         )
 
 

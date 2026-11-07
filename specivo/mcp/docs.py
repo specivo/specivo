@@ -71,6 +71,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
         "AI spend report: usage grouped by user, model, tool, project, issue, cost type, branch and period, "
         "in one currency"
     ),
+    "specivo_ai_subscriptions": (
+        "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
+        "or 'delete'; warns about overlaps and gaps"
+    ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -207,6 +211,23 @@ and corrections.
    `project_key` reports the whole instance (administrators). Spend includes seat cost (subscription
    fees spread over the entries that used them) when you read every entry of the project
 
+### Register AI subscriptions from invoices
+When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):
+1. `specivo_ai_subscriptions(op="presets")` -- map each invoice to a `plan_key` (`custom` for any
+   other plan, with `provider` and `plan_name`)
+2. `specivo_ai_subscriptions(op="list")` -- see what is registered already, so you do not add it twice
+3. `specivo_ai_subscriptions(op="add", periods=[{{"plan_key": "claude-max-5x", "amount": "100",
+   "currency": "USD", "starts_on": "2026-01-21", "ends_on": "2026-02-25"}}, ...])` -- one period per
+   plan and price, all in one call: the amount actually charged, tax included, in its currency, as a
+   string; `ends_on` on every period that ended, none on the one that runs. Days are UTC and both
+   ends count. All or nothing: if any period is invalid, nothing is added and every problem is listed
+4. Read the warnings: a gap or overlap between periods of one plan family (same provider and tools)
+   is reported, never refused. Ask the person about a gap (a cancelled month?) rather than filling it
+5. `op="end"` (`subscription_id`, `ends_on`) when a plan is cancelled; `op="update"` to correct one.
+   Prefer `end` to `delete`: deleting removes the plan from past spend reports
+Needs an unlimited personal API key: a project-limited key and a service account are refused, since
+subscriptions belong to a person. Administrators pass `user="login"` for someone else's.
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -315,6 +336,10 @@ the security audit log. Notable cases:
 - `specivo_ai_usage_report` reads only the entries you may read; the instance report (no
   `project_key`) is for administrators. Seat cost shows to administrators and to whoever reads every
   entry of the project in the period; plan names never appear.
+- `specivo_ai_subscriptions` works on the key owner's own subscriptions, and only with an unlimited
+  key of a person (not a service account); changing them needs self-service on. Administrators reach
+  anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events. Every
+  change over MCP writes `ai_subscriptions_changed`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 

@@ -78,6 +78,28 @@ msgstr "Voir le commentaire"
 msgid "Password reset request"
 msgstr "Demande de réinitialisation du mot de passe"
 
+#: specivo/mcp/ai_subscription_tools.py:145
+msgid ""
+"AI subscriptions belong to your account, not to a project: connect with "
+"an unlimited personal API key to manage them."
+msgstr ""
+"Les abonnements IA appartiennent à votre compte, pas à un projet : "
+"connectez-vous avec une clé API personnelle sans limite pour les gérer."
+
+#: specivo/mcp/ai_subscription_tools.py:152
+msgid ""
+"AI subscriptions belong to people, not to service accounts: connect with "
+"your personal API key, or ask an administrator to record them."
+msgstr ""
+"Les abonnements IA appartiennent à des personnes, pas à des comptes de "
+"service : connectez-vous avec votre clé API personnelle, ou demandez à un "
+"administrateur de les enregistrer."
+
+#: specivo/mcp/ai_subscription_tools.py:163
+msgid "Only administrators manage other people's AI subscriptions."
+msgstr ""
+"Seuls les administrateurs gèrent les abonnements IA des autres personnes."
+
 #: specivo/schemas/auth.py:97
 msgid ""
 "The project limit must be an object with a single \"projects\" list "

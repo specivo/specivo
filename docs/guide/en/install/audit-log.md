@@ -21,7 +21,7 @@ The viewer groups event types into categories:
 |---|---|
 | Sign-in | Password sign-ins and failures, refused credentials (`auth_failure`), password resets and changes, email address changes. |
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
-| Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
+| Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns, time entries and AI subscriptions. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
 | Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off, AI model prices added, changed or deleted, bundled prices loaded, other people's AI subscriptions added, changed or deleted by an administrator, and AI subscription self-service switched on or off. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
@@ -169,9 +169,12 @@ installation's first load runs in the database migration and is not audited. See
 | `ai_subscription_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new`; a changed note shows only as `notes: {"changed": true}` |
 | `ai_subscription_deleted` | the administrator | the deleted subscription, as for `ai_subscription_created` |
 | `ai_subscriptions_self_service_toggled` | the administrator | `enabled` |
+| `ai_subscriptions_changed` | the account whose key an agent used, over MCP (`specivo_ai_subscriptions` adding, updating, ending or deleting) | `tool: "ai_subscriptions"`, `source: "mcp"`, `op`, `subscription_ids`, `target_login` (whose subscriptions), and for a change the changed `fields` |
 
-Only an administrator's change to **somebody else's** subscription is recorded. People's changes
-to their own subscriptions, and an administrator's to their own, are not audit events. Notes are
+Only an administrator's change to **somebody else's** subscription is recorded as
+`ai_subscription_*`. People's changes to their own subscriptions, and an administrator's to their
+own, are not, except that every change over MCP is `ai_subscriptions_changed`, like every agent
+tool call. Notes are
 never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 
 

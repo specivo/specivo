@@ -193,6 +193,10 @@ class AuditEvent(StrEnum):
     AI_SUBSCRIPTION_UPDATED = "ai_subscription_updated"
     AI_SUBSCRIPTION_DELETED = "ai_subscription_deleted"
     AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED = "ai_subscriptions_self_service_toggled"
+    # MCP tool calls that change AI subscriptions (``specivo_ai_subscriptions``
+    # add, update, end, delete; every MCP call is audited): ``op``,
+    # ``subscription_ids``, ``target_login`` and, for a change, ``fields``.
+    AI_SUBSCRIPTIONS_CHANGED = "ai_subscriptions_changed"
     # AI usage entries. Logged in another user's name (details: ``entry_id``,
     # ``target_user_id``, ``target_login``, ``source``, ``tool``,
     # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
@@ -339,6 +343,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.RELATION_LISTED,
             AuditEvent.RELATION_ADDED,
             AuditEvent.RELATION_REMOVED,
+            AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
         ],
         AuditCategory.AGENTS,
     ),
