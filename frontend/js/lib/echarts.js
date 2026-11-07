@@ -1,6 +1,6 @@
 /* Apache ECharts, tree-shaken to what Specivo's charts use.
 
-   Only the parts registered here end up in the bundle: bar charts, the grid,
+   Only the parts registered here end up in the bundle: bar and line charts, the grid,
    tooltip, legend, dataset and aria components, and the SVG renderer (vector
    output, crisp at any zoom, and no <canvas> to read back). Import ECharts
    through this module, never from 'echarts' directly, so another chart cannot
@@ -11,7 +11,7 @@
    specivo/static/vendor/LICENSES/. */
 
 import { init, use } from 'echarts/core';
-import { BarChart } from 'echarts/charts';
+import { BarChart, LineChart } from 'echarts/charts';
 import {
     AriaComponent,
     DatasetComponent,
@@ -23,6 +23,7 @@ import { SVGRenderer } from 'echarts/renderers';
 
 use([
     BarChart,
+    LineChart,
     AriaComponent,
     DatasetComponent,
     GridComponent,

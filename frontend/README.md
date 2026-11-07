@@ -20,7 +20,7 @@ frontend/
   css/pages/*.css       page-specific partials
   js/alpine-init.js     registers every Alpine.data component + store
   js/app.js             wires the vanilla (non-Alpine) modules on DOMContentLoaded
-  js/spend-chart.js     AI spend report charts (ECharts); its own bundle, loaded by the report pages only
+  js/spend-chart.js     AI spend report and My AI usage charts (ECharts); its own bundle, loaded by those pages only
   js/stores.js          Alpine store factories (notifications, sidebar)
   js/lib/*.js           shared helpers (csrf, anchored-menu, echarts: the tree-shaken chart library)
   js/components/*.js     one Alpine factory per file

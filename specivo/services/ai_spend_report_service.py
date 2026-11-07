@@ -3,7 +3,8 @@
 :meth:`AiSpendReportService.report` answers "who, which models, which tools,
 which projects and issues, and how much" for an instance (administrators) or
 one project, over a date range, grouped by any of :data:`GROUP_BY` plus an
-optional period bucket (:data:`PERIODS`).
+optional period bucket (:data:`PERIODS`; coarsened past :data:`MAX_PERIODS`
+buckets, so no caller can ask for a day per row over three years).
 
 Rows
 ----
@@ -110,6 +111,9 @@ PERIODS: tuple[str, ...] = ("day", "week", "month")
 SORTS: tuple[str, ...] = ("key", "spend")
 #: Longest report range, in days (about three years).
 MAX_RANGE_DAYS = 1100
+#: Most period buckets a report has: a finer period over a longer range is
+#: coarsened (day, then week, then month), whoever asks.
+MAX_PERIODS = 120
 
 #: Which day a month's seat fee is converted at under the ``entry_date`` policy:
 #: ``"month_end"`` (the month's last day, or today for the running month). An
@@ -157,6 +161,18 @@ def period_end(start: date, period: str) -> date:
     if period == "week":
         return start + timedelta(days=6)
     return month_last(start.year, start.month)
+
+
+def coarsen_period(date_from: date, date_to: date, period: str | None) -> str | None:
+    """*period*, or the next coarser one while the range would have more than :data:`MAX_PERIODS` buckets."""
+    from specivo.services.ai_usage_chart_service import bucket_count
+
+    if period is None:
+        return None
+    for size in PERIODS[PERIODS.index(period) :]:
+        if bucket_count(date_from, date_to, size) <= MAX_PERIODS:
+            return size
+    return PERIODS[-1]
 
 
 def parse_group_by(value: str | Iterable[str] | None) -> tuple[str, ...]:
@@ -249,6 +265,8 @@ class SpendReport:
     totals: ReportRow
     #: Models of the unpriced entries counted, most entries first (a few).
     unpriced_models: list[tuple[str, int]] = field(default_factory=list)
+    #: The period asked for, when it was coarsened into ``period`` (see :func:`coarsen_period`).
+    requested_period: str | None = None
 
     @property
     def rate_dates(self) -> tuple[date, ...]:
@@ -318,6 +336,8 @@ class AiSpendReportService:
             raise _invalid(f"A report covers at most {MAX_RANGE_DAYS} days", "to_date")
         if filters.cost_type is not None and filters.cost_type not in AI_USAGE_COST_TYPES:
             raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
+        requested_period = period
+        period = coarsen_period(date_from, date_to, period)
 
         if project is None:
             if not is_global_admin(viewer):
@@ -402,6 +422,7 @@ class AiSpendReportService:
             rows=rows,
             totals=totals,
             unpriced_models=missing,
+            requested_period=requested_period if requested_period != period else None,
         )
 
     async def sees_every_entry(

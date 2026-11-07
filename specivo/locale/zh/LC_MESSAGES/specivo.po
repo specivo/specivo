@@ -11492,3 +11492,159 @@ msgstr "目前还没有维基页面、工作项或评论提及此工作项。"
 msgid "No wiki page, issue or comment links here yet."
 msgstr "目前还没有维基页面、工作项或评论链接到这里。"
 
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:129
+msgid "Charts"
+msgstr "图表"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:131
+#, python-format
+msgid "Per month, %(first)s to %(last)s (UTC days)."
+msgstr "按月，%(first)s 至 %(last)s（UTC 日期）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:132
+#, python-format
+msgid "Per week (from Monday), %(first)s to %(last)s (UTC days)."
+msgstr "按周（从周一开始），%(first)s 至 %(last)s（UTC 日期）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:133
+#, python-format
+msgid "Per day, %(first)s to %(last)s (UTC days)."
+msgstr "按日，%(first)s 至 %(last)s（UTC 日期）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:134
+#, python-format
+msgid "Amounts in %(currency)s."
+msgstr "金额以 %(currency)s 计。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:135
+msgid "Amounts without a usable exchange rate are left out of the charts; the totals above list them."
+msgstr "没有可用汇率的金额不计入图表；上方的合计列出了这些金额。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:138
+#, python-format
+msgid "%(count)s entry has no price, so it adds nothing to the value shown. Periods marked * have such entries."
+msgid_plural "%(count)s entries have no price, so they add nothing to the value shown. Periods marked * have such entries."
+msgstr[0] "%(count)s 条记录没有价格，因此不计入所示价值。含有此类记录的时间段标有 *。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:143
+msgid "API-equivalent value and spend over time"
+msgstr "API 等价价值与支出随时间变化"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:143
+msgid "API-equivalent value over time"
+msgstr "API 等价价值随时间变化"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:145
+msgid "Split the value by"
+msgstr "价值拆分方式"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:146
+msgid "By tool"
+msgstr "按工具"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:147
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:184
+msgid "By model"
+msgstr "按模型"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:151
+msgid "API-equivalent value over time; the totals and the table hold the numbers"
+msgstr "API 等价价值随时间变化；具体数字见合计和表格"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:158
+msgid "Tokens over time"
+msgstr "令牌随时间变化"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:160
+msgid "Input and output"
+msgstr "输入和输出"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:162
+msgid "Input, output and reasoning tokens over time"
+msgstr "输入、输出和推理令牌随时间变化"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:166
+msgid "Cache"
+msgstr "缓存"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:168
+msgid "Cache read and cache write tokens over time"
+msgstr "缓存读取和写入令牌随时间变化"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:176
+msgid "By project"
+msgstr "按项目"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:178
+msgid "API-equivalent value by project"
+msgstr "按项目的 API 等价价值"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:186
+msgid "API-equivalent value by model"
+msgstr "按模型的 API 等价价值"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:195
+msgid "Subscription leverage"
+msgstr "订阅杠杆"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:196
+msgid "The API-equivalent value of the usage each of your plans covered in this period, divided by the plan's fee for the same days."
+msgstr "本期间每个套餐所覆盖用量的 API 等价价值，除以该套餐同期的费用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:201
+msgid "Fee for the period"
+msgstr "期间费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:221
+msgid "No counted usage matches these filters, so there is nothing to chart."
+msgstr "没有符合这些筛选条件的计入用量，因此无可绘制的图表。"
+
+#: specivo/web/pages/ai_usage.py:366
+#, python-format
+msgid "Week of %(date)s"
+msgstr "%(date)s 当周"
+
+#: specivo/web/pages/ai_usage.py:372
+#, python-format
+msgid "%(num)d entry without a price"
+msgid_plural "%(num)d entries without a price"
+msgstr[0] "%(num)d 条记录没有价格"
+
+#: specivo/web/pages/ai_usage.py:378
+#, python-format
+msgid "%(num)d amount without an exchange rate"
+msgid_plural "%(num)d amounts without an exchange rate"
+msgstr[0] "%(num)d 笔金额没有汇率"
+
+#: specivo/web/pages/ai_usage.py:393
+#: specivo/web/pages/ai_usage.py:401
+msgid "Other"
+msgstr "其他"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:129
+msgid "These entries span too many years to chart. Narrow the dates to see the charts."
+msgstr "这些记录跨越的年份太多，无法绘制图表。请缩小日期范围以查看图表。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:134
+#, python-format
+msgid "Per year, %(first)s to %(last)s (UTC days)."
+msgstr "按年，%(first)s 至 %(last)s（UTC 日期）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:135
+#, python-format
+msgid "Per quarter, %(first)s to %(last)s (UTC days)."
+msgstr "按季度，%(first)s 至 %(last)s（UTC 日期）。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:151
+msgid "Time buckets"
+msgstr "时间粒度"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html:226
+#, python-format
+msgid "Grouped by %(shown)s instead of %(asked)s: the range would have too many periods."
+msgstr "已按%(shown)s而非%(asked)s分组：该范围的时间段过多。"
+
+#: specivo/web/pages/ai_usage.py:506
+msgid "Auto"
+msgstr "自动"

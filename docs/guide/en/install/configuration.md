@@ -286,6 +286,24 @@ Behind a reverse proxy, set [`TRUSTED_PROXIES`](#client-addresses-behind-a-proxy
 shares the proxy's budget. If Redis is unavailable, searches are not limited, as with every other
 rate limit, and `RATE_LIMIT_ENABLED=false` turns all rate limits off.
 
+## AI report rate limits
+
+AI usage charts and spend reports group a person's or a project's whole AI usage and convert its
+amounts, so each person has a budget per minute for them. It is shared by My AI usage (its charts),
+the project and instance AI spend report pages, the report API (`GET /api/v1/projects/{key}/ai-usage/report/`
+and `GET /api/v1/ai-usage/report/`, JSON and CSV) and the MCP report tool.
+
+| Variable | Purpose / default |
+|---|---|
+| `AI_REPORT_RATE_LIMIT_PER_MINUTE` | Charts and reports per minute one person may load. Default `30`. |
+| `AI_REPORT_RATE_LIMIT_ADMIN_PER_MINUTE` | The same for administrators, who also read the instance report. Default `120`. |
+| `AI_USAGE_CHART_CACHE_SECONDS` | Seconds the My AI usage chart data is kept in Redis for the same person and filters. A new, edited or deleted entry shows at once; exchange rates, prices and plans changed meanwhile show within this time. Default `60`; `0` turns the cache off. |
+
+Over the limit, a page shows the rate-limit page and the API answers `429` with code
+`rate_limit_exceeded`, both with `Retry-After`. Whatever is asked for, a chart has at most 120
+points (days, weeks, months, quarters or years, by the range of the entries shown), and a spend
+report grouped by day or week over a long range is grouped by week or month instead.
+
 ## Client addresses behind a proxy
 
 Specivo uses the client's IP address for the per-address rate limits (sign-in, single sign-on,

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import pagination %}
-{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label with context %}
+{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label, usage_charts with context %}
 
 {% block title %}{% trans %}My AI usage{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -70,6 +70,7 @@
       <option value="excluded" {{ 'selected' if filters.status == 'excluded' else '' }}>{% trans %}Excluded only{% endtrans %}</option>
     </select>
   </label>
+  {% if chart_bucket %}<input type="hidden" name="bucket" value="{{ chart_bucket }}">{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
     {% if page_query %}<a class="sp-btn sp-btn-ghost" href="/my/ai-usage/">{% trans %}Clear{% endtrans %}</a>{% endif %}
@@ -77,6 +78,8 @@
 </form>
 
 {{ totals_box(totals) }}
+
+{{ usage_charts(charts, has_rows=(rows | length > 0), bucket_links=bucket_links) }}
 
 {% if rows %}
 <form method="post" action="/my/ai-usage/reassign/" id="aiu-reassign" class="card sp-card-pad sp-mb-md" data-testid="aiu-reassign-form">
@@ -110,3 +113,5 @@
 </div>
 {% endif %}
 {% endblock %}
+
+{% block chart_js %}{% if charts and not charts.too_long %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

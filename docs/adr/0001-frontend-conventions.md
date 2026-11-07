@@ -49,7 +49,7 @@ Four bundles are produced:
 | `frontend/css/specivo.css` | `dist/css/specivo.min.css` | all custom styles |
 | `frontend/js/alpine-init.js` | `dist/js/alpine-init.min.js` | registers every Alpine component + store |
 | `frontend/js/app.js` | `dist/js/app.min.js` | vanilla (non-Alpine) modules |
-| `frontend/js/spend-chart.js` | `dist/js/spend-chart.min.js` | AI spend report charts (ECharts); loaded only by the report pages |
+| `frontend/js/spend-chart.js` | `dist/js/spend-chart.min.js` | AI spend report and My AI usage charts (ECharts); loaded only by those pages |
 
 - **Content hashing + manifest:** esbuild writes `<name>.<hash>.<ext>` plus a `manifest.json`
   per output dir. At startup the app loads the manifests (`load_asset_manifests()` in `specivo/web/assets.py`)
@@ -313,12 +313,13 @@ keeps the product name (not the instance brand).
 Charts use **Apache ECharts** (Apache-2.0; its renderer zrender is BSD-3-Clause), pinned to an
 exact version in `frontend/package.json` and bundled by esbuild, not vendored:
 
-- **Tree-shaken.** `frontend/js/lib/echarts.js` registers only the parts in use (bar chart; grid,
+- **Tree-shaken.** `frontend/js/lib/echarts.js` registers only the parts in use (bar and line charts; grid,
   tooltip, legend, dataset and aria components; the SVG renderer) and re-exports named functions.
   Charts import ECharts through it, never from `echarts` itself, and never re-export the
   `echarts/core` namespace, which would keep all of core in the bundle.
 - **Page-specific bundle.** A chart page gets its own esbuild entry (today
-  `frontend/js/spend-chart.js` → `dist/js/spend-chart.min.js`) and loads it from the
+  `frontend/js/spend-chart.js` → `dist/js/spend-chart.min.js`, shared by the AI spend reports
+  and My AI usage) and loads it from the
   `{% block chart_js %}` of `base.html`, only when there is something to draw. Other pages never
   download the library.
 - **SVG renderer**, so charts are sharp at any zoom and need no `<canvas>`.
