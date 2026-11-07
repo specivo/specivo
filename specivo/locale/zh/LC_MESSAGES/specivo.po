@@ -78,6 +78,22 @@ msgstr "查看评论"
 msgid "Password reset request"
 msgstr "密码重置请求"
 
+#: specivo/mcp/ai_subscription_tools.py:145
+msgid ""
+"AI subscriptions belong to your account, not to a project: connect with "
+"an unlimited personal API key to manage them."
+msgstr "AI 订阅属于你的账户，而不是某个项目：请使用不受限制的个人 API 密钥连接来管理它们。"
+
+#: specivo/mcp/ai_subscription_tools.py:152
+msgid ""
+"AI subscriptions belong to people, not to service accounts: connect with "
+"your personal API key, or ask an administrator to record them."
+msgstr "AI 订阅属于个人，而不是服务账户：请使用你的个人 API 密钥连接，或请管理员代为登记。"
+
+#: specivo/mcp/ai_subscription_tools.py:163
+msgid "Only administrators manage other people's AI subscriptions."
+msgstr "只有管理员可以管理其他人的 AI 订阅。"
+
 #: specivo/schemas/auth.py:97
 msgid ""
 "The project limit must be an object with a single \"projects\" list "
