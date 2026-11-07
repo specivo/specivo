@@ -70,13 +70,22 @@ Entra ID 从应用注册对应的企业应用进行预配。
     | `externalId` | `objectId`（默认是 `mailNickname`，请改掉，见下文） |
     | `preferredLanguage` | `preferredLanguage`（可选） |
 
-    默认列表中的其他属性（职位、地址、电话号码、企业扩展）会被接受但忽略。没有 `mail` 的用户无法预配：Specivo 需要邮箱地址。
+    默认列表中的其他属性（职位、地址、电话号码、企业扩展）会被接受但忽略。每个 Specivo 账户都需要邮箱地址，所以 `mail` 为空的用户会被拒绝（见[没有邮箱的用户](#users-without-a-mailbox)）。
 4. 要预配组，保持 **Provision Microsoft Entra ID Groups** 启用。只会发送分配给应用的组，以及这些组中同样被分配的成员。
 5. 在 **Settings** 下把 **Scope** 设为 **Sync only assigned users and groups**，在 **Users and groups** 下分配用户和组，然后把 **Provisioning Status** 设为 **On**。
 
 Entra ID 大约每 40 分钟运行一个周期。要测试单个用户，用 **Provision on demand**。在 Entra 中禁用某人（或移除其分配）会在下一周期发送 `active` 为 false；删除某人则在软删除期结束后约 30 天发送删除请求。
 
 Entra 的邮箱声明永远不会被验证，所以为了让首次登录正常工作，请把 `externalId` 映射到 `objectId`（第 3 步），并在 Specivo 提供商页面的 **声明（Claims）** 下把 **SCIM externalId 声明** 设为 `oid`。这样 Specivo 就能按对象 ID 找到已预配的账户；见[预配后登录](#signing-in-after-provisioning)。
+
+### 没有邮箱的用户 {#users-without-a-mailbox}
+
+Entra ID 只为拥有 Exchange 邮箱（或手动设置了邮箱）的用户填写 `mail`。对于 `mail` 为空的用户，它在请求中省略 `emails`，Specivo 会返回 `400 invalidValue`：“A user needs an email address”。预配日志会显示该用户预配失败。可以用以下任一方式为这些用户提供地址：
+
+- **在用户上设置 `mail`**：在 Entra 中打开 **Users → 该用户 → Edit properties → Contact information → Email**。如果该地址确实能收到邮件，这是最好的做法。
+- **回退到用户主体名称（UPN）**：在第 3 步的属性映射中编辑 `emails[type eq "work"].value` 这一行，把 **Mapping type** 设为 **Expression**，表达式设为 `Coalesce([mail], [userPrincipalName])`。有邮箱的用户继续发送 `mail`，其他用户发送其 UPN。只有当 UPN 是你邮件域上的真实地址时才这样做：Specivo 会把通知和密码重置链接发到这个地址，而 `@your-tenant.onmicrosoft.com` 形式的 UPN 通常收不到任何邮件。如果提供商设置了 **允许的邮箱域名**，UPN 的域名必须在列表中。
+
+保存映射后，用 **Provision on demand** 测试一个用户，或等待下一个周期。
 
 ## Okta {#okta}
 
@@ -169,7 +178,7 @@ SCIM 永远不会更改设有 Specivo 密码的账户的邮箱地址：IdP 会�
 | `SCIM_MAX_BODY_BYTES` | `1048576` | 请求体的最大字节数。更大的请求返回 `413`。 |
 | `SCIM_MAX_RESULTS` | `200` | 一次列表响应中最多返回的资源数。 |
 
-每一次 SCIM 变更都会写入日志（`specivo.scim`），开启安全审计日志后还会记录为 `scim_user_created`、`scim_user_updated`、`scim_user_deprovisioned`、`scim_group_created`、`scim_group_updated`、`scim_group_deleted` 或 `scim_request_refused`，来源为该提供商。停用操作还会记录为 `user_deprovisioned`，原因为 `scim_deprovision`。令牌变更记录为 `scim_config_changed`。
+每一次 SCIM 变更都会写入日志（`specivo.scim`），并在[安全审计日志](../audit-log.md)中记录为 `scim_user_created`、`scim_user_updated`、`scim_user_deprovisioned`、`scim_group_created`、`scim_group_updated`、`scim_group_deleted` 或 `scim_request_refused`，来源为该提供商。停用操作还会记录为 `user_deprovisioned`，原因为 `scim_deprovision`。令牌变更记录为 `scim_config_changed`。
 
 ## 故障排查 {#troubleshooting}
 
@@ -179,7 +188,7 @@ SCIM 永远不会更改设有 Specivo 密码的账户的邮箱地址：IdP 会�
 | 之前正常，现在返回 `401` | 有人轮换或撤销了令牌。生成新令牌并填到 IdP。 |
 | 创建用户时 `409 uniqueness` | `userName` 已存在、邮箱属于永远不会被关联的账户（管理员、服务账户、另一提供商的账户），或已有账户使用该登录名但邮箱不同。见[现有账户](#existing-accounts)。 |
 | 创建组时 `409 uniqueness` | 已有同名的 Specivo 用户组。重命名其中一个。 |
-| `400 invalidValue`：“A user needs an email address” | 用户在 IdP 没有邮箱，或缺少邮箱映射（Entra ID：映射 `mail`）。 |
+| `400 invalidValue`：“A user needs an email address” | 用户在 IdP 没有邮箱，或缺少邮箱映射。Entra ID：映射 `mail`；没有邮箱的用户见[没有邮箱的用户](#users-without-a-mailbox)。 |
 | `400 invalidValue`：“Members must be users provisioned by this identity provider” | 组中有尚未预配的成员。先预配他们，或把他们分配到应用。 |
 | `400`：“This account is an administrator in Specivo” | IdP 试图禁用、删除管理员（或服务账户）或更改其邮箱。先在 Specivo 中移除管理员权限。 |
 | IdP 已启用用户，但用户仍处于停用状态 | 账户是在 Specivo 中停用的，不是通过 SCIM。在 **管理 → 用户** 下重新激活。 |
