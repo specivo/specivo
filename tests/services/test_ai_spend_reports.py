@@ -707,3 +707,97 @@ async def test_csv(db_session: AsyncSession, w: World) -> None:
     assert alice.startswith("2026-03-01,Rep Alice,'=HYPERLINK(1)")
     assert ",USD,2.50,2.50," in alice
     assert lines[-1].startswith("total,")
+
+
+# ---------------------------------------------------------------------------
+# A set of projects
+# ---------------------------------------------------------------------------
+
+
+async def test_project_set_counts_only_its_projects(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 5), api="3")
+    await entry(db, w.bob, project=w.q, day=date(2026, 3, 6), api="5")
+    await entry(db, w.bob, project=None, day=date(2026, 3, 7), api="7")
+    only_p = await run(db, w.admin, projects=[w.p], group_by=["project"])
+    assert only_p.scope == "projects" and only_p.project is None
+    assert {r.key["project"] for r in only_p.rows} == {w.p.id}
+    assert amount(only_p.totals.api_equivalent) == Decimal(3)
+    both = await run(db, w.admin, projects=[w.p, w.q, w.p], group_by=["project"])
+    assert {r.key["project"] for r in both.rows if not r.seat_only} == {w.p.id, w.q.id}
+    assert amount(both.totals.api_equivalent) == Decimal(8)  # unassigned usage is not in any project
+
+
+async def test_project_set_reads_each_project_by_its_own_rule(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 5), api="3")
+    await entry(db, w.bob, project=w.p, day=date(2026, 3, 6), api="5")
+    await entry(db, w.bob, project=w.q, day=date(2026, 3, 7), api="7")
+    # alice's role shows her own entries only, in both projects.
+    alice = await run(db, w.alice, projects=[w.p, w.q], group_by=["user"])
+    assert {r.key["user"] for r in alice.rows if not r.seat_only} == {w.alice.id}
+    # mgr reads everyone in RPA, the same rows as RPA's own report.
+    mgr = await run(db, w.mgr, projects=[w.p], group_by=["user"], include_seat_cost=False)
+    single = await run(db, w.mgr, w.p, group_by=["user"], include_seat_cost=False)
+    assert [(r.key, amount(r.api_equivalent)) for r in mgr.rows] == [
+        (r.key, amount(r.api_equivalent)) for r in single.rows
+    ]
+    # A project the viewer cannot reach is refused, as its own report would be.
+    with pytest.raises((PermissionDeniedError, AppError)):
+        await run(db, w.mgr, projects=[w.p, w.q])
+
+
+async def test_project_set_seat_cost_and_no_unallocated_fee(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    sub = w.subs["alice"]
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 5), api="30", cost_type="subscription", subscription=sub)
+    await entry(db, w.alice, project=w.q, day=date(2026, 3, 6), api="10", cost_type="subscription", subscription=sub)
+    # mgr reads every entry of RPA: the share RPA's usage carries (75 of alice's 100), never the rest.
+    mgr = await run(db, w.mgr, projects=[w.p], group_by=["user"])
+    assert mgr.seat_cost_shown and not mgr.seat_cost_hidden and not mgr.unallocated_shown
+    assert amount(by(mgr, user=w.alice.id).seat_allocated) == Decimal(75)
+    assert not any(r.seat_only for r in mgr.rows)  # dave's and bob's idle fees are not shown
+    assert amount(mgr.totals.seat_unallocated) == 0
+    # Even the administrator gets no unallocated fee in a set report.
+    admin = await run(db, w.admin, projects=[w.p, w.q], group_by=["user"])
+    assert admin.seat_cost_shown and not admin.unallocated_shown
+    assert amount(admin.totals.seat_allocated) == Decimal(100)
+    assert not any(r.seat_only for r in admin.rows)
+    # alice does not read every entry of the set: seat cost is left out of the whole report.
+    alice = await run(db, w.alice, projects=[w.p, w.q], group_by=["user"])
+    assert alice.seat_cost_hidden and not alice.seat_cost_shown
+    assert alice.totals.total_spend is alice.totals.marginal
+
+
+async def test_project_set_hides_seat_cost_when_one_project_hides_an_entry(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    sub = w.subs["alice"]
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 5), api="30", cost_type="subscription", subscription=sub)
+    assert (await run(db, w.carol, projects=[w.p], group_by=["user"])).seat_cost_shown
+    await entry(db, w.bob, project=w.p, day=date(2026, 3, 6), api="1", issue=w.private_issue)
+    report = await run(db, w.carol, projects=[w.p], group_by=["user"])
+    assert report.seat_cost_hidden and not report.seat_cost_shown
+
+
+async def test_project_set_currencies(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    await rate(db, date(2026, 3, 8), "EUR", "USD", "1.1")
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 10), api="10", currency="EUR")
+    await entry(db, w.bob, project=w.q, day=date(2026, 3, 10), api="1000", currency="THB")
+    report = await run(db, w.admin, projects=[w.p, w.q], group_by=[], include_seat_cost=False)
+    api = report.totals.api_equivalent
+    assert api is not None and api.total.amount == Decimal(11)
+    assert [(g.currency, g.amount.amount, g.reason.value) for g in api.unconverted] == [
+        ("THB", Decimal(1000), "no_rate")
+    ]
+    # Without a currency asked for, a set reports in the instance's reporting currency.
+    w.p.reporting_currency_code = "THB"
+    await db.flush()
+    default = await _svc.report(db, w.admin, project=None, projects=[w.p], date_from=MARCH_1, date_to=MARCH_31)
+    assert default.currency == await _instance_currency(db)
+
+
+async def _instance_currency(db: AsyncSession) -> str:
+    from specivo.services.currency_service import CurrencyService
+
+    return await CurrencyService().reporting_currency_for(db, None)

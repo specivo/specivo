@@ -1,26 +1,27 @@
-"""Htmx partials for the dashboard — return HTML fragments, not full pages."""
+"""Htmx partials for the dashboard — return HTML fragments, not full pages.
+
+Each partial renders one block of the dashboard with the same data as the
+page (``specivo.web.pages.dashboard``), so a switch or a pager swaps just that
+block. Without JavaScript the switches are plain links to the page.
+"""
 
 from __future__ import annotations
 
+import datetime
 from typing import cast
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from specivo.core.database import DB_SESSION
-from specivo.models.issue import Issue
-from specivo.models.lookups import IssueStatus
-from specivo.models.project import Project
+from specivo.core.utils import utcnow
 from specivo.models.user import User
-from specivo.services.project_service import ProjectService
+from specivo.services import dashboard_service as dash
 from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.pages.dashboard import _label_projects, activity_context, spend_context
 
 router = APIRouter(prefix="/partials/dashboard", tags=["web-partials"], include_in_schema=False)
-
-_project_svc = ProjectService()
 
 
 @router.get("/my-issues/", response_class=HTMLResponse)
@@ -36,59 +37,11 @@ async def my_issues_partial(
         return RedirectResponse("/login/", status_code=302)
     user = cast("User", user_obj)
 
-    projects, _ = await _project_svc.list_projects(db, user, offset=0, limit=50)
-    visible_pids = {p.id for p in projects}
-
-    my_issues: list[Issue] = []
-    total = 0
-    if visible_pids:
-        # Count total
-        count_stmt = (
-            select(func.count())
-            .select_from(Issue)
-            .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(
-                Issue.assigned_to_id == user.id,
-                IssueStatus.category != "closed",
-                Issue.project_id.in_(visible_pids),
-            )
-        )
-        total = (await db.execute(count_stmt)).scalar() or 0
-
-        # Fetch page
-        my_issues_stmt = (
-            select(Issue)
-            .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(
-                Issue.assigned_to_id == user.id,
-                IssueStatus.category != "closed",
-                Issue.project_id.in_(visible_pids),
-            )
-            .options(
-                selectinload(Issue.tracker),
-                selectinload(Issue.status),
-                selectinload(Issue.priority),
-            )
-            .order_by(Issue.updated_at.desc())
-            .offset(offset)
-            .limit(limit)
-        )
-        my_issues = list((await db.execute(my_issues_stmt)).scalars().all())
-
-    # Batch-load project names
-    issue_project_ids = list({i.project_id for i in my_issues})
-    if issue_project_ids:
-        proj_rows = (
-            await db.execute(
-                select(Project.id, Project.name).where(Project.id.in_(issue_project_ids))
-            )
-        ).all()
-        proj_names = {r.id: r.name for r in proj_rows}
-        for issue in my_issues:
-            issue.project_name = proj_names.get(issue.project_id, "")  # type: ignore[attr-defined]
-
-    templates = get_templates()
-    return templates.TemplateResponse(
+    today = datetime.date.today()
+    scope = await dash.load_scope(db, user)
+    my_issues, total = await dash.my_open_issues(db, scope, offset=offset, limit=limit)
+    _label_projects(scope, my_issues)
+    return get_templates().TemplateResponse(
         request,
         "pages/_my_issues.html",
         context={
@@ -97,5 +50,41 @@ async def my_issues_partial(
             "my_issues_total": total,
             "my_issues_offset": offset,
             "my_issues_limit": limit,
+            "issue_flags": await dash.issue_flags(db, scope, my_issues, today),
         },
     )
+
+
+@router.get("/spend/", response_class=HTMLResponse)
+async def spend_partial(
+    request: Request,
+    db: AsyncSession = DB_SESSION,
+    period: str = Query("month"),
+) -> Response:
+    """The AI spend and agent time block for *period* (``today``, ``7d``, ``month``)."""
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+    scope = await dash.load_scope(db, user)
+    context = {"user": user, **await spend_context(db, scope, period, utcnow().date())}
+    if context["spend"] is None:
+        # Neither an administrator nor a manager of AI spend in any project.
+        return Response(status_code=403)
+    return get_templates().TemplateResponse(request, "pages/dashboard/_spend.html", context=context)
+
+
+@router.get("/activity/", response_class=HTMLResponse)
+async def activity_partial(
+    request: Request,
+    db: AsyncSession = DB_SESSION,
+    who: str = Query("all"),
+) -> Response:
+    """The grouped activity block for *who* (``all``, ``agents``, ``people``)."""
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+    scope = await dash.load_scope(db, user)
+    context = {"user": user, **await activity_context(db, scope, who)}
+    return get_templates().TemplateResponse(request, "pages/dashboard/_activity.html", context=context)
