@@ -14,10 +14,10 @@ const cssOutdir = path.resolve(__dirname, '..', 'specivo', 'static', 'dist', 'cs
 // and whether it is a JS or CSS bundle. The build loop and manifest writer
 // treat them uniformly.
 //
-// Two JS bundles, matching the historical load order: alpine-init.min.js
-// registers all Alpine components/stores and must run BEFORE alpine.min.js;
-// app.min.js wires the vanilla (non-Alpine) modules on DOMContentLoaded and
-// runs after Alpine.
+// Two JS bundles on every page, matching the historical load order:
+// alpine-init.min.js registers all Alpine components/stores and must run
+// BEFORE alpine.min.js; app.min.js wires the vanilla (non-Alpine) modules on
+// DOMContentLoaded and runs after Alpine. Page-specific bundles follow them.
 const bundles = [
   {
     type: 'js',
@@ -30,6 +30,26 @@ const bundles = [
     entryPoints: ['js/app.js'],
     outdir: jsOutdir,
     outfile: path.join(jsOutdir, 'app.min.js'),
+  },
+  // The AI spend report charts, with Apache ECharts tree-shaken in. A bundle
+  // of its own, loaded only by the report pages (pages/ai_usage/report.html),
+  // so the chart library never weighs on other pages. The banner keeps the
+  // ECharts copyright header (its sources use plain /* */ headers, which
+  // minifying drops; zrender's and tslib's /*! */ headers are kept as is).
+  {
+    type: 'js',
+    entryPoints: ['js/spend-chart.js'],
+    outdir: jsOutdir,
+    outfile: path.join(jsOutdir, 'spend-chart.min.js'),
+    banner: {
+      js: [
+        '/*! Apache ECharts | Copyright 2017-2026 The Apache Software Foundation |',
+        ' * Licensed under the Apache License, Version 2.0; this product includes software',
+        ' * developed at The Apache Software Foundation (https://www.apache.org/).',
+        ' * Parts derived from d3.js, Copyright 2010-2016 Mike Bostock (BSD-3-Clause).',
+        ' * Full texts: /static/vendor/LICENSES/ */',
+      ].join('\n'),
+    },
   },
   {
     type: 'css',
@@ -149,6 +169,7 @@ async function build() {
       ...sharedOptions,
       entryPoints: bundle.entryPoints,
       outfile: bundle.outfile,
+      ...(bundle.banner ? { banner: bundle.banner } : {}),
     };
 
     if (isWatch) {

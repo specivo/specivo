@@ -158,11 +158,25 @@ async def test_project_report_page(client: AsyncClient, w: World) -> None:
     html = resp.text
     assert 'data-testid="spend-table"' in html
     assert "data-sp-spend-chart='" in html
-    assert "/static/vendor/observable-plot.0.6.min.js" in html
+    assert "/static/dist/js/spend-chart.min" in html  # the chart bundle, loaded on this page only
     assert "Rep Alice" in html and "Rep Bob" in html
     assert 'data-testid="spend-seat"' in html
     assert "/api/v1/projects/RWA/ai-usage/report/?" in html and "format=csv" in html
     assert "<script>" not in html.split('data-testid="spend-presets"', 1)[1]
+
+
+async def test_report_without_rows_skips_the_chart_bundle(client: AsyncClient, w: World) -> None:
+    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/report/", from_date="2025-01-01", to_date="2025-01-31")
+    assert resp.status_code == 200, resp.text
+    assert 'data-testid="spend-empty"' in resp.text
+    assert "spend-chart.min" not in resp.text
+    assert "data-sp-spend-chart" not in resp.text
+
+
+async def test_other_pages_skip_the_chart_bundle(client: AsyncClient, w: World) -> None:
+    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/")
+    assert resp.status_code == 200, resp.text
+    assert "spend-chart.min" not in resp.text
 
 
 async def test_project_report_page_hides_seat_cost(client: AsyncClient, w: World) -> None:

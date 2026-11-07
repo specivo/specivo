@@ -25,9 +25,7 @@ pytestmark = [pytest.mark.e2e]
 
 def _no_horizontal_overflow(page: Page) -> bool:
     """Check that the page body doesn't overflow horizontally."""
-    return page.evaluate(
-        "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2"
-    )
+    return page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2")
 
 
 def _buttons_within_viewport(page: Page, selector: str, viewport_width: int) -> None:
@@ -350,3 +348,72 @@ class TestResponsiveAiUsage:
         responsive_page.wait_for_load_state("networkidle")
         _buttons_within_viewport(responsive_page, ".sp-aiu-form .form-input", viewport_size["width"])
         _buttons_within_viewport(responsive_page, ".sp-aiu-form-actions .sp-btn", viewport_size["width"])
+
+
+class TestResponsiveAiSpendReport:
+    """The AI spend reports (project and admin): the ECharts chart fits every viewport, light and dark."""
+
+    MARCH = "from_date=2026-03-01&to_date=2026-03-31"
+    LONG_MODEL = "a-rather-long-model-name-from-a-local-runtime-2026-03-10-instruct-q4"
+
+    @pytest.fixture(autouse=True)
+    def _entries(self, api_client, responsive_project: str) -> None:
+        resp = api_client.get(f"/api/v1/projects/{responsive_project}/ai-usage/", params={"model": "claude-haiku-4-5"})
+        if resp.status_code == 200 and resp.json()["total_count"]:
+            return
+        for model, day, amount in (
+            (self.LONG_MODEL, "2026-03-03", "4.20"),
+            ("claude-haiku-4-5", "2026-03-12", "1.10"),
+            ("claude-haiku-4-5", "2026-03-24", "0.75"),
+        ):
+            resp = api_client.post(
+                f"/api/v1/projects/{responsive_project}/ai-usage/",
+                json={
+                    "tool": "claude-code",
+                    "model": model,
+                    "usage_date": day,
+                    "tokens": {"input": 200_000, "output": 9_000},
+                    "cost_type": "api",
+                    "cost": {"amount": amount, "currency": "USD"},
+                },
+            )
+            assert resp.status_code == 201, resp.text
+
+    @pytest.mark.parametrize("scheme", ["light", "dark"])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/projects/{key}/ai-usage/report/?{march}&group=model&period=week",
+            "/projects/{key}/ai-usage/report/?{march}&group=model",
+            "/admin/ai-spend/?{march}&group=project&period=day",
+        ],
+        ids=["project-per-week", "project-by-model", "admin-per-day"],
+    )
+    def test_chart_fits(
+        self, responsive_page: Page, responsive_project: str, viewport_size: dict, path: str, scheme: str
+    ):
+        page = responsive_page
+        page.emulate_media(color_scheme=scheme)
+        page.goto(path.format(key=responsive_project, march=self.MARCH))
+        chart = page.get_by_test_id("spend-chart")
+        expect(chart).to_have_attribute("data-sp-drawn", "")
+        expect(chart.locator("svg").first).to_be_visible()
+        page.wait_for_load_state("networkidle")
+        assert _no_horizontal_overflow(page), f"{path} has horizontal overflow"
+        svg = chart.locator("svg").first.bounding_box()
+        card = page.locator(".sp-spend-chart-card").bounding_box()
+        assert svg and card
+        assert svg["x"] >= card["x"] - 1 and svg["x"] + svg["width"] <= card["x"] + card["width"] + 1
+        assert svg["x"] + svg["width"] <= viewport_size["width"]
+        # No axis or legend text sticks out of the drawing.
+        outside = chart.evaluate(
+            """(el) => {
+                const box = el.querySelector('svg').getBoundingClientRect();
+                return Array.from(el.querySelectorAll('svg text')).filter((t) => {
+                    if (t.closest('[clip-path]')) return false;  // legend items scrolled out of view
+                    const r = t.getBoundingClientRect();
+                    return r.width && (r.left < box.left - 1 || r.right > box.right + 1);
+                }).map((t) => t.textContent);
+            }"""
+        )
+        assert outside == [], f"chart text clipped at {viewport_size['width']}px: {outside}"

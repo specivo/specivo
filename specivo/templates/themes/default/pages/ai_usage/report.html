@@ -228,11 +228,8 @@
 <div class="card sp-spend-chart-card">
   <div class="sp-spend-chart" data-testid="spend-chart" role="img" aria-label="{{ _('Spend chart; the table below holds the same numbers') }}"
        data-sp-spend-chart='{{ chart | tojson }}'
-       data-d3-src="/static/vendor/d3.7.9.0.min.js"
-       data-plot-src="/static/vendor/observable-plot.0.6.min.js"
        data-label-spend="{{ _('Spend') }}"
-       data-label-api="{{ _('API-equivalent value') }}"
-       data-label-total="{{ _('Total') }}"></div>
+       data-label-api="{{ _('API-equivalent value') }}"></div>
 </div>
 
 <div class="card">
@@ -297,3 +294,6 @@
 {% endif %}
 {% endif %}
 {% endblock %}
+
+{# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
+{% block chart_js %}{% if report and rows %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

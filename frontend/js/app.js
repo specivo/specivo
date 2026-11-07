@@ -22,7 +22,6 @@ import { initModal } from './modules/modal';
 import { initVersionSort } from './modules/version-sort';
 import { initMermaid } from './modules/mermaid';
 import { initSelectAll } from './modules/select-all';
-import { initSpendChart } from './modules/spend-chart';
 
 document.addEventListener('DOMContentLoaded', function () {
     initCsrf();
@@ -40,5 +39,4 @@ document.addEventListener('DOMContentLoaded', function () {
     initVersionSort();
     initMermaid();
     initSelectAll();
-    initSpendChart();
 });
