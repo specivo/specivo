@@ -9,9 +9,12 @@
   the project's "AI usage" tab instead.
 
 Every rule (visibility, seat allocation, who sees seat cost) is
-:class:`AiSpendReportService`'s. The page is a plain GET form; the chart is
-drawn by ``frontend/js/modules/spend-chart.js`` from a ``data-`` attribute,
-and the table holds the same numbers for readers without it. The CSV export is
+:class:`AiSpendReportService`'s. The page is a plain GET form. Above the table,
+the AI usage charts of My AI usage (``AiUsageChartService.report_charts``, the
+``usage_charts`` macro) show the same usage over time, by group and as
+subscription leverage; the group chart over the table is drawn by
+``frontend/js/modules/spend-chart.js`` from a ``data-`` attribute, and the
+table holds the same numbers for readers without it. The CSV export is
 the REST endpoint with the same query.
 """
 
@@ -25,6 +28,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
@@ -34,7 +38,8 @@ from specivo.core.exchange import ConversionSummary
 from specivo.core.i18n import get_locale
 from specivo.core.i18n import gettext as _
 from specivo.core.money import currency_display_name
-from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES
+from specivo.models.ai_subscription import AiSubscription
+from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.ai_spend_report_service import (
@@ -50,12 +55,25 @@ from specivo.services.ai_spend_report_service import (
     period_end,
 )
 from specivo.services.ai_subscription_service import AiToolService
+from specivo.services.ai_usage_chart_service import CHOSEN_SIZES, AiUsageChartService
 from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.currency_service import CurrencyService
+from specivo.services.permission_service import ai_usage_visibility
 from specivo.services.project_service import ProjectService
 from specivo.web.deps import get_templates, require_user
 from specivo.web.pages.admin import require_admin
-from specivo.web.pages.ai_usage import NONE_VALUE, _filters, _fmt_int, _issue_filter, _money_view, _parse_date, _rows
+from specivo.web.pages.ai_usage import (
+    NONE_VALUE,
+    _charts_view,
+    _filters,
+    _fmt_int,
+    _issue_filter,
+    _money_view,
+    _parse_date,
+    _rows,
+    _tool_names,
+    cached_chart_payload,
+)
 
 router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
 
@@ -92,6 +110,8 @@ class ReportForm:
     tool: str = ""
     model: str = ""
     cost_type: str = ""
+    #: Time bucket of the charts ("" automatic); only a wish, the chart service caps the points.
+    bucket: str = ""
 
     @classmethod
     def read(cls, **raw: str) -> ReportForm:
@@ -110,6 +130,7 @@ class ReportForm:
             tool=raw.get("tool", "").strip().lower()[:50],
             model=raw.get("model", "").strip()[:200],
             cost_type=raw.get("cost_type", "") if raw.get("cost_type", "") in AI_USAGE_COST_TYPES else "",
+            bucket=raw.get("bucket", "") if raw.get("bucket", "") in CHOSEN_SIZES else "",
         )
         if form.group2 == form.group:
             form.group2 = ""
@@ -143,6 +164,7 @@ class ReportForm:
             "tool": self.tool,
             "model": self.model,
             "cost_type": self.cost_type,
+            "bucket": self.bucket,
             **override,
         }
         return urlencode({k: v for k, v in values.items() if v})
@@ -182,6 +204,7 @@ def _form_params(
     tool: str = Query(""),
     model: str = Query(""),
     cost_type: str = Query(""),
+    bucket: str = Query(""),
 ) -> ReportForm:
     return ReportForm.read(
         preset=preset,
@@ -198,6 +221,7 @@ def _form_params(
         tool=tool,
         model=model,
         cost_type=cost_type,
+        bucket=bucket,
     )
 
 
@@ -361,6 +385,84 @@ def _chart(report: SpendReport, views: list[dict[str, Any]]) -> dict[str, Any]:
     return {"currency": report.currency, "period": report.period or "", "points": points, "locale": get_locale()}
 
 
+def _bucket_links(base_url: str, form: ReportForm) -> list[dict[str, Any]]:
+    """The charts' bucket switch: automatic, or a size the reader picks (the server still caps the points)."""
+    out = []
+    for value, label in (("", _("Auto")), ("day", _("Day")), ("week", _("Week")), ("month", _("Month"))):
+        query = form.query(bucket=value)
+        out.append(
+            {
+                "value": value,
+                "label": label,
+                "url": base_url + (f"?{query}" if query else ""),
+                "active": value == form.bucket,
+            }
+        )
+    return out
+
+
+async def _charts(
+    db: AsyncSession, user: User, project: Project | None, form: ReportForm, report: SpendReport
+) -> dict[str, Any] | None:
+    """The charts above the report table, from Redis when the same view was built in the last minute.
+
+    The cache key holds the scope, the reader, what the reader may see (their
+    project visibility and whether seat cost is shown), every filter and the
+    data version (the scope's entries and the plans: count and latest change),
+    so two readers, or one reader whose rights changed, never share a payload.
+    """
+
+    async def build() -> dict[str, Any] | None:
+        charts = await AiUsageChartService().report_charts(
+            db,
+            user,
+            project=project,
+            date_from=report.date_from,
+            date_to=report.date_to,
+            currency=report.currency,
+            rate_policy=report.rate_policy,
+            include_seat_cost=report.include_seat_cost,
+            filters=report.filters,
+            bucket=form.bucket or None,
+            tool_names=await _tool_names(db),
+        )
+        return _charts_view(charts)
+
+    version = select(
+        func.count(AiUsageEntry.id),
+        func.max(AiUsageEntry.updated_at),
+        select(func.count(AiSubscription.id)).scalar_subquery(),
+        select(func.max(AiSubscription.updated_at)).scalar_subquery(),
+    )
+    if project is not None:
+        version = version.where(AiUsageEntry.project_id == project.id)
+    policy = report.rate_policy
+    parts = {
+        "scope": report.scope,
+        "project": project.id if project is not None else None,
+        "viewer": user.id,
+        "admin": bool(user.is_admin),
+        "visibility": await ai_usage_visibility(db, user, project) if project is not None else "",
+        "seat_shown": report.seat_cost_shown,
+        "seat_hidden": report.seat_cost_hidden,
+        "currency": report.currency,
+        "policy": [policy.kind.value, policy.max_age_days, policy.fixed_on],
+        "from": report.date_from.isoformat(),
+        "to": report.date_to.isoformat(),
+        "filters": [
+            report.filters.user_id,
+            report.filters.tool,
+            report.filters.model,
+            report.filters.provider,
+            report.filters.cost_type,
+        ],
+        "seats": report.include_seat_cost,
+        "bucket": form.bucket,
+    }
+    prefix = f"aiu:spend-charts:{report.scope}:{project.id if project is not None else 0}:{user.id}"
+    return await cached_chart_payload(db, prefix, parts, version, build)
+
+
 async def _context(db: AsyncSession, report: SpendReport | None, form: ReportForm) -> dict[str, Any]:
     locale = get_locale()
     currencies = await CurrencyService().list_currencies(db, active_only=True)
@@ -440,6 +542,8 @@ async def project_spend_report(
     await _projects.require_project_access(db, project, user)
     await enforce_ai_report_rate_limit(request, response, user)
     report, error = await _run(db, user, project, form)
+    charts = await _charts(db, user, project, form, report) if report is not None else None
+    base_url = f"/projects/{project.key}/ai-usage/report/"
     members = await _projects.list_members(db, project) if report is not None and report.seat_cost_shown else []
     return get_templates().TemplateResponse(
         request,
@@ -449,7 +553,9 @@ async def project_spend_report(
             "active_page": "ai_usage",
             "active_project": project,
             "project": project,
-            "base_url": f"/projects/{project.key}/ai-usage/report/",
+            "base_url": base_url,
+            "charts": charts,
+            "bucket_links": _bucket_links(base_url, form),
             "csv_base": f"/api/v1/projects/{project.key}/ai-usage/report/",
             "entries_url": f"/projects/{project.key}/ai-usage/",
             "members": [{"id": m["user_id"], "name": m["display_name"] or m["login"]} for m in members],
@@ -469,10 +575,9 @@ async def admin_spend_report(
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """The instance's AI spend report, unallocated seat cost included."""
-    from sqlalchemy import select
-
     await enforce_ai_report_rate_limit(request, response, user)
     report, error = await _run(db, user, None, form)
+    charts = await _charts(db, user, None, form, report) if report is not None else None
     people = (await db.execute(select(User.id, User.login, User.display_name).where(User.status == "active"))).all()
     return get_templates().TemplateResponse(
         request,
@@ -482,6 +587,8 @@ async def admin_spend_report(
             "active_page": "admin",
             "project": None,
             "base_url": ADMIN_URL,
+            "charts": charts,
+            "bucket_links": _bucket_links(ADMIN_URL, form),
             "csv_base": "/api/v1/ai-usage/report/",
             "entries_url": ADMIN_ENTRIES_URL,
             "members": sorted(

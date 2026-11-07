@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
-{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note with context %}
+{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts with context %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
-  Context: form, report (or None on an error), rows, totals, chart, members, tools, currencies.
+  Context: form, report (or None on an error), rows, totals, chart (the group chart over the
+  table), charts (the AI usage charts above it, see ai_usage._charts_view), bucket_links,
+  members, tools, currencies.
 #}
 
 {% macro dim_label(dim) -%}
@@ -227,7 +229,10 @@
   {% if report.seat_cost_hidden %}<span data-testid="spend-seat-hidden">{% trans %}Seat cost is left out: subscription fees are shown only to administrators and to people who can see every entry of this project in the period.{% endtrans %}</span>{% endif %}
 </p>
 
+{{ usage_charts(charts, has_rows=rows | length > 0, bucket_links=bucket_links) }}
+
 {% if rows %}
+{% if charts and not charts.too_long %}<h2 class="sp-aiu-charts-title sp-spend-table-title">{% trans %}Report{% endtrans %}</h2>{% endif %}
 <div class="card sp-spend-chart-card">
   <div class="sp-spend-chart" data-testid="spend-chart" role="img" aria-label="{{ _('Spend chart; the table below holds the same numbers') }}"
        data-sp-spend-chart='{{ chart | tojson }}'
@@ -299,4 +304,4 @@
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
-{% block chart_js %}{% if report and rows %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}
+{% block chart_js %}{% if report and (rows or (charts and not charts.too_long)) %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

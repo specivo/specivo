@@ -195,7 +195,11 @@ async def test_report_without_rows_skips_the_chart_bundle(client: AsyncClient, w
 
 
 async def test_other_pages_skip_the_chart_bundle(client: AsyncClient, w: World) -> None:
-    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/")
+    resp = await _get(client, w.mgr, "/projects/RWA/")
+    assert resp.status_code == 200, resp.text
+    assert "spend-chart.min" not in resp.text
+    # The AI usage tab draws charts only when its filters select usage.
+    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/", status="excluded")
     assert resp.status_code == 200, resp.text
     assert "spend-chart.min" not in resp.text
 

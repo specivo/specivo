@@ -177,9 +177,15 @@ a.sp-aiu-chart-switch-option:focus-visible { outline: 2px solid var(--sp-accent)
 .sp-aiu-chart-controls { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); }
 .sp-aiu-chart-switch-option:has(input:focus-visible) { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
 .sp-aiu-charts-empty { margin: 0 0 var(--sp-space-md); }
+.sp-aiu-chart-caption { margin: var(--sp-space-xs, 4px) 0 0; }
+.sp-aiu-chart-grid + .sp-aiu-chart-caption { margin: 0 0 var(--sp-space-md); }
+/* The spend reports: the heading between the charts and the report table. */
+.sp-spend-table-title { margin-top: var(--sp-space-md); }
 @media (max-width: 900px) {
   .sp-aiu-chart-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   .sp-aiu-chart-card { padding: var(--sp-space-sm); }
+  /* Four stack options (the spend reports) wrap instead of overflowing a phone. */
+  .sp-aiu-chart-switch { flex-wrap: wrap; }
 }

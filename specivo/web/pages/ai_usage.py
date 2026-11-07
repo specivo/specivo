@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -412,6 +413,7 @@ def _group_label(labels: dict[str, str], key: str) -> str:
 
 
 def _share_points(charts: UsageCharts, shares: list[Share], projects: bool) -> list[dict[str, Any]]:
+    """The points of a breakdown chart. Spend is the pay-per-use spend (seat cost is not split by group)."""
     points = []
     for s in shares:
         if s.key == OTHER:
@@ -422,6 +424,10 @@ def _share_points(charts: UsageCharts, shares: list[Share], projects: bool) -> l
             label = s.label or "–"
         points.append({"label": label, "spend": _float(s.spend), "api": _float(s.api)})
     return points
+
+
+def _project_label(key: str, labels: dict[str, str]) -> str:
+    return _("Unassigned") if key == NO_PROJECT else _group_label(labels, key)
 
 
 def _leverage_text(value: Decimal | None, locale: str) -> str:
@@ -445,18 +451,30 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
         }
 
     has_spend = charts.has_spend
+    report = charts.scope != "own"
+    stacks: dict[str, Any] = {}
+    if report:
+        stacks["user"] = stack(charts.users, "api_by_user", charts.user_labels)
+    stacks["tool"] = stack(charts.tools, "api_by_tool", charts.tool_labels)
+    stacks["model"] = stack(charts.models, "api_by_model", {})
+    if charts.scope == "instance":
+        stacks["project"] = {
+            "names": [_project_label(k, charts.project_labels) for k in charts.projects],
+            "values": [[_float(b.api_by_project.get(k, Decimal(0))) for b in charts.buckets] for k in charts.projects],
+        }
     time = {
         **base,
         "kind": "usage-time",
         "periods": periods,
-        "stacks": {
-            "tool": stack(charts.tools, "api_by_tool", charts.tool_labels),
-            "model": stack(charts.models, "api_by_model", {}),
-        },
-        "spend": [_float(b.spend) for b in charts.buckets] if has_spend else None,
+        "stacks": stacks,
+        # On a spend report with seat cost, spend is pay-per-use plus seat cost, and the seat cost has a line too.
+        "spend": [_float(b.spend + b.seat) for b in charts.buckets] if has_spend else None,
         "spend_label": _("Spend"),
         "total_label": _("API-equivalent value"),
     }
+    if charts.has_seat:
+        time["seat"] = [_float(b.seat) for b in charts.buckets]
+        time["seat_label"] = _("Seat cost")
 
     def tokens(classes: tuple[str, ...]) -> dict[str, Any] | None:
         series = [
@@ -471,18 +489,20 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
     def share(points: list[dict[str, Any]]) -> dict[str, Any]:
         return {**base, "kind": "usage-share", "points": points, "no_spend": not has_spend}
 
+    def money(value: Decimal | None) -> str:
+        return Money(value, charts.currency).format(locale) if value is not None else ""
+
     leverage = [
         {
             "plan": p.plan_name,
-            "fee": Money(p.fee, charts.currency).format(locale) if p.fee is not None else "",
-            "api": Money(p.api, charts.currency).format(locale),
-            "leverage": f"{format_decimal(p.leverage, format='#,##0.00', locale=locale)}×"
-            if p.leverage is not None
-            else "",
+            "fee": money(p.fee),
+            "api": money(p.api),
+            "leverage": _leverage_text(p.leverage, locale),
+            **({"holder": p.holder or "–"} if report else {}),
         }
         for p in charts.leverage
     ]
-    return {
+    view: dict[str, Any] = {
         "time": time,
         "tokens_fresh": tokens(_FRESH_TOKENS),
         "tokens_cache": tokens(_CACHE_TOKENS),
@@ -497,55 +517,70 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
         "unconverted": charts.unconverted,
         "leverage": leverage,
     }
+    if report:
+        view.update(
+            scope=charts.scope,
+            by_user=share(_share_points(charts, charts.by_user, projects=False)),
+            by_tool=share(_share_points(charts, charts.by_tool, projects=False)),
+            seat_shown=charts.seat_shown,
+            people=[
+                {
+                    "name": p.label or "–",
+                    "fee": money(p.fee),
+                    "api": money(p.api),
+                    "leverage": _leverage_text(p.leverage, locale),
+                }
+                for p in charts.people
+            ],
+            leverage_total=(
+                {
+                    "fee": money(charts.leverage_total.fee),
+                    "api": money(charts.leverage_total.api),
+                    "leverage": _leverage_text(charts.leverage_total.leverage, locale),
+                }
+                if charts.leverage_total is not None
+                else None
+            ),
+        )
+        if charts.scope == "project":
+            view.pop("by_project")
+    return view
 
 
-def _bucket_links(filters: Filters, chosen: str) -> list[dict[str, Any]]:
+def _bucket_links(filters: Filters, chosen: str, url: str = MY_URL) -> list[dict[str, Any]]:
     """The chart's bucket switch: automatic, or a size the reader picks (the server still caps the points)."""
     base = filters.query()
     out = []
     for value, label in (("", _("Auto")), ("day", _("Day")), ("week", _("Week")), ("month", _("Month"))):
         query = "&".join(q for q in (base, urlencode({"bucket": value}) if value else "") if q)
         out.append(
-            {"value": value, "label": label, "url": MY_URL + (f"?{query}" if query else ""), "active": value == chosen}
+            {"value": value, "label": label, "url": url + (f"?{query}" if query else ""), "active": value == chosen}
         )
     return out
 
 
-def _chart_cache_key(user: User, currency: str, args: dict[str, Any], version: tuple[Any, ...]) -> str:
-    """Redis key of one chart payload: the user, the language, the currency, the filters and the data version."""
-    parts = {
-        "locale": get_locale(),
-        "currency": currency,
-        "version": [str(v) for v in version],
-        **{
-            k: (v.id if isinstance(v, Project) else (v.isoformat() if isinstance(v, date) else v))
-            for k, v in args.items()
-        },
-    }
-    digest = hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:32]
-    return f"aiu:charts:{user.id}:{digest}"
-
-
-async def _cached_charts_view(
-    db: AsyncSession, user: User, currency: str, args: dict[str, Any]
+async def cached_chart_payload(
+    db: AsyncSession,
+    prefix: str,
+    parts: dict[str, Any],
+    version_stmt: Any,
+    build: Callable[[], Awaitable[dict[str, Any] | None]],
 ) -> dict[str, Any] | None:
-    """The chart payload of the page, from Redis when the same view was built in the last minute.
+    """A chart payload from Redis under ``{prefix}:{digest of parts and data version}``, or *build*'s, then stored.
 
-    The key holds the number of the user's entries and their latest change,
-    so logging, editing, excluding or deleting an entry shows at once; what
-    the key cannot see (exchange rates, prices, plans) is at most
+    *version_stmt* selects what changes when the charted data does (an entry
+    count and the latest change); it runs only when caching is on. What it
+    cannot see (exchange rates, prices, plans) is at most
     ``ai_usage_chart_cache_seconds`` old. Without Redis the payload is built
     each time.
     """
     ttl = get_settings().ai_usage_chart_cache_seconds
     key = ""
     if ttl:
-        version = (
-            await db.execute(
-                select(func.count(), func.max(AiUsageEntry.updated_at)).where(AiUsageEntry.user_id == user.id)
-            )
-        ).one()
-        key = _chart_cache_key(user, currency, args, tuple(version))
+        version = (await db.execute(version_stmt)).one()
+        payload_parts = {"locale": get_locale(), "version": [str(v) for v in version], **parts}
+        digest = hashlib.sha256(json.dumps(payload_parts, sort_keys=True, default=str).encode()).hexdigest()[:32]
+        key = f"{prefix}:{digest}"
         try:
             redis = await get_redis()
             cached = await redis.get(key)
@@ -554,14 +589,118 @@ async def _cached_charts_view(
                 return payload
         except Exception:
             key = ""
-    charts = await AiUsageChartService().charts(db, user, currency=currency, tool_names=await _tool_names(db), **args)
-    view = _charts_view(charts)
+    view = await build()
     if key:
         try:
             await redis.set(key, json.dumps(view), ex=ttl)
         except Exception:
             pass
     return view
+
+
+def _cache_value(value: Any) -> Any:
+    """A filter value as it goes into a chart cache key."""
+    if isinstance(value, Project):
+        return value.id
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+async def _cached_charts_view(
+    db: AsyncSession, user: User, currency: str, args: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The chart payload of My AI usage, from Redis when the same view was built in the last minute.
+
+    The key holds the number of the user's entries and their latest change,
+    so logging, editing, excluding or deleting an entry shows at once.
+    """
+
+    async def build() -> dict[str, Any] | None:
+        charts = await AiUsageChartService().charts(
+            db, user, currency=currency, tool_names=await _tool_names(db), **args
+        )
+        return _charts_view(charts)
+
+    version = select(func.count(), func.max(AiUsageEntry.updated_at)).where(AiUsageEntry.user_id == user.id)
+    parts = {"currency": currency, **{k: _cache_value(v) for k, v in args.items()}}
+    return await cached_chart_payload(db, f"aiu:charts:{user.id}", parts, version, build)
+
+
+async def _project_charts_view(
+    db: AsyncSession,
+    user: User,
+    project: Project,
+    currency: str,
+    filters: Filters,
+    issue_id: int | None,
+    chosen: str,
+) -> dict[str, Any] | None:
+    """The charts of the project's AI usage tab: the entries the reader may read there, with the tab's filters.
+
+    Counted entries, or the excluded ones when the tab shows only those (as
+    on My AI usage). Seat cost and leverage follow the spend report's rules
+    (AiUsageChartService.report_charts). Cached in Redis like the report
+    charts: keyed by the project, the reader, what the reader may see, the
+    filters and the data version (the project's entries and the plans).
+    """
+    from specivo.models.ai_subscription import AiSubscription
+    from specivo.services.ai_spend_report_service import ReportFilters
+
+    excluded = filters.status == "excluded"
+    extra = filters.extra()
+    report_filters = ReportFilters(
+        user_id=_parse_int(filters.user_id),
+        tool=filters.tool or None,
+        model=filters.model or None,
+        provider=extra["provider"],
+        cost_type=filters.cost_type or None,
+    )
+    args: dict[str, Any] = {
+        "date_from": _parse_date(filters.from_date),
+        "date_to": _parse_date(filters.to_date),
+        "issue_id": issue_id,
+        "without_issue": filters.issue == NONE_VALUE,
+        "branch": extra["branch"],
+        "without_branch": extra["without_branch"],
+        "excluded": excluded,
+    }
+
+    async def build() -> dict[str, Any] | None:
+        charts = await AiUsageChartService().report_charts(
+            db,
+            user,
+            project=project,
+            currency=currency,
+            filters=report_filters,
+            bucket=chosen or None,
+            tool_names=await _tool_names(db),
+            **args,
+        )
+        return _charts_view(charts)
+
+    version = select(
+        func.count(AiUsageEntry.id),
+        func.max(AiUsageEntry.updated_at),
+        select(func.count(AiSubscription.id)).scalar_subquery(),
+        select(func.max(AiSubscription.updated_at)).scalar_subquery(),
+    ).where(AiUsageEntry.project_id == project.id)
+    parts = {
+        "viewer": user.id,
+        "admin": bool(user.is_admin),
+        "visibility": await ai_usage_visibility(db, user, project),
+        "currency": currency,
+        "filters": [
+            report_filters.user_id,
+            report_filters.tool,
+            report_filters.model,
+            report_filters.provider,
+            report_filters.cost_type,
+        ],
+        "bucket": chosen,
+        **{k: _cache_value(v) for k, v in args.items()},
+    }
+    return await cached_chart_payload(db, f"aiu:project-charts:{project.id}:{user.id}", parts, version, build)
 
 
 async def _filter_choices(db: AsyncSession) -> dict[str, Any]:
@@ -586,6 +725,7 @@ async def _project_for(db: AsyncSession, user: User, project_key: str) -> Projec
 async def project_ai_usage(
     project_key: str,
     request: Request,
+    response: Response,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
     user_id: str = Query(""),
@@ -598,17 +738,22 @@ async def project_ai_usage(
     status: str = Query(""),
     provider: str = Query(""),
     branch: str = Query(""),
+    bucket: str = Query(""),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     notice: str = Query(""),
     error: str = Query(""),
 ) -> Response:
-    """The project's AI usage the reader may see, with filters and totals in its reporting currency.
+    """The project's AI usage the reader may see, with filters, totals in its reporting currency, and charts.
 
     ``provider`` and ``branch`` (``-``: none) and ``issue=-`` (no issue) come
-    from the spend report's drill-through.
+    from the spend report's drill-through. The charts group the project's
+    usage, so the page spends the reader's AI report budget
+    (specivo.core.ai_report_limits); the bucket asked for is only a wish.
     """
     project = await _project_for(db, user, project_key)
+    await enforce_ai_report_rate_limit(request, response, user)
+    chosen = bucket if bucket in CHOSEN_SIZES else ""
     filters = _filters(
         user_id=user_id,
         tool=tool,
@@ -641,6 +786,9 @@ async def project_ai_usage(
     currency = await CurrencyService().reporting_currency_for(db, project)
     summary = await _service.summarize_entries(db, user, **common)
 
+    charts_view = await _project_charts_view(db, user, project, currency, filters, issue_id, chosen)
+    base_url = f"/projects/{project.key}/ai-usage/"
+    page_query = "&".join(q for q in (filters.query(), urlencode({"bucket": chosen}) if chosen else "") if q)
     sees_all = user.is_admin or await ai_usage_visibility(db, user, project) == AI_USAGE_VISIBILITY_ALL
     members = await _projects.list_members(db, project) if sees_all else []
     can_log = await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
@@ -658,7 +806,10 @@ async def project_ai_usage(
             "offset": offset,
             "limit": limit,
             "filters": filters,
-            "page_query": filters.query(),
+            "page_query": page_query,
+            "charts": charts_view,
+            "chart_bucket": chosen,
+            "bucket_links": _bucket_links(filters, chosen, base_url),
             "issue_unknown": issue_id == -1,
             "members": [{"id": m["user_id"], "name": m["display_name"] or m["login"]} for m in members],
             "can_log": can_log,

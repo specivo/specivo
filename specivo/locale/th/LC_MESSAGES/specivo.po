@@ -12099,3 +12099,51 @@ msgstr "จัดกลุ่มตาม%(shown)sแทน%(asked)s เพร�
 #: specivo/web/pages/ai_usage.py:506
 msgid "Auto"
 msgstr "อัตโนมัติ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "By user"
+msgstr "ตามผู้ใช้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "The spend line is pay-per-use charges plus seat cost; the dashed line is the seat cost alone."
+msgstr "เส้นค่าใช้จ่ายคือค่าจ่ายตามการใช้งานรวมกับค่าที่นั่ง ส่วนเส้นประคือค่าที่นั่งอย่างเดียว"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "API-equivalent value by user"
+msgstr "มูลค่าเทียบเท่า API ตามผู้ใช้"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "API-equivalent value by tool"
+msgstr "มูลค่าเทียบเท่า API ตามเครื่องมือ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "The breakdowns show pay-per-use charges; seat cost is not split by group here, the table below holds it."
+msgstr "การแยกย่อยแสดงค่าจ่ายตามการใช้งาน ค่าที่นั่งไม่ได้แบ่งตามกลุ่มในส่วนนี้ ดูได้ในตารางด้านล่าง"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per person: the seat cost their usage in this project carries, against the API-equivalent value of that subscription usage. Plan details stay with their holders and administrators."
+msgstr "ตามบุคคล: ค่าที่นั่งที่การใช้งานของเขาในโปรเจกต์นี้รับไว้ เทียบกับมูลค่าเทียบเท่า API ของการใช้งานแบบสมัครสมาชิกนั้น รายละเอียดแผนเห็นได้เฉพาะเจ้าของแผนและผู้ดูแลระบบ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per plan and per person: the plans' fees counted in this period, against the API-equivalent value of the usage they covered."
+msgstr "ตามแผนและตามบุคคล: ค่าธรรมเนียมของแผนที่นับในช่วงเวลานี้ เทียบกับมูลค่าเทียบเท่า API ของการใช้งานที่แผนครอบคลุม"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per plan"
+msgstr "ตามแผน"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Holder"
+msgstr "เจ้าของแผน"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per person"
+msgstr "ตามบุคคล"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Fees for the period"
+msgstr "ค่าธรรมเนียมของช่วงเวลา"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Report"
+msgstr "รายงาน"

@@ -116,6 +116,12 @@ async def test_report_pages_are_metered(client: AsyncClient, live: Live) -> None
     assert await _codes(client, live.member, url, USER_LIMIT + 1) == [200] * USER_LIMIT + [429]
 
 
+async def test_the_project_ai_usage_tab_is_metered(client: AsyncClient, live: Live) -> None:
+    """The tab draws charts of the project's usage, so it spends the same budget as the report."""
+    url = f"/projects/{live.project_key}/ai-usage/"
+    assert await _codes(client, live.member, url, USER_LIMIT + 1) == [200] * USER_LIMIT + [429]
+
+
 async def test_administrators_have_a_higher_budget(client: AsyncClient, live: Live) -> None:
     codes = await _codes(client, live.admin, "/admin/ai-spend/", ADMIN_LIMIT + 1)
     assert codes == [200] * ADMIN_LIMIT + [429]

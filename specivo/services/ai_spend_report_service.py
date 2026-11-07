@@ -56,7 +56,9 @@ visible); otherwise the seat measures are left out and ``seat_cost_hidden`` is
 set. Unallocated seat cost and fees never appear in project reports, so a
 project viewer can see at most the shares carried by that project's entries,
 never another user's whole fee. No plan name or subscription detail is part of
-a report.
+a report. :meth:`AiSpendReportService.seat_breakdown` groups the same numbers
+by plan id too, for the charts (``ai_usage_chart_service``), which name plans
+on the instance report only.
 
 Query count
 -----------
@@ -121,7 +123,7 @@ MAX_PERIODS = 120
 SEAT_RATE_DAY = "month_end"
 
 #: Dimensions an unallocated seat fee can fill (the rest stay empty, so it gets a row of its own).
-_SEAT_DIMENSIONS = frozenset({"user", "provider", "cost_type"})
+_SEAT_DIMENSIONS = frozenset({"user", "provider", "cost_type", "subscription"})
 #: Column of each dimension.
 _COLUMNS = {
     "user": AiUsageEntry.user_id,
@@ -132,6 +134,8 @@ _COLUMNS = {
     "model": AiUsageEntry.model,
     "cost_type": AiUsageEntry.cost_type,
     "branch": AiUsageEntry.git_branch,
+    # Internal only (never in GROUP_BY, so no report groups by plan): the charts' seat breakdown.
+    "subscription": AiUsageEntry.subscription_id,
 }
 #: Issue key of entries on an issue the viewer cannot see (their own entries only).
 HIDDEN_ISSUE = 0
@@ -234,6 +238,8 @@ class ReportRow:
     seat_allocated: ConversionSummary | None = None
     seat_unallocated: ConversionSummary | None = None
     total_spend: ConversionSummary | None = None
+    #: The API-equivalent value of the row's subscription usage (the leverage numerator), with seat cost only.
+    seat_api: ConversionSummary | None = None
     leverage: Decimal | None = None
     # Conversion results gathered while the rows are built.
     _results: dict[str, list[ConversionResult]] = field(default_factory=lambda: defaultdict(list))
@@ -320,12 +326,78 @@ class AiSpendReportService:
         instance report by anyone but an administrator; 422 for bad
         parameters.
         """
+        return await self._report(
+            session,
+            viewer,
+            project=project,
+            date_from=date_from,
+            date_to=date_to,
+            dims=parse_group_by(group_by),
+            period=period,
+            currency=currency,
+            rate_policy=rate_policy,
+            include_seat_cost=include_seat_cost,
+            filters=filters,
+            sort=sort,
+        )
+
+    async def seat_breakdown(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None,
+        date_from: date,
+        date_to: date,
+        period: str,
+        currency: str,
+        rate_policy: str | RatePolicy | None = None,
+        filters: ReportFilters | None = None,
+    ) -> SpendReport:
+        """The report rows per *period*, user and subscription, for the AI usage charts.
+
+        The same rules as :meth:`report` (who may see seat cost, allocation,
+        unallocated fees in instance reports), grouped by subscription too, so
+        the charts can sum seat cost per period and per plan and person. Not a
+        public grouping: plan ids never leave the server, the caller decides
+        which plan details the reader may see.
+        """
+        return await self._report(
+            session,
+            viewer,
+            project=project,
+            date_from=date_from,
+            date_to=date_to,
+            dims=("user", "subscription"),
+            period=period,
+            currency=currency,
+            rate_policy=rate_policy,
+            include_seat_cost=True,
+            filters=filters,
+            sort="key",
+        )
+
+    async def _report(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None,
+        date_from: date,
+        date_to: date,
+        dims: tuple[str, ...],
+        period: str | None,
+        currency: str | None,
+        rate_policy: str | RatePolicy | None,
+        include_seat_cost: bool,
+        filters: ReportFilters | None,
+        sort: str,
+    ) -> SpendReport:
         from specivo.services.currency_service import CurrencyService
         from specivo.services.exchange_rate_service import ExchangeRateService, parse_policy
         from specivo.services.project_service import ProjectService
 
         filters = filters or ReportFilters()
-        dims = parse_group_by(group_by)
         if period is not None and period not in PERIODS:
             raise _invalid(f"period must be one of {', '.join(PERIODS)}", "period")
         if sort not in SORTS:
@@ -602,7 +674,7 @@ class AiSpendReportService:
                 if not days or not part:
                     continue
                 day = max(month_first(year, month), date_from, sub.starts_on)
-                row = builder.seat_row(user_id=sub.user_id, provider=sub.provider, day=day)
+                row = builder.seat_row(user_id=sub.user_id, provider=sub.provider, subscription_id=sub.id, day=day)
                 amount = Money(part.quantize(_SHARE_EXPONENT, rounding=ROUND_HALF_UP), sub.currency_code)
                 items.append((row, amount, rate_day(year, month), False))
         return items
@@ -777,8 +849,8 @@ class _RowBuilder:
                 self._amounts[key].setdefault("seat_api", defaultdict(Decimal))
                 self._amounts[key]["seat_api"][(raw["api_currency"], day)] += raw["api"]
 
-    def seat_row(self, *, user_id: int, provider: str, day: date) -> ReportRow:
-        values = {"user": user_id, "provider": provider, "cost_type": "subscription"}
+    def seat_row(self, *, user_id: int, provider: str, subscription_id: int, day: date) -> ReportRow:
+        values = {"user": user_id, "provider": provider, "cost_type": "subscription", "subscription": subscription_id}
         return self._get(values, day, seat_only=self._seat_only)[1]
 
     def amounts(self) -> Iterable[tuple[ReportRow, str, Money, date]]:
@@ -816,8 +888,9 @@ def _finish(row: ReportRow, currency: str, seat_shown: bool) -> None:
         seats = [*res.get("seat_allocated", []), *res.get("seat_unallocated", [])]
         row.total_spend = summarize([*res.get("marginal", []), *seats], currency)
         seat_total = summarize(seats, currency).total
+        row.seat_api = summarize(res.get("seat_api", []), currency)
         if seat_total.amount > 0:
-            covered = summarize(res.get("seat_api", []), currency).total
+            covered = row.seat_api.total
             row.leverage = (covered.amount / seat_total.amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     else:
         row.total_spend = row.marginal

@@ -1,4 +1,4 @@
-/* My AI usage charts: chart shapes for the shared chart setup of spend-chart.js.
+/* AI usage charts (My AI usage and the spend reports): chart shapes for the shared chart setup of spend-chart.js.
 
    The page (pages/ai_usage/my.html) holds one <div data-sp-spend-chart='{...}'>
    per chart, whose data has a "kind" and every label already translated
@@ -8,8 +8,9 @@
    options:
 
    - usage-time:   API-equivalent value per period, stacked by tool or by model
-                   (the chart's mode, set by a switch), with spend as a line when
-                   there is any. Periods with unpriced entries get a marked axis
+                   (on the spend reports also by user or project; the chart's
+                   mode, set by a switch), with spend as a line when there is
+                   any, and seat cost as a dashed line where the reader may see it. Periods with unpriced entries get a marked axis
                    label and a tooltip note, so they never just look cheap.
    - usage-tokens: token counts per period, one stacked series per class.
    - usage-share:  API-equivalent value (and spend) per group, horizontal bars.
@@ -148,6 +149,19 @@ registerShape('usage-time', {
                 z: 5,
                 lineStyle: { width: 2, color: theme.text },
                 itemStyle: { color: theme.text },
+            });
+        }
+        if (Array.isArray(data.seat)) {
+            // Spend reports: the seat cost alone, dashed, under the spend line that includes it.
+            skip.add(series.length);
+            series.push({
+                type: 'line',
+                name: data.seat_label,
+                data: data.seat,
+                symbol: 'none',
+                z: 4,
+                lineStyle: { width: 2, type: 'dashed', color: theme.muted },
+                itemStyle: { color: theme.muted },
             });
         }
         return {

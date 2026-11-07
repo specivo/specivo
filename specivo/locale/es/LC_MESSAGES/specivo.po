@@ -12407,3 +12407,51 @@ msgstr "Agrupado por %(shown)s en lugar de %(asked)s: el rango tendría demasiad
 #: specivo/web/pages/ai_usage.py:506
 msgid "Auto"
 msgstr "Auto"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "By user"
+msgstr "Por usuario"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "The spend line is pay-per-use charges plus seat cost; the dashed line is the seat cost alone."
+msgstr "La línea de gasto suma los cargos por uso y el coste de licencias; la línea discontinua es solo el coste de licencias."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "API-equivalent value by user"
+msgstr "Valor equivalente en API por usuario"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "API-equivalent value by tool"
+msgstr "Valor equivalente en API por herramienta"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "The breakdowns show pay-per-use charges; seat cost is not split by group here, the table below holds it."
+msgstr "Los desgloses muestran los cargos por uso; el coste de licencias no se reparte por grupo aquí, la tabla de abajo lo incluye."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per person: the seat cost their usage in this project carries, against the API-equivalent value of that subscription usage. Plan details stay with their holders and administrators."
+msgstr "Por persona: el coste de licencias que soporta su uso en este proyecto, frente al valor equivalente en API de ese uso de suscripción. Los detalles de los planes solo los ven sus titulares y los administradores."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per plan and per person: the plans' fees counted in this period, against the API-equivalent value of the usage they covered."
+msgstr "Por plan y por persona: las cuotas de los planes contadas en este periodo, frente al valor equivalente en API del uso que cubrieron."
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per plan"
+msgstr "Por plan"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Holder"
+msgstr "Titular"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per person"
+msgstr "Por persona"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Fees for the period"
+msgstr "Cuotas del periodo"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Report"
+msgstr "Informe"
