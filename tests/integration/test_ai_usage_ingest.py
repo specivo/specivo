@@ -225,6 +225,7 @@ async def test_info_lists_versions_limits_tools_and_currencies(client: AsyncClie
     assert body["max_age_days"] == 400
     assert "claude-code" in body["tools"]
     assert {"USD", "THB"} <= set(body["currencies"])
+    assert body["issue_ref_sources"] == ["explicit", "env", "agent_log"]
     assert datetime.fromisoformat(body["server_time"]).tzinfo is not None
 
     assert (await client.get(URL + "/", headers=w.auth("bot"))).status_code == 200
@@ -295,6 +296,49 @@ async def test_both_token_buckets_are_stored_apart_and_priced_once(
     assert stored.long_context is not None and stored.long_context["input"] == 1_000_000
     assert stored.api_equivalent is not None
     assert stored.api_equivalent.amount == Decimal("6.25") and stored.api_equivalent.currency == "USD"
+
+
+async def test_a_bucket_that_lost_all_its_usage_is_set_to_zero(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """A reporter that re-splits a session sends a key without usage again with all-zero tokens."""
+    admin = AdminUserFactory.build(login="ingx_zero_admin", status="active")
+    db_session.add(admin)
+    await db_session.flush()
+    await AiModelPriceService().create(
+        db_session,
+        PriceInput(
+            provider="testlab",
+            model="lab-zero-1",
+            currency="USD",
+            effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+            prices={"input": "1.25", "output": "10", "long_input": "2.5", "long_output": "15"},
+            long_context_threshold=200_000,
+        ),
+        actor=admin,
+    )
+    await db_session.commit()
+    base = {"provider": "testlab", "model": "lab-zero-1", "cost_type": "api"}
+    [created] = await post(
+        client,
+        w,
+        "bot",
+        record("k-zero", **base, tokens={"input": 1_000_000}, long_context_tokens={"input": 1_000_000}),
+    )
+    assert created["status"] == "created", created
+
+    for tokens in ({}, {"input": 0, "output": 0}):
+        [zeroed] = await post(client, w, "bot", record("k-zero", **base, tokens=tokens))
+        assert zeroed["error"] is None, zeroed
+        stored = await entry(db_session, created["entry_id"])
+        assert set(stored.tokens().values()) == {0}
+        assert stored.long_context is None
+        assert stored.api_equivalent is not None and stored.api_equivalent.amount == Decimal("0")
+    assert zeroed["status"] == "unchanged"  # the second all-zero form is the same content
+
+    # A new key may be all zero too.
+    [fresh] = await post(client, w, "bot", record("k-zero-new", tokens={}))
+    assert fresh["status"] == "created", fresh
 
 
 async def test_bound_per_class_applies_to_the_sum_of_both_buckets(client: AsyncClient, w: World) -> None:
@@ -612,19 +656,27 @@ async def test_dropped_issue_the_reporter_cannot_see_is_not_named(
 
 
 async def test_replay_keeps_the_stored_attribution(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
-    [first] = await post(client, w, "bot", record("k-keep", attribution={"project_key": "INGX"}))
-    assert first["attribution"]["method"] == "explicit"
+    [first] = await post(client, w, "bot", record("k-keep", attribution={"issue_ref": "INGX-3"}))
+    assert first["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": "INGX-3"}
 
     # No attribution: kept, nothing changed.
     [bare] = await post(client, w, "bot", record("k-keep"))
     assert bare["status"] == "unchanged"
-    assert bare["attribution"]["project_key"] == "INGX"
+    assert bare["attribution"]["issue_ref"] == "INGX-3"
 
-    # A different inferred target: not applied, warned.
+    # A different inferred issue: not applied, warned.
     [inferred] = await post(client, w, "bot", record("k-keep", attribution={"git_branch": "feat/ingx-7-x"}))
     assert inferred["status"] == "updated"  # the branch is stored as context
-    assert inferred["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": None}
+    assert inferred["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": "INGX-3"}
     assert codes(inferred) == ["attribution_dropped"]
+
+    # The agent's log never replaces an explicit issue.
+    [agent] = await post(
+        client, w, "bot", record("k-keep", attribution={"issue_ref": "INGX-12", "issue_ref_source": "agent_log"})
+    )
+    assert agent["status"] == "updated"  # the branch is no longer sent
+    assert agent["attribution"]["issue_ref"] == "INGX-3"
+    assert codes(agent) == ["attribution_dropped"]
 
     # A different explicit target: refused.
     [other_project] = await post(client, w, "bot", record("k-keep", attribution={"project_key": "INGY"}))
@@ -636,8 +688,298 @@ async def test_replay_keeps_the_stored_attribution(client: AsyncClient, db_sessi
     [same] = await post(
         client, w, "bot", record("k-keep", attribution={"project_key": "INGX", "git_branch": "feat/ingx-7-x"})
     )
-    assert same["status"] == "unchanged"
+    assert same["status"] == "updated"  # the branch is sent again
     assert same["error"] is None
+    assert codes(same) == ["attribution_dropped"]
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.issue_id, stored.attribution_method) == (w.issues[3].id, "explicit")
+
+
+async def _third_project(db: AsyncSession, w: World) -> Issue:
+    """A project ``INGZ`` where the bot may log too, with issue 1."""
+    z = ProjectFactory.build(key="INGZ", identifier="ingz", is_public=False)
+    db.add(z)
+    await db.flush()
+    role = await _role(db, "Ingz Runner", ["view_issues", "view_ai_usage", "log_ai_usage"])
+    await _member(db, z, w.users["bot"], role)
+    template = w.issues[3]
+    issue: Issue = IssueFactory.build(
+        project_id=z.id,
+        project_key=z.key,
+        tracker_id=template.tracker_id,
+        status_id=template.status_id,
+        priority_id=template.priority_id,
+        author_id=w.users["teammate"].id,
+        sequence_number=1,
+        subject="Work item in INGZ",
+    )
+    db.add(issue)
+    await db.commit()
+    clear_role_cache(db)
+    return issue
+
+
+WINDOW = {"started_at": "2026-11-05T01:10:00Z", "ended_at": "2026-11-05T01:20:00Z"}
+SESSION = (datetime(2026, 11, 5, 1, 0, tzinfo=UTC), datetime(2026, 11, 5, 2, 0, tzinfo=UTC))
+
+
+async def test_project_only_entry_is_refined_by_an_mcp_session_issue_of_its_project(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    # Push 1: the agent is still researching, only the repository is known.
+    [first] = await post(client, w, "bot", record("k-ref-mcp", attribution={"repo": "github.com/acme/app"}, **WINDOW))
+    assert first["attribution"] == {"method": "repo", "project_key": "INGX", "issue_ref": None}
+
+    # The agent then marks INGX-7 over MCP; push 2 of the same bucket gets it.
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    [second] = await post(client, w, "bot", record("k-ref-mcp", attribution={"repo": "github.com/acme/app"}, **WINDOW))
+    assert second["status"] == "updated"
+    assert second["warnings"] == []
+    assert second["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.project_id, stored.issue_id, stored.attribution_method) == (w.p.id, w.issues[7].id, "mcp_session")
+    assert stored.revision == 2
+
+    # From now on it has an issue and keeps it (without the window, the branch is what is found).
+    [third] = await post(client, w, "bot", record("k-ref-mcp", attribution={"git_branch": "feat/ingx-12-x"}))
+    assert third["attribution"]["issue_ref"] == "INGX-7"
+    assert codes(third) == ["attribution_dropped"]
+
+
+async def test_project_only_entry_from_project_key_is_refined_by_branch_and_explicit_issue(
+    client: AsyncClient, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-ref-br", attribution={"project_key": "INGX"}))
+    assert first["attribution"]["method"] == "explicit"
+    [branch] = await post(
+        client, w, "bot", record("k-ref-br", attribution={"project_key": "INGX", "git_branch": "feat/ingx-12-x"})
+    )
+    assert branch["status"] == "updated"
+    assert branch["attribution"] == {"method": "branch", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+    # SPECIVO_ISSUE set on a later push of a project-only bucket refines it as well.
+    [project_only] = await post(client, w, "bot", record("k-ref-env", attribution={"project_key": "INGX"}))
+    assert project_only["attribution"]["issue_ref"] is None
+    [env] = await post(
+        client, w, "bot", record("k-ref-env", attribution={"issue_ref": "INGX-3", "issue_ref_source": "env"})
+    )
+    assert env["status"] == "updated"
+    assert env["error"] is None
+    assert env["attribution"] == {"method": "env", "project_key": "INGX", "issue_ref": "INGX-3"}
+
+
+async def test_project_only_entry_refuses_or_drops_issues_of_other_projects(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    z_issue = await _third_project(db_session, w)
+    [first] = await post(client, w, "bot", record("k-ref-x", attribution={"project_key": "INGX"}, **WINDOW))
+    assert first["attribution"]["project_key"] == "INGX"
+
+    # An inferred issue in another project the bot may log to: dropped, the project stays.
+    await _session(db_session, w, "bot_mcp", "bot", z_issue, *SESSION)
+    [inferred] = await post(client, w, "bot", record("k-ref-x", **WINDOW))
+    assert inferred["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": None}
+    assert codes(inferred) == ["attribution_dropped"]
+    assert "not in project INGX" in inferred["warnings"][0]["message"]
+
+    # ... and a usable candidate of the stored project found later still refines it.
+    [branch] = await post(client, w, "bot", record("k-ref-x", attribution={"git_branch": "feat/ingx-7-x"}, **WINDOW))
+    assert codes(branch) == ["attribution_dropped"]
+    assert branch["attribution"] == {"method": "branch", "project_key": "INGX", "issue_ref": "INGX-7"}
+
+    # An explicit issue elsewhere is a conflict.
+    [second] = await post(client, w, "bot", record("k-ref-x2", attribution={"project_key": "INGX"}))
+    [explicit] = await post(client, w, "bot", record("k-ref-x2", attribution={"issue_ref": "INGZ-1"}))
+    assert explicit["status"] == "rejected"
+    assert explicit["error"]["code"] == "attribution_conflict"
+    stored = await entry(db_session, second["entry_id"])
+    assert (stored.project_id, stored.issue_id) == (w.p.id, None)
+
+
+async def test_refining_needs_permission_on_the_issue(client: AsyncClient, w: World) -> None:
+    # INGX-20 is private: the bot cannot see it, so it cannot refine with it either.
+    [first] = await post(client, w, "bot", record("k-ref-priv", attribution={"project_key": "INGX"}))
+    assert first["attribution"]["issue_ref"] is None
+    [explicit] = await post(client, w, "bot", record("k-ref-priv", attribution={"issue_ref": "INGX-20"}))
+    assert explicit["error"]["code"] == "not_found"
+
+
+async def test_entry_moved_by_a_person_is_never_changed_by_a_replay(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-moved", attribution={"repo": "github.com/acme/app"}, **WINDOW))
+    stored = await entry(db_session, first["entry_id"])
+    await AiUsageService().update(db_session, w.users["bot"], stored, {"issue_id": w.issues[12].id})
+    await db_session.commit()
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.issue_id, stored.attribution_method) == (w.issues[12].id, "manual")
+
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    results = [
+        (await post(client, w, "bot", record("k-moved", attribution=hints, **WINDOW)))[0]
+        for hints in (
+            {},
+            {"git_branch": "feat/ingx-3-x"},
+            {"issue_ref": "INGX-3", "issue_ref_source": "agent_log"},
+            {"issue_ref": "INGX-3"},
+            {"project_key": "INGX"},
+        )
+    ]
+    assert [r["status"] for r in results] == ["updated", "updated", "updated", "unchanged", "unchanged"]
+    assert all(r["attribution"] == {"method": "manual", "project_key": "INGX", "issue_ref": "INGX-12"} for r in results)
+    # The session issue (INGX-7) and every other hint differ: each one is reported, none applied.
+    assert [codes(r) for r in results] == [["attribution_dropped"]] * 4 + [[]]
+    assert "was moved in Specivo" in results[3]["warnings"][0]["message"]
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.issue_id, stored.attribution_method) == (w.issues[12].id, "manual")
+
+
+async def test_entry_unassigned_by_a_person_stays_unassigned(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-unassigned", attribution={"issue_ref": "INGX-3"}))
+    stored = await entry(db_session, first["entry_id"])
+    await AiUsageService().update(db_session, w.users["bot"], stored, {"project_id": None})
+    await db_session.commit()
+    [replay] = await post(client, w, "bot", record("k-unassigned", attribution={"git_branch": "feat/ingx-7-x"}))
+    assert replay["attribution"] == {"method": "manual", "project_key": None, "issue_ref": None}
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.project_id, stored.issue_id) == (None, None)
+
+
+async def test_a_person_saving_the_same_attribution_does_not_mark_it_manual(
+    db_session: AsyncSession, client: AsyncClient, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-same", attribution={"project_key": "INGX"}))
+    stored = await entry(db_session, first["entry_id"])
+    await AiUsageService().update(db_session, w.users["bot"], stored, {"project_id": w.p.id, "comments": "Notes"})
+    await db_session.commit()
+    stored = await entry(db_session, first["entry_id"])
+    assert stored.attribution_method == "explicit"
+
+
+# ---------------------------------------------------------------------------
+# The agent's log (issue_ref_source = agent_log)
+# ---------------------------------------------------------------------------
+
+
+async def test_agent_log_issue_wins_over_inferred_hints(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    [result] = await post(
+        client,
+        w,
+        "bot",
+        record(
+            "k-al",
+            attribution={
+                "issue_ref": "ingx-12",
+                "issue_ref_source": "agent_log",
+                "commits": [COMMIT_SHA],
+                "git_branch": "feat/ingx-3-x",
+                "repo": "github.com/acme/app",
+            },
+            **WINDOW,
+        ),
+    )
+    assert result["status"] == "created"
+    assert result["warnings"] == []
+    assert result["attribution"] == {"method": "agent_log", "project_key": "INGX", "issue_ref": "INGX-12"}
+    stored = await entry(db_session, result["entry_id"])
+    assert stored.attribution_method == "agent_log"
+
+
+async def test_unusable_agent_log_issue_is_dropped_and_the_next_step_tried(client: AsyncClient, w: World) -> None:
+    def agent(ref: str, **extra: Any) -> dict[str, Any]:
+        return {"issue_ref": ref, "issue_ref_source": "agent_log", "commits": [COMMIT_SHA], **extra}
+
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-al-missing", attribution=agent("INGX-999")),
+        record("k-al-hidden", attribution=agent("INGX-20")),  # private: the bot cannot see it
+        record("k-al-nolog", attribution=agent("INGY-1")),  # visible, no log permission
+        record("k-al-outside", attribution=agent("INGY-1", project_key="INGX")),
+        record("k-al-alone", attribution={"issue_ref": "INGX-999", "issue_ref_source": "agent_log"}),
+    )
+    assert [r["status"] for r in results] == ["created"] * 5
+    assert [(r["attribution"]["method"], r["attribution"]["issue_ref"]) for r in results] == [
+        ("commit", "INGX-3"),
+        ("commit", "INGX-3"),
+        ("commit", "INGX-3"),
+        ("commit", "INGX-3"),
+        ("none", None),
+    ]
+    assert all(codes(r) == ["attribution_dropped"] for r in results)
+    # Not found and not visible read the same, and the hidden issue is only named as the sender sent it.
+    assert "it was not found" in results[0]["warnings"][0]["message"]
+    assert "it was not found" in results[1]["warnings"][0]["message"]
+    assert "cannot be logged" in results[2]["warnings"][0]["message"]
+    assert "not in project INGX" in results[3]["warnings"][0]["message"]
+    assert results[0]["warnings"][0]["field"] == "attribution.issue_ref"
+
+
+async def test_agent_log_replaces_an_inferred_issue(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    [first] = await post(client, w, "bot", record("k-al-rep", **WINDOW))
+    assert first["attribution"]["method"] == "mcp_session"
+    [second] = await post(
+        client,
+        w,
+        "bot",
+        record("k-al-rep", attribution={"issue_ref": "INGX-12", "issue_ref_source": "agent_log"}, **WINDOW),
+    )
+    assert second["status"] == "updated"
+    assert second["attribution"] == {"method": "agent_log", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+    # A later agent_log issue replaces an earlier one (the reporter learnt of a mark later).
+    [third] = await post(
+        client,
+        w,
+        "bot",
+        record("k-al-rep", attribution={"issue_ref": "INGX-3", "issue_ref_source": "agent_log"}, **WINDOW),
+    )
+    assert third["attribution"] == {"method": "agent_log", "project_key": "INGX", "issue_ref": "INGX-3"}
+    assert third["warnings"] == []
+
+    # But never an explicit one: dropped, not a conflict.
+    [explicit] = await post(client, w, "bot", record("k-al-rep2", attribution={"issue_ref": "INGX-7"}))
+    [kept] = await post(
+        client, w, "bot", record("k-al-rep2", attribution={"issue_ref": "INGX-3", "issue_ref_source": "agent_log"})
+    )
+    assert kept["status"] == "unchanged"
+    assert kept["error"] is None
+    assert kept["attribution"]["issue_ref"] == "INGX-7"
+    assert codes(kept) == ["attribution_dropped"]
+    assert explicit["entry_id"] == kept["entry_id"]
+
+
+async def test_agent_log_replaces_an_inferred_project_but_not_an_explicit_one(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _third_project(db_session, w)
+    agent = {"issue_ref": "INGZ-1", "issue_ref_source": "agent_log"}
+
+    [repo] = await post(client, w, "bot", record("k-al-repo", attribution={"repo": "github.com/acme/app"}))
+    assert repo["attribution"]["method"] == "repo"
+    [moved] = await post(client, w, "bot", record("k-al-repo", attribution={**agent, "repo": "github.com/acme/app"}))
+    assert moved["status"] == "updated"
+    assert moved["warnings"] == []
+    assert moved["attribution"] == {"method": "agent_log", "project_key": "INGZ", "issue_ref": "INGZ-1"}
+    stored = await entry(db_session, repo["entry_id"])
+    assert stored.project_id is not None and stored.project_id != w.p.id
+
+    [explicit] = await post(client, w, "bot", record("k-al-pk", attribution={"project_key": "INGX"}))
+    for hints in (agent, {**agent, "project_key": "INGX"}):
+        [kept] = await post(client, w, "bot", record("k-al-pk", attribution=hints))
+        assert kept["status"] == "unchanged"
+        assert kept["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": None}
+        assert codes(kept) == ["attribution_dropped"]
+        assert "not in project INGX" in kept["warnings"][0]["message"]
+    stored = await entry(db_session, explicit["entry_id"])
+    assert (stored.project_id, stored.issue_id) == (w.p.id, None)
 
 
 async def test_replay_attributes_an_unassigned_entry(client: AsyncClient, db_session: AsyncSession, w: World) -> None:

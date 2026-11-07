@@ -51,8 +51,22 @@ from specivo.models.money import amount_column, currency_column, money_or_none, 
 AI_USAGE_SOURCES: tuple[str, ...] = ("manual", "api", "mcp", "reporter", "import")
 LOCKED_SOURCES: frozenset[str] = frozenset({"reporter", "import"})
 
-#: How the entry's project and issue were found.
-AI_USAGE_ATTRIBUTION_METHODS: tuple[str, ...] = ("explicit", "env", "mcp_session", "commit", "branch", "repo", "none")
+#: How the entry's project and issue were found. ``agent_log``: the issue the
+#: reporter read from the agent's own Specivo tool calls. ``manual``: a person
+#: moved the entry in Specivo; replays of the bucket never change it again.
+AI_USAGE_ATTRIBUTION_METHODS: tuple[str, ...] = (
+    "explicit",
+    "env",
+    "agent_log",
+    "mcp_session",
+    "commit",
+    "branch",
+    "repo",
+    "manual",
+    "none",
+)
+#: The method of an entry a person moved in Specivo.
+MANUAL_ATTRIBUTION = "manual"
 
 #: Who pays for the usage, which decides the marginal cost.
 AI_USAGE_COST_TYPES: tuple[str, ...] = ("subscription", "api", "local", "free", "unknown")

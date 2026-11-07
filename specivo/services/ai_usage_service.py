@@ -35,9 +35,11 @@ administrator. Reporter and import entries keep their token, model and tool
 columns: only the project, the issue and the comments change. People exclude
 them (``excluded_at``) rather than delete them, and a later upsert keeps the
 exclusion; administrators may hard-delete. Moving an entry to another project
-is checked like logging it there in its user's name (``require_can_log``).
-A replay of an existing bucket is authorized against the stored entry, never
-the project the record names (``_replace``).
+is checked like logging it there in its user's name (``require_can_log``),
+and a move (a changed project or issue) sets ``attribution_method`` to
+``manual``, which a reporter's replay never changes again. A replay of an
+existing bucket is authorized against the stored entry, never the project
+the record names (``_replace``).
 
 Costs
 -----
@@ -92,6 +94,7 @@ from specivo.models.ai_usage_entry import (
     AI_USAGE_COST_TYPES,
     AI_USAGE_SOURCES,
     LOCKED_SOURCES,
+    MANUAL_ATTRIBUTION,
     AiUsageEntry,
 )
 from specivo.models.currency import Currency
@@ -997,6 +1000,7 @@ class AiUsageService:
         source: str = "reporter",
         api_key_id: int | None = None,
         request: Request | None = None,
+        reattribute: bool = False,
     ) -> UpsertResult:
         """Create or replace the bucket ``(target, idempotency_key)`` with the totals sent.
 
@@ -1005,7 +1009,10 @@ class AiUsageService:
           entry re-priced at its ``priced_at`` and ``revision`` bumped. The
           project and issue are taken from the record only while the entry is
           unassigned: an attributed entry (by the reporter or a person) keeps
-          its attribution. Comments and the exclusion are never touched.
+          its attribution, unless *reattribute* says the ingest decided to
+          refine or replace it (never for an entry a person moved, whose
+          ``attribution_method`` is ``manual``). Comments and the exclusion
+          are never touched.
         - An existing entry is authorized against its stored project and user
           (see ``_replace``); a record naming another project than the stored
           one is 409 ``ai_usage_attribution_conflict``.
@@ -1031,7 +1038,9 @@ class AiUsageService:
                 if savepoint.is_active:
                     await savepoint.commit()
                 return UpsertResult(entry, "created")
-        return await self._replace(session, actor, target, existing, data, values, project, request)
+        return await self._replace(
+            session, actor, target, existing, data, values, project, request, reattribute=reattribute
+        )
 
     async def _by_key(self, session: AsyncSession, user_id: int, key: str) -> AiUsageEntry | None:
         stmt = (
@@ -1084,6 +1093,8 @@ class AiUsageService:
         values: dict[str, Any],
         project: Project | None,
         request: Request | None,
+        *,
+        reattribute: bool = False,
     ) -> UpsertResult:
         """Replace the totals of an existing bucket; authorized against the **stored** entry.
 
@@ -1096,6 +1107,12 @@ class AiUsageService:
         people do (``update``). A record without a project leaves the stored
         attribution as it is. An update by someone other than the entry's user
         is audited like logging in their name.
+
+        With *reattribute* (the ingest's decision to refine a project-only
+        entry or replace an inferred attribution), the record's project, issue
+        and method replace the stored ones, after ``require_can_log`` in both
+        the stored and the new project. An entry a person moved
+        (``attribution_method`` ``manual``) is never reattributed or assigned.
         """
         if entry.reporter_user_id != actor.id:
             raise AppError(
@@ -1104,14 +1121,19 @@ class AiUsageService:
                 status_code=409,
                 field="idempotency_key",
             )
-        assigns = entry.project_id is None and project is not None
-        if project is not None and entry.project_id is not None and project.id != entry.project_id:
+        manual = entry.attribution_method == MANUAL_ATTRIBUTION
+        moves = reattribute and not manual and project is not None and entry.project_id is not None
+        assigns = (entry.project_id is None and project is not None and not manual) or moves
+        if not moves and project is not None and entry.project_id is not None and project.id != entry.project_id:
             raise AppError(
                 code="ai_usage_attribution_conflict",
                 message="This entry belongs to another project; send it without a project, or move it by hand",
                 status_code=409,
                 field="project_id",
             )
+        if moves:
+            stored = await self._project(session, entry.project_id)
+            await self.require_can_log(session, actor, target, stored, None, request=request)
         if assigns:
             await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
         else:
@@ -1178,9 +1200,11 @@ class AiUsageService:
         issue_id = changes.get("issue_id", entry.issue_id if project_id == entry.project_id else None)
         if "project_id" in changes or "issue_id" in changes:
             await self._require_can_move(session, actor, entry, project_id, issue_id, request=request)
-            entry.project_id = project_id
-            entry.issue_id = issue_id
-            entry.attribution_method = "explicit" if project_id is not None else "none"
+            if (project_id, issue_id) != (entry.project_id, entry.issue_id):
+                # A person moved it: replays of the bucket never change it again.
+                entry.project_id = project_id
+                entry.issue_id = issue_id
+                entry.attribution_method = MANUAL_ATTRIBUTION
         if "comments" in changes:
             entry.comments = self._text(changes["comments"], "comments", COMMENTS_MAX_LENGTH)
 

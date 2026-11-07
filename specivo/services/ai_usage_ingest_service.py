@@ -15,6 +15,9 @@ stored as ``attribution_method``:
 
 1. ``attribution.issue_ref`` (``explicit``, or ``env`` when the client says
    it came from ``SPECIVO_ISSUE``);
+1a. ``attribution.issue_ref`` with ``issue_ref_source`` ``agent_log``
+   (``agent_log``): the issue the reporter read from the agent's own Specivo
+   MCP calls. Inferred-like: dropped with a warning when unusable;
 2. the issue of an MCP agent session overlapping ``[started_at, ended_at]``
    (``mcp_session``): the reporting account's sessions first, then, for an
    on-behalf record, the target user's;
@@ -26,16 +29,30 @@ stored as ``attribution_method``:
    matched to a connected repository's ``repo_full_name`` (``repo``);
 6. nothing (``none``).
 
-Explicit hints (``issue_ref``, ``project_key``) that cannot be used reject
-the record. Inferred ones (steps 2 to 4 and the repository) that the target
-user cannot log to are dropped with an ``attribution_dropped`` warning, and
-the next step is tried. With a ``project_key``, inferred issues of other
-projects are dropped too.
+Explicit hints (``issue_ref`` from a person, ``project_key``) that cannot be
+used reject the record. An ``agent_log`` issue and the inferred hints (steps 2
+to 4 and the repository) that the target user cannot log to are dropped with
+an ``attribution_dropped`` warning, and the next step is tried. With a
+``project_key``, ``agent_log`` and inferred issues of other projects are
+dropped too.
 
-A replay of a bucket that is already attributed keeps its attribution: an
-explicit hint naming something else rejects the record
-(``attribution_conflict``); an inferred one is not applied and the record
-gets ``attribution_dropped``.
+Replays
+-------
+A replay of a bucket that is already attributed (``stored``) mostly keeps
+its attribution. What a replay may change (see :func:`_replaces`):
+
+- an entry a person moved (``manual``) never changes: a differing hint,
+  explicit or not, gets ``attribution_dropped``;
+- an entry with a project and **no issue** is refined by an issue of that
+  project: an explicit ``issue_ref``, an ``agent_log`` issue or an inferred
+  one. An explicit issue elsewhere is ``attribution_conflict``; an inferred
+  one elsewhere is dropped. An ``agent_log`` issue elsewhere replaces an
+  inferred project (``repo``) and is dropped otherwise;
+- an entry with an issue keeps it, except that an ``agent_log`` issue
+  replaces an inferred one (``mcp_session``, ``commit``, ``branch``) or an
+  earlier ``agent_log`` one (the reporter may learn of a mark later);
+- otherwise an explicit hint naming something else rejects the record
+  (``attribution_conflict``) and anything else gets ``attribution_dropped``.
 """
 
 from __future__ import annotations
@@ -66,7 +83,7 @@ from specivo.core.exceptions import AppError, NotFoundError
 from specivo.core.money import Money, MoneyError
 from specivo.core.utils import utcnow
 from specivo.hooks.refs import extract_branch_refs
-from specivo.models.ai_usage_entry import AiUsageEntry
+from specivo.models.ai_usage_entry import MANUAL_ATTRIBUTION, AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.repository import IssueCommitLink, RepositoryCommit, RepositoryIntegration
@@ -169,6 +186,8 @@ class _Target:
     project: Project | None = None
     issue: Issue | None = None
     method: str = "none"
+    #: On a replay: the stored attribution is replaced by this one.
+    reattribute: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -350,11 +369,13 @@ class AiUsageIngestService:
                 "key_conflict", "This idempotency key belongs to an entry another account reported", "idempotency_key"
             )
 
-        attributed = existing is not None and existing.project_id is not None
+        attributed = existing is not None and (
+            existing.project_id is not None or existing.attribution_method == MANUAL_ATTRIBUTION
+        )
         resolved = await self._attribute(
             session, batch, record, target, result, stored=existing if attributed else None
         )
-        if attributed:
+        if attributed and not resolved.reattribute:
             # The stored attribution stays; the service checks the stored project.
             resolved = _Target()
 
@@ -372,6 +393,7 @@ class AiUsageIngestService:
             source="reporter",
             api_key_id=batch.api_key_id,
             request=batch.request,
+            reattribute=resolved.reattribute,
         )
         entry = outcome.entry
         result.status = outcome.status
@@ -471,58 +493,94 @@ class AiUsageIngestService:
         """Resolve the record's project and issue (see the module docstring); raises for an unusable explicit hint.
 
         *stored* is the already attributed entry the record replays, or None.
-        Its attribution wins: a conflicting explicit hint is refused, a
-        conflicting inferred one is reported with ``attribution_dropped``.
+        On a replay the result is either empty (the stored attribution stays)
+        or marked ``reattribute`` (it replaces the stored one).
         """
         hints = record.attribution
+        manual = stored is not None and stored.attribution_method == MANUAL_ATTRIBUTION
         explicit_project: Project | None = None
         if hints.project_key is not None:
             explicit_project = await self._project_by_key(session, batch, hints.project_key)
 
-        if hints.issue_ref is not None:
-            issue = await self._explicit_issue(session, batch, hints.issue_ref)
+        explicit_ref = hints.explicit_issue_ref
+        if explicit_ref is not None:
+            issue = await self._explicit_issue(session, batch, explicit_ref)
             if explicit_project is not None and issue.project_id != explicit_project.id:
                 raise RecordRejectedError(
                     "attribution_invalid",
-                    f"Issue {hints.issue_ref} is not in project {hints.project_key}",
+                    f"Issue {explicit_ref} is not in project {hints.project_key}",
                     "attribution.issue_ref",
                 )
             project = await session.get(Project, issue.project_id)
-            if stored is not None:
-                self._require_same(stored, project, issue, hints.issue_ref)
+            named = _Target(project, issue, hints.issue_method)
+            if stored is None:
+                await _usage.require_can_log(session, batch.actor, target, project, issue.id, request=batch.request)
+                return named
+            if manual:
+                self._warn_kept(result, stored, named)
                 return _Target()
-            await _usage.require_can_log(session, batch.actor, target, project, issue.id, request=batch.request)
-            return _Target(project, issue, hints.issue_method)
+            if _replaces(stored, named):
+                await _usage.require_can_log(session, batch.actor, target, project, issue.id, request=batch.request)
+                return replace(named, reattribute=True)
+            self._require_same(stored, project, issue, explicit_ref)
+            return _Target()
 
         if explicit_project is not None:
-            if stored is not None:
-                self._require_same(stored, explicit_project, None, explicit_project.key)
-            else:
+            if stored is None:
                 await _usage.require_can_log(
                     session, batch.actor, target, explicit_project, None, request=batch.request
                 )
+            elif manual:
+                self._warn_kept(result, stored, _Target(explicit_project, None, "explicit"))
+                return _Target()
+            else:
+                self._require_same(stored, explicit_project, None, explicit_project.key)
 
-        found = await self._inferred(session, batch, record, target, result, explicit_project)
+        agent_scope, inferred_scope = explicit_project, explicit_project
+        if stored is not None and stored.project_id is not None:
+            stored_project = await session.get(Project, stored.project_id)
+            if stored.issue_id is None:
+                # Refining a project-only entry: inferred issues must stay in its project, and
+                # so must an agent_log issue unless the project itself was only inferred.
+                inferred_scope = stored_project
+                if stored.attribution_method not in _REPLACEABLE:
+                    agent_scope = stored_project
+
+        found: _Target | None = None
+        agent_ref = hints.agent_log_issue_ref
+        if agent_ref is not None:
+            found = await self._agent_log(session, batch, agent_ref, target, result, agent_scope)
+        if found is None:
+            found = await self._inferred(session, batch, record, target, result, inferred_scope)
         if found is None and explicit_project is not None:
             found = _Target(explicit_project, None, "explicit")
         if found is None:
             found = await self._by_repo(session, batch, record, target, result)
         if found is None:
             return _Target()
-        if stored is not None and found.method != "explicit":
-            changes_project = found.project is not None and found.project.id != stored.project_id
-            changes_issue = found.issue is not None and found.issue.id != stored.issue_id
-            if changes_project or changes_issue:
-                result.warnings.append(
-                    Problem(
-                        "attribution_dropped",
-                        "The entry is already attributed; the attribution found from "
-                        f"{_METHOD_LABELS[found.method]} was not applied",
-                        "attribution",
-                    )
-                )
-            return _Target()
-        return found
+        if stored is None:
+            return found
+        if _replaces(stored, found):
+            return replace(found, reattribute=True)
+        if found.method != "explicit":
+            self._warn_kept(result, stored, found)
+        return _Target()
+
+    @staticmethod
+    def _warn_kept(result: RecordResult, stored: AiUsageEntry, found: _Target) -> None:
+        """Warn ``attribution_dropped`` when *found* differs from the stored attribution that stays."""
+        changes_project = found.project is not None and found.project.id != stored.project_id
+        changes_issue = found.issue is not None and found.issue.id != stored.issue_id
+        if not (changes_project or changes_issue):
+            return
+        why = "was moved in Specivo" if stored.attribution_method == MANUAL_ATTRIBUTION else "is already attributed"
+        result.warnings.append(
+            Problem(
+                "attribution_dropped",
+                f"The entry {why}; the attribution found from {_METHOD_LABELS[found.method]} was not applied",
+                "attribution",
+            )
+        )
 
     @staticmethod
     def _require_same(stored: AiUsageEntry, project: Project | None, issue: Issue | None, named: str) -> None:
@@ -534,6 +592,37 @@ class AiUsageIngestService:
                 f"The entry is attributed elsewhere than {named}; send it without attribution, or move it in Specivo",
                 "attribution.issue_ref" if issue is not None else "attribution.project_key",
             )
+
+    async def _agent_log(
+        self,
+        session: AsyncSession,
+        batch: _Batch,
+        ref: str,
+        target: User,
+        result: RecordResult,
+        only_project: Project | None,
+    ) -> _Target | None:
+        """Step 1a: the ``agent_log`` issue, or None (with ``attribution_dropped``) when it cannot be used."""
+        from specivo.services.issue_service import IssueService
+
+        try:
+            issue: Issue | None = await IssueService().get_by_display_key(session, ref, batch.actor)
+        except AppError:
+            issue = None
+        project = await session.get(Project, issue.project_id) if issue is not None and issue.project_id else None
+        if issue is None or project is None:
+            # One message whether the issue does not exist or cannot be seen.
+            result.warnings.append(
+                Problem(
+                    "attribution_dropped",
+                    f"{ref}, found from {_METHOD_LABELS['agent_log']}, was skipped: it was not found",
+                    "attribution.issue_ref",
+                )
+            )
+            return None
+        if await self._usable(session, batch, target, project, issue, "agent_log", result, only_project):
+            return _Target(project, issue, "agent_log")
+        return None
 
     async def _project_by_key(self, session: AsyncSession, batch: _Batch, key: str) -> Project:
         from specivo.services.project_service import ProjectService
@@ -732,13 +821,38 @@ class AiUsageIngestService:
         return None
 
 
+#: Stored methods a replay may replace: what the server inferred, and nothing.
+_REPLACEABLE: frozenset[str] = frozenset({"mcp_session", "commit", "branch", "repo", "none"})
+#: Stored methods of an entry with an issue that an ``agent_log`` issue replaces.
+_REPLACEABLE_BY_AGENT_LOG: frozenset[str] = _REPLACEABLE | {"agent_log"}
+
+
+def _replaces(stored: AiUsageEntry, found: _Target) -> bool:
+    """Whether a replay's attribution *found* replaces the *stored* one (see the module docstring)."""
+    if stored.attribution_method == MANUAL_ATTRIBUTION or found.issue is None or found.project is None:
+        return False
+    if found.issue.id == stored.issue_id:
+        return False
+    if stored.issue_id is None:
+        # A project-only entry: refined by an issue of its project; an agent_log issue
+        # elsewhere replaces a project that was only inferred.
+        if found.project.id == stored.project_id:
+            return True
+        return found.method == "agent_log" and stored.attribution_method in _REPLACEABLE
+    # An entry with an issue keeps it, unless it was inferred (or from the agent's log) and the
+    # agent's log names another.
+    return found.method == "agent_log" and stored.attribution_method in _REPLACEABLE_BY_AGENT_LOG
+
+
 _METHOD_LABELS: dict[str, str] = {
+    "agent_log": "the agent's log",
     "mcp_session": "an MCP agent session",
     "commit": "the commits",
     "branch": "the branch name",
     "repo": "the repository",
     "explicit": "the record",
     "env": "the record",
+    "manual": "a move in Specivo",
 }
 
 __all__ = ["SCHEMA_V1", "AiUsageIngestService", "RecordResult", "contract_error"]
