@@ -83,3 +83,8 @@
 .bulk-toolbar { display: flex; align-items: center; gap: var(--sp-space-md); padding: var(--sp-space-sm) var(--sp-space-lg); background: rgba(196, 154, 60, 0.08); border-bottom: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm); }
 .bulk-toolbar .selected-count { font-weight: 600; color: var(--sp-accent); }
 
+
+/* Numeric columns: the header follows the right-aligned cells. The table
+   header rules above (.sp-table th and friends) set text-align: left with a
+   higher specificity than the page-level number classes, so restate it here. */
+table th.sp-aiu-num, table th.sp-sub-num, table th.sp-mp-num { text-align: right; }
