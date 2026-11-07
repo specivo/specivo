@@ -99,7 +99,7 @@ from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
-from specivo.services.ai_usage_service import AiUsageService
+from specivo.services.ai_usage_service import AiUsageService, unpriced_models
 from specivo.services.api_key_scope import is_global_admin
 
 #: Dimensions a report can be grouped by, in their canonical order.
@@ -247,6 +247,8 @@ class SpendReport:
     filters: ReportFilters
     rows: list[ReportRow]
     totals: ReportRow
+    #: Models of the unpriced entries counted, most entries first (a few).
+    unpriced_models: list[tuple[str, int]] = field(default_factory=list)
 
     @property
     def rate_dates(self) -> tuple[date, ...]:
@@ -381,6 +383,7 @@ class AiSpendReportService:
             _finish(row, target, seat_shown)
         await self._label(session, viewer, rows, dims)
         rows.sort(key=_sort_key(dims, period, sort))
+        missing = await unpriced_models(session, conditions) if totals.unpriced_entries else []
         return SpendReport(
             scope="instance" if project is None else "project",
             project=project,
@@ -398,6 +401,7 @@ class AiSpendReportService:
             filters=filters,
             rows=rows,
             totals=totals,
+            unpriced_models=missing,
         )
 
     async def sees_every_entry(

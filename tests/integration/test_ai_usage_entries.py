@@ -24,8 +24,10 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.ai_pricing_seed import FIRST_PERIOD_START, Snapshot
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.money import Money
+from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.ai_subscription import AiSubscription
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
@@ -375,6 +377,34 @@ async def test_adding_or_editing_prices_never_changes_existing_entries(db_sessio
     await db_session.refresh(unpriced)
     assert (priced.price_id, priced.marginal, unpriced.price_id, unpriced.cost_basis) == before
     assert unpriced.revision == 1
+
+
+async def test_a_seed_that_moves_a_first_period_back_prices_earlier_entries(db_session: AsyncSession, w: World) -> None:
+    march = await _svc.log(db_session, w.alice, usage(project_id=w.p.id, model="lab-backfill", cost_type="api"))
+    assert march.cost_basis == "unpriced" and march.price_id is None
+    # Stored the way an older release did: the first period starts at the list's as_of.
+    row = AiModelPrice(
+        provider="testlab",
+        model="lab-backfill",
+        currency_code="USD",
+        input=Decimal("1"),
+        output=Decimal("10"),
+        effective_from=JUNE_1,
+        source="seed",
+    )
+    db_session.add(row)
+    await db_session.flush()
+
+    outcome = await _prices.load_seed(
+        db_session, actor=w.admin, snapshot=Snapshot(as_of=JUNE_1, source={}, prices=()), history=()
+    )
+    assert outcome.rebased == 1
+    await db_session.refresh(row)
+    await db_session.refresh(march)
+    assert row.effective_from == FIRST_PERIOD_START
+    assert march.price_id == row.id and march.cost_basis != "unpriced"
+    assert march.api_equivalent == Money(Decimal("2"), "USD")  # 1M in at 1 + 100k out at 10
+    assert march.revision == 2
 
 
 async def test_recompute_prices_each_entry_at_its_own_instant(db_session: AsyncSession, w: World) -> None:

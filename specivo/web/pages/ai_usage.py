@@ -319,6 +319,8 @@ async def _totals(db: AsyncSession, summary: UsageSummary, currency: str) -> dic
     return {
         "entries": summary.entries,
         "excluded": summary.excluded,
+        "unpriced": summary.unpriced,
+        "unpriced_models": [{"model": m, "count": n} for m, n in summary.unpriced_models],
         "currency": currency,
         "total_tokens": _fmt_int(summary.total_tokens, locale),
         "input": _fmt_int(tokens.get("input", 0), locale),

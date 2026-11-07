@@ -1,9 +1,15 @@
 """Write the bundled AI model price seed into ``ai_model_prices`` (synchronous SQLAlchemy Core).
 
-:func:`apply_seed` reads the stored ``seed`` rows, asks
-:func:`specivo.core.ai_pricing_seed.plan_seed` what changed, and writes it:
-closes first, then inserts, then links each closed row to its successor
-(``superseded_by_id``). ``admin`` rows are never read or written.
+:func:`apply_seed` reads the stored ``seed`` rows (and when each model's
+``admin`` rows start), asks :func:`specivo.core.ai_pricing_seed.plan_seed` what
+changed, and writes it: rebases (a model's first seed period moved back to
+``FIRST_PERIOD_START``) and closes first, then inserts, then links each closed
+row to its successor (``superseded_by_id``). ``admin`` rows are never written.
+
+``effective_from`` is otherwise immutable (trigger ``ai_model_prices_immutable``);
+the trigger lets a ``seed`` row's start move earlier only while the
+transaction-local setting :data:`REBASE_SETTING` is ``on``, which
+:func:`write_plan` sets around its rebases.
 
 It takes a synchronous ``Connection`` so the same code serves the migration
 that first seeds the table (``op.get_bind()``) and the service
@@ -22,6 +28,7 @@ from sqlalchemy import Connection, Table, func, insert, select, text, update
 
 from specivo.core.ai_pricing_seed import (
     PRICE_COLUMNS,
+    Backfill,
     HistoryPeriod,
     SeedPlan,
     Snapshot,
@@ -34,6 +41,10 @@ from specivo.core.ai_pricing_seed import (
 #: Key of the advisory lock held while a seed run writes.
 SEED_LOCK_KEY = "ai_model_prices_seed"
 
+#: Transaction-local setting that lets the immutability trigger accept a seed
+#: row's ``effective_from`` moving earlier (see migration 0067).
+REBASE_SETTING = "specivo.ai_price_rebase"
+
 
 @dataclass
 class SeedOutcome:
@@ -44,12 +55,15 @@ class SeedOutcome:
     closed: int = 0
     history_inserted: int = 0
     aliases_updated: int = 0
+    rebased: int = 0
     unchanged: int = 0
     skipped: list[str] = field(default_factory=list)
+    #: Models whose earlier usage gained a price (the caller re-prices those entries).
+    backfills: list[Backfill] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
-        return bool(self.inserted or self.closed or self.aliases_updated)
+        return bool(self.inserted or self.closed or self.aliases_updated or self.rebased)
 
     def details(self) -> dict[str, Any]:
         """Audit details (counts and the snapshot instant; the skipped messages are capped)."""
@@ -59,6 +73,7 @@ class SeedOutcome:
             "closed": self.closed,
             "history_inserted": self.history_inserted,
             "aliases_updated": self.aliases_updated,
+            "rebased": self.rebased,
             "unchanged": self.unchanged,
             "skipped": len(self.skipped),
         }
@@ -102,10 +117,29 @@ def read_stored_seed_rows(conn: Connection, table: Table) -> list[StoredSeedRow]
     ]
 
 
+def read_admin_starts(conn: Connection, table: Table) -> dict[tuple[str, str], datetime]:
+    """The earliest ``effective_from`` of each model's active admin rows."""
+    c = table.c
+    stmt = (
+        select(c.provider, c.model, func.min(c.effective_from))
+        .where(c.source == "admin", c.is_active.is_(True))
+        .group_by(c.provider, c.model)
+    )
+    return {(provider, model): start for provider, model, start in conn.execute(stmt).all()}
+
+
 def write_plan(conn: Connection, table: Table, plan: SeedPlan) -> SeedOutcome:
     """Execute *plan*; returns the counts."""
     c = table.c
-    outcome = SeedOutcome(as_of=plan.as_of, unchanged=plan.unchanged, skipped=list(plan.skipped))
+    outcome = SeedOutcome(
+        as_of=plan.as_of, unchanged=plan.unchanged, skipped=list(plan.skipped), backfills=list(plan.backfills)
+    )
+    if plan.rebases:
+        conn.execute(text("SELECT set_config(:name, 'on', true)"), {"name": REBASE_SETTING})
+        for row_id, start in plan.rebases.items():
+            conn.execute(update(table).where(c.id == row_id).values(effective_from=start, updated_at=func.now()))
+            outcome.rebased += 1
+        conn.execute(text("SELECT set_config(:name, 'off', true)"), {"name": REBASE_SETTING})
     for row_id, instant in plan.closes.items():
         conn.execute(update(table).where(c.id == row_id).values(effective_to=instant, updated_at=func.now()))
         outcome.closed += 1
@@ -140,5 +174,5 @@ def apply_seed(
     snapshot = snapshot if snapshot is not None else load_snapshot()
     history = history if history is not None else load_history()
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": SEED_LOCK_KEY})
-    plan = plan_seed(read_stored_seed_rows(conn, table), snapshot, history)
+    plan = plan_seed(read_stored_seed_rows(conn, table), snapshot, history, read_admin_starts(conn, table))
     return write_plan(conn, table, plan)

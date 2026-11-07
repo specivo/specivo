@@ -384,6 +384,7 @@ async def _context(db: AsyncSession, report: SpendReport | None, form: ReportFor
             chart=_chart(report, views),
             rate_dates=[d.isoformat() for d in report.rate_dates],
             rates_used=_rates_view(report),
+            unpriced_models=[{"model": m, "count": n} for m, n in report.unpriced_models],
         )
     return context
 

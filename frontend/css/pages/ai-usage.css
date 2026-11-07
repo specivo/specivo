@@ -117,6 +117,10 @@
 }
 .sp-spend-preset:hover { border-color: var(--sp-accent); color: var(--sp-text-primary); }
 .sp-spend-preset.active { background: var(--sp-accent-subtle); border-color: var(--sp-accent); color: var(--sp-text-primary); font-weight: 600; }
+/* Note near the totals when some entries have no price (they count as 0). */
+.sp-aiu-unpriced { background: var(--sp-warning-subtle); color: var(--sp-text-primary); border-left: 3px solid var(--sp-warning); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin: calc(-1 * var(--sp-space-sm)) 0 var(--sp-space-lg); overflow-wrap: anywhere; }
+.sp-aiu-unpriced p { margin: 0; }
+.sp-aiu-unpriced p + p { margin-top: var(--sp-space-xs); }
 .sp-spend-notes { margin: calc(-1 * var(--sp-space-sm)) 0 var(--sp-space-lg); }
 .sp-spend-chart-card { padding: var(--sp-space-md); margin-bottom: var(--sp-space-lg); }
 /* The chart module sets the height; ECharts fits the width and redraws on resize. */

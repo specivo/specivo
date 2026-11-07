@@ -58,7 +58,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -247,6 +247,24 @@ class EntryReferences:
     key_names: dict[int, str] = field(default_factory=dict)
 
 
+#: How many unpriced models a summary or report names.
+UNPRICED_MODELS_SHOWN = 5
+
+
+async def unpriced_models(
+    session: AsyncSession, conditions: Sequence[ColumnElement[bool]], limit: int = UNPRICED_MODELS_SHOWN
+) -> list[tuple[str, int]]:
+    """The models of the unpriced entries matching *conditions*, most entries first."""
+    stmt = (
+        select(AiUsageEntry.model, func.count())
+        .where(*conditions, AiUsageEntry.cost_basis == "unpriced")
+        .group_by(AiUsageEntry.model)
+        .order_by(func.count().desc(), AiUsageEntry.model)
+        .limit(limit)
+    )
+    return [(model or "", int(count)) for model, count in (await session.execute(stmt)).all()]
+
+
 @dataclass
 class UsageSummary:
     """Totals of a filtered set of entries, excluded ones left out (see ``summarize_entries``).
@@ -258,6 +276,10 @@ class UsageSummary:
 
     entries: int = 0
     excluded: int = 0
+    #: Counted entries without a price for their model and date (they add 0).
+    unpriced: int = 0
+    #: The models of those entries, most entries first (at most ``UNPRICED_MODELS_SHOWN``).
+    unpriced_models: list[tuple[str, int]] = field(default_factory=list)
     tokens: dict[str, int] = field(default_factory=dict)
     marginal: list[tuple[Money, date]] = field(default_factory=list)
     api_equivalent: list[tuple[Money, date]] = field(default_factory=list)
@@ -520,6 +542,7 @@ class AiUsageService:
                 select(
                     func.count().filter(counted),
                     func.count().filter(AiUsageEntry.excluded_at.is_not(None)),
+                    func.count().filter(counted, AiUsageEntry.cost_basis == "unpriced"),
                     *[func.coalesce(func.sum(AiUsageEntry.class_total(c)).filter(counted), 0) for c in TOKEN_CLASSES],
                 ).where(*conditions)
             )
@@ -527,8 +550,11 @@ class AiUsageService:
         summary = UsageSummary(
             entries=int(row[0]),
             excluded=int(row[1]),
-            tokens={c: int(v) for c, v in zip(TOKEN_CLASSES, row[2:], strict=True)},
+            unpriced=int(row[2]),
+            tokens={c: int(v) for c, v in zip(TOKEN_CLASSES, row[3:], strict=True)},
         )
+        if summary.unpriced:
+            summary.unpriced_models = await unpriced_models(session, [*conditions, counted])
         for name in ("marginal", "api_equivalent"):
             amount = getattr(AiUsageEntry, f"{name}_amount")
             currency = getattr(AiUsageEntry, f"{name}_currency")

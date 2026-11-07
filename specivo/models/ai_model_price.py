@@ -55,7 +55,9 @@ class AiModelPrice(Base, TimestampMixin):
     Amounts, the currency, the identity and ``effective_from`` cannot be
     updated (trigger ``ai_model_prices_immutable``). What may change in place
     is ``effective_to`` (closing a period), ``is_active``, ``superseded_by_id``,
-    ``aliases`` and ``note``. The service refuses to delete a row usage
+    ``aliases`` and ``note``; the bundled seed may also move a ``seed`` row's
+    ``effective_from`` earlier (a model's first period, see
+    ``specivo.core.ai_pricing_seed.FIRST_PERIOD_START``). The service refuses to delete a row usage
     entries reference, or to move its end before them.
 
     ``reasoning`` ``NULL`` bills reasoning tokens at the output price; any

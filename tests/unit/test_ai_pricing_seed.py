@@ -15,8 +15,10 @@ from types import ModuleType
 import pytest
 
 from specivo.core.ai_pricing_seed import (
+    FIRST_PERIOD_START,
     PRICE_COLUMNS,
     SNAPSHOT_FORMAT,
+    Backfill,
     HistoryPeriod,
     SeedFormatError,
     SeedPrice,
@@ -294,16 +296,69 @@ def test_one_hour_cache_write_is_twice_input_when_missing() -> None:
     assert long_price.row_prices()["long_cache_write_1h"] == Decimal("12")
 
 
-def test_a_new_model_is_inserted_from_as_of() -> None:
+def test_a_new_model_starts_its_first_period_in_the_past() -> None:
     plan = plan_seed([], _snapshot(_price()))
-    assert [(p.price.model, p.effective_from, p.effective_to) for p in plan.inserts] == [("alpha-1", AS_OF, None)]
-    assert plan.closes == {}
+    assert [(p.price.model, p.effective_from, p.effective_to) for p in plan.inserts] == [
+        ("alpha-1", FIRST_PERIOD_START, None)
+    ]
+    assert plan.closes == {} and plan.rebases == {}
+    assert plan.backfills == [Backfill(provider="testprov", model="alpha-1", until=AS_OF)]
+
+
+def test_a_new_model_with_seed_rows_or_history_starts_at_as_of() -> None:
+    closed = _stored(_price(), 1, FIRST_PERIOD_START, AS_OF)
+    plan = plan_seed([closed], _snapshot(_price(input="2"), as_of=LATER))
+    [insert] = plan.inserts
+    assert insert.effective_from == LATER and not plan.backfills
+
+    earlier = HistoryPeriod(price=_price(input="4"), effective_from=AS_OF - timedelta(days=90), effective_to=AS_OF)
+    plan = plan_seed([], _snapshot(_price()), [earlier])
+    assert sorted((p.effective_from, p.from_history) for p in plan.inserts) == [
+        (earlier.effective_from, True),
+        (AS_OF, False),
+    ]
+    assert not plan.backfills
+
+
+def test_a_new_model_priced_earlier_by_an_admin_starts_at_as_of() -> None:
+    key = ("testprov", "alpha-1")
+    plan = plan_seed([], _snapshot(_price()), admin_starts={key: AS_OF - timedelta(days=5)})
+    assert [p.effective_from for p in plan.inserts] == [AS_OF] and not plan.backfills
+    later_admin = plan_seed([], _snapshot(_price()), admin_starts={key: LATER})
+    assert [p.effective_from for p in later_admin.inserts] == [FIRST_PERIOD_START]
 
 
 def test_an_unchanged_price_is_a_no_op() -> None:
     price = _price()
-    plan = plan_seed([_stored(price, 1, AS_OF)], _snapshot(price, as_of=LATER))
-    assert plan.is_empty and plan.unchanged == 1
+    plan = plan_seed([_stored(price, 1, FIRST_PERIOD_START)], _snapshot(price, as_of=LATER))
+    assert plan.is_empty and plan.unchanged == 1 and not plan.backfills
+
+
+def test_a_first_period_stored_from_an_as_of_moves_back_once() -> None:
+    old, new = _price(), _price(input="2.5")
+    stored = [_stored(old, 7, AS_OF, LATER), _stored(new, 8, LATER)]
+    plan = plan_seed(stored, _snapshot(new, as_of=LATER))
+    assert plan.rebases == {7: FIRST_PERIOD_START}
+    assert plan.backfills == [Backfill(provider="testprov", model="alpha-1", until=AS_OF)]
+    assert not plan.inserts and not plan.closes and plan.unchanged == 1
+    moved = [_stored(old, 7, FIRST_PERIOD_START, LATER), _stored(new, 8, LATER)]
+    again = plan_seed(moved, _snapshot(new, as_of=LATER))
+    assert again.is_empty and not again.backfills
+
+
+def test_a_first_period_is_not_moved_over_admin_history_or_deactivated_rows() -> None:
+    price = _price()
+    row = _stored(price, 7, AS_OF)
+    key = ("testprov", "alpha-1")
+    assert plan_seed([row], _snapshot(price), admin_starts={key: AS_OF - timedelta(days=1)}).rebases == {}
+    assert plan_seed([row], _snapshot(price), admin_starts={key: AS_OF}).rebases == {7: FIRST_PERIOD_START}
+    history = HistoryPeriod(price=_price(input="4"), effective_from=AS_OF - timedelta(days=90), effective_to=AS_OF)
+    with_history = plan_seed(
+        [row, _stored(history.price, 6, history.effective_from, history.effective_to)], _snapshot(price), [history]
+    )
+    assert with_history.rebases == {} and with_history.is_empty
+    deactivated = _stored(price, 5, AS_OF - timedelta(days=30), AS_OF, active=False)
+    assert plan_seed([deactivated, row], _snapshot(price)).rebases == {}
 
 
 def test_a_changed_price_closes_and_opens_at_as_of() -> None:
@@ -317,7 +372,7 @@ def test_a_changed_price_closes_and_opens_at_as_of() -> None:
 
 def test_a_snapshot_not_newer_than_the_open_period_is_skipped() -> None:
     plan = plan_seed([_stored(_price(), 7, LATER)], _snapshot(_price(input="9"), as_of=AS_OF))
-    assert plan.is_empty and len(plan.skipped) == 1
+    assert not plan.inserts and not plan.closes and len(plan.skipped) == 1
 
 
 def test_a_deactivated_open_seed_period_is_left_alone() -> None:
