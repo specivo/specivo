@@ -65,12 +65,38 @@ def test_log_ai_usage_by_hand_on_an_issue(admin_page: Page, api_client: httpx.Cl
     # Back on the issue, on the AI usage tab, with the new entry.
     admin_page.wait_for_url(f"**/issue/{issue['key']}/**")
     panel = admin_page.get_by_test_id("ai-usage-tab-panel")
-    expect(panel.get_by_text(comment)).to_be_visible()
-    expect(panel.get_by_test_id("aiu-total-tokens")).to_have_text("262,000")
+    expect(panel.get_by_test_id("aiu-issue-session")).to_have_count(1)
+    expect(panel.get_by_test_id("aiu-issue-tokens")).to_have_attribute("title", "262,000")
 
     entries = [e for e in _entries(api_client, project["key"]) if e["comments"] == comment]
     assert len(entries) == 1
     assert entries[0]["issue_key"] == issue["key"] and entries[0]["source"] == "manual"
+    console.assert_no_errors()
+
+
+def test_issue_tab_pages_and_charts_without_reload(admin_page: Page, api_client: httpx.Client, project: dict) -> None:
+    """Twelve entries over six days: totals over all of them, a chart, and the sessions a page at a time."""
+    issue = create_issue(api_client, project["key"], "Rebuild the checkout")
+    for i in range(12):
+        _log_via_api(
+            api_client, project["key"], f"Session {i}", issue_id=issue["id"], usage_date=f"2026-03-{10 + i % 6:02d}"
+        )
+    console = ConsoleErrorTracker().attach(admin_page)
+
+    admin_page.goto(f"/issue/{issue['key']}/#ai-usage")
+    panel = admin_page.get_by_test_id("ai-usage-tab-panel")
+    expect(panel.get_by_test_id("aiu-issue-kpis")).to_contain_text("12 entries")
+    expect(panel.locator("#aiu-issue-chart-time[data-sp-drawn]")).to_have_count(1)  # the bundle came with the tab
+    expect(panel.get_by_test_id("aiu-issue-session")).to_have_count(10)
+
+    url = admin_page.url
+    panel.get_by_test_id("aiu-issue-next").click()
+    expect(panel.get_by_test_id("aiu-issue-range")).to_have_text("11–12 of 12")
+    expect(panel.get_by_test_id("aiu-issue-session")).to_have_count(2)
+    expect(panel.get_by_test_id("aiu-issue-kpis")).to_contain_text("12 entries")
+    expect(panel.locator("#aiu-issue-chart-time[data-sp-drawn]")).to_have_count(1)
+    expect(admin_page.locator("#aiu-issue-sessions-title")).to_be_focused()
+    assert admin_page.url == url  # swapped in place; the issue page stays
     console.assert_no_errors()
 
 

@@ -321,7 +321,9 @@ exact version in `frontend/package.json` and bundled by esbuild, not vendored:
   `frontend/js/spend-chart.js` → `dist/js/spend-chart.min.js`, shared by the AI spend reports
   and My AI usage) and loads it from the
   `{% block chart_js %}` of `base.html`, only when there is something to draw. Other pages never
-  download the library.
+  download the library. A chart inside an htmx partial (the issue page's AI usage tab) names
+  the bundle in a `data-sp-chart-src` attribute instead; `frontend/js/modules/issue-ai-usage.js`
+  loads it once when such content is swapped in, and the bundle's own htmx hooks draw later swaps.
 - **SVG renderer**, so charts are sharp at any zoom and need no `<canvas>`.
 - **Theme from CSS custom properties.** Colours, text and font are read at draw time
   (`--sp-text-*`, `--sp-border`, `--sp-bg-elevated`, `--sp-font-body`, and the series palette

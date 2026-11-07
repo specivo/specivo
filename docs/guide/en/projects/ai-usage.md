@@ -78,12 +78,44 @@ For totals per person, model, tool, issue or week, with subscription fees includ
 
 ## On an issue
 
-An issue's **AI usage** tab sits next to the **Time** tab. It loads when you open it and shows the
-totals and entries logged on that issue, with **Log AI usage** to log usage for the issue and
-**Open in the project list** for the filtered project list.
+An issue's **AI usage** tab sits next to the **Time** tab and answers "what did this feature cost
+in AI?". It loads when you open it and shows:
+
+- **Headline numbers**: the spend, the API-equivalent value, the tokens and entries, how many
+  people used AI on the issue, and the first and last day with usage.
+- **Spend by person**: one bar per person in their colour, with the tools they used; the eight
+  largest are shown and the rest are counted. When nothing you can see has a spend (for example
+  subscription usage while seat cost is hidden from you), the bars show the API-equivalent value.
+- **Spend by tool** and **Spend by model**: the largest eight, and one **Other** bar for the rest.
+- **Spend over time** when the usage spans four days or more, per day, week or month like the
+  other AI usage charts. Switch the stack between people, tools and models.
+- **Sessions**: the entries, newest first, 10, 25 or 50 to a page, with the date, person, tool,
+  model, tokens, cost type, spend and branch.
+
+The totals always count every entry of the issue, whatever page of sessions you are on.
+
+When the issue has sub-issues, the numbers include their usage (and the usage on their own
+sub-issues). Choose **This issue only** to leave it out; **With sub-issues** brings it back, and
+the sessions then show which issue each entry was logged on.
+
+The tab follows the rules of the [spend report](ai-spend-reports.md): you see the entries your
+role's *AI usage visibility* allows, and the spend includes seat cost only if you are an
+administrator or can see every entry of the project in the period. Otherwise the tab says that
+seat cost is left out. Excluded entries are not counted; a link lists them in the project.
+
+**Open in project AI usage** opens the project's list filtered by the issue, and **Spend report**
+opens the project's spend report at this issue. **Log AI usage** logs usage for the issue by hand.
+Each view of the tab also has its own address (`/issue/KEY/ai-usage/`), so the sub-issue switch
+and the pages work without JavaScript and can be shared.
 
 ![The AI usage tab of an issue](../../assets/img/ai-usage-issue.webp)
 
+If the tab says no usage is logged yet, usage has not been attributed to the issue. Usage counts
+for an issue when the reporter names it (for example with the `SPECIVO_ISSUE` environment
+variable), when the agent marks the issue it works on through Specivo's MCP server, when the
+session's commits are linked to it, or when the branch name holds its key. See
+[Which issue the usage counts for](../ai-agents/reporting-ai-usage.md#which-issue-the-usage-counts-for).
+You can also move entries to the issue from [My AI usage](#my-ai-usage).
 
 The tab is shown to people who may view or log AI usage in the project.
 

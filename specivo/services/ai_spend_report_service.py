@@ -103,7 +103,7 @@ from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
-from specivo.services.ai_usage_service import AiUsageService, unpriced_models
+from specivo.services.ai_usage_service import AiUsageService, issue_subtree_clause, unpriced_models
 from specivo.services.api_key_scope import is_global_admin
 
 #: Dimensions a report can be grouped by, in their canonical order.
@@ -226,6 +226,8 @@ class ReportFilters:
     without_branch: bool = False
     #: Internal: only these entries (the sessions page of the drill-down prices its page of entries).
     entry_ids: tuple[int, ...] | None = None
+    #: The entries of this issue and of every issue below it (the issue page's AI usage tab).
+    issue_tree_id: int | None = None
 
     @property
     def excludes_seats(self) -> bool:
@@ -238,6 +240,7 @@ class ReportFilters:
             or bool(self.branch)
             or self.without_branch
             or self.entry_ids is not None
+            or self.issue_tree_id is not None
         )
         return (
             narrowed or bool(self.tool or self.model or self.provider) or self.cost_type not in (None, "subscription")
@@ -252,6 +255,8 @@ class ReportFilters:
             out.append(AiUsageEntry.project_id.is_(None))
         if self.entry_ids is not None:
             out.append(AiUsageEntry.id.in_(list(self.entry_ids)))
+        if self.issue_tree_id is not None:
+            out.append(issue_subtree_clause(self.issue_tree_id))
         return out
 
     def cache_parts(self) -> list[Any]:
@@ -269,6 +274,7 @@ class ReportFilters:
             self.branch,
             self.without_branch,
             list(self.entry_ids) if self.entry_ids is not None else None,
+            self.issue_tree_id,
         ]
 
 

@@ -12631,3 +12631,119 @@ msgid_plural "Others (%(count)s people)"
 msgstr[0] "Прочие (%(count)s человек)"
 msgstr[1] "Прочие (%(count)s человека)"
 msgstr[2] "Прочие (%(count)s человек)"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "What this issue cost in AI"
+msgstr "Сколько эта задача стоила в ИИ"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Open in project AI usage"
+msgstr "Открыть в использовании ИИ проекта"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage to count"
+msgstr "Что учитывать"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "With sub-issues"
+msgstr "С подзадачами"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "This issue only"
+msgstr "Только эта задача"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(first)s to %(last)s"
+msgstr "%(first)s — %(last)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Usage on %(count)s day (UTC), amounts in %(currency)s."
+msgid_plural "Usage on %(count)s days (UTC), amounts in %(currency)s."
+msgstr[0] "Использование за %(count)s день (UTC), суммы в %(currency)s."
+msgstr[1] "Использование за %(count)s дня (UTC), суммы в %(currency)s."
+msgstr[2] "Использование за %(count)s дней (UTC), суммы в %(currency)s."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Includes the usage logged on its sub-issues."
+msgstr "Включает использование, записанное на подзадачах."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Only the last three years of usage are counted."
+msgstr "Учитываются только последние три года использования."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "API-equivalent value by person"
+msgstr "API-эквивалент по сотрудникам"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(value)s API value"
+msgstr "%(value)s по ценам API"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per month (UTC)."
+msgstr "По месяцам (UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per week, from Monday (UTC)."
+msgstr "По неделям, с понедельника (UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per quarter or year (UTC)."
+msgstr "По кварталам или годам (UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Per day (UTC)."
+msgstr "По дням (UTC)."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Periods marked * have entries without a price."
+msgstr "В периодах, отмеченных *, есть записи без цены."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "The entries of this issue, newest first"
+msgstr "Записи этой задачи, сначала новые"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Pages of sessions"
+msgstr "Страницы сессий"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Previous page"
+msgstr "Предыдущая страница"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "Page %(num)d"
+msgstr "Страница %(num)d"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Next page"
+msgstr "Следующая страница"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Sessions per page"
+msgstr "Сессий на странице"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+#, python-format
+msgid "%(num)d per page"
+msgstr "%(num)d на странице"
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue or its sub-issues yet."
+msgstr "На этой задаче и её подзадачах пока нет записей об использовании ИИ."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "No AI usage logged on this issue yet."
+msgstr "На этой задаче пока нет записей об использовании ИИ."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "Usage counts for an issue when its reporter names the issue (for example with the SPECIVO_ISSUE environment variable), when the agent marks the issue it works on through Specivo's MCP server, when the session's commits are linked to it, or when the branch name holds its key. You can also log usage by hand or move entries here from My AI usage."
+msgstr "Использование относится к задаче, когда отправитель указывает её (например, через переменную окружения SPECIVO_ISSUE), когда агент отмечает задачу, над которой работает, через MCP-сервер Specivo, когда коммиты сессии связаны с ней или когда имя ветки содержит её ключ. Можно также записать использование вручную или перенести сюда записи из раздела «Моё использование ИИ»."
+
+#: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html
+msgid "How usage is attributed to an issue"
+msgstr "Как использование относится к задаче"

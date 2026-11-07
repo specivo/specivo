@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+{#
+  An issue's AI usage as a page of its own (ai_issue_usage.issue_ai_usage_page): the issue tab's
+  links lead here without JavaScript, and the view can be shared. The body is the tab itself.
+#}
+
+{% block title %}{% trans %}AI usage{% endtrans %} - {{ issue.display_key }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": issue.display_key, "url": "/issue/" ~ issue.display_key ~ "/"},
+  {"label": _("AI usage")}
+]) }}
+
+<div class="page-header">
+  <h1><a class="issue-key" href="/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a> {{ issue.subject }}</h1>
+</div>
+
+<div id="issue-ai-usage-tab" data-testid="ai-usage-page">
+  {% include "pages/ai_usage/_issue_tab.html" %}
+</div>
+{% endblock %}
+
+{# The chart bundle (Apache ECharts) loads only when there is a chart to draw. #}
+{% block chart_js %}{% if summary and summary.chart %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

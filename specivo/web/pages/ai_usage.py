@@ -1,8 +1,8 @@
-"""Web pages for AI usage: the project tab, the issue panel, My AI usage and the manual entry form.
+"""Web pages for AI usage: the project tab, My AI usage and the manual entry form.
 
 - ``/projects/{key}/ai-usage/``: the project's entries the reader may see,
   with filters and totals in the project's reporting currency.
-- ``/partials/issues/{key}/ai-usage/``: the issue tab, loaded when opened.
+- the issue tab (``/partials/issues/{key}/ai-usage/``) is :mod:`specivo.web.pages.ai_issue_usage`.
 - ``/my/ai-usage/``: the entries logged in the reader's name across projects,
   unassigned ones included, with bulk reassignment to a project or issue.
 - ``/projects/{key}/ai-usage/new/`` and ``/my/ai-usage/new/``: log usage by hand.
@@ -886,49 +886,6 @@ async def project_ai_usage(
             "notice": notice if notice in _NOTICES else "",
             "error": error if error in _LIST_ERRORS else "",
             **await _filter_choices(db),
-        },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Issue tab
-# ---------------------------------------------------------------------------
-
-
-@router.get("/partials/issues/{issue_ref}/ai-usage/", response_class=HTMLResponse)
-async def issue_ai_usage_partial(
-    issue_ref: str,
-    request: Request,
-    user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """The issue's AI usage tab (loaded when opened): totals and the entries the reader may see."""
-    try:
-        issue = await _issues.get_by_display_key(db, issue_ref, user=user)
-    except NotFoundError:
-        return HTMLResponse("", status_code=404)
-    project = await _project_for(db, user, issue.project_key)
-    entries, total = await _service.list_entries(db, user, project=project, issue_id=issue.id, limit=100)
-    refs = await _service.references(db, user, entries)
-    summary = await _service.summarize_entries(db, user, project=project, issue_id=issue.id)
-    currency = await CurrencyService().reporting_currency_for(db, project)
-    can_log = await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
-    return_to = f"/issue/{issue.display_key}/#ai-usage"
-    return get_templates().TemplateResponse(
-        request,
-        "pages/ai_usage/_issue_tab.html",
-        context={
-            "user": user,
-            "issue": issue,
-            "project": project,
-            "rows": await _rows(db, user, entries, refs),
-            "total": total,
-            "totals": await _totals(db, summary, currency),
-            "can_log": can_log,
-            "return_to": return_to,
-            "log_url": f"/projects/{project.key}/ai-usage/new/?"
-            + urlencode({"issue": issue.display_key, "next": return_to}),
-            "list_url": f"/projects/{project.key}/ai-usage/?" + urlencode({"issue": issue.display_key}),
         },
     )
 
