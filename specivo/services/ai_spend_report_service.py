@@ -136,6 +136,8 @@ _COLUMNS = {
     "branch": AiUsageEntry.git_branch,
     # Internal only (never in GROUP_BY, so no report groups by plan): the charts' seat breakdown.
     "subscription": AiUsageEntry.subscription_id,
+    # Internal only: one row per entry, for the drill-down's page of entries (always with ``entry_ids``).
+    "entry": AiUsageEntry.id,
 }
 #: Issue key of entries on an issue the viewer cannot see (their own entries only).
 HIDDEN_ISSUE = 0
@@ -200,18 +202,73 @@ def parse_group_by(value: str | Iterable[str] | None) -> tuple[str, ...]:
 
 @dataclass(frozen=True, slots=True)
 class ReportFilters:
-    """Narrow the entries a report counts (all optional)."""
+    """Narrow the entries a report counts (all optional).
+
+    ``project_id`` and ``unassigned`` (entries without a project) narrow an
+    instance report to one project; a project report is one project already.
+    ``issue_id`` / ``without_issue`` and ``branch`` / ``without_branch`` keep
+    the entries of one issue or branch (or of none). The drill-down of the
+    report pages sets them; callers resolve keys and visibility first (an
+    issue the viewer cannot see is no filter they may use).
+    """
 
     user_id: int | None = None
     tool: str | None = None
     model: str | None = None
     provider: str | None = None
     cost_type: str | None = None
+    project_id: int | None = None
+    unassigned: bool = False
+    issue_id: int | None = None
+    without_issue: bool = False
+    branch: str | None = None
+    without_branch: bool = False
+    #: Internal: only these entries (the sessions page of the drill-down prices its page of entries).
+    entry_ids: tuple[int, ...] | None = None
 
     @property
     def excludes_seats(self) -> bool:
-        """Whether a fee cannot match these filters (it has no tool or model)."""
-        return bool(self.tool or self.model or self.provider) or self.cost_type not in (None, "subscription")
+        """Whether a fee cannot match these filters (it has no tool, model, project, issue or branch)."""
+        narrowed = (
+            self.project_id is not None
+            or self.unassigned
+            or self.issue_id is not None
+            or self.without_issue
+            or bool(self.branch)
+            or self.without_branch
+            or self.entry_ids is not None
+        )
+        return (
+            narrowed or bool(self.tool or self.model or self.provider) or self.cost_type not in (None, "subscription")
+        )
+
+    def conditions(self) -> list[Any]:
+        """The WHERE conditions of the filters ``AiUsageService._list_conditions`` does not take."""
+        out: list[Any] = []
+        if self.project_id is not None:
+            out.append(AiUsageEntry.project_id == self.project_id)
+        if self.unassigned:
+            out.append(AiUsageEntry.project_id.is_(None))
+        if self.entry_ids is not None:
+            out.append(AiUsageEntry.id.in_(list(self.entry_ids)))
+        return out
+
+    def cache_parts(self) -> list[Any]:
+        """Every filter, for a cache key."""
+        return [
+            self.user_id,
+            self.tool,
+            self.model,
+            self.provider,
+            self.cost_type,
+            self.project_id,
+            self.unassigned,
+            self.issue_id,
+            self.without_issue,
+            self.branch,
+            self.without_branch,
+            list(self.entry_ids) if self.entry_ids is not None else None,
+        ]
 
 
 @dataclass
@@ -247,6 +304,28 @@ class ReportRow:
     @property
     def total_tokens(self) -> int:
         return sum(self.tokens.values())
+
+
+@dataclass
+class PersonUsage:
+    """What one person used in a report's entries: tools (slugs), cost types and plan ids."""
+
+    tools: list[str] = field(default_factory=list)
+    cost_types: set[str] = field(default_factory=set)
+    subscription_ids: set[int] = field(default_factory=set)
+
+
+@dataclass
+class DrillFacts:
+    """See :meth:`AiSpendReportService.drill_facts`."""
+
+    people: int = 0
+    #: Days with an entry.
+    days: int = 0
+    #: People per value of the grouped dimension (raw keys: ids, slugs, names; None for none).
+    people_by_key: dict[Any, int] = field(default_factory=dict)
+    #: Per user id.
+    usage: dict[int, PersonUsage] = field(default_factory=dict)
 
 
 @dataclass
@@ -435,19 +514,7 @@ class AiSpendReportService:
         seat_shown = include_seat_cost and seats_allowed
         unallocated_shown = seat_shown and project is None and not filters.excludes_seats
 
-        conditions = await self._usage._list_conditions(
-            session,
-            viewer,
-            project=project,
-            user_id=filters.user_id,
-            date_from=date_from,
-            date_to=date_to,
-            tool=filters.tool,
-            model=filters.model,
-            provider=filters.provider,
-            cost_type=filters.cost_type,
-            excluded=False,
-        )
+        conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
         raw = await self._grouped_rows(session, conditions, dims)
         visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
         builder = _RowBuilder(dims, period)
@@ -496,6 +563,126 @@ class AiSpendReportService:
             unpriced_models=missing,
             requested_period=requested_period if requested_period != period else None,
         )
+
+    async def conditions(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        date_from: date,
+        date_to: date,
+        filters: ReportFilters,
+    ) -> list[Any]:
+        """The WHERE conditions of the counted entries a report of *viewer* covers (visibility included)."""
+        conditions = await self._usage._list_conditions(
+            session,
+            viewer,
+            project=project,
+            user_id=filters.user_id,
+            date_from=date_from,
+            date_to=date_to,
+            tool=filters.tool,
+            model=filters.model,
+            provider=filters.provider,
+            cost_type=filters.cost_type,
+            issue_id=filters.issue_id,
+            without_issue=filters.without_issue,
+            branch=filters.branch,
+            without_branch=filters.without_branch,
+            excluded=False,
+        )
+        return [*conditions, *filters.conditions()]
+
+    async def entry_spend(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None,
+        date_from: date,
+        date_to: date,
+        entry_ids: Sequence[int],
+        currency: str | None = None,
+        rate_policy: str | RatePolicy | None = None,
+        include_seat_cost: bool = True,
+    ) -> dict[int, ReportRow]:
+        """The report row of each of *entry_ids* (a page of entries), by entry id.
+
+        The same rules as :meth:`report`: an entry's seat share is its part
+        of its holder's fee for the month (weighted over all of the holder's
+        entries of the month), shown only to a viewer who may see seat cost.
+        Bounded by the page: the caller passes at most one page of ids.
+        """
+        if not entry_ids:
+            return {}
+        report = await self._report(
+            session,
+            viewer,
+            project=project,
+            date_from=date_from,
+            date_to=date_to,
+            dims=("entry",),
+            period=None,
+            currency=currency,
+            rate_policy=rate_policy,
+            include_seat_cost=include_seat_cost,
+            filters=ReportFilters(entry_ids=tuple(entry_ids)),
+            sort="key",
+        )
+        return {int(r.key["entry"]): r for r in report.rows if r.key.get("entry") is not None}
+
+    async def drill_facts(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None,
+        date_from: date,
+        date_to: date,
+        filters: ReportFilters,
+        dim: str | None,
+    ) -> DrillFacts:
+        """Who used what in a report's entries: the people, per *dim* value and per person.
+
+        Three grouped queries over the same counted entries the report counts:
+        the number of people and of days, the number of people per value of *dim* (not
+        for ``user``), and per person the tools, cost types and plans used.
+        Plan ids stay here; the caller decides who may see plan names.
+        """
+        conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
+        facts = DrillFacts()
+        people, days = (
+            await session.execute(
+                select(
+                    func.count(func.distinct(AiUsageEntry.user_id)), func.count(func.distinct(AiUsageEntry.usage_date))
+                ).where(*conditions)
+            )
+        ).one()
+        facts.people, facts.days = int(people or 0), int(days or 0)
+        if dim is not None and dim != "user" and dim in _COLUMNS:
+            column = _COLUMNS[dim]
+            stmt = select(column, func.count(func.distinct(AiUsageEntry.user_id))).where(*conditions).group_by(column)
+            facts.people_by_key = {key: int(n) for key, n in (await session.execute(stmt)).all()}
+        stmt_u = (
+            select(
+                AiUsageEntry.user_id,
+                AiUsageEntry.tool_slug,
+                AiUsageEntry.cost_type,
+                AiUsageEntry.subscription_id,
+            )
+            .where(*conditions)
+            .group_by(
+                AiUsageEntry.user_id, AiUsageEntry.tool_slug, AiUsageEntry.cost_type, AiUsageEntry.subscription_id
+            )
+        )
+        for user_id, tool, cost_type, sub_id in (await session.execute(stmt_u)).all():
+            usage = facts.usage.setdefault(user_id, PersonUsage())
+            if tool not in usage.tools:
+                usage.tools.append(tool)
+            usage.cost_types.add(cost_type)
+            if sub_id is not None and cost_type == "subscription":
+                usage.subscription_ids.add(sub_id)
+        return facts
 
     async def sees_every_entry(
         self, session: AsyncSession, viewer: User, project: Project, date_from: date, date_to: date
@@ -864,6 +1051,13 @@ class _RowBuilder:
         return list(self._rows.values())
 
 
+def fold_rows(rows: list[ReportRow], currency: str, seat_shown: bool) -> ReportRow:
+    """One row summing *rows* (an "other" group of a long report), finished like any row."""
+    row = _totals_row(rows)
+    _finish(row, currency, seat_shown)
+    return row
+
+
 def _totals_row(rows: list[ReportRow]) -> ReportRow:
     total = ReportRow(key={}, period=None)
     for row in rows:
@@ -1025,11 +1219,14 @@ __all__ = [
     "SEAT_RATE_DAY",
     "SORTS",
     "AiSpendReportService",
+    "DrillFacts",
+    "PersonUsage",
     "PolicyKind",
     "ReportFilters",
     "ReportRow",
     "SpendReport",
     "default_range",
+    "fold_rows",
     "parse_group_by",
     "period_end",
     "period_start",

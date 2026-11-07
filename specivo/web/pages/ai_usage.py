@@ -57,6 +57,7 @@ from specivo.services.ai_usage_chart_service import (
     AiUsageChartService,
     Share,
     UsageCharts,
+    color_slots,
 )
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences, UsageSummary
 from specivo.services.currency_service import CurrencyService
@@ -305,6 +306,7 @@ async def _rows(
                 "reported": reported.format(locale) if reported is not None else "",
                 "project_key": refs.project_keys.get(e.project_id, "") if e.project_id is not None else "",
                 "issue_key": issue_key or "",
+                "branch": e.git_branch or "",
                 "comments": e.comments or "",
                 "excluded": e.is_excluded,
                 "editable": editable,
@@ -445,9 +447,13 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
     base = {"currency": charts.currency, "locale": locale}
 
     def stack(keys: list[str], attr: str, labels: dict[str, str]) -> dict[str, Any]:
+        slots = color_slots(keys)
         return {
             "names": [_group_label(labels, k) for k in keys],
             "values": [[_float(getattr(b, attr).get(k, Decimal(0))) for b in charts.buckets] for k in keys],
+            # Group keys and their palette slots: the report tables and person cards take their colours from here.
+            "keys": keys,
+            "colors": [slots[k] for k in keys],
         }
 
     has_spend = charts.has_spend
@@ -458,9 +464,12 @@ def _charts_view(charts: UsageCharts) -> dict[str, Any] | None:
     stacks["tool"] = stack(charts.tools, "api_by_tool", charts.tool_labels)
     stacks["model"] = stack(charts.models, "api_by_model", {})
     if charts.scope == "instance":
+        project_slots = color_slots(charts.projects)
         stacks["project"] = {
             "names": [_project_label(k, charts.project_labels) for k in charts.projects],
             "values": [[_float(b.api_by_project.get(k, Decimal(0))) for b in charts.buckets] for k in charts.projects],
+            "keys": charts.projects,
+            "colors": [project_slots[k] for k in charts.projects],
         }
     time = {
         **base,

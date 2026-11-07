@@ -20,6 +20,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded AI tools and personal AI subscriptions, their coverage and proration rules (§4), and the AI subscription audit events (§18).
 **Revised:** 2026-11-06 — recorded AI spend reports: grouping, conversion, seat allocation and who sees seat cost (§4), and the route order of `/ai-usage/report/` (§4).
 **Revised:** 2026-11-06 — recorded that notifications and mail are rendered per recipient, in their language and timezone, with links built from `APP_URL` (§6).
+**Revised:** 2026-11-07 — recorded the AI spend report drill-down: URL state, narrowing filters and bounds (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -330,7 +331,14 @@ range hidden from them); no report names a plan or shows a fee as such. The quer
 (one grouped query, the subscriptions, the weights, label lookups, at most three statements per conversion target).
 The REST routes (`/projects/{key}/ai-usage/report/`, `/ai-usage/report/`, `format=csv`) are included **before**
 the entries router so `/ai-usage/report/` is not read as an entry id; CSV cells that could start a spreadsheet
-formula are prefixed with `'`.
+formula are prefixed with `'`. The report pages are a drill-down whose whole state is in the URL
+(`group`, incl. `sessions`, and the filters `project`, `user_id`, `issue`, `tool`, `model`, `provider`,
+`cost_type`, `branch`; `-` for none): keys are resolved within what the reader may see, an unknown project or an
+issue they cannot see matches nothing (`ReportFilters.project_id` / `issue_id` = -1), a project report ignores
+`project`, and the project, issue and branch filters leave unallocated seat cost out (`excludes_seats`). A level
+shows at most 30 rows (the rest folded into one "other" row, `fold_rows`); the sessions level pages the entries and
+prices only that page (`entry_spend`, an internal per-entry grouping). Group colours are palette slots by rank of the
+chart on the same page (`color_slots`), so tables, cards and charts agree.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 

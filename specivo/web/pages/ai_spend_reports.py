@@ -1,31 +1,38 @@
 """Web pages for AI spend reports: the project report, the admin "AI spend" page and its entry list.
 
 - ``/projects/{key}/ai-usage/report/``: the project's AI usage the reader may
-  see, grouped and totalled in one currency, with a chart.
+  see, grouped and totalled in one currency.
 - ``/admin/ai-spend/``: the whole instance (administrators), unallocated seat
   cost included.
 - ``/admin/ai-spend/entries/``: the entries behind a cell of the admin
-  report, across projects (drill-through); a project report drills through to
-  the project's "AI usage" tab instead.
+  report, across projects; a project report links the project's "AI usage"
+  tab instead.
 
 Every rule (visibility, seat allocation, who sees seat cost) is
-:class:`AiSpendReportService`'s. The page is a plain GET form. Above the table,
-the AI usage charts of My AI usage (``AiUsageChartService.report_charts``, the
-``usage_charts`` macro) show the same usage over time, by group and as
-subscription leverage; the group chart over the table is drawn by
-``frontend/js/modules/spend-chart.js`` from a ``data-`` attribute, and the
-table holds the same numbers for readers without it. The CSV export is
-the REST endpoint with the same query.
+:class:`AiSpendReportService`'s. Both report pages are a drill-down whose
+whole state is in the URL (:class:`ReportForm`): the grouping (``group``,
+``sessions`` for the entries) and the drill filters (``project``,
+``user_id``, ``issue``, ``tool``, ``model``, ``provider``, ``cost_type``,
+``branch``). A row opens its group: its values become filters and the
+grouping moves on (:data:`DRILL_NEXT`); the path above the title steps back.
+The page renders every level on the server; htmx only swaps a level in
+without a page load (``frontend/js/modules/spend-drill.js`` moves the focus).
+Under the drill-down, "Spend by person" cards, then the AI usage charts
+(``AiUsageChartService.report_charts``, the ``usage_charts`` macro), whose
+stack colours the table swatches and cards share (``color_slots``). Charts
+and cards are cached per reader (:func:`cached_chart_payload`). The CSV
+export is the REST endpoint with the same query.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
+from babel.numbers import format_compact_decimal
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
@@ -34,12 +41,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
-from specivo.core.exchange import ConversionSummary
-from specivo.core.i18n import get_locale
+from specivo.core.i18n import get_locale, ngettext
 from specivo.core.i18n import gettext as _
 from specivo.core.money import currency_display_name
 from specivo.models.ai_subscription import AiSubscription
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
+from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.ai_spend_report_service import (
@@ -48,16 +55,27 @@ from specivo.services.ai_spend_report_service import (
     PERIODS,
     PRESETS,
     AiSpendReportService,
+    DrillFacts,
+    PersonUsage,
     ReportFilters,
     ReportRow,
     SpendReport,
     default_range,
+    fold_rows,
+    normalize_filter_provider,
     period_end,
 )
 from specivo.services.ai_subscription_service import AiToolService
-from specivo.services.ai_usage_chart_service import CHOSEN_SIZES, AiUsageChartService
+from specivo.services.ai_usage_chart_service import (
+    CHOSEN_SIZES,
+    NEUTRAL_SLOT,
+    NO_PROJECT,
+    AiUsageChartService,
+    color_slots,
+)
 from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.currency_service import CurrencyService
+from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import ai_usage_visibility
 from specivo.services.project_service import ProjectService
 from specivo.web.deps import get_templates, require_user
@@ -80,6 +98,7 @@ router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
 _reports = AiSpendReportService()
 _usage = AiUsageService()
 _projects = ProjectService()
+_issues = IssueService()
 
 ADMIN_URL = "/admin/ai-spend/"
 ADMIN_ENTRIES_URL = "/admin/ai-spend/entries/"
@@ -91,10 +110,59 @@ CHART_MAX_ROWS = 40
 # The report form
 # ---------------------------------------------------------------------------
 
+#: The "Sessions" level of the drill-down: the entries themselves, a page at a time.
+SESSIONS = "sessions"
+#: Drill filters in breadcrumb order, and the form field of each.
+DRILL_ORDER: tuple[str, ...] = ("project", "user", "issue", "tool", "model", "provider", "cost_type", "branch")
+FILTER_FIELD = {
+    "project": "project",
+    "user": "user_id",
+    "issue": "issue",
+    "tool": "tool",
+    "model": "model",
+    "provider": "provider",
+    "cost_type": "cost_type",
+    "branch": "branch",
+}
+#: Where a click on a row of each grouping leads: the first of these not filtered yet, else the sessions.
+DRILL_NEXT: dict[str, tuple[str, ...]] = {
+    "project": ("user", "issue"),
+    "user": ("issue",),
+    "issue": (),
+    "tool": ("user", "issue"),
+    "model": ("user", "issue"),
+    "provider": ("model", "user", "issue"),
+    "cost_type": ("user", "issue"),
+    "branch": (),
+}
+#: Rows of a drill-down table; the rest are summed into one "other" row (the CSV has them all).
+DRILL_MAX_ROWS = 30
+#: Bars of the "Spend by ..." card.
+SIDE_BARS = 8
+#: Person cards at most; the rest are counted.
+PEOPLE_MAX = 60
+#: Page sizes of the sessions level.
+SESSION_LIMITS = (10, 25, 50)
+
+
+def next_group(dim: str, filtered: set[str], instance: bool) -> str:
+    """The grouping after a click on a *dim* row, *filtered* holding every drill filter then set."""
+    for option in DRILL_NEXT.get(dim, ()):
+        if option not in filtered and (instance or option != "project"):
+            return option
+    return SESSIONS
+
 
 @dataclass
 class ReportForm:
-    """The report parameters as typed, cleaned; unknown values fall back to the defaults."""
+    """The report parameters as typed, cleaned; unknown values fall back to the defaults.
+
+    Besides the report's own filters, the drill-down state lives here (and so
+    in the URL): ``project`` (instance report: a key, ``-`` for unassigned),
+    ``issue`` (a key, ``-`` for none), ``branch`` (``-`` for none),
+    ``provider``, the grouping ``group`` (``sessions``: the entries), the
+    sessions page (``offset``, ``limit``) and ``detail`` (every amount column).
+    """
 
     preset: str = "30d"
     from_date: str = ""
@@ -112,31 +180,62 @@ class ReportForm:
     cost_type: str = ""
     #: Time bucket of the charts ("" automatic); only a wish, the chart service caps the points.
     bucket: str = ""
+    project: str = ""
+    issue: str = ""
+    branch: str = ""
+    provider: str = ""
+    offset: int = 0
+    limit: int = 25
+    detail: str = ""
+    #: No grouping was asked for: the page picks its own (project on the instance report, user on a project's).
+    group_missing: bool = False
 
     @classmethod
-    def read(cls, **raw: str) -> ReportForm:
+    def read(cls, **raw: str | None) -> ReportForm:
+        def text(name: str) -> str:
+            return (raw.get(name) or "").strip()
+
+        group_raw = raw.get("group")
+        group = (group_raw or "").strip()
+        offset, limit = text("offset"), text("limit")
         form = cls(
-            preset=raw.get("preset", "") if raw.get("preset", "") in PRESETS else "",
-            from_date=raw.get("from_date", "") if _parse_date(raw.get("from_date")) else "",
-            to_date=raw.get("to_date", "") if _parse_date(raw.get("to_date")) else "",
-            group=raw.get("group", "user") if raw.get("group", "user") in (*GROUP_BY, "") else "user",
-            group2=raw.get("group2", "") if raw.get("group2", "") in GROUP_BY else "",
-            period=raw.get("period", "") if raw.get("period", "") in PERIODS else "",
-            currency=raw.get("currency", "").strip().upper()[:3],
-            policy=raw.get("policy", "") if raw.get("policy", "") in ("entry_date", "latest") else "entry_date",
-            seats="off" if raw.get("seats") == "off" else "on",
-            sort="spend" if raw.get("sort") == "spend" else "key",
-            user_id=raw.get("user_id", "").strip() if raw.get("user_id", "").strip().isdigit() else "",
-            tool=raw.get("tool", "").strip().lower()[:50],
-            model=raw.get("model", "").strip()[:200],
-            cost_type=raw.get("cost_type", "") if raw.get("cost_type", "") in AI_USAGE_COST_TYPES else "",
-            bucket=raw.get("bucket", "") if raw.get("bucket", "") in CHOSEN_SIZES else "",
+            preset=text("preset") if text("preset") in PRESETS else "",
+            from_date=text("from_date") if _parse_date(text("from_date")) else "",
+            to_date=text("to_date") if _parse_date(text("to_date")) else "",
+            group=group if group in (*GROUP_BY, SESSIONS, "") else "user",
+            group2=text("group2") if text("group2") in GROUP_BY else "",
+            period=text("period") if text("period") in PERIODS else "",
+            currency=text("currency").upper()[:3],
+            policy=text("policy") if text("policy") in ("entry_date", "latest") else "entry_date",
+            seats="off" if text("seats") == "off" else "on",
+            sort="spend" if text("sort") == "spend" else "key",
+            user_id=text("user_id") if text("user_id").isdigit() else "",
+            tool=text("tool").lower()[:50],
+            model=text("model")[:200],
+            cost_type=text("cost_type") if text("cost_type") in AI_USAGE_COST_TYPES else "",
+            bucket=text("bucket") if text("bucket") in CHOSEN_SIZES else "",
+            project=text("project").upper()[:50],
+            issue=text("issue").upper()[:50],
+            branch=text("branch")[:255],
+            provider=text("provider").lower()[:50],
+            offset=int(offset) if offset.isdigit() and int(offset) < 10_000_000 else 0,
+            limit=int(limit) if limit.isdigit() and int(limit) in SESSION_LIMITS else 25,
+            detail="1" if text("detail") == "1" else "",
+            group_missing=group_raw is None,
         )
-        if form.group2 == form.group:
+        if form.group2 == form.group or form.group == SESSIONS:
             form.group2 = ""
         if not form.preset:
             form.preset = "custom" if form.from_date or form.to_date else "30d"
         return form
+
+    def for_scope(self, instance: bool) -> ReportForm:
+        """Apply the scope: a project report has no project filter; the default grouping depends on the scope."""
+        if not instance:
+            self.project = ""
+        if self.group_missing:
+            self.group = "project" if instance else "user"
+        return self
 
     def dates(self) -> tuple[date, date]:
         if self.preset == "custom":
@@ -145,11 +244,22 @@ class ReportForm:
         return default_range(self.preset)
 
     @property
+    def sessions(self) -> bool:
+        return self.group == SESSIONS
+
+    @property
     def group_by(self) -> list[str]:
+        """The report's grouping; the sessions level groups by model (its "Spend by model" card)."""
+        if self.sessions:
+            return ["model"]
         return [g for g in (self.group, self.group2) if g]
 
-    def query(self, **override: str) -> str:
-        values = {
+    def filtered(self) -> list[str]:
+        """The drill filters set, in breadcrumb order."""
+        return [d for d in DRILL_ORDER if getattr(self, FILTER_FIELD[d])]
+
+    def query(self, **override: Any) -> str:
+        values: dict[str, Any] = {
             "preset": self.preset,
             "from_date": self.from_date if self.preset == "custom" else "",
             "to_date": self.to_date if self.preset == "custom" else "",
@@ -160,14 +270,27 @@ class ReportForm:
             "policy": self.policy if self.policy != "entry_date" else "",
             "seats": "off" if self.seats == "off" else "",
             "sort": self.sort if self.sort != "key" else "",
+            "project": self.project,
             "user_id": self.user_id,
+            "issue": self.issue,
             "tool": self.tool,
             "model": self.model,
+            "provider": self.provider,
             "cost_type": self.cost_type,
+            "branch": self.branch,
             "bucket": self.bucket,
+            "detail": self.detail,
+            "offset": str(self.offset) if self.offset else "",
+            "limit": str(self.limit) if self.limit != 25 else "",
             **override,
         }
+        if values.get("group") != SESSIONS:
+            values["offset"] = values["limit"] = ""
         return urlencode({k: v for k, v in values.items() if v})
+
+    def level_query(self, group: str, **override: Any) -> str:
+        """The query of another level: *group*, without "then by", period bucket or page."""
+        return self.query(group=group, group2="", period="", offset="", limit="", **override)
 
     def api_query(self, report: SpendReport) -> str:
         """The REST query of the same report (for the CSV link)."""
@@ -180,10 +303,14 @@ class ReportForm:
             "rate_policy": self.policy,
             "include_seat_cost": "false" if self.seats == "off" else "true",
             "sort": self.sort,
+            "project": self.project if report.project is None else "",
             "user_id": self.user_id,
+            "issue": self.issue,
             "tool": self.tool,
             "model": self.model,
+            "provider": self.provider,
             "cost_type": self.cost_type,
+            "branch": self.branch,
             "format": "csv",
         }
         return urlencode({k: v for k, v in values.items() if v != ""})
@@ -193,7 +320,7 @@ def _form_params(
     preset: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
-    group: str = Query("user"),
+    group: str | None = Query(None),
     group2: str = Query(""),
     period: str = Query(""),
     currency: str = Query(""),
@@ -205,6 +332,13 @@ def _form_params(
     model: str = Query(""),
     cost_type: str = Query(""),
     bucket: str = Query(""),
+    project: str = Query(""),
+    issue: str = Query(""),
+    branch: str = Query(""),
+    provider: str = Query(""),
+    offset: str = Query(""),
+    limit: str = Query(""),
+    detail: str = Query(""),
 ) -> ReportForm:
     return ReportForm.read(
         preset=preset,
@@ -222,17 +356,105 @@ def _form_params(
         model=model,
         cost_type=cost_type,
         bucket=bucket,
+        project=project,
+        issue=issue,
+        branch=branch,
+        provider=provider,
+        offset=offset,
+        limit=limit,
+        detail=detail,
     )
+
+
+@dataclass
+class Scope:
+    """The drill filters resolved: what the report counts, and how to name each filter."""
+
+    filters: ReportFilters
+    #: The project of the project filter (instance report), for the entry list.
+    selected: Project | None = None
+    #: Breadcrumb label per drill filter.
+    labels: dict[str, str] = field(default_factory=dict)
+    #: The subject of the issue filter, when the reader may see it.
+    issue_subject: str = ""
+
+
+async def _resolve(db: AsyncSession, user: User, project: Project | None, form: ReportForm) -> Scope:
+    """The report filters of *form*: project and issue keys resolved, within what *user* may see.
+
+    An unknown project, or an issue the reader cannot see (or of another
+    project on a project report), matches nothing rather than being ignored,
+    so a shared link never shows more than it says.
+    """
+    scope = Scope(filters=ReportFilters())
+    project_id: int | None = None
+    unassigned = False
+    if project is None and form.project:
+        if form.project == NONE_VALUE:
+            unassigned = True
+            scope.labels["project"] = _("Unassigned")
+        else:
+            try:
+                scope.selected = await _projects.get_by_key(db, form.project)
+                project_id = scope.selected.id
+            except NotFoundError:
+                project_id = -1
+            scope.labels["project"] = form.project
+    issue_id: int | None = None
+    if form.issue == NONE_VALUE:
+        scope.labels["issue"] = _("No issue")
+    elif form.issue:
+        issue_id = -1
+        try:
+            found = await _issues.get_by_display_key(db, form.issue, user=user)
+        except NotFoundError:
+            found = None
+        within = project or scope.selected
+        if found is not None and (within is None or found.project_id == within.id):
+            issue_id = found.id
+            scope.issue_subject = found.subject
+        scope.labels["issue"] = form.issue
+    if form.user_id:
+        person = await db.get(User, int(form.user_id))
+        scope.labels["user"] = (person.display_name or person.login) if person is not None else form.user_id
+    if form.tool:
+        scope.labels["tool"] = (await _tool_names(db)).get(form.tool, form.tool)
+    if form.model:
+        scope.labels["model"] = form.model
+    if form.provider:
+        scope.labels["provider"] = form.provider
+    if form.cost_type:
+        scope.labels["cost_type"] = _cost_type_text(form.cost_type)
+    if form.branch:
+        scope.labels["branch"] = _("No branch") if form.branch == NONE_VALUE else form.branch
+    scope.filters = ReportFilters(
+        user_id=int(form.user_id) if form.user_id else None,
+        tool=form.tool or None,
+        model=form.model or None,
+        provider=normalize_filter_provider(form.provider),
+        cost_type=form.cost_type or None,
+        project_id=project_id,
+        unassigned=unassigned,
+        issue_id=issue_id,
+        without_issue=form.issue == NONE_VALUE,
+        branch=form.branch if form.branch and form.branch != NONE_VALUE else None,
+        without_branch=form.branch == NONE_VALUE,
+    )
+    return scope
+
+
+def _cost_type_text(value: str) -> str:
+    return {
+        "subscription": _("Subscription"),
+        "api": _("API (pay per use)"),
+        "local": _("Local model"),
+        "free": _("Free"),
+    }.get(value, _("Unknown"))
 
 
 # ---------------------------------------------------------------------------
 # View model
 # ---------------------------------------------------------------------------
-
-
-def _number(summary: ConversionSummary | None) -> float:
-    """A converted total as a float, for the chart only (the table shows the exact amount)."""
-    return float(summary.total.amount) if summary is not None else 0.0
 
 
 def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
@@ -291,6 +513,7 @@ def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str
         "unpriced": row.unpriced_entries,
         "requests": _fmt_int(row.request_count, locale),
         "tokens": _fmt_int(row.total_tokens, locale),
+        "tokens_short": _short_int(row.total_tokens, locale),
         "token_detail": {c: _fmt_int(n, locale) for c, n in row.tokens.items()},
         "marginal": _money_view(row.marginal, locale) if row.marginal else None,
         "api_equivalent": _money_view(row.api_equivalent, locale) if row.api_equivalent else None,
@@ -305,6 +528,16 @@ def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str
     }
 
 
+def _short_int(value: int, locale: str) -> str:
+    """A count in short form (``22.9B``, ``761.6M``) in the reader's locale; the full count goes in a title."""
+    if abs(value) < 10_000:
+        return _fmt_int(value, locale)
+    try:
+        return str(format_compact_decimal(value, format_type="short", locale=locale, fraction_digits=1))
+    except (ValueError, LookupError):
+        return _fmt_int(value, locale)
+
+
 def _cell_text(cell: dict[str, Any]) -> str:
     """A row cell as plain text (chart labels), in the reader's language."""
     kind, dim = cell["kind"], cell["dim"]
@@ -315,13 +548,7 @@ def _cell_text(cell: dict[str, Any]) -> str:
     if kind == "none":
         return {"project": _("Unassigned"), "issue": _("No issue"), "branch": _("No branch")}.get(dim, "–")
     if dim == "cost_type":
-        labels = {
-            "subscription": _("Subscription"),
-            "api": _("API (pay per use)"),
-            "local": _("Local model"),
-            "free": _("Free"),
-        }
-        return labels.get(cell["value"], _("Unknown"))
+        return _cost_type_text(cell["value"])
     return str(cell["label"])
 
 
@@ -367,24 +594,6 @@ def _rates_view(report: SpendReport) -> list[dict[str, str]]:
     return out
 
 
-def _chart(report: SpendReport, views: list[dict[str, Any]]) -> dict[str, Any]:
-    """The chart's data: spend per period bucket and group, or spend and API-equivalent value per group."""
-    points = []
-    for row, view in zip(report.rows[: CHART_MAX_ROWS * 10], views, strict=False):
-        label = " · ".join(_cell_text(c) for c in view["cells"]) or _("All usage")
-        points.append(
-            {
-                "period": view["period"],
-                "label": label,
-                "spend": _number(row.total_spend),
-                "api": _number(row.api_equivalent),
-            }
-        )
-    if not report.period:
-        points = points[:CHART_MAX_ROWS]
-    return {"currency": report.currency, "period": report.period or "", "points": points, "locale": get_locale()}
-
-
 def _bucket_links(base_url: str, form: ReportForm) -> list[dict[str, Any]]:
     """The charts' bucket switch: automatic, or a size the reader picks (the server still caps the points)."""
     out = []
@@ -401,10 +610,43 @@ def _bucket_links(base_url: str, form: ReportForm) -> list[dict[str, Any]]:
     return out
 
 
+def _version_stmt(project: Project | None) -> Any:
+    """What changes when the reported data does: the scope's entries and the plans (count and latest change)."""
+    version = select(
+        func.count(AiUsageEntry.id),
+        func.max(AiUsageEntry.updated_at),
+        select(func.count(AiSubscription.id)).scalar_subquery(),
+        select(func.max(AiSubscription.updated_at)).scalar_subquery(),
+    )
+    if project is not None:
+        version = version.where(AiUsageEntry.project_id == project.id)
+    return version
+
+
+async def _cache_parts(db: AsyncSession, user: User, project: Project | None, report: SpendReport) -> dict[str, Any]:
+    """The cache key parts of a view of *report*: the scope, the reader and what they may see, every filter."""
+    policy = report.rate_policy
+    return {
+        "scope": report.scope,
+        "project": project.id if project is not None else None,
+        "viewer": user.id,
+        "admin": bool(user.is_admin),
+        "visibility": await ai_usage_visibility(db, user, project) if project is not None else "",
+        "seat_shown": report.seat_cost_shown,
+        "seat_hidden": report.seat_cost_hidden,
+        "currency": report.currency,
+        "policy": [policy.kind.value, policy.max_age_days, policy.fixed_on],
+        "from": report.date_from.isoformat(),
+        "to": report.date_to.isoformat(),
+        "filters": report.filters.cache_parts(),
+        "seats": report.include_seat_cost,
+    }
+
+
 async def _charts(
     db: AsyncSession, user: User, project: Project | None, form: ReportForm, report: SpendReport
 ) -> dict[str, Any] | None:
-    """The charts above the report table, from Redis when the same view was built in the last minute.
+    """The charts of the report, from Redis when the same view was built in the last minute.
 
     The cache key holds the scope, the reader, what the reader may see (their
     project visibility and whether seat cost is shown), every filter and the
@@ -428,39 +670,10 @@ async def _charts(
         )
         return _charts_view(charts)
 
-    version = select(
-        func.count(AiUsageEntry.id),
-        func.max(AiUsageEntry.updated_at),
-        select(func.count(AiSubscription.id)).scalar_subquery(),
-        select(func.max(AiSubscription.updated_at)).scalar_subquery(),
-    )
-    if project is not None:
-        version = version.where(AiUsageEntry.project_id == project.id)
-    policy = report.rate_policy
-    parts = {
-        "scope": report.scope,
-        "project": project.id if project is not None else None,
-        "viewer": user.id,
-        "admin": bool(user.is_admin),
-        "visibility": await ai_usage_visibility(db, user, project) if project is not None else "",
-        "seat_shown": report.seat_cost_shown,
-        "seat_hidden": report.seat_cost_hidden,
-        "currency": report.currency,
-        "policy": [policy.kind.value, policy.max_age_days, policy.fixed_on],
-        "from": report.date_from.isoformat(),
-        "to": report.date_to.isoformat(),
-        "filters": [
-            report.filters.user_id,
-            report.filters.tool,
-            report.filters.model,
-            report.filters.provider,
-            report.filters.cost_type,
-        ],
-        "seats": report.include_seat_cost,
-        "bucket": form.bucket,
-    }
+    parts = await _cache_parts(db, user, project, report)
+    parts["bucket"] = form.bucket
     prefix = f"aiu:spend-charts:{report.scope}:{project.id if project is not None else 0}:{user.id}"
-    return await cached_chart_payload(db, prefix, parts, version, build)
+    return await cached_chart_payload(db, prefix, parts, _version_stmt(project), build)
 
 
 async def _context(db: AsyncSession, report: SpendReport | None, form: ReportForm) -> dict[str, Any]:
@@ -484,7 +697,6 @@ async def _context(db: AsyncSession, report: SpendReport | None, form: ReportFor
         context.update(
             rows=views,
             totals=_row_view(report, report.totals, form, locale),
-            chart=_chart(report, views),
             rate_dates=[d.isoformat() for d in report.rate_dates],
             rates_used=_rates_view(report),
             unpriced_models=[{"model": m, "count": n} for m, n in report.unpriced_models],
@@ -493,7 +705,7 @@ async def _context(db: AsyncSession, report: SpendReport | None, form: ReportFor
 
 
 async def _run(
-    db: AsyncSession, user: User, project: Project | None, form: ReportForm
+    db: AsyncSession, user: User, project: Project | None, form: ReportForm, scope: Scope
 ) -> tuple[SpendReport | None, dict[str, str]]:
     first, last = form.dates()
     try:
@@ -504,16 +716,11 @@ async def _run(
             date_from=first,
             date_to=last,
             group_by=form.group_by,
-            period=form.period or None,
+            period=None if form.sessions else form.period or None,
             currency=form.currency or None,
             rate_policy=form.policy,
             include_seat_cost=form.seats != "off",
-            filters=ReportFilters(
-                user_id=int(form.user_id) if form.user_id else None,
-                tool=form.tool or None,
-                model=form.model or None,
-                cost_type=form.cost_type or None,
-            ),
+            filters=scope.filters,
             sort=form.sort,
         )
     except PermissionDeniedError:
@@ -524,8 +731,593 @@ async def _run(
 
 
 # ---------------------------------------------------------------------------
+# Drill-down
+# ---------------------------------------------------------------------------
+
+
+def _spend(row: ReportRow) -> Decimal:
+    return row.total_spend.total.amount if row.total_spend is not None else Decimal(0)
+
+
+def _chart_key(dim: str, value: Any) -> str:
+    """A row key as the chart stacks name it (``ai_usage_chart_service``)."""
+    if dim == "project" and value is None:
+        return NO_PROJECT
+    return "" if value is None else str(value)
+
+
+def _slot_map(dim: str, charts: dict[str, Any] | None, rows: list[ReportRow]) -> tuple[dict[str, int], bool]:
+    """Colour slots by chart key: the chart's on the page when it stacks *dim*, else by spend rank.
+
+    Returns ``(slots, from_chart)``; with a chart, groups it folded into
+    "other" are grey there and here.
+    """
+    stacks = ((charts or {}).get("time") or {}).get("stacks") or {}
+    stack = stacks.get(dim)
+    if stack and stack.get("keys") and stack.get("colors"):
+        return {str(k): int(c) for k, c in zip(stack["keys"], stack["colors"], strict=False)}, True
+    ranked = sorted(rows, key=lambda r: -_spend(r))
+    return color_slots(_chart_key(dim, r.key.get(dim)) for r in ranked), False
+
+
+def _slot(slots: tuple[dict[str, int], bool], dim: str, value: Any) -> int:
+    return slots[0].get(_chart_key(dim, value), NEUTRAL_SLOT)
+
+
+def _share(part: Decimal, whole: Decimal) -> dict[str, Any]:
+    """A share of the total as a bar width (0-100) and a label."""
+    if whole <= 0 or part <= 0:
+        return {"width": 0, "label": "–" if whole <= 0 else "0%"}
+    pct = float(part / whole * 100)
+    label = "<1%" if pct < 1 else f"{round(pct)}%"
+    return {"width": round(min(pct, 100.0), 1), "label": label}
+
+
+def _row_dims(report: SpendReport, row: ReportRow) -> dict[str, str] | None:
+    """The drill filter values of *row*, or None when it cannot be opened (a fee, a hidden issue, no provider)."""
+    if row.seat_only:
+        return None
+    values: dict[str, str] = {}
+    for dim in report.group_by:
+        value = row.key.get(dim)
+        if dim == "user":
+            if value is None:
+                return None
+            values["user_id"] = str(value)
+        elif dim == "project":
+            values["project"] = row.labels.get("project") or NONE_VALUE if value is not None else NONE_VALUE
+        elif dim == "issue":
+            if value == HIDDEN_ISSUE:
+                return None
+            values["issue"] = row.labels.get("issue") or NONE_VALUE if value is not None else NONE_VALUE
+        elif dim == "branch":
+            values["branch"] = value or NONE_VALUE
+        elif value is None or value == "":
+            return None
+        else:
+            values[FILTER_FIELD[dim]] = str(value)
+    return values
+
+
+def _open_url(base_url: str, report: SpendReport, row: ReportRow, form: ReportForm) -> str:
+    """The drill-down URL of *row*: its values as filters, the next grouping, its period's dates."""
+    values = _row_dims(report, row)
+    if values is None or not report.group_by:
+        return ""
+    instance = report.project is None
+    filtered = set(form.filtered()) | set(report.group_by)
+    group = next_group(report.group_by[-1], filtered, instance)
+    if group == "project" and not instance:
+        group = SESSIONS
+    if row.period is not None and report.period is not None:
+        first = max(report.date_from, row.period)
+        last = min(report.date_to, period_end(row.period, report.period))
+        values.update(preset="custom", from_date=first.isoformat(), to_date=last.isoformat())
+    return base_url + "?" + form.level_query(group, **values)
+
+
+def _crumbs(base_url: str, form: ReportForm, scope: Scope, instance: bool, root: str) -> list[dict[str, Any]]:
+    """The drill path: the whole report, then each filter in breadcrumb order; each opens its own level."""
+    active = form.filtered()
+    root_group = "project" if instance else "user"
+    out: list[dict[str, Any]] = [
+        {
+            "dim": "",
+            "label": root,
+            "url": base_url + "?" + form.level_query(root_group, **{FILTER_FIELD[d]: "" for d in active}),
+        }
+    ]
+    for i, dim in enumerate(active):
+        cleared = {FILTER_FIELD[d]: "" for d in active[i + 1 :]}
+        group = next_group(dim, set(active[: i + 1]), instance)
+        out.append(
+            {
+                "dim": dim,
+                "label": scope.labels.get(dim) or getattr(form, FILTER_FIELD[dim]),
+                "url": base_url + "?" + form.level_query(group, **cleared),
+            }
+        )
+    out[-1]["current"] = True
+    return out
+
+
+def _tabs(base_url: str, form: ReportForm, instance: bool) -> list[dict[str, Any]]:
+    """The group-by switch: project (instance only), person, feature, tool, model and the sessions."""
+    filtered = set(form.filtered())
+    dims = (["project"] if instance else []) + ["user", "issue", "tool", "model", SESSIONS]
+    return [
+        {
+            "group": dim,
+            "url": base_url + "?" + form.level_query(dim),
+            "active": form.group == dim,
+            "disabled": dim in filtered,
+        }
+        for dim in dims
+    ]
+
+
+def _fold(report: SpendReport) -> tuple[list[ReportRow], ReportRow | None, int]:
+    """The rows a drill-down table shows: all of them, or the largest by spend and one "other" row.
+
+    Only without a period bucket (a row per period and group is the report's
+    time view). Returns ``(rows, other, groups folded)``; the kept rows keep
+    the report's order.
+    """
+    rows = report.rows
+    if report.period or len(rows) <= DRILL_MAX_ROWS:
+        return rows, None, 0
+    ranked = sorted(range(len(rows)), key=lambda i: -_spend(rows[i]))
+    keep = set(ranked[: DRILL_MAX_ROWS - 1])
+    kept = [r for i, r in enumerate(rows) if i in keep]
+    rest = [r for i, r in enumerate(rows) if i not in keep]
+    return kept, fold_rows(rest, report.currency, report.seat_cost_shown), len(rest)
+
+
+def _plural_people(count: int) -> str:
+    return ngettext("%(num)d person", "%(num)d people", count) % {"num": count}
+
+
+def _sub_line(
+    dim: str,
+    row: ReportRow,
+    facts: DrillFacts,
+    tool_names: dict[str, str],
+    subjects: dict[int, str],
+) -> str:
+    """The line under a group's name: who used it (people), or what a person used (tools)."""
+    value = row.key.get(dim)
+    if row.seat_only:
+        return _("Fees of subscriptions without priced usage")
+    if dim == "user":
+        usage = facts.usage.get(value) if value is not None else None
+        return ", ".join(tool_names.get(t, t) for t in usage.tools) if usage else ""
+    if dim == "issue" and value == HIDDEN_ISSUE:
+        return ""
+    people = facts.people_by_key.get(value)
+    parts = []
+    if dim == "issue" and value and subjects.get(value):
+        parts.append(subjects[value])
+    if people:
+        parts.append(_plural_people(people))
+    return " · ".join(parts)
+
+
+async def _issue_subjects(db: AsyncSession, rows: list[ReportRow]) -> dict[int, str]:
+    """Subjects of the issues the rows name (only issues the reader may see carry a label)."""
+    ids = [r.key["issue"] for r in rows if r.key.get("issue") and r.labels.get("issue")]
+    if not ids:
+        return {}
+    stmt = select(Issue.id, Issue.subject).where(Issue.id.in_(ids))
+    return {iid: subject for iid, subject in (await db.execute(stmt)).all()}
+
+
+def _side_card(
+    title_dim: str, views: list[dict[str, Any]], other: dict[str, Any] | None, total: Decimal
+) -> dict[str, Any]:
+    """The "Spend by ..." card: the first rows of the table as bars, and one line saying what they show."""
+    bars = views[:SIDE_BARS]
+    rest = views[SIDE_BARS:]
+    top = max(views, key=lambda v: v["spend_value"], default=None)
+    largest = max((v["spend_value"] for v in bars), default=Decimal(0))
+    items = [
+        {
+            "label": v["name"],
+            "slot": v["slot"],
+            "amount": v["spend_text"],
+            "width": _share(v["spend_value"], largest)["width"],
+        }
+        for v in bars
+    ]
+    groups = len(views) + (other["groups"] if other else 0)
+    summary = ngettext("%(num)d group.", "%(num)d groups.", groups) % {"num": groups}
+    if top is not None and top["spend_value"] > 0:
+        summary += " " + _("Largest: %(name)s with %(amount)s (%(share)s).") % {
+            "name": top["name"],
+            "amount": top["spend_text"],
+            "share": _share(top["spend_value"], total)["label"],
+        }
+    if rest or other:
+        hidden = len(rest) + (other["groups"] if other else 0)
+        summary += " " + ngettext("%(num)d more in the table.", "%(num)d more in the table.", hidden) % {"num": hidden}
+    return {"dim": title_dim, "bars": items, "summary": summary}
+
+
+async def _drill_view(
+    db: AsyncSession,
+    user: User,
+    project: Project | None,
+    form: ReportForm,
+    report: SpendReport,
+    scope: Scope,
+    facts: DrillFacts,
+    charts: dict[str, Any] | None,
+    base_url: str,
+) -> dict[str, Any]:
+    """The drill-down: path, title, tiles, the group switch, the table (or the entries) and the side card."""
+    locale = get_locale()
+    instance = project is None
+    tool_names = await _tool_names(db)
+    root = _("All projects") if instance else project.name if project is not None else ""
+    crumbs = _crumbs(base_url, form, scope, instance, root)
+    title = crumbs[-1]["label"]
+    if form.issue and scope.issue_subject:
+        title = f"{form.issue} · {scope.issue_subject}"
+    total_spend = _spend(report.totals)
+    view: dict[str, Any] = {
+        "crumbs": crumbs,
+        "title": title,
+        "tabs": _tabs(base_url, form, instance),
+        "people": facts.people,
+        "level": form.group if form.group in (*GROUP_BY, SESSIONS) else "",
+        "single": len(report.group_by) == 1 and not report.period,
+    }
+    dim = report.group_by[0] if report.group_by else ""
+    slots = _slot_map(dim, charts, report.rows) if dim else ({}, False)
+    shown, other_row, folded = _fold(report)
+    subjects = await _issue_subjects(db, shown) if dim == "issue" else {}
+
+    def money_text(row: ReportRow) -> str:
+        return row.total_spend.total.format(locale) if row.total_spend is not None else "–"
+
+    views = []
+    for row in shown:
+        item = _row_view(report, row, form, locale)
+        name = _cell_text(item["cells"][0]) if item["cells"] else _("All usage")
+        item.update(
+            name=name,
+            slot=_slot(slots, dim, row.key.get(dim)) if dim else NEUTRAL_SLOT,
+            sub=_sub_line(dim, row, facts, tool_names, subjects) if view["single"] and dim else "",
+            share=_share(_spend(row), total_spend),
+            spend_value=_spend(row),
+            spend_text=money_text(row),
+            open=_open_url(base_url, report, row, form),
+        )
+        views.append(item)
+    other = None
+    if other_row is not None:
+        other = _row_view(report, other_row, form, locale)
+        other.update(
+            groups=folded,
+            share=_share(_spend(other_row), total_spend),
+            spend_value=_spend(other_row),
+            spend_text=money_text(other_row),
+        )
+    view.update(rows=views, other=other)
+    if form.sessions:
+        view["side"] = _side_card("model", views, other, total_spend)
+        view["side"]["summary"] = _sessions_summary(report, facts)
+    elif view["single"] and dim:
+        view["side"] = _side_card(dim, views, other, total_spend)
+    else:
+        view["side"] = None
+    return view
+
+
+def _sessions_summary(report: SpendReport, facts: DrillFacts) -> str:
+    entries = ngettext("%(num)d entry", "%(num)d entries", report.totals.entries) % {"num": report.totals.entries}
+    days = ngettext("%(num)d day", "%(num)d days", facts.days) % {"num": facts.days}
+    models = ngettext("%(num)d model", "%(num)d models", len(report.rows)) % {"num": len(report.rows)}
+    return _("%(entries)s over %(days)s, %(models)s.") % {"entries": entries, "days": days, "models": models}
+
+
+async def _sessions(
+    db: AsyncSession,
+    user: User,
+    project: Project | None,
+    form: ReportForm,
+    report: SpendReport,
+    scope: Scope,
+    charts: dict[str, Any] | None,
+    request: Request,
+) -> dict[str, Any]:
+    """A page of the entries behind the current level, each with its spend (seat share included where shown)."""
+    f = scope.filters
+    entries: list[AiUsageEntry] = []
+    total = 0
+    if f.project_id != -1:
+        entries, total = await _usage.list_entries(
+            db,
+            user,
+            project=project or scope.selected,
+            user_id=f.user_id,
+            date_from=report.date_from,
+            date_to=report.date_to,
+            tool=f.tool,
+            model=f.model,
+            cost_type=f.cost_type,
+            issue_id=f.issue_id,
+            without_issue=f.without_issue,
+            provider=f.provider,
+            branch=f.branch,
+            without_branch=f.without_branch,
+            excluded=False,
+            unassigned=True if f.unassigned else None,
+            offset=form.offset,
+            limit=form.limit,
+        )
+    refs = await _usage.references(db, user, entries)
+    return_to = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+    rows = await _rows(db, user, entries, refs)
+    spend = await _reports.entry_spend(
+        db,
+        user,
+        project=project,
+        date_from=report.date_from,
+        date_to=report.date_to,
+        entry_ids=[e.id for e in entries],
+        currency=report.currency,
+        rate_policy=report.rate_policy,
+        include_seat_cost=report.include_seat_cost,
+    )
+    locale = get_locale()
+    user_slots = _slot_map("user", charts, [])
+    for entry, row in zip(entries, rows, strict=True):
+        priced = spend.get(entry.id)
+        row["spend"] = priced.total_spend.total.format(locale) if priced and priced.total_spend else "–"
+        row["slot"] = _slot(user_slots, "user", entry.user_id)
+        row["tokens_short"] = _short_int(sum(entry.all_tokens().values()), locale)
+    filtered = set(form.filtered())
+    return {
+        "rows": rows,
+        "total": total,
+        "offset": form.offset,
+        "limit": form.limit,
+        "query": form.query(offset="", limit=""),
+        "return_to": return_to,
+        "show_user": "user" not in filtered,
+        "show_project": project is None and "project" not in filtered,
+        "show_tool": "tool" not in filtered,
+        "show_model": "model" not in filtered,
+        "show_issue": "issue" not in filtered,
+    }
+
+
+def _entries_url(report: SpendReport, form: ReportForm) -> str:
+    """The entry list of the current level: the project's AI usage tab, or the admin entry list."""
+    first, last = report.date_from, report.date_to
+    params = {
+        "from_date": first.isoformat(),
+        "to_date": last.isoformat(),
+        "user_id": form.user_id,
+        "tool": form.tool,
+        "model": form.model,
+        "cost_type": form.cost_type,
+        "provider": form.provider,
+        "issue": form.issue,
+        "branch": form.branch,
+        "status": "counted",
+    }
+    if report.project is not None:
+        return f"/projects/{report.project.key}/ai-usage/?" + urlencode({k: v for k, v in params.items() if v})
+    params["project"] = form.project
+    return ADMIN_ENTRIES_URL + "?" + urlencode({k: v for k, v in params.items() if v})
+
+
+# ---------------------------------------------------------------------------
+# Spend by person
+# ---------------------------------------------------------------------------
+
+
+def _initials(name: str) -> str:
+    words = [w for w in name.replace(".", " ").replace("_", " ").split() if w]
+    if len(words) >= 2:
+        return (words[0][0] + words[-1][0]).upper()
+    return name[:2].upper() if name else "?"
+
+
+def _payment(usage: PersonUsage | None, plans: list[str], instance: bool, seat_shown: bool) -> str:
+    """How a person's usage is paid: plan names (instance report), a seat, or the cost types only.
+
+    Plan names only on the instance report (administrators); a project report
+    that shows seat cost says "subscription seat"; without seat cost only the
+    cost types the entries carry.
+    """
+    cost_types = usage.cost_types if usage is not None else set()
+    parts: list[str] = []
+    if "subscription" in cost_types or plans:
+        if seat_shown and instance and plans:
+            parts.extend(plans)
+        elif seat_shown:
+            parts.append(_("Subscription seat"))
+        else:
+            parts.append(_("Subscription"))
+    labels = {"api": _("Pay-per-use API"), "local": _("Local model"), "free": _("Free")}
+    parts.extend(labels[c] for c in ("api", "local", "free") if c in cost_types)
+    return " + ".join(parts)
+
+
+async def _people_view(
+    db: AsyncSession,
+    user: User,
+    project: Project | None,
+    form: ReportForm,
+    report: SpendReport,
+    scope: Scope,
+    facts: DrillFacts,
+    charts: dict[str, Any] | None,
+    base_url: str,
+) -> dict[str, Any] | None:
+    """The "Spend by person" cards of the current level, from Redis when built in the last minute.
+
+    Cached with the same key parts as the charts (scope, reader, what the
+    reader may see, every filter, the data version), so readers never share it.
+    """
+    if form.user_id:
+        return None
+
+    async def build() -> dict[str, Any] | None:
+        if report.group_by == ("user",) and not report.period:
+            by_user = report
+        else:
+            by_user = await _reports.report(
+                db,
+                user,
+                project=project,
+                date_from=report.date_from,
+                date_to=report.date_to,
+                group_by=("user",),
+                currency=report.currency,
+                rate_policy=report.rate_policy,
+                include_seat_cost=report.include_seat_cost,
+                filters=scope.filters,
+                sort=form.sort,
+            )
+        rows = [r for r in by_user.rows if r.key.get("user") is not None]
+        if not rows:
+            return None
+        instance = project is None
+        seat_shown = by_user.seat_cost_shown
+        plans: dict[int, list[str]] = {}
+        if seat_shown and instance:
+            plans = await _plan_names(db, by_user, rows, facts)
+        tool_names = await _tool_names(db)
+        locale = get_locale()
+        slots = _slot_map("user", charts, rows)
+        largest = max((_spend(r) for r in rows), default=Decimal(0))
+        cards = []
+        for row in rows[:PEOPLE_MAX]:
+            uid = row.key["user"]
+            name = row.labels.get("user", "") or str(uid)
+            usage = facts.usage.get(uid)
+            filtered = set(form.filtered()) | {"user"}
+            cards.append(
+                {
+                    "name": name,
+                    "initials": _initials(name),
+                    "slot": _slot(slots, "user", uid),
+                    "spend": row.total_spend.total.format(locale) if row.total_spend is not None else "–",
+                    "width": _share(_spend(row), largest)["width"],
+                    "tools": [tool_names.get(t, t) for t in usage.tools] if usage else [],
+                    "payment": _payment(usage, plans.get(uid, []), instance, seat_shown),
+                    "url": base_url + "?" + form.level_query(next_group("user", filtered, instance), user_id=str(uid)),
+                }
+            )
+        return {"cards": cards, "more": max(0, len(rows) - PEOPLE_MAX)}
+
+    parts = await _cache_parts(db, user, project, report)
+    parts.update(sort=form.sort, level=form.query(offset="", limit="", bucket="", detail=""))
+    prefix = f"aiu:spend-people:{report.scope}:{project.id if project is not None else 0}:{user.id}"
+    return await cached_chart_payload(db, prefix, parts, _version_stmt(project), build)
+
+
+async def _plan_names(
+    db: AsyncSession, report: SpendReport, rows: list[ReportRow], facts: DrillFacts
+) -> dict[int, list[str]]:
+    """Plan names per person (instance report only): plans their entries used, and idle plans whose fee counts."""
+    used = {sid for u in facts.usage.values() for sid in u.subscription_ids}
+    users = [r.key["user"] for r in rows]
+    condition: Any = AiSubscription.id.in_(used) if used else None
+    if report.unallocated_shown:
+        idle = (
+            AiSubscription.user_id.in_(users)
+            & (AiSubscription.starts_on <= report.date_to)
+            & (AiSubscription.ends_on.is_(None) | (AiSubscription.ends_on >= report.date_from))
+        )
+        condition = idle if condition is None else (condition | idle)
+    if condition is None:
+        return {}
+    stmt = select(AiSubscription.user_id, AiSubscription.plan_name).where(condition).order_by(AiSubscription.plan_name)
+    out: dict[int, list[str]] = {}
+    for uid, name in (await db.execute(stmt)).all():
+        if name not in out.setdefault(uid, []):
+            out[uid].append(name)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
+
+
+async def _page(
+    request: Request,
+    response: Response,
+    db: AsyncSession,
+    user: User,
+    project: Project | None,
+    form: ReportForm,
+) -> Response:
+    """Either report page: the report, its drill-down, the person cards and the charts."""
+    instance = project is None
+    form.for_scope(instance)
+    await enforce_ai_report_rate_limit(request, response, user)
+    scope = await _resolve(db, user, project, form)
+    report, error = await _run(db, user, project, form, scope)
+    if project is not None and form.user_id and (report is None or not report.totals.entries):
+        # A person is named on a project report only through entries the reader may see.
+        scope.labels["user"] = form.user_id
+    base_url = ADMIN_URL if instance else f"/projects/{project.key}/ai-usage/report/"  # type: ignore[union-attr]
+    charts = drill = people = sessions = None
+    if report is not None:
+        charts = await _charts(db, user, project, form, report)
+        dim = None if form.sessions or len(report.group_by) != 1 or report.period else report.group_by[0]
+        facts = await _reports.drill_facts(
+            db,
+            user,
+            project=project,
+            date_from=report.date_from,
+            date_to=report.date_to,
+            filters=scope.filters,
+            dim=dim,
+        )
+        drill = await _drill_view(db, user, project, form, report, scope, facts, charts, base_url)
+        if form.sessions:
+            sessions = await _sessions(db, user, project, form, report, scope, charts, request)
+        people = await _people_view(db, user, project, form, report, scope, facts, charts, base_url)
+    if instance:
+        active = (await db.execute(select(User.id, User.login, User.display_name).where(User.status == "active"))).all()
+        members: list[dict[str, Any]] = sorted(
+            ({"id": uid, "name": str(name or login)} for uid, login, name in active), key=lambda m: m["name"].lower()
+        )
+    elif report is not None and report.seat_cost_shown:
+        members = [
+            {"id": m["user_id"], "name": m["display_name"] or m["login"]}
+            for m in await _projects.list_members(db, project)  # type: ignore[arg-type]
+        ]
+    else:
+        members = []
+    context: dict[str, Any] = {
+        "user": user,
+        "active_page": "admin" if instance else "ai_usage",
+        "project": project,
+        "base_url": base_url,
+        "charts": charts,
+        "drill": drill,
+        "people": people,
+        "sessions": sessions,
+        "bucket_links": _bucket_links(base_url, form),
+        "csv_base": "/api/v1/ai-usage/report/" if instance else f"/api/v1/projects/{project.key}/ai-usage/report/",  # type: ignore[union-attr]
+        "entries_url": ADMIN_ENTRIES_URL if instance else f"/projects/{project.key}/ai-usage/",  # type: ignore[union-attr]
+        "level_entries_url": _entries_url(report, form) if report is not None else "",
+        "members": members,
+        "error": error,
+        **await _context(db, report, form),
+    }
+    if not instance:
+        context["active_project"] = project
+    return get_templates().TemplateResponse(
+        request, "pages/ai_usage/report.html", context=context, status_code=422 if error else 200
+    )
 
 
 @router.get("/projects/{project_key}/ai-usage/report/", response_class=HTMLResponse)
@@ -540,30 +1332,7 @@ async def project_spend_report(
     """The project's AI spend report: rows from the entries the reader may see."""
     project = await _projects.get_by_key(db, project_key.upper())
     await _projects.require_project_access(db, project, user)
-    await enforce_ai_report_rate_limit(request, response, user)
-    report, error = await _run(db, user, project, form)
-    charts = await _charts(db, user, project, form, report) if report is not None else None
-    base_url = f"/projects/{project.key}/ai-usage/report/"
-    members = await _projects.list_members(db, project) if report is not None and report.seat_cost_shown else []
-    return get_templates().TemplateResponse(
-        request,
-        "pages/ai_usage/report.html",
-        context={
-            "user": user,
-            "active_page": "ai_usage",
-            "active_project": project,
-            "project": project,
-            "base_url": base_url,
-            "charts": charts,
-            "bucket_links": _bucket_links(base_url, form),
-            "csv_base": f"/api/v1/projects/{project.key}/ai-usage/report/",
-            "entries_url": f"/projects/{project.key}/ai-usage/",
-            "members": [{"id": m["user_id"], "name": m["display_name"] or m["login"]} for m in members],
-            "error": error,
-            **await _context(db, report, form),
-        },
-        status_code=422 if error else 200,
-    )
+    return await _page(request, response, db, user, project, form)
 
 
 @router.get(ADMIN_URL, response_class=HTMLResponse)
@@ -575,30 +1344,7 @@ async def admin_spend_report(
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """The instance's AI spend report, unallocated seat cost included."""
-    await enforce_ai_report_rate_limit(request, response, user)
-    report, error = await _run(db, user, None, form)
-    charts = await _charts(db, user, None, form, report) if report is not None else None
-    people = (await db.execute(select(User.id, User.login, User.display_name).where(User.status == "active"))).all()
-    return get_templates().TemplateResponse(
-        request,
-        "pages/ai_usage/report.html",
-        context={
-            "user": user,
-            "active_page": "admin",
-            "project": None,
-            "base_url": ADMIN_URL,
-            "charts": charts,
-            "bucket_links": _bucket_links(ADMIN_URL, form),
-            "csv_base": "/api/v1/ai-usage/report/",
-            "entries_url": ADMIN_ENTRIES_URL,
-            "members": sorted(
-                ({"id": uid, "name": name or login} for uid, login, name in people), key=lambda m: m["name"].lower()
-            ),
-            "error": error,
-            **await _context(db, report, form),
-        },
-        status_code=422 if error else 200,
-    )
+    return await _page(request, response, db, user, None, form)
 
 
 @router.get(ADMIN_ENTRIES_URL, response_class=HTMLResponse)

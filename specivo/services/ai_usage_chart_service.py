@@ -105,6 +105,34 @@ OTHER = "\x00other"
 NO_PROJECT = "\x00none"
 
 
+#: Series colours of the theme (``--sp-chart-1`` .. ``--sp-chart-8``); the last, a grey, is "other".
+COLOR_SLOTS = 8
+#: The slot of "other", "none" and every group past the first seven.
+NEUTRAL_SLOT = COLOR_SLOTS - 1
+
+
+def color_slots(keys: Iterable[Any]) -> dict[Any, int]:
+    """The colour of each group, by rank: a slot (0-based) of the theme's chart palette.
+
+    *keys* come largest first (as the chart stacks do). The first seven get
+    a colour each, the rest and ``OTHER`` / ``NO_PROJECT`` / empty keys the
+    neutral grey. The spend report pages colour their tables, bars and person
+    cards with the slots of the chart on the same page, so a person or tool
+    has the same colour everywhere on it, and no two of the largest share one.
+    """
+    out: dict[Any, int] = {}
+    rank = 0
+    for key in keys:
+        if key in out:
+            continue
+        if key is None or key == "" or key == OTHER or key == NO_PROJECT or rank >= NEUTRAL_SLOT:
+            out[key] = NEUTRAL_SLOT
+        else:
+            out[key] = rank
+            rank += 1
+    return out
+
+
 def bucket_start(day: date, size: str) -> date:
     """The first day of the *size* bucket holding *day* (weeks start on Monday)."""
     if size == "day":
@@ -436,12 +464,15 @@ class AiUsageChartService:
             model=filters.model,
             provider=filters.provider,
             cost_type=filters.cost_type,
-            issue_id=issue_id,
-            without_issue=without_issue,
-            branch=branch,
-            without_branch=without_branch,
+            issue_id=issue_id if issue_id is not None else filters.issue_id,
+            without_issue=without_issue or filters.without_issue,
+            branch=branch or filters.branch,
+            without_branch=without_branch or filters.without_branch,
             excluded=excluded,
         )
+        # The report's own narrowing (the drill-down's project, issue and branch) follows the
+        # report's rules: seat shares follow the entries (``seat_breakdown`` takes the same filters).
+        conditions = [*conditions, *filters.conditions()]
         out = UsageCharts(currency=currency, scope="instance" if project is None else "project")
         span = await self._span(session, conditions)
         if span is None:

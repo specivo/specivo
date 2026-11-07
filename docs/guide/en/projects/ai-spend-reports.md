@@ -15,6 +15,44 @@ There are two reports:
 
 ![The spend report of a project, per person and week](../../assets/img/ai-spend-project.webp)
 
+## Drill down
+
+Both reports open as a drill-down: tiles with the **spend**, **entries**, **tokens** and **people**
+of what you are looking at, a **Group by** switch, a table and a **Spend by …** card next to it.
+
+- **Group by**: **Project** (on the AI spend page), **Person**, **Feature** (the issue), **Tool**,
+  **Model** or **Sessions**. The AI spend page starts with projects, a project report with people.
+- Each row has a colour, a name and a short line under it (how many people used a tool or worked on
+  an issue, which tools a person used), its entries, tokens, spend and its **share** of the total.
+- **Click a row to open it.** The row becomes a filter and the table moves to the next useful
+  grouping: a project opens its people, a person their issues, an issue its sessions. A tool or a
+  model opens the people who used it.
+- The **path** above the title shows what you opened, for example *All projects › WEB › a person ›
+  WEB-12*. Click any step to go back to it. Groupings already in the path are greyed out
+  in the switch.
+- **Sessions** lists the entries behind the current level, newest first, a page at a time: date,
+  person, tool, model, tokens, cost type, spend, issue and branch. Spend includes the entry's share
+  of its subscription where you may see seat cost. **Open in the entry list** shows the same entries
+  on the AI usage list.
+- **All amount columns** adds pay-per-use, seat cost, API-equivalent value and leverage to the table,
+  with an **Entries** button per row (see [From a number to the entries](#from-a-number-to-the-entries)).
+- A grouping with more than 30 rows shows the 29 largest by spend and one **Other** row with the
+  rest; the CSV lists every row.
+
+Everything you open is in the page address, so you can bookmark a level, reload it or send the
+link to someone. They see it with their own rights: the same filters, only the entries they may see.
+
+## Spend by person
+
+Under the drill-down, **Spend by person** lists everyone in the current selection: their spend, the
+tools they used and how their usage is paid. The colour of a person is the same as in the charts on
+the page. **Show** opens that person in the drill-down.
+
+How usage is paid follows the rules for seat cost below. The AI spend page names each person's plans
+(*Claude Max 20x*, *Pay-per-use API*). A project report that shows seat cost says **Subscription
+seat**, never the plan; anyone else sees only the cost types of the entries (*Subscription*,
+*Pay-per-use API*, *Local model*, *Free*).
+
 ## What the numbers mean
 
 | Measure | What it is |
@@ -62,15 +100,17 @@ private: a project report shows only the shares carried by that project's usage,
 
 ![The AI spend page for the whole instance, per person and project](../../assets/img/ai-spend-admin.webp)
 
+The period buttons are always shown; the other settings are under **Dates, filters and options**.
+
 - **Period**: click **Last 7 days**, **Last 30 days**, **This month** or **Last month**, or pick
   the first and last day yourself. Days are UTC days.
 - **Group by** and **Then by**: person, project (on the AI spend page), issue, tool, provider, model,
   cost type or branch. Choose **Nothing (totals)** for one line.
-- **Per**: split each group per **day**, **week** (from Monday) or **month**. The chart then stacks
-  the spend of each group per period; without it, the chart compares spend and API-equivalent value
-  per group.
+- **Per**: split each group per **day**, **week** (from Monday) or **month**. Opening such a row
+  opens its group for that period's dates.
 - **User**, **Tool**, **Model**, **Cost type**: narrow the usage. Unallocated seat cost has no tool
-  or model, so it is left out when you filter by one.
+  or model, so it is left out when you filter by one, and likewise when you open a project, an issue
+  or a branch.
 - **Currency**: the [reporting currency](../install/currencies.md#reporting-currency) of the project
   (or of the instance on the AI spend page), or any active currency.
 - **Exchange rates**: **Rate of each day** converts each day's amounts with that day's rate (within
@@ -81,7 +121,7 @@ private: a project report shows only the shares carried by that project's usage,
 
 ## Charts
 
-Above the report table, **Charts** show the usage the report counts, with the same filters,
+Below the drill-down, **Charts** show the usage the report counts, with the same filters,
 currency and exchange rates, so they add up to the totals:
 
 - **API-equivalent value and spend over time**, split **by user**, **by tool** or **by model** (and
@@ -114,15 +154,19 @@ too old*). Add the missing rates under **Admin → Exchange rates** and open the
 
 ## From a number to the entries
 
-Every row has an **Entries** button. It opens the AI usage list filtered to that row: the same
-period, person, tool, model, issue, branch and so on. On the AI spend page it opens a list of the
+Opening rows down to **Sessions** shows the entries in the report itself. With **All amount
+columns**, every row also has an **Entries** button. It opens the AI usage list filtered to that row:
+the same period, person, tool, model, issue, branch and so on. On the AI spend page it opens a list of the
 instance's entries, unassigned ones included. Rows on an issue you cannot see have no button.
 
 ## Download
 
-**Download CSV** saves the report as it is shown: one line per row and a total line, the amounts in
-the report's currency, and a column listing amounts that were not converted.
+**Download CSV** saves the report as it is shown, with the filters of the path you opened: one line
+per row (all of them, also those under **Other**) and a total line, the amounts in the report's
+currency, and a column listing amounts that were not converted. At the **Sessions** level it lists
+the spend per model.
 
 The same report is available over the REST API (`GET /api/v1/projects/{key}/ai-usage/report/` and,
-for administrators, `GET /api/v1/ai-usage/report/`, both with `format=csv`) and to AI agents through
+for administrators, `GET /api/v1/ai-usage/report/`, both with `format=csv`; `issue`, `branch` and,
+on the instance report, `project` narrow it like the path, `-` meaning none) and to AI agents through
 the `specivo_ai_usage_report` MCP tool, with the same rules about what each person may see.

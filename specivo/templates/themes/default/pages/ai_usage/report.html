@@ -1,11 +1,13 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, pagination %}
 {% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts with context %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
-  Context: form, report (or None on an error), rows, totals, chart (the group chart over the
-  table), charts (the AI usage charts above it, see ai_usage._charts_view), bucket_links,
+  Context: form, report (or None on an error), rows and totals (the report rows), drill (the
+  drill-down: path, title, tiles, group switch, table rows and the "Spend by ..." card, see
+  ai_spend_reports._drill_view), sessions (the entries of the sessions level), people (the
+  person cards), charts (the AI usage charts, see ai_usage._charts_view), bucket_links,
   members, tools, currencies.
 #}
 
@@ -18,6 +20,29 @@
 {%- elif dim == "model" %}{% trans %}Model{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Cost type{% endtrans %}
 {%- else %}{% trans %}Branch{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro level_label(dim) -%}
+{% if dim == "user" %}{% trans %}Person{% endtrans %}
+{%- elif dim == "project" %}{% trans %}Project{% endtrans %}
+{%- elif dim == "issue" %}{% trans %}Feature{% endtrans %}
+{%- elif dim == "tool" %}{% trans %}Tool{% endtrans %}
+{%- elif dim == "provider" %}{% trans %}Provider{% endtrans %}
+{%- elif dim == "model" %}{% trans %}Model{% endtrans %}
+{%- elif dim == "cost_type" %}{% trans %}Cost type{% endtrans %}
+{%- elif dim == "branch" %}{% trans %}Branch{% endtrans %}
+{%- else %}{% trans %}Sessions{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro spend_by(dim) -%}
+{% if dim == "user" %}{% trans %}Spend by person{% endtrans %}
+{%- elif dim == "project" %}{% trans %}Spend by project{% endtrans %}
+{%- elif dim == "issue" %}{% trans %}Spend by feature{% endtrans %}
+{%- elif dim == "tool" %}{% trans %}Spend by tool{% endtrans %}
+{%- elif dim == "provider" %}{% trans %}Spend by provider{% endtrans %}
+{%- elif dim == "cost_type" %}{% trans %}Spend by cost type{% endtrans %}
+{%- elif dim == "branch" %}{% trans %}Spend by branch{% endtrans %}
+{%- else %}{% trans %}Spend by model{% endtrans %}{% endif %}
 {%- endmacro %}
 
 {% macro period_label(value) -%}
@@ -66,6 +91,13 @@
 ]) }}
 {% endif %}
 
+{#
+  Everything below the page breadcrumbs is one swap target: links of the drill-down
+  (path, group switch, rows, cards, pages) are boosted by htmx and replace it, so the
+  page is server-rendered at every level and its URL holds the whole state. Without
+  JavaScript the same links are plain page loads.
+#}
+<div id="sp-spend-report" class="sp-spend-report" hx-target="#sp-spend-report" hx-select="#sp-spend-report" hx-swap="outerHTML show:none">
 <div class="page-header">
   <h1>{% if project %}{% trans %}AI spend report{% endtrans %}{% else %}{% trans %}AI spend{% endtrans %}{% endif %}</h1>
   <div class="page-header-actions">
@@ -83,11 +115,18 @@
 
 <nav class="sp-spend-presets" aria-label="{{ _('Period') }}" data-testid="spend-presets">
   {% for p in presets if p != "custom" %}
-  <a href="{{ base_url }}?{{ form.query(preset=p, from_date='', to_date='') }}" class="sp-spend-preset{{ ' active' if form.preset == p else '' }}" {% if form.preset == p %}aria-current="true"{% endif %} data-preset="{{ p }}">{{ preset_label(p) }}</a>
+  <a href="{{ base_url }}?{{ form.query(preset=p, from_date='', to_date='', offset='') }}" class="sp-spend-preset{{ ' active' if form.preset == p else '' }}" {% if form.preset == p %}aria-current="true"{% endif %} data-preset="{{ p }}">{{ preset_label(p) }}</a>
   {% endfor %}
 </nav>
 
+<details class="sp-spend-options"{% if error or form.group2 or form.period or form.currency or form.policy != 'entry_date' or form.seats == 'off' or form.sort == 'spend' or form.preset == 'custom' %} open{% endif %} data-testid="spend-options">
+<summary class="sp-spend-options-toggle">{% trans %}Dates, filters and options{% endtrans %}</summary>
 <form method="get" action="{{ base_url }}" class="sp-aiu-filters sp-spend-form" data-testid="spend-form">
+  {% if form.project %}<input type="hidden" name="project" value="{{ form.project }}">{% endif %}
+  {% if form.issue %}<input type="hidden" name="issue" value="{{ form.issue }}">{% endif %}
+  {% if form.branch %}<input type="hidden" name="branch" value="{{ form.branch }}">{% endif %}
+  {% if form.provider %}<input type="hidden" name="provider" value="{{ form.provider }}">{% endif %}
+  {% if form.detail %}<input type="hidden" name="detail" value="1">{% endif %}
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}From{% endtrans %}</span>
     <input type="date" name="from_date" value="{{ report.date_from.isoformat() if report else form.from_date }}" class="filter-input">
@@ -101,6 +140,7 @@
     <select name="group" class="filter-select" data-testid="spend-group">
       <option value="">{% trans %}Nothing (totals){% endtrans %}</option>
       {% for d in dimensions %}<option value="{{ d }}" {{ 'selected' if form.group == d else '' }}>{{ dim_label(d) }}</option>{% endfor %}
+      <option value="sessions" {{ 'selected' if form.group == 'sessions' else '' }}>{% trans %}Sessions (entries){% endtrans %}</option>
     </select>
   </label>
   <label class="sp-aiu-filter">
@@ -176,132 +216,305 @@
     <button type="submit" class="sp-btn sp-btn-primary" data-testid="spend-submit">{% trans %}Show{% endtrans %}</button>
   </div>
 </form>
+</details>
 
-{% if report %}
+{% if report and drill %}
 {% set seats = report.seat_cost_shown %}
+{% set detail = form.detail == "1" %}
 {% set label_cols = (1 if report.period else 0) + (report.group_by | length) %}
-<div class="sp-aiu-totals sp-spend-totals" data-testid="spend-totals">
-  <div class="sp-aiu-total">
-    <span class="sp-aiu-total-label">{% trans %}Spend{% endtrans %}</span>
-    <span data-testid="spend-total">{{ money_total(totals.total_spend) }}</span>
-    <span class="sp-text-muted-xs">{% if seats %}{% trans %}Pay-per-use plus seat cost{% endtrans %}{% else %}{% trans %}Pay-per-use charges{% endtrans %}{% endif %}</span>
-  </div>
-  {% if seats %}
-  <div class="sp-aiu-total">
-    <span class="sp-aiu-total-label">{% trans %}Seat cost{% endtrans %}</span>
-    <span data-testid="spend-seat">{{ money_total(totals.seat_allocated) }}</span>
-    <span class="sp-text-muted-xs">{% trans %}Subscription fees carried by this usage{% endtrans %}</span>
-  </div>
-  {% if report.unallocated_shown %}
-  <div class="sp-aiu-total">
-    <span class="sp-aiu-total-label">{% trans %}Unallocated seat cost{% endtrans %}</span>
-    <span data-testid="spend-unallocated">{{ money_total(totals.seat_unallocated) }}</span>
-    <span class="sp-text-muted-xs">{% trans %}Fees of subscriptions without priced usage{% endtrans %}</span>
-  </div>
+<section class="sp-drill" aria-labelledby="sp-drill-title" data-testid="spend-drill">
+  {% if drill.crumbs | length > 1 %}
+  <nav class="sp-drill-crumbs" aria-label="{{ _('Report path') }}" data-testid="spend-crumbs" hx-boost="true">
+    <ol>
+      {% for c in drill.crumbs %}
+      <li>
+        {% if not loop.first %}<span class="sp-drill-crumb-sep" aria-hidden="true">›</span>{% endif %}
+        <span class="sp-drill-crumb">
+          {% if c.dim %}<span class="sp-drill-crumb-dim">{{ level_label(c.dim) }}</span>{% endif %}
+          {% if c.current %}<span class="sp-drill-crumb-current" aria-current="page">{{ c.label }}</span>{% else %}<a href="{{ c.url }}" data-testid="spend-crumb">{{ c.label }}</a>{% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+  </nav>
   {% endif %}
-  {% endif %}
-  <div class="sp-aiu-total">
-    <span class="sp-aiu-total-label">{% trans %}API-equivalent value{% endtrans %}</span>
-    <span data-testid="spend-api">{{ money_total(totals.api_equivalent) }}</span>
-    <span class="sp-text-muted-xs">{% trans %}The same tokens at pay-per-use prices{% endtrans %}</span>
+  <h2 id="sp-drill-title" class="sp-drill-title" tabindex="-1" data-sp-drill-focus data-testid="spend-drill-title">{{ drill.title }}</h2>
+
+  <div class="sp-drill-kpis" data-testid="spend-kpis">
+    <div class="sp-drill-kpi sp-drill-kpi--spend">
+      <span class="sp-drill-kpi-label">{% trans %}Spend{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="spend-total">{{ money_total(totals.total_spend) }}</span>
+      <span class="sp-text-muted-xs">{% if seats %}{% trans %}Pay-per-use plus seat cost{% endtrans %}{% else %}{% trans %}Pay-per-use charges{% endtrans %}{% endif %}</span>
+    </div>
+    <div class="sp-drill-kpi">
+      <span class="sp-drill-kpi-label">{% trans %}Entries{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="spend-entries">{{ totals.entries }}</span>
+      {% if totals.unpriced %}<span class="sp-text-muted-xs">{% trans count=totals.unpriced %}{{ count }} not priced{% pluralize %}{{ count }} not priced{% endtrans %}</span>{% endif %}
+    </div>
+    <div class="sp-drill-kpi">
+      <span class="sp-drill-kpi-label">{% trans %}Tokens{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="spend-tokens" title="{{ totals.tokens }}">{{ totals.tokens_short }}</span>
+    </div>
+    <div class="sp-drill-kpi">
+      <span class="sp-drill-kpi-label">{% trans %}People{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="spend-people-count">{{ drill.people }}</span>
+    </div>
   </div>
-  {% if seats and totals.leverage %}
-  <div class="sp-aiu-total">
-    <span class="sp-aiu-total-label">{% trans %}Leverage{% endtrans %}</span>
-    <span class="sp-aiu-amount" data-testid="spend-leverage">{{ totals.leverage }}</span>
-    <span class="sp-text-muted-xs">{% trans %}API-equivalent value of subscription usage per unit of seat cost{% endtrans %}</span>
+
+  <div class="sp-aiu-totals sp-spend-totals" data-testid="spend-totals">
+    {% if seats %}
+    <div class="sp-aiu-total">
+      <span class="sp-aiu-total-label">{% trans %}Seat cost{% endtrans %}</span>
+      <span data-testid="spend-seat">{{ money_total(totals.seat_allocated) }}</span>
+      <span class="sp-text-muted-xs">{% trans %}Subscription fees carried by this usage{% endtrans %}</span>
+    </div>
+    {% if report.unallocated_shown %}
+    <div class="sp-aiu-total">
+      <span class="sp-aiu-total-label">{% trans %}Unallocated seat cost{% endtrans %}</span>
+      <span data-testid="spend-unallocated">{{ money_total(totals.seat_unallocated) }}</span>
+      <span class="sp-text-muted-xs">{% trans %}Fees of subscriptions without priced usage{% endtrans %}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+    <div class="sp-aiu-total">
+      <span class="sp-aiu-total-label">{% trans %}API-equivalent value{% endtrans %}</span>
+      <span data-testid="spend-api">{{ money_total(totals.api_equivalent) }}</span>
+      <span class="sp-text-muted-xs">{% trans %}The same tokens at pay-per-use prices{% endtrans %}</span>
+    </div>
+    {% if seats and totals.leverage %}
+    <div class="sp-aiu-total">
+      <span class="sp-aiu-total-label">{% trans %}Leverage{% endtrans %}</span>
+      <span class="sp-aiu-amount" data-testid="spend-leverage">{{ totals.leverage }}</span>
+      <span class="sp-text-muted-xs">{% trans %}API-equivalent value of subscription usage per unit of seat cost{% endtrans %}</span>
+    </div>
+    {% endif %}
   </div>
-  {% endif %}
-  <div class="sp-aiu-total">
-    <span class="sp-aiu-total-label">{% trans %}Tokens{% endtrans %}</span>
-    <span class="sp-aiu-amount">{{ totals.tokens }}</span>
-    <span class="sp-text-muted-xs">{% trans count=totals.entries %}{{ count }} entry{% pluralize %}{{ count }} entries{% endtrans %}{% if totals.unpriced %} · {% trans count=totals.unpriced %}{{ count }} not priced{% pluralize %}{{ count }} not priced{% endtrans %}{% endif %}</span>
+
+  {{ unpriced_note(totals.unpriced, totals.entries, unpriced_models) }}
+
+  <p class="sp-text-muted-xs sp-spend-notes" data-testid="spend-notes">
+    {% trans first=report.date_from.isoformat(), last=report.date_to.isoformat(), currency=report.currency %}{{ first }} to {{ last }} (UTC days), amounts in {{ currency }}.{% endtrans %}
+    {% if rates_used %}{% trans %}Exchange rates used:{% endtrans %}
+    {% for r in rates_used %}1 {{ r.from }} = {{ r.rate }} {{ r.to }} ({{ r.date }}){% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}
+    {% if report.requested_period %}<span data-testid="spend-period-coarsened">{% trans asked=period_label(report.requested_period) | lower, shown=period_label(report.period) | lower %}Grouped by {{ shown }} instead of {{ asked }}: the range would have too many periods.{% endtrans %}</span>{% endif %}
+    {% if report.seat_cost_hidden %}<span data-testid="spend-seat-hidden">{% trans %}Seat cost is left out: subscription fees are shown only to administrators and to people who can see every entry of this project in the period.{% endtrans %}</span>{% endif %}
+  </p>
+
+  <div class="sp-drill-bar-row">
+    <nav class="sp-drill-tabs" aria-label="{{ _('Group by') }}" data-testid="spend-tabs" hx-boost="true">
+      <span class="sp-drill-tabs-label" aria-hidden="true">{% trans %}Group by{% endtrans %}</span>
+      {% for t in drill.tabs %}
+      {% if t.disabled %}<span class="sp-drill-tab is-disabled" aria-disabled="true" title="{{ _('Already filtered by this') }}" data-group="{{ t.group }}">{{ level_label(t.group) }}</span>
+      {% else %}<a class="sp-drill-tab{{ ' active' if t.active else '' }}" href="{{ t.url }}"{% if t.active %} aria-current="true"{% endif %} data-group="{{ t.group }}" data-testid="spend-tab">{{ level_label(t.group) }}</a>{% endif %}
+      {% endfor %}
+    </nav>
+    {% if not form.sessions and report.group_by %}
+    <a class="sp-drill-detail-toggle" href="{{ base_url }}?{{ form.query(detail='' if detail else '1') }}" hx-boost="true" data-testid="spend-detail-toggle">{% if detail %}{% trans %}Fewer columns{% endtrans %}{% else %}{% trans %}All amount columns{% endtrans %}{% endif %}</a>
+    {% endif %}
   </div>
-</div>
 
-{{ unpriced_note(totals.unpriced, totals.entries, unpriced_models) }}
-
-<p class="sp-text-muted-xs sp-spend-notes" data-testid="spend-notes">
-  {% trans first=report.date_from.isoformat(), last=report.date_to.isoformat(), currency=report.currency %}{{ first }} to {{ last }} (UTC days), amounts in {{ currency }}.{% endtrans %}
-  {% if rates_used %}{% trans %}Exchange rates used:{% endtrans %}
-  {% for r in rates_used %}1 {{ r.from }} = {{ r.rate }} {{ r.to }} ({{ r.date }}){% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}
-  {% if report.requested_period %}<span data-testid="spend-period-coarsened">{% trans asked=period_label(report.requested_period) | lower, shown=period_label(report.period) | lower %}Grouped by {{ shown }} instead of {{ asked }}: the range would have too many periods.{% endtrans %}</span>{% endif %}
-  {% if report.seat_cost_hidden %}<span data-testid="spend-seat-hidden">{% trans %}Seat cost is left out: subscription fees are shown only to administrators and to people who can see every entry of this project in the period.{% endtrans %}</span>{% endif %}
-</p>
-
-{{ usage_charts(charts, has_rows=rows | length > 0, bucket_links=bucket_links) }}
-
-{% if rows %}
-{% if charts and not charts.too_long %}<h2 class="sp-aiu-charts-title sp-spend-table-title">{% trans %}Report{% endtrans %}</h2>{% endif %}
-<div class="card sp-spend-chart-card">
-  <div class="sp-spend-chart" data-testid="spend-chart" role="img" aria-label="{{ _('Spend chart; the table below holds the same numbers') }}"
-       data-sp-spend-chart='{{ chart | tojson }}'
-       data-label-spend="{{ _('Spend') }}"
-       data-label-api="{{ _('API-equivalent value') }}"></div>
-</div>
-
-<div class="card">
-<div class="sp-table-scroll">
-<table class="sp-table sp-spend-table" data-testid="spend-table">
-  <thead>
-    <tr>
-      {% if report.period %}<th>{{ period_label(report.period) }}</th>{% endif %}
-      {% for d in report.group_by %}<th>{{ dim_label(d) }}</th>{% endfor %}
-      {% if not label_cols %}<th></th>{% endif %}
-      <th class="sp-aiu-num">{% trans %}Entries{% endtrans %}</th>
-      <th class="sp-aiu-num">{% trans %}Tokens{% endtrans %}</th>
-      {% if seats %}
-      <th class="sp-aiu-num">{% trans %}Pay-per-use{% endtrans %}</th>
-      <th class="sp-aiu-num">{% trans %}Seat cost{% endtrans %}</th>
+  <div class="sp-drill-layout{{ ' is-wide' if form.sessions or detail or not drill.side else '' }}">
+    <div class="sp-drill-main">
+    {% if form.sessions %}
+      {% if sessions and sessions.rows %}
+      <div class="sp-table-scroll">
+      <table class="sp-table sp-drill-table sp-drill-sessions" data-testid="spend-sessions">
+        <caption class="sp-visually-hidden">{% trans %}The entries of this selection, newest first{% endtrans %}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{% trans %}Date{% endtrans %}</th>
+            {% if sessions.show_user %}<th scope="col">{% trans %}Person{% endtrans %}</th>{% endif %}
+            {% if sessions.show_project %}<th scope="col">{% trans %}Project{% endtrans %}</th>{% endif %}
+            {% if sessions.show_tool %}<th scope="col">{% trans %}Tool{% endtrans %}</th>{% endif %}
+            {% if sessions.show_model %}<th scope="col">{% trans %}Model{% endtrans %}</th>{% endif %}
+            <th scope="col" class="sp-aiu-num">{% trans %}Tokens{% endtrans %}</th>
+            <th scope="col">{% trans %}Cost type{% endtrans %}</th>
+            <th scope="col" class="sp-aiu-num">{% trans %}Spend{% endtrans %}</th>
+            {% if sessions.show_issue %}<th scope="col">{% trans %}Issue{% endtrans %}</th>{% endif %}
+            <th scope="col">{% trans %}Branch{% endtrans %}</th>
+            <th scope="col"><span class="sp-visually-hidden">{% trans %}Actions{% endtrans %}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in sessions.rows %}
+          <tr data-entry-id="{{ r.id }}" data-testid="spend-session">
+            <td class="sp-aiu-date" data-label="{{ _('Date') }}">{{ r.usage_date }}</td>
+            {% if sessions.show_user %}<td data-label="{{ _('Person') }}"><span class="sp-drill-name"><span class="sp-swatch sp-slot-{{ r.slot }}" aria-hidden="true"></span>{{ r.user_name }}</span></td>{% endif %}
+            {% if sessions.show_project %}<td data-label="{{ _('Project') }}">{% if r.project_key %}{{ r.project_key }}{% else %}<span class="sp-text-muted">{% trans %}Unassigned{% endtrans %}</span>{% endif %}</td>{% endif %}
+            {% if sessions.show_tool %}<td data-label="{{ _('Tool') }}">{{ r.tool }}</td>{% endif %}
+            {% if sessions.show_model %}<td data-label="{{ _('Model') }}"><span class="sp-aiu-model">{{ r.model }}</span></td>{% endif %}
+            <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ r.total_tokens }}: {{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}">{{ r.tokens_short }}</td>
+            <td data-label="{{ _('Cost type') }}"><span class="sp-drill-tag sp-drill-tag--{{ r.cost_type }}">{{ cost_type_label(r.cost_type) }}</span></td>
+            <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ r.spend }}</strong></td>
+            {% if sessions.show_issue %}<td data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/" hx-boost="false">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+            <td data-label="{{ _('Branch') }}">{% if r.branch %}<code class="sp-drill-branch">{{ r.branch }}</code>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
+            <td class="sp-aiu-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" hx-boost="false" data-testid="spend-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div class="sp-drill-pages" hx-boost="true" data-testid="spend-sessions-pages">{{ pagination(sessions.total, sessions.offset, sessions.limit, base_url, sessions.query) }}</div>
+      {% else %}
+      <div class="card sp-aiu-empty" data-testid="spend-empty">{% trans %}No AI usage in this period.{% endtrans %}</div>
       {% endif %}
-      <th class="sp-aiu-num">{% trans %}Spend{% endtrans %}</th>
-      <th class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
-      {% if seats %}<th class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>{% endif %}
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for r in rows %}
-    <tr class="{{ 'sp-spend-seat-row' if r.seat_only else '' }}" data-testid="spend-row">
-      {% if report.period %}<td class="sp-aiu-date">{{ r.period }}</td>{% endif %}
-      {% for c in r.cells %}<td>{{ cell(c) }}</td>{% endfor %}
-      {% if not label_cols %}<td>{% if r.seat_only %}{% trans %}Unallocated seat cost{% endtrans %}{% else %}{% trans %}All usage{% endtrans %}{% endif %}</td>{% endif %}
-      <td class="sp-aiu-num">{{ r.entries }}{% if r.unpriced %} <span class="sp-text-muted-xs" title="{{ _('Entries without a price') }}">({{ r.unpriced }})</span>{% endif %}</td>
-      <td class="sp-aiu-num" title="{{ _('%(input)s in, %(output)s out, %(cache)s cache read, %(reasoning)s reasoning') % {'input': r.token_detail.input, 'output': r.token_detail.output, 'cache': r.token_detail.cache_read, 'reasoning': r.token_detail.reasoning} }}">{{ r.tokens }}</td>
-      {% if seats %}
-      <td class="sp-aiu-num">{{ amount_cell(r.marginal) }}</td>
-      <td class="sp-aiu-num">{{ amount_cell(r.seat_allocated) }}{% if r.has_unallocated %}<div class="sp-text-muted-xs">{% trans %}unallocated:{% endtrans %} {{ money_total(r.seat_unallocated) }}</div>{% endif %}</td>
-      {% endif %}
-      <td class="sp-aiu-num"><strong>{{ amount_cell(r.total_spend) }}</strong></td>
-      <td class="sp-aiu-num">{{ amount_cell(r.api_equivalent) }}</td>
-      {% if seats %}<td class="sp-aiu-num">{{ r.leverage or "–" }}</td>{% endif %}
-      <td class="sp-aiu-actions">{% if r.drill %}<a class="sp-btn-sm" href="{{ r.drill }}" data-testid="spend-drill">{% if r.seat_only %}{% trans %}Subscriptions{% endtrans %}{% else %}{% trans %}Entries{% endtrans %}{% endif %}</a>{% endif %}</td>
-    </tr>
+      <p class="sp-text-muted-xs sp-drill-hint">{% trans %}Each entry is one tool's usage of one model on one day, as reported. Spend includes the entry's share of its subscription where you may see seat cost.{% endtrans %}
+        <a href="{{ level_entries_url }}" data-testid="spend-entry-list">{% trans %}Open in the entry list{% endtrans %}</a></p>
+    {% elif drill.rows %}
+      <div class="sp-table-scroll">
+      <table class="sp-table sp-spend-table sp-drill-table" data-testid="spend-table">
+        <caption class="sp-visually-hidden">{% if report.group_by %}{{ spend_by(report.group_by[0]) }}{% else %}{% trans %}Spend{% endtrans %}{% endif %}</caption>
+        <thead>
+          <tr>
+            {% if report.period %}<th scope="col">{{ period_label(report.period) }}</th>{% endif %}
+            {% for d in report.group_by %}<th scope="col">{{ level_label(d) }}</th>{% endfor %}
+            {% if not label_cols %}<th scope="col"></th>{% endif %}
+            <th scope="col" class="sp-aiu-num">{% trans %}Entries{% endtrans %}</th>
+            <th scope="col" class="sp-aiu-num">{% trans %}Tokens{% endtrans %}</th>
+            {% if detail and seats %}
+            <th scope="col" class="sp-aiu-num">{% trans %}Pay-per-use{% endtrans %}</th>
+            <th scope="col" class="sp-aiu-num">{% trans %}Seat cost{% endtrans %}</th>
+            {% endif %}
+            <th scope="col" class="sp-aiu-num">{% trans %}Spend{% endtrans %}</th>
+            {% if detail %}
+            <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+            {% if seats %}<th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>{% endif %}
+            {% endif %}
+            <th scope="col" class="sp-drill-share-col">{% trans %}Share{% endtrans %}</th>
+            {% if detail %}<th scope="col"><span class="sp-visually-hidden">{% trans %}Entries{% endtrans %}</span></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in drill.rows %}
+          <tr class="sp-drill-row{{ ' is-link' if r.open else '' }}{{ ' sp-spend-seat-row' if r.seat_only else '' }}" data-testid="spend-row">
+            {% if report.period %}<td class="sp-aiu-date" data-label="{{ period_label(report.period) }}">{{ r.period }}</td>{% endif %}
+            {% for c in r.cells %}
+            {% if loop.first %}
+            <th scope="row" class="sp-drill-namecell" data-label="{{ level_label(c.dim) }}">
+              <span class="sp-drill-name">
+                <span class="sp-swatch sp-slot-{{ r.slot }}" aria-hidden="true"></span>
+                {% if r.open %}<a class="sp-drill-open" href="{{ r.open }}" hx-boost="true" data-testid="spend-open">{{ r.name }}</a>
+                {% elif r.seat_only %}<a href="{{ r.drill }}">{{ cell(c) }}</a>
+                {% else %}{{ cell(c) }}{% endif %}
+              </span>
+              {% if r.sub %}<span class="sp-drill-sub">{{ r.sub }}</span>{% endif %}
+            </th>
+            {% else %}<td data-label="{{ level_label(c.dim) }}">{{ cell(c) }}</td>{% endif %}
+            {% endfor %}
+            {% if not label_cols %}<th scope="row" class="sp-drill-namecell" data-label="">{% if r.seat_only %}{% trans %}Unallocated seat cost{% endtrans %}{% else %}{% trans %}All usage{% endtrans %}{% endif %}</th>{% endif %}
+            <td class="sp-aiu-num" data-label="{{ _('Entries') }}">{{ r.entries }}{% if r.unpriced %} <span class="sp-text-muted-xs" title="{{ _('Entries without a price') }}">({{ r.unpriced }})</span>{% endif %}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ r.tokens }}: {{ _('%(input)s in, %(output)s out, %(cache)s cache read, %(reasoning)s reasoning') % {'input': r.token_detail.input, 'output': r.token_detail.output, 'cache': r.token_detail.cache_read, 'reasoning': r.token_detail.reasoning} }}">{{ r.tokens_short }}</td>
+            {% if detail and seats %}
+            <td class="sp-aiu-num" data-label="{{ _('Pay-per-use') }}">{{ amount_cell(r.marginal) }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Seat cost') }}">{{ amount_cell(r.seat_allocated) }}{% if r.has_unallocated %}<div class="sp-text-muted-xs">{% trans %}unallocated:{% endtrans %} {{ money_total(r.seat_unallocated) }}</div>{% endif %}</td>
+            {% endif %}
+            <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ amount_cell(r.total_spend) }}</strong></td>
+            {% if detail %}
+            <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(r.api_equivalent) }}</td>
+            {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ r.leverage or "–" }}</td>{% endif %}
+            {% endif %}
+            <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-{{ r.slot }}" style="width:{{ r.share.width }}%"></span><span class="sp-drill-share-pct">{{ r.share.label }}</span></span></td>
+            {% if detail %}<td class="sp-aiu-actions" data-label="">{% if r.drill %}<a class="sp-btn-sm" href="{{ r.drill }}" data-testid="spend-drill">{% if r.seat_only %}{% trans %}Subscriptions{% endtrans %}{% else %}{% trans %}Entries{% endtrans %}{% endif %}</a>{% endif %}</td>{% endif %}
+          </tr>
+          {% endfor %}
+          {% if drill.other %}
+          {% set o = drill.other %}
+          <tr class="sp-drill-row sp-drill-other" data-testid="spend-other">
+            {% if report.period %}<td></td>{% endif %}
+            <th scope="row" class="sp-drill-namecell" colspan="{{ report.group_by | length or 1 }}" data-label="">
+              <span class="sp-drill-name"><span class="sp-swatch sp-slot-7" aria-hidden="true"></span>{% trans count=o.groups %}Other ({{ count }} group){% pluralize %}Other ({{ count }} groups){% endtrans %}</span>
+              <span class="sp-drill-sub">{% trans %}The smaller groups, summed; the CSV lists each{% endtrans %}</span>
+            </th>
+            <td class="sp-aiu-num" data-label="{{ _('Entries') }}">{{ o.entries }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ o.tokens }}">{{ o.tokens_short }}</td>
+            {% if detail and seats %}
+            <td class="sp-aiu-num" data-label="{{ _('Pay-per-use') }}">{{ amount_cell(o.marginal) }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Seat cost') }}">{{ amount_cell(o.seat_allocated) }}</td>
+            {% endif %}
+            <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ amount_cell(o.total_spend) }}</strong></td>
+            {% if detail %}
+            <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(o.api_equivalent) }}</td>
+            {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ o.leverage or "–" }}</td>{% endif %}
+            {% endif %}
+            <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-7" style="width:{{ o.share.width }}%"></span><span class="sp-drill-share-pct">{{ o.share.label }}</span></span></td>
+            {% if detail %}<td></td>{% endif %}
+          </tr>
+          {% endif %}
+        </tbody>
+        <tfoot>
+          <tr class="sp-spend-total-row">
+            <th scope="row" colspan="{{ label_cols or 1 }}" data-label="">{% trans %}Total{% endtrans %}</th>
+            <td class="sp-aiu-num" data-label="{{ _('Entries') }}">{{ totals.entries }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ totals.tokens }}">{{ totals.tokens_short }}</td>
+            {% if detail and seats %}
+            <td class="sp-aiu-num" data-label="{{ _('Pay-per-use') }}">{{ amount_cell(totals.marginal) }}</td>
+            <td class="sp-aiu-num" data-label="{{ _('Seat cost') }}">{{ amount_cell(totals.seat_allocated) }}{% if totals.has_unallocated %}<div class="sp-text-muted-xs">{% trans %}unallocated:{% endtrans %} {{ money_total(totals.seat_unallocated) }}</div>{% endif %}</td>
+            {% endif %}
+            <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ amount_cell(totals.total_spend) }}</strong></td>
+            {% if detail %}
+            <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(totals.api_equivalent) }}</td>
+            {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ totals.leverage or "–" }}</td>{% endif %}
+            {% endif %}
+            <td class="sp-drill-share-col"></td>
+            {% if detail %}<td></td>{% endif %}
+          </tr>
+        </tfoot>
+      </table>
+      </div>
+      {% if drill.single %}<p class="sp-text-muted-xs sp-drill-hint">{% trans %}Select a row to open it. Every row leads down to the entries behind it.{% endtrans %}</p>{% endif %}
+    {% else %}
+      <div class="card sp-aiu-empty" data-testid="spend-empty">{% trans %}No AI usage in this period.{% endtrans %}</div>
+    {% endif %}
+    </div>
+
+    {% if drill.side and drill.side.bars %}
+    <aside class="card sp-drill-side" aria-labelledby="sp-drill-side-title" data-testid="spend-side">
+      <h3 id="sp-drill-side-title" class="sp-drill-side-title">{% if form.sessions %}{% trans %}Spend by model in these entries{% endtrans %}{% else %}{{ spend_by(drill.side.dim) }}{% endif %}</h3>
+      <ul class="sp-drill-bars">
+        {% for b in drill.side.bars %}
+        <li class="sp-drill-bars-item">
+          <span class="sp-drill-bars-label">{{ b.label }}</span>
+          <span class="sp-drill-bars-track" aria-hidden="true"><span class="sp-drill-bars-fill sp-slot-{{ b.slot }}" style="width:{{ b.width }}%"></span></span>
+          <span class="sp-drill-bars-amount">{{ b.amount }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="sp-text-muted-xs sp-drill-side-summary" data-testid="spend-side-summary">{{ drill.side.summary }}</p>
+    </aside>
+    {% endif %}
+  </div>
+</section>
+
+{% if people and people.cards %}
+<section class="card sp-people" aria-labelledby="sp-people-title" data-testid="spend-people">
+  <div class="sp-people-head">
+    <h2 id="sp-people-title" class="sp-people-title">{% trans %}Spend by person{% endtrans %}</h2>
+    <span class="sp-text-muted-xs">{{ report.date_from.isoformat() }} – {{ report.date_to.isoformat() }}</span>
+  </div>
+  <ol class="sp-people-list" hx-boost="true">
+    {% for c in people.cards %}
+    <li class="sp-person" data-testid="spend-person">
+      <span class="sp-person-avatar sp-slot-{{ c.slot }}" aria-hidden="true">{{ c.initials }}</span>
+      <div class="sp-person-main">
+        <div class="sp-person-head"><strong class="sp-person-name">{{ c.name }}</strong><span class="sp-person-spend">{{ c.spend }}</span></div>
+        <span class="sp-person-bar" aria-hidden="true"><span class="sp-slot-{{ c.slot }}" style="width:{{ c.width }}%"></span></span>
+        <div class="sp-person-meta">
+          {% for t in c.tools %}<span class="sp-person-chip">{{ t }}</span>{% endfor %}
+          {% if c.payment %}<span class="sp-person-plan" data-testid="spend-person-payment">{{ c.payment }}</span>{% endif %}
+        </div>
+      </div>
+      <a class="sp-btn-sm sp-person-open" href="{{ c.url }}" aria-label="{{ _('Open %(name)s in the report') % {'name': c.name} }}" data-testid="spend-person-open">{% trans %}Show{% endtrans %} <span aria-hidden="true">→</span></a>
+    </li>
     {% endfor %}
-  </tbody>
-  <tfoot>
-    <tr class="sp-spend-total-row">
-      <td colspan="{{ label_cols or 1 }}">{% trans %}Total{% endtrans %}</td>
-      <td class="sp-aiu-num">{{ totals.entries }}</td>
-      <td class="sp-aiu-num">{{ totals.tokens }}</td>
-      {% if seats %}
-      <td class="sp-aiu-num">{{ amount_cell(totals.marginal) }}</td>
-      <td class="sp-aiu-num">{{ amount_cell(totals.seat_allocated) }}{% if totals.has_unallocated %}<div class="sp-text-muted-xs">{% trans %}unallocated:{% endtrans %} {{ money_total(totals.seat_unallocated) }}</div>{% endif %}</td>
-      {% endif %}
-      <td class="sp-aiu-num"><strong>{{ amount_cell(totals.total_spend) }}</strong></td>
-      <td class="sp-aiu-num">{{ amount_cell(totals.api_equivalent) }}</td>
-      {% if seats %}<td class="sp-aiu-num">{{ totals.leverage or "–" }}</td>{% endif %}
-      <td></td>
-    </tr>
-  </tfoot>
-</table>
-</div>
-</div>
-{% else %}
-<div class="card sp-aiu-empty" data-testid="spend-empty">{% trans %}No AI usage in this period.{% endtrans %}</div>
+  </ol>
+  {% if people.more %}<p class="sp-text-muted-xs">{% trans count=people.more %}{{ count }} more person not shown.{% pluralize %}{{ count }} more people not shown.{% endtrans %}</p>{% endif %}
+</section>
 {% endif %}
+
+{{ usage_charts(charts, has_rows=drill.rows | length > 0, bucket_links=bucket_links) }}
 {% endif %}
+</div>
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
-{% block chart_js %}{% if report and (rows or (charts and not charts.too_long)) %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}
+{% block chart_js %}{% if report and charts and not charts.too_long %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

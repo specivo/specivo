@@ -13,12 +13,13 @@ for the measures, the seat allocation and who sees seat cost.
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
 from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
 from specivo.core.database import DbSession
+from specivo.core.exceptions import NotFoundError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
@@ -31,11 +32,15 @@ from specivo.services.ai_spend_report_service import (
     parse_group_by,
     report_csv,
 )
+from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 
 router = APIRouter(tags=["ai-usage"])
 _service = AiSpendReportService()
 _projects = ProjectService()
+
+#: A filter value selecting entries without a project, issue or branch.
+NONE_VALUE = "-"
 
 Period = Literal["day", "week", "month"]
 Preset = Literal["7d", "30d", "this_month", "last_month"]
@@ -68,9 +73,13 @@ async def _report(
     cost_type: str | None,
     sort: str,
     fmt: str,
+    project_filter: str | None = None,
+    issue: str | None = None,
+    branch: str | None = None,
 ) -> SpendReportOut | Response:
     await enforce_ai_report_rate_limit(request, response, user)
     first, last = default_range(preset)
+    narrowing = await _narrowing(db, user, project, project_filter, issue, branch)
     report = await _service.report(
         db,
         user,
@@ -82,7 +91,9 @@ async def _report(
         currency=currency,
         rate_policy=rate_policy,
         include_seat_cost=include_seat_cost,
-        filters=ReportFilters(user_id=user_id, tool=tool, model=model, provider=provider, cost_type=cost_type),
+        filters=ReportFilters(
+            user_id=user_id, tool=tool, model=model, provider=provider, cost_type=cost_type, **narrowing
+        ),
         sort=sort,
     )
     if fmt == "csv":
@@ -94,6 +105,54 @@ async def _report(
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
     return SpendReportOut.from_report(report)
+
+
+async def _narrowing(
+    db: DbSession,
+    user: User,
+    project: Project | None,
+    project_filter: str | None,
+    issue: str | None,
+    branch: str | None,
+) -> dict[str, Any]:
+    """The project (instance report), issue and branch filters; ``-`` selects entries without one.
+
+    An unknown project, or an issue the caller cannot see (or of another
+    project), matches nothing.
+    """
+    out: dict[str, Any] = {}
+    selected: Project | None = None
+    if project is None and project_filter:
+        if project_filter.strip() == NONE_VALUE:
+            out["unassigned"] = True
+        else:
+            try:
+                selected = await _projects.get_by_key(db, project_filter.strip().upper())
+                out["project_id"] = selected.id
+            except NotFoundError:
+                out["project_id"] = -1
+    if issue:
+        if issue.strip() == NONE_VALUE:
+            out["without_issue"] = True
+        else:
+            out["issue_id"] = -1
+            try:
+                found = await IssueService().get_by_display_key(db, issue.strip().upper(), user=user)
+            except NotFoundError:
+                found = None
+            within = project or selected
+            if found is not None and (within is None or found.project_id == within.id):
+                out["issue_id"] = found.id
+    if branch:
+        if branch.strip() == NONE_VALUE:
+            out["without_branch"] = True
+        else:
+            out["branch"] = branch.strip()
+    return out
+
+
+_ISSUE = Query(None, max_length=50, description="An issue key, or '-' for entries without an issue")
+_BRANCH = Query(None, max_length=255, description="A git branch, or '-' for entries without one")
 
 
 @router.get(
@@ -121,6 +180,8 @@ async def project_ai_spend_report(
     model: str | None = Query(None, max_length=200),
     provider: str | None = Query(None, max_length=50),
     cost_type: AiUsageCostType | None = Query(None),
+    issue: str | None = _ISSUE,
+    branch: str | None = _BRANCH,
     sort: Literal["key", "spend"] = Query("key", description="By the grouping key (default), or by total spend"),
     format: Literal["json", "csv"] = Query("json"),  # noqa: A002
     current_user: User = Depends(get_current_user),
@@ -154,6 +215,8 @@ async def project_ai_spend_report(
         cost_type=cost_type,
         sort=sort,
         fmt=format,
+        issue=issue,
+        branch=branch,
     )
 
 
@@ -179,6 +242,9 @@ async def instance_ai_spend_report(
     model: str | None = Query(None, max_length=200),
     provider: str | None = Query(None, max_length=50),
     cost_type: AiUsageCostType | None = Query(None),
+    project: str | None = Query(None, max_length=50, description="A project key, or '-' for unassigned entries"),
+    issue: str | None = _ISSUE,
+    branch: str | None = _BRANCH,
     sort: Literal["key", "spend"] = Query("key"),
     format: Literal["json", "csv"] = Query("json"),  # noqa: A002
     current_user: User = Depends(get_current_user),
@@ -209,4 +275,7 @@ async def instance_ai_spend_report(
         cost_type=cost_type,
         sort=sort,
         fmt=format,
+        project_filter=project,
+        issue=issue,
+        branch=branch,
     )

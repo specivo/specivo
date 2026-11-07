@@ -12485,3 +12485,170 @@ msgstr "Prix pour la période"
 #: specivo/templates/themes/default/pages/ai_usage/report.html
 msgid "Report"
 msgstr "Rapport"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Feature"
+msgstr "Fonctionnalité"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by person"
+msgstr "Dépenses par personne"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by project"
+msgstr "Dépenses par projet"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by feature"
+msgstr "Dépenses par fonctionnalité"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by tool"
+msgstr "Dépenses par outil"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by provider"
+msgstr "Dépenses par fournisseur"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by cost type"
+msgstr "Dépenses par type de coût"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by branch"
+msgstr "Dépenses par branche"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by model"
+msgstr "Dépenses par modèle"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Dates, filters and options"
+msgstr "Dates, filtres et options"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Sessions (entries)"
+msgstr "Sessions (entrées)"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Report path"
+msgstr "Chemin du rapport"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Already filtered by this"
+msgstr "Déjà filtré par ce critère"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Fewer columns"
+msgstr "Moins de colonnes"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "All amount columns"
+msgstr "Toutes les colonnes de montants"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "The entries of this selection, newest first"
+msgstr "Les entrées de cette sélection, les plus récentes d'abord"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Each entry is one tool's usage of one model on one day, as reported. Spend includes the entry's share of its subscription where you may see seat cost."
+msgstr "Chaque entrée correspond à l'utilisation d'un modèle par un outil sur une journée, telle que déclarée. La dépense inclut la part de l'abonnement portée par l'entrée lorsque vous pouvez voir le coût des licences."
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Open in the entry list"
+msgstr "Ouvrir dans la liste des entrées"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Share"
+msgstr "Part"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Other (%(count)s group)"
+msgid_plural "Other (%(count)s groups)"
+msgstr[0] "Autres (%(count)s groupe)"
+msgstr[1] "Autres (%(count)s groupes)"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "The smaller groups, summed; the CSV lists each"
+msgstr "Les plus petits groupes, additionnés ; le CSV les détaille un par un"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Select a row to open it. Every row leads down to the entries behind it."
+msgstr "Sélectionnez une ligne pour l'ouvrir. Chaque ligne mène aux entrées qui la composent."
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by model in these entries"
+msgstr "Dépenses par modèle dans ces entrées"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Open %(name)s in the report"
+msgstr "Ouvrir %(name)s dans le rapport"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person not shown."
+msgid_plural "%(count)s more people not shown."
+msgstr[0] "%(count)s autre personne non affichée."
+msgstr[1] "%(count)s autres personnes non affichées."
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d person"
+msgid_plural "%(num)d people"
+msgstr[0] "%(num)d personne"
+msgstr[1] "%(num)d personnes"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d group."
+msgid_plural "%(num)d groups."
+msgstr[0] "%(num)d groupe."
+msgstr[1] "%(num)d groupes."
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "Largest: %(name)s with %(amount)s (%(share)s)."
+msgstr "Le plus important : %(name)s avec %(amount)s (%(share)s)."
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d more in the table."
+msgid_plural "%(num)d more in the table."
+msgstr[0] "%(num)d de plus dans le tableau."
+msgstr[1] "%(num)d de plus dans le tableau."
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d entry"
+msgid_plural "%(num)d entries"
+msgstr[0] "%(num)d entrée"
+msgstr[1] "%(num)d entrées"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d day"
+msgid_plural "%(num)d days"
+msgstr[0] "%(num)d jour"
+msgstr[1] "%(num)d jours"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d model"
+msgid_plural "%(num)d models"
+msgstr[0] "%(num)d modèle"
+msgstr[1] "%(num)d modèles"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(entries)s over %(days)s, %(models)s."
+msgstr "%(entries)s sur %(days)s, %(models)s."
+
+#: specivo/web/pages/ai_spend_reports.py
+msgid "Subscription seat"
+msgstr "Licence d'abonnement"
+
+#: specivo/web/pages/ai_spend_reports.py
+msgid "Pay-per-use API"
+msgstr "API en paiement à l'usage"

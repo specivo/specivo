@@ -130,13 +130,22 @@ registerShape('usage-time', {
         const mode = data.stacks[state.mode] ? state.mode : Object.keys(data.stacks)[0];
         const stack = data.stacks[mode] || { names: [], values: [] };
         const axis = axisStyle(theme);
-        const series = stack.names.map((name, i) => ({
-            type: 'bar',
-            name,
-            stack: 'api',
-            data: stack.values[i].map((v) => v || null),
-            barMaxWidth: 48,
-        }));
+        // Stable colours (palette slots) when the data names them: the report tables and
+        // person cards on the page use the same slots, so a group keeps its colour.
+        const colors = Array.isArray(stack.colors) ? stack.colors : null;
+        const series = stack.names.map((name, i) => {
+            const item = {
+                type: 'bar',
+                name,
+                stack: 'api',
+                data: stack.values[i].map((v) => v || null),
+                barMaxWidth: 48,
+            };
+            if (colors && Number.isInteger(colors[i])) {
+                item.itemStyle = { color: theme.palette[colors[i] % theme.palette.length] };
+            }
+            return item;
+        });
         const skip = new Set();
         if (Array.isArray(data.spend)) {
             skip.add(series.length);
