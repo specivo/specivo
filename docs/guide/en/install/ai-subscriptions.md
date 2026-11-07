@@ -110,6 +110,52 @@ When a usage reporter sends a tool Specivo does not know yet, the tool is **adde
 inactive**, so new reporters work without an upgrade. Activate it, and give it a name and a default
 provider, to offer it in pickers. Tools are never deleted.
 
+## With your AI agent
+
+An agent connected to Specivo over [MCP](../ai-agents/connecting.md) can register your subscriptions
+for you. Give it your invoices and ask, for example:
+
+> Here are my Claude and ChatGPT invoices for this year. Register them as my AI subscriptions.
+
+The agent uses the `specivo_ai_subscriptions` tool:
+
+| Operation | What it does |
+|---|---|
+| `presets` | Lists the plans with their suggested prices, so the agent can match each invoice to a plan. |
+| `list` | Shows your subscriptions. Administrators can name another person (`user`). |
+| `add` | Registers one or more periods in one call, such as every plan change on your invoices. Each period has a plan (or a custom plan with its provider and name), the fee, the currency, the billing period, the first and last day, and notes. |
+| `update` | Corrects one subscription. |
+| `end` | Sets the last day of one subscription, today by default. |
+| `delete` | Deletes one subscription. Prefer `end`: deleting removes the plan from past reports. |
+
+Register each invoice period as its own subscription, with the amount actually charged, tax
+included, in its currency, and a last day on every period that was followed by another. For
+example, Claude Max 5x for 100 USD from 21 January to 25 February, then Max 20x for 200 USD from
+26 March to 25 May, then Max 5x again.
+
+`add` is all or nothing. When any period is wrong (an unknown plan, a fee that is not a number, a
+last day before the first), nothing is added and the agent is told what to fix in each period.
+
+Every answer shows each subscription's plan, fee, currency, days and the tools it covers, and
+**warns** when two periods of the same plan family overlap or leave a gap. A plan family is your
+plans of the same provider covering the same tools, so Claude Pro, Max 5x and Max 20x are one
+family and ChatGPT Plus is another. In the example above, the agent would warn about the gap from
+26 February to 25 March. Warnings never block anything, because a gap is often real (a month you
+did not pay for) and so is an overlap (an upgrade during a billing period).
+
+The tool follows the same rules as the page: it acts for the person whose API key the agent uses,
+writing needs self-service unless that person is an administrator, and an administrator's changes
+to somebody else's subscriptions are audited. Two kinds of key are refused, each with a message
+saying why:
+
+- **A key limited to some projects.** Subscriptions belong to the account, so use an unlimited
+  personal key.
+- **A service account's key.** Subscriptions belong to people. Connect the agent with your own
+  personal key, or ask an administrator to record them.
+
+Every change the tool makes is also written to the [audit log](audit-log.md#ai-subscriptions) as
+`ai_subscriptions_changed`, like every other change an agent makes.
+
 ## Through the API
 
 Amounts are decimal **strings** such as `"20.00"`, never JSON numbers; days are `YYYY-MM-DD`.
