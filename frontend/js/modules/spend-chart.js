@@ -1,19 +1,17 @@
-/* AI spend report charts (Apache ECharts, SVG renderer).
+/* AI usage charts (Apache ECharts, SVG renderer).
 
-   The report page holds <div data-sp-spend-chart='{...}'> with the chart data
-   (spend and API-equivalent value per row, converted amounts only, plus the
-   reporting currency, the period and the reader's locale) and translated
-   series names in data-label-* attributes. This module is bundled on its own
-   (spend-chart.min.js, see frontend/build.js), and only the report pages load
-   it, so ECharts never weighs on other pages. It draws:
+   A chart is a <div data-sp-spend-chart='{...}'> holding its data (converted
+   amounts only, the reporting currency and the reader's locale) and
+   translated series names in data-label-* attributes. This module is bundled
+   on its own (spend-chart.min.js, see frontend/build.js), and only the pages
+   with charts (the AI spend reports, My AI usage, a project's AI usage) load
+   it, so ECharts never weighs on other pages. By default it draws spend and
+   API-equivalent value side by side per group (groupOption).
 
-   - with a period: spend per period bucket, stacked by group;
-   - without: spend and API-equivalent value side by side per group.
-
-   Other chart shapes register themselves with registerShape() (see
-   modules/usage-charts.js, the My AI usage charts): their data carries a
-   "kind", and they share this module's theme, formatters, tooltips, sizing,
-   theme and htmx handling, so there is one chart setup.
+   Chart shapes register themselves with registerShape() (see
+   modules/usage-charts.js): their data carries a "kind", and they share this
+   module's theme, formatters, tooltips, sizing, theme and htmx handling, so
+   there is one chart setup.
 
    Colours, text and font come from the app's CSS custom properties, read at
    draw time, so the charts follow the theme and redraw when it changes. The
@@ -35,7 +33,6 @@ const THEME_ATTRS = ['class', 'style', 'data-theme', 'data-bs-theme'];
 
 /**
  * @typedef {Object} SpendPoint
- * @property {string} period  Period bucket label ('' without a period).
  * @property {string} label   Group label, already translated and joined.
  * @property {number} spend   Spend in the reporting currency.
  * @property {number} api     API-equivalent value in the reporting currency.
@@ -44,7 +41,7 @@ const THEME_ATTRS = ['class', 'style', 'data-theme', 'data-bs-theme'];
 /**
  * @typedef {Object} ChartData
  * @property {string} currency  ISO 4217 code of the reporting currency.
- * @property {string} period    'day' | 'week' | 'month' | ''.
+ * @property {string} [kind]    The registered shape that draws it (none: groupOption).
  * @property {SpendPoint[]} points
  * @property {string} [locale]  The reader's locale, e.g. 'en' or 'pt_BR'.
  */
@@ -151,15 +148,6 @@ export function moneyFormatters(locale, currency) {
 }
 
 /**
- * Values in first-seen order, without repeats.
- * @param {string[]} values
- * @returns {string[]}
- */
-export function unique(values) {
-    return Array.from(new Set(values));
-}
-
-/**
  * One tooltip line: colour marker, series name, amount.
  * @param {string} color
  * @param {string} name
@@ -208,59 +196,6 @@ export function axisStyle(theme) {
         axisTick: { lineStyle: { color: theme.border } },
         axisLabel: { color: theme.muted, fontFamily: theme.font },
         splitLine: { lineStyle: { color: theme.border } },
-    };
-}
-
-/**
- * Spend per period bucket, one stacked bar series per group.
- * @param {ChartData} data
- * @param {ChartTheme} theme
- * @param {number} width
- * @param {ReturnType<typeof moneyFormatters>} fmt
- */
-function periodOption(data, theme, width, fmt) {
-    const periods = unique(data.points.map((p) => p.period));
-    const groups = unique(data.points.map((p) => p.label));
-    const spend = new Map(data.points.map((p) => [`${p.period}\u0000${p.label}`, p.spend]));
-    // Dataset rows: [period, spend of group 0, spend of group 1, ...]. The
-    // dimension names are positional, so a group called "period" cannot clash.
-    const source = periods.map((period) => [period, ...groups.map((g) => spend.get(`${period}\u0000${g}`) ?? null)]);
-    const axis = axisStyle(theme);
-    // Turn the period labels when they would not fit side by side (about 7 px
-    // per character plus a gap, against the plot width beside the value axis).
-    const longest = Math.max(...periods.map((p) => p.length));
-    const crowded = periods.length * (longest * 7 + 16) > width - 80;
-    return {
-        height: width < 480 ? 280 : 320,
-        option: {
-            dataset: { dimensions: ['period', ...groups.map((_, i) => `g${i}`)], source },
-            xAxis: {
-                type: 'category',
-                ...axis,
-                axisLabel: { ...axis.axisLabel, hideOverlap: true, rotate: crowded ? 45 : 0 },
-                splitLine: { show: false },
-            },
-            yAxis: {
-                type: 'value',
-                ...axis,
-                axisLabel: { ...axis.axisLabel, formatter: fmt.axis },
-            },
-            series: groups.map((name, i) => ({
-                type: 'bar',
-                name,
-                stack: 'spend',
-                encode: { x: 0, y: i + 1 },
-                barMaxWidth: 48,
-            })),
-            tooltip: {
-                trigger: 'item',
-                formatter: (params) => {
-                    if (params.componentType !== 'series') return tooltipBox(params.name, []);
-                    const amount = fmt.full(params.value[params.seriesIndex + 1] || 0);
-                    return tooltipBox(params.name, [tooltipRow(params.color, params.seriesName, amount)]);
-                },
-            },
-        },
     };
 }
 
@@ -333,7 +268,6 @@ export function buildOption(state, theme, width, animate) {
     const custom = data.kind ? shapes.get(data.kind) : null;
     let shape;
     if (custom) shape = custom.build(state, theme, width, fmt);
-    else if (data.period) shape = periodOption(data, theme, width, fmt);
     else shape = groupOption(data, labels, theme, width, fmt);
     const option = {
         ...shape.option,

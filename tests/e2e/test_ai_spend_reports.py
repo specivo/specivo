@@ -90,7 +90,7 @@ def _log(api: httpx.Client, project_key: str, model: str, day: str, amount: str,
     return resp.json()
 
 
-def test_project_report_chart_and_drill_through(admin_page: Page, api_client: httpx.Client, project: dict) -> None:
+def test_project_report_chart_and_drill_down(admin_page: Page, api_client: httpx.Client, project: dict) -> None:
     key = project["key"]
     comment = unique_key("Report session ")
     _log(api_client, key, "claude-sonnet-4-5", "2026-03-03", "1.50", comment)
@@ -105,48 +105,37 @@ def test_project_report_chart_and_drill_through(admin_page: Page, api_client: ht
 
     admin_page.add_init_script(CSP_WATCH)
     admin_page.goto(f"/projects/{key}/ai-usage/report/?{MARCH}&group=model&period=week")
-    chart = admin_page.get_by_test_id("spend-chart")
-    expect(chart).to_have_attribute("data-sp-drawn", "")
-    expect(chart.locator("svg").first).to_be_visible()
-    expect(chart).to_have_attribute("role", "img")
-    expect(chart).to_have_attribute("aria-label", re.compile(r"table below"))
     rows = admin_page.get_by_test_id("spend-row")
     expect(rows).to_have_count(3)  # sonnet in two weeks, haiku in one
     expect(admin_page.get_by_test_id("spend-total")).to_contain_text("3.75")
 
-    # Stacked bars per week, one series per model. Hovering a bar shows its
-    # series and the amount in the reporting currency.
-    sonnet_color = _palette(admin_page, 1)
+    # Group by model over the whole range: the value by model is drawn with spend
+    # against API-equivalent value per model.
+    admin_page.goto(f"/projects/{key}/ai-usage/report/?{MARCH}&group=model")
+    expect(rows).to_have_count(2)
+    chart = admin_page.get_by_test_id("aiu-chart-models")
+    expect(chart).to_have_attribute("data-sp-drawn", "")
+    expect(chart.locator("svg").first).to_be_visible()
+    expect(chart).to_have_attribute("role", "img")
     expect(chart.locator("svg text", has_text="claude-sonnet-4-5").first).to_be_visible()
-    _wait_bars(admin_page, chart, sonnet_color, 2)
-    x, y = _bars(admin_page, chart, sonnet_color)[0]
+    # The test instance has no model prices, so the API-equivalent bars are
+    # empty: hover and toggle the spend series.
+    spend_color = _palette(admin_page, 1)
+    _wait_bars(admin_page, chart, spend_color, 2)
+    x, y = _bars(admin_page, chart, spend_color)[0]
     admin_page.mouse.move(x, y)
     tooltip = chart.locator(".sp-chart-tooltip")
     expect(tooltip).to_be_visible()
-    expect(tooltip).to_contain_text("claude-sonnet-4-5")
-    expect(tooltip).to_contain_text(re.compile(r"\$\s?[12]\.[05]0"))
-
-    # Group by model only, over the whole range: spend against API-equivalent value.
-    admin_page.get_by_test_id("spend-period").select_option("")
-    admin_page.get_by_test_id("spend-submit").click()
-    expect(rows).to_have_count(2)
-    expect(chart).to_have_attribute("data-sp-drawn", "")
-    # The test instance has no model prices, so the API-equivalent bars are
-    # empty: hover and toggle the spend series.
-    _wait_bars(admin_page, chart, sonnet_color, 2)
-    x, y = _bars(admin_page, chart, sonnet_color)[0]
-    admin_page.mouse.move(x, y)
-    expect(tooltip).to_be_visible()
-    expect(tooltip).to_contain_text("Spend")
+    expect(tooltip).to_contain_text("Pay-per-use")
     expect(tooltip).to_contain_text("API-equivalent value")
 
     # The legend toggles a series off and on again.
     admin_page.mouse.move(0, 0)
-    legend_spend = chart.locator("svg text").filter(has_text=re.compile(r"^Spend$")).first
+    legend_spend = chart.locator("svg text").filter(has_text=re.compile(r"^Pay-per-use$")).first
     legend_spend.click()
-    _wait_bars(admin_page, chart, sonnet_color, 0)
+    _wait_bars(admin_page, chart, spend_color, 0)
     legend_spend.click()
-    _wait_bars(admin_page, chart, sonnet_color, 2)
+    _wait_bars(admin_page, chart, spend_color, 2)
 
     # Colours come from the theme's custom properties and follow a change.
     admin_page.evaluate("document.documentElement.style.setProperty('--sp-text-primary', 'rgb(1, 2, 3)')")
@@ -158,10 +147,33 @@ def test_project_report_chart_and_drill_through(admin_page: Page, api_client: ht
     )
     _assert_no_csp_violations(admin_page)
 
-    sonnet = rows.filter(has_text="claude-sonnet-4-5")
-    sonnet.get_by_test_id("spend-drill").click()
+    # The drill-down: a row opens the model's people in place (no page load), the
+    # heading takes the focus, and the path leads back.
+    expect(admin_page.get_by_test_id("spend-side")).to_contain_text("claude-sonnet-4-5")
+    admin_page.evaluate("window.__spDrill = 1")
+    rows.filter(has_text="claude-sonnet-4-5").get_by_test_id("spend-open").click()
+    admin_page.wait_for_url(re.compile(r"group=user"))
+    title = admin_page.get_by_test_id("spend-drill-title")
+    expect(title).to_have_text("claude-sonnet-4-5")
+    expect(title).to_be_focused()
+    assert admin_page.evaluate("window.__spDrill === 1")
+    # Person, then their (no) issue, then the sessions.
+    admin_page.get_by_test_id("spend-open").first.click()
+    admin_page.wait_for_url(re.compile(r"group=issue"))
+    admin_page.get_by_test_id("spend-open").first.click()
+    admin_page.wait_for_url(re.compile(r"group=sessions"))
+    expect(admin_page.get_by_test_id("spend-session")).to_have_count(2)
+    admin_page.get_by_test_id("spend-crumb").first.click()
+    admin_page.wait_for_url(re.compile(r"group=user"))
+    expect(admin_page.get_by_test_id("spend-crumbs")).to_have_count(0)
+    admin_page.go_back()
+    admin_page.wait_for_url(re.compile(r"group=sessions"))
+    expect(admin_page.get_by_test_id("spend-session")).to_have_count(2)
+
+    admin_page.get_by_test_id("spend-entry-list").click()
     admin_page.wait_for_url(f"**/projects/{key}/ai-usage/?**")
     expect(admin_page.locator("tr[data-entry-id]")).to_have_count(2)
+    _assert_no_csp_violations(admin_page)
     console.assert_no_errors()
 
 
@@ -178,7 +190,7 @@ def test_admin_report_presets_and_csv(admin_page: Page, api_client: httpx.Client
     admin_page.add_init_script(CSP_WATCH)
     admin_page.goto(f"/admin/ai-spend/?{MARCH}&group=project")
     expect(admin_page.get_by_test_id("spend-table")).to_be_visible()
-    chart = admin_page.get_by_test_id("spend-chart")
+    chart = admin_page.get_by_test_id("aiu-chart-projects")
     expect(chart).to_have_attribute("data-sp-drawn", "")
     expect(chart.locator("svg text", has_text=project["key"]).first).to_be_visible()
     _assert_no_csp_violations(admin_page)

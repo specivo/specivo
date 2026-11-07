@@ -11696,3 +11696,162 @@ msgstr "期间费用"
 #: specivo/templates/themes/default/pages/ai_usage/report.html
 msgid "Report"
 msgstr "报表"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Feature"
+msgstr "功能"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by person"
+msgstr "按成员统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by project"
+msgstr "按项目统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by feature"
+msgstr "按功能统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by tool"
+msgstr "按工具统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by provider"
+msgstr "按提供商统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by cost type"
+msgstr "按成本类型统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by branch"
+msgstr "按分支统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by model"
+msgstr "按模型统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Dates, filters and options"
+msgstr "日期、筛选和选项"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Sessions (entries)"
+msgstr "会话（记录）"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Report path"
+msgstr "报表路径"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Already filtered by this"
+msgstr "已按此项筛选"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Fewer columns"
+msgstr "较少列"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "All amount columns"
+msgstr "全部金额列"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "The entries of this selection, newest first"
+msgstr "此选择中的记录，最新的在前"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Each entry is one tool's usage of one model on one day, as reported. Spend includes the entry's share of its subscription where you may see seat cost."
+msgstr "每条记录是一个工具在一天内对一个模型的使用（按上报内容）。在你可以查看席位费用时，支出包含该记录分摊的订阅费用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Open in the entry list"
+msgstr "在记录列表中打开"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Share"
+msgstr "占比"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Other (%(count)s group)"
+msgid_plural "Other (%(count)s groups)"
+msgstr[0] "其他（%(count)s 组）"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "The smaller groups, summed; the CSV lists each"
+msgstr "较小的分组合计；CSV 中逐一列出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Select a row to open it. Every row leads down to the entries behind it."
+msgstr "选择一行即可打开。每一行都能逐级深入到其背后的记录。"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Spend by model in these entries"
+msgstr "这些记录中按模型统计的支出"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "Open %(name)s in the report"
+msgstr "在报表中打开 %(name)s"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+#, python-format
+msgid "%(count)s more person not shown."
+msgid_plural "%(count)s more people not shown."
+msgstr[0] "另有 %(count)s 人未显示。"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d person"
+msgid_plural "%(num)d people"
+msgstr[0] "%(num)d 人"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d group."
+msgid_plural "%(num)d groups."
+msgstr[0] "%(num)d 个分组。"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "Largest: %(name)s with %(amount)s (%(share)s)."
+msgstr "最多：%(name)s，%(amount)s（%(share)s）。"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d more in the table."
+msgid_plural "%(num)d more in the table."
+msgstr[0] "表中还有 %(num)d 个。"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d entry"
+msgid_plural "%(num)d entries"
+msgstr[0] "%(num)d 条记录"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d day"
+msgid_plural "%(num)d days"
+msgstr[0] "%(num)d 天"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(num)d model"
+msgid_plural "%(num)d models"
+msgstr[0] "%(num)d 个模型"
+
+#: specivo/web/pages/ai_spend_reports.py
+#, python-format
+msgid "%(entries)s over %(days)s, %(models)s."
+msgstr "%(entries)s，跨 %(days)s，%(models)s。"
+
+#: specivo/web/pages/ai_spend_reports.py
+msgid "Subscription seat"
+msgstr "订阅席位"
+
+#: specivo/web/pages/ai_spend_reports.py
+msgid "Pay-per-use API"
+msgstr "按量付费 API"

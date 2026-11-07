@@ -277,8 +277,11 @@ async def test_admin_page_charts(client: AsyncClient, w: World) -> None:
     assert 'data-testid="spend-leverage-plans"' in html and "Secret plan" in html
     total = re.search(r'data-testid="spend-leverage-total">(.*?)</tr>', html, re.S)
     assert total and "0.18×" in total.group(1)
-    # The charts sit above the report table, which still works.
-    assert html.index('data-testid="aiu-charts"') < html.index('data-testid="spend-table"')
+    # The drill-down comes first, the charts (trends) follow it.
+    assert html.index('data-testid="spend-table"') < html.index('data-testid="aiu-charts"')
+    # The stacks name their keys and stable colours, which the drill-down's swatches share.
+    assert time["stacks"]["user"]["keys"] == [str(w.alice.id), str(w.bob.id)]
+    assert time["stacks"]["user"]["colors"] == [0, 1]
     assert "spend-chart.min" in html
 
 

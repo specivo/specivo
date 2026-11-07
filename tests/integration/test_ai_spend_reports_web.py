@@ -156,7 +156,7 @@ async def test_project_report_page(client: AsyncClient, w: World) -> None:
     resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/report/", **MARCH, group="user", period="week")
     assert resp.status_code == 200, resp.text
     html = resp.text
-    assert 'data-testid="spend-table"' in html
+    assert 'data-testid="spend-table"' in html and 'data-testid="spend-drill"' in html
     assert "data-sp-spend-chart='" in html
     assert "/static/dist/js/spend-chart.min" in html  # the chart bundle, loaded on this page only
     assert "Rep Alice" in html and "Rep Bob" in html
@@ -214,7 +214,10 @@ async def test_project_report_page_hides_seat_cost(client: AsyncClient, w: World
 
 
 async def test_drill_through_to_the_project_tab(client: AsyncClient, w: World) -> None:
-    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/report/", **MARCH, group="issue", group2="branch")
+    # The entry links of each row are in the table with every amount column.
+    resp = await _get(
+        client, w.mgr, "/projects/RWA/ai-usage/report/", **MARCH, group="issue", group2="branch", detail="1"
+    )
     hrefs = [
         seg.split('"', 1)[0].replace("&amp;", "&") for seg in resp.text.split('href="/projects/RWA/ai-usage/?')[1:]
     ]
@@ -234,7 +237,7 @@ async def test_drill_through_to_the_project_tab(client: AsyncClient, w: World) -
 
 
 async def test_admin_page_and_entries(client: AsyncClient, w: World) -> None:
-    resp = await _get(client, w.admin, "/admin/ai-spend/", **MARCH, group="project")
+    resp = await _get(client, w.admin, "/admin/ai-spend/", **MARCH, group="project", detail="1")
     assert resp.status_code == 200, resp.text
     assert 'data-testid="spend-unallocated"' in resp.text
     assert 'href="/admin/ai-subscriptions/"' in resp.text  # unallocated seat rows, not split by person

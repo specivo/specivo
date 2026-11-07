@@ -386,8 +386,9 @@ class TestResponsiveAiSpendReport:
             "/projects/{key}/ai-usage/report/?{march}&group=model&period=week",
             "/projects/{key}/ai-usage/report/?{march}&group=model",
             "/admin/ai-spend/?{march}&group=project&period=day",
+            "/projects/{key}/ai-usage/report/?{march}&group=sessions",
         ],
-        ids=["project-per-week", "project-by-model", "admin-per-day"],
+        ids=["project-per-week", "project-by-model", "admin-per-day", "project-sessions"],
     )
     def test_chart_fits(
         self, responsive_page: Page, responsive_project: str, viewport_size: dict, path: str, scheme: str
@@ -395,13 +396,13 @@ class TestResponsiveAiSpendReport:
         page = responsive_page
         page.emulate_media(color_scheme=scheme)
         page.goto(path.format(key=responsive_project, march=self.MARCH))
-        chart = page.get_by_test_id("spend-chart")
+        chart = page.get_by_test_id("aiu-chart-time")
         expect(chart).to_have_attribute("data-sp-drawn", "")
         expect(chart.locator("svg").first).to_be_visible()
         page.wait_for_load_state("networkidle")
         assert _no_horizontal_overflow(page), f"{path} has horizontal overflow"
         svg = chart.locator("svg").first.bounding_box()
-        card = page.locator(".sp-spend-chart-card").bounding_box()
+        card = page.locator(".sp-aiu-chart-card").first.bounding_box()
         assert svg and card
         assert svg["x"] >= card["x"] - 1 and svg["x"] + svg["width"] <= card["x"] + card["width"] + 1
         assert svg["x"] + svg["width"] <= viewport_size["width"]
