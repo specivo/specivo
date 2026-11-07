@@ -667,7 +667,39 @@ class AiModelPriceService:
             await self._audit(
                 session, AuditEvent.AI_MODEL_PRICES_SEEDED, actor, request, outcome.details(), resource_id=None
             )
+        await self._reprice_backfills(session, outcome, actor)
         return outcome
+
+    @staticmethod
+    async def _reprice_backfills(session: AsyncSession, outcome: SeedOutcome, actor: User | None) -> None:
+        """Re-price stored entries a seed run just gave a price (before a model's first period's old start).
+
+        Entries keep the price (or its absence) they were stored with, so the
+        entries of each backfilled model dated before its old start are priced
+        again, each at its own instant. Models without such entries cost one
+        count query.
+        """
+        if not outcome.backfills:
+            return
+        from specivo.core.ai_pricing_seed import FIRST_PERIOD_START
+        from specivo.services.ai_usage_service import AiUsageService
+
+        usage = AiUsageService()
+        for backfill in outcome.backfills:
+            if backfill.until <= FIRST_PERIOD_START:
+                continue
+            found = await usage.count_in_range(
+                session, start=FIRST_PERIOD_START, end=backfill.until, model=backfill.model
+            )
+            if not found:
+                continue
+            await usage.recompute_range(
+                session,
+                actor_id=actor.id if actor is not None else None,
+                start=FIRST_PERIOD_START,
+                end=backfill.until,
+                model=backfill.model,
+            )
 
     # -- helpers ----------------------------------------------------------------------
 

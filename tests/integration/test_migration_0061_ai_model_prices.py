@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from specivo.core.ai_pricing_seed import load_history, load_snapshot
+from specivo.core.ai_pricing_seed import FIRST_PERIOD_START, load_history, load_snapshot
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration, pytest.mark.serial]
 
@@ -85,8 +85,8 @@ async def test_downgrade_restores_the_old_tables_empty_and_upgrade_seeds_again()
     )
     count, earliest, latest, open_rows = rows[0]
     assert count == expected
-    assert latest == snapshot.as_of
+    assert latest <= snapshot.as_of
     assert open_rows == len(snapshot.prices)
-    assert earliest <= snapshot.as_of
+    assert earliest == FIRST_PERIOD_START  # first periods start in the past, not at the list's as_of
     missing_1h = await _execute("SELECT count(*) FROM ai_model_prices WHERE cache_write_1h IS NULL")
     assert missing_1h == [(0,)]

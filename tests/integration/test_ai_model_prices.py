@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_pricing import TokenCounts, price_usage
 from specivo.core.ai_pricing_seed import (
+    FIRST_PERIOD_START,
     PRICE_COLUMNS,
     HistoryPeriod,
     SeedPrice,
@@ -295,6 +296,26 @@ async def test_prices_and_the_start_cannot_be_updated_in_place(db_session: Async
     )
 
 
+async def test_only_the_seed_rebase_may_move_a_seed_start_earlier(db_session: AsyncSession) -> None:
+    seed = await _add(db_session, start=T1)
+    admin_row = await _add(db_session, start=T1, source="admin")
+    earlier = update(AiModelPrice).where(AiModelPrice.id == seed.id).values(effective_from=T0)
+    await _refused(db_session, lambda: db_session.execute(earlier), "never edited in place")
+
+    rebase_on = text("SELECT set_config('specivo.ai_price_rebase', 'on', true)")
+    savepoint = await db_session.begin_nested()
+    await db_session.execute(rebase_on)
+    for statement in (
+        update(AiModelPrice).where(AiModelPrice.id == admin_row.id).values(effective_from=T0),
+        update(AiModelPrice).where(AiModelPrice.id == seed.id).values(effective_from=T2),
+    ):
+        await _refused(db_session, lambda s=statement: db_session.execute(s), "never edited in place")
+    await db_session.execute(earlier)
+    await savepoint.commit()
+    await db_session.refresh(seed)
+    assert seed.effective_from == T0
+
+
 async def test_a_referenced_price_cannot_be_deleted_or_ended_before_its_entries(
     db_session: AsyncSession, admin: User
 ) -> None:
@@ -479,11 +500,13 @@ async def _seed_rows(db: AsyncSession, model: str = "gamma-1") -> list[AiModelPr
     return list(result.scalars().all())
 
 
-async def test_a_first_load_inserts_from_as_of_and_a_rerun_is_a_no_op(db_session: AsyncSession, admin: User) -> None:
+async def test_a_first_load_starts_in_the_past_and_a_rerun_is_a_no_op(db_session: AsyncSession, admin: User) -> None:
     first = await _service.load_seed(db_session, actor=admin, snapshot=_snap(_seed_price()), history=())
     assert (first.inserted, first.closed, first.changed) == (1, 0, True)
     [row] = await _seed_rows(db_session)
-    assert (row.source, row.effective_from, row.effective_to, row.is_active) == ("seed", T1, None, True)
+    assert (row.source, row.effective_from, row.effective_to, row.is_active) == ("seed", FIRST_PERIOD_START, None, True)
+    before_as_of = await _service.resolve(db_session, "gamma-1", T0, provider="seedtest")
+    assert before_as_of is not None and before_as_of.price.id == row.id
     assert row.cache_write_1h == Decimal("2")  # missing 1h cache write: 2x input
     assert row.created_by_id is None
 
@@ -499,7 +522,7 @@ async def test_a_changed_price_closes_and_opens_periods(db_session: AsyncSession
     outcome = await _service.load_seed(db_session, snapshot=_snap(_seed_price(input="0.8"), as_of=T1), history=())
     assert (outcome.inserted, outcome.closed) == (1, 1)
     old, new = await _seed_rows(db_session)
-    assert (old.effective_from, old.effective_to, old.input) == (T0, T1, Decimal("1"))
+    assert (old.effective_from, old.effective_to, old.input) == (FIRST_PERIOD_START, T1, Decimal("1"))
     assert (new.effective_from, new.effective_to, new.input) == (T1, None, Decimal("0.8"))
     assert old.superseded_by_id == new.id
     assert (await _service.resolve(db_session, "gamma-1", T1 - TICK, provider="seedtest")).price.id == old.id  # type: ignore[union-attr]
@@ -538,6 +561,48 @@ async def test_history_periods_are_loaded_once(db_session: AsyncSession) -> None
     ]
     resolved = await _service.resolve(db_session, "gamma-1", T0 + timedelta(days=3), provider="seedtest")
     assert resolved is not None and resolved.price.input == Decimal("2")
+
+
+async def test_an_older_history_price_applies_before_the_newer_list_price(db_session: AsyncSession) -> None:
+    history = (HistoryPeriod(price=_seed_price(input="2"), effective_from=T0, effective_to=T1),)
+    await _service.load_seed(db_session, snapshot=_snap(_seed_price(), as_of=T2), history=history)
+    rows = await _seed_rows(db_session)
+    assert [(r.effective_from, r.effective_to, r.input) for r in rows] == [
+        (T0, T1, Decimal("2")),
+        (T2, None, Decimal("1")),
+    ]
+    older = await _service.resolve(db_session, "gamma-1", T0 + timedelta(days=3), provider="seedtest")
+    newer = await _service.resolve(db_session, "gamma-1", T2 + timedelta(days=3), provider="seedtest")
+    assert older is not None and older.price.input == Decimal("2")
+    assert newer is not None and newer.price.input == Decimal("1")
+    assert await _service.resolve(db_session, "gamma-1", T0 - TICK, provider="seedtest") is None
+
+
+async def test_a_reseed_moves_a_first_period_back_and_leaves_admin_periods(
+    db_session: AsyncSession, admin: User
+) -> None:
+    # As a release before the rule stored them: first periods from the list's as_of.
+    moved = await _add(db_session, provider="seedtest", model="gamma-1", start=T1)
+    blocked = await _add(db_session, provider="seedtest", model="delta-1", start=T1)
+    mine = await _service.create(
+        db_session,
+        _input(provider="seedtest", model="delta-1", effective_from=T0, prices={"input": "0.5", "output": "2"}),
+        actor=admin,
+    )
+    outcome = await _service.load_seed(db_session, actor=admin, snapshot=_snap(as_of=T1), history=())
+    assert outcome.rebased == 1 and outcome.changed
+    for row in (moved, blocked, mine.price):
+        await db_session.refresh(row)
+    assert (moved.effective_from, moved.effective_to) == (FIRST_PERIOD_START, None)
+    assert blocked.effective_from == T1
+    assert (mine.price.effective_from, mine.price.source) == (T0, "admin")
+    resolved = await _service.resolve(db_session, "gamma-1", T0, provider="seedtest")
+    assert resolved is not None and resolved.price.id == moved.id
+    audit = await _audit_rows(db_session, AuditEvent.AI_MODEL_PRICES_SEEDED)
+    assert audit[-1].details["rebased"] == 1
+
+    again = await _service.load_seed(db_session, snapshot=_snap(as_of=T1), history=())
+    assert again.rebased == 0 and not again.changed
 
 
 async def test_loading_the_bundled_snapshot_again_changes_nothing(db_session: AsyncSession) -> None:

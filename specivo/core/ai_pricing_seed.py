@@ -14,14 +14,22 @@ Two committed files feed ``ai_model_prices`` rows of source ``seed``:
 :func:`plan_seed` compares them with the seed rows already stored and returns
 what to write. It **appends periods and never rewrites them**:
 
-- a model without an open seed period is inserted from ``as_of``;
+- a model's **first** period (no seed row, no admin row before ``as_of`` and no
+  period in the history file) starts at :data:`FIRST_PERIOD_START`, not at
+  ``as_of``: LiteLLM lists current prices, and usage logged before the
+  snapshot's date is priced with them rather than left unpriced;
+- any other model without an open seed period is inserted from ``as_of``;
 - an unchanged price is a no-op;
 - a changed price closes the open seed period at ``as_of`` and opens a new one
   from ``as_of``;
 - a history period is inserted unless a seed period already covers part of it;
 - a deactivated open period, and every ``admin`` row, is left alone;
 - a model that disappeared from the snapshot keeps its open period (LiteLLM
-  dropping a model does not end its price).
+  dropping a model does not end its price);
+- the earliest seed row of a model that a release before this rule stored from
+  an ``as_of`` is moved back to :data:`FIRST_PERIOD_START` (a *rebase*), unless
+  an earlier seed or admin row exists or the history file has periods for the
+  model.
 
 Prices in both files are strings, per one million tokens. A missing one-hour
 cache write price becomes the providers' published one-hour cache write rate,
@@ -55,6 +63,11 @@ SNAPSHOT_PATH = DATA_DIR / "ai_model_prices.json"
 HISTORY_PATH = DATA_DIR / "ai_model_prices_history.json"
 
 SNAPSHOT_FORMAT = 1
+
+#: Where a model's first bundled price period starts: early enough to cover any
+#: usage, so the first known price also prices what was logged before the
+#: snapshot's ``as_of``.
+FIRST_PERIOD_START = datetime(2000, 1, 1, tzinfo=UTC)
 
 #: Every price column of ``ai_model_prices``, base tier then long-context tier.
 PRICE_COLUMNS: tuple[str, ...] = (
@@ -471,20 +484,32 @@ class PlannedRow:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class Backfill:
+    """A model whose usage before *until* gained a price in this run (entries there need re-pricing)."""
+
+    provider: str
+    model: str
+    until: datetime
+
+
 @dataclass
 class SeedPlan:
-    """What a seed run writes: closes first (``{row id: instant}``), then inserts."""
+    """What a seed run writes: rebases and closes first (``{row id: instant}``), then inserts."""
 
     as_of: datetime
     inserts: list[PlannedRow] = field(default_factory=list)
     closes: dict[int, datetime] = field(default_factory=dict)
+    #: Seed rows whose ``effective_from`` moves back to :data:`FIRST_PERIOD_START`.
+    rebases: dict[int, datetime] = field(default_factory=dict)
     alias_updates: dict[int, tuple[str, ...]] = field(default_factory=dict)
+    backfills: list[Backfill] = field(default_factory=list)
     unchanged: int = 0
     skipped: list[str] = field(default_factory=list)
 
     @property
     def is_empty(self) -> bool:
-        return not (self.inserts or self.closes or self.alias_updates)
+        return not (self.inserts or self.closes or self.rebases or self.alias_updates)
 
 
 def same_price(row: StoredSeedRow, price: SeedPrice) -> bool:
@@ -511,16 +536,39 @@ def plan_seed(
     stored: Iterable[StoredSeedRow],
     snapshot: Snapshot,
     history: Iterable[HistoryPeriod] = (),
+    admin_starts: Mapping[tuple[str, str], datetime] | None = None,
 ) -> SeedPlan:
-    """Compare the stored seed rows with the bundled files; see the module docstring for the rules."""
+    """Compare the stored seed rows with the bundled files; see the module docstring for the rules.
+
+    *admin_starts* maps ``(provider, model)`` to the earliest ``effective_from``
+    of its active admin rows: a model priced by an administrator before a
+    bundled period keeps that period's start.
+    """
     as_of = snapshot.as_of
+    history = tuple(history)
+    admin_starts = admin_starts or {}
     plan = SeedPlan(as_of=as_of)
     by_model: dict[tuple[str, str], list[StoredSeedRow]] = {}
     for row in stored:
         by_model.setdefault((row.provider, row.model), []).append(row)
+    history_models = {(p.price.provider, p.price.model) for p in history}
+
+    for key, rows in sorted(by_model.items()):
+        first = min(rows, key=lambda r: (r.effective_from, r.id))
+        admin_start = admin_starts.get(key)
+        if (
+            key in history_models
+            or not first.is_active
+            or first.effective_from <= FIRST_PERIOD_START
+            or (admin_start is not None and admin_start < first.effective_from)
+        ):
+            continue
+        plan.rebases[first.id] = FIRST_PERIOD_START
+        plan.backfills.append(Backfill(provider=key[0], model=key[1], until=first.effective_from))
 
     for price in snapshot.prices:
-        rows = by_model.get((price.provider, price.model), [])
+        key = (price.provider, price.model)
+        rows = by_model.get(key, [])
         open_rows = sorted((r for r in rows if r.effective_to is None), key=lambda r: r.effective_from)
         current = open_rows[-1] if open_rows else None
         name = f"{price.provider}/{price.model}"
@@ -528,7 +576,12 @@ def plan_seed(
             if any(_overlaps(as_of, None, r) for r in rows if r.is_active):
                 plan.skipped.append(f"{name}: a seed period already covers {format_instant(as_of)}")
                 continue
-            plan.inserts.append(PlannedRow(price=price, effective_from=as_of, effective_to=None))
+            admin_start = admin_starts.get(key)
+            first_known = not rows and key not in history_models and (admin_start is None or admin_start >= as_of)
+            start = FIRST_PERIOD_START if first_known and as_of > FIRST_PERIOD_START else as_of
+            plan.inserts.append(PlannedRow(price=price, effective_from=start, effective_to=None))
+            if start < as_of:
+                plan.backfills.append(Backfill(provider=price.provider, model=price.model, until=as_of))
             continue
         if not current.is_active:
             plan.unchanged += 1

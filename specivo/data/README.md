@@ -72,10 +72,20 @@ and rounded half up to six decimal places (the script reports any rounding).
 The licence is credited in `THIRD-PARTY-NOTICES.md` and on the admin page.
 
 LiteLLM keeps current prices only. The loader is therefore **append-only**:
-a new model gets a period from `as_of`, an unchanged price is a no-op, a
-changed price ends the open bundled period at `as_of` and opens a new one, and
-administrator prices are never touched. Usage before a model's first period is
-unpriced unless someone enters an earlier price.
+an unchanged price is a no-op, a changed price ends the open bundled period at
+`as_of` and opens a new one, and administrator prices are never touched.
+
+A model's **first** known period starts at `FIRST_PERIOD_START`
+(2000-01-01 UTC, in `specivo.core.ai_pricing_seed`), not at `as_of`, so usage
+logged before the snapshot's date is priced with the first known price. A
+period counts as first when the model has no earlier bundled period, no
+administrator period starting before it, and no period in
+`ai_model_prices_history.json`; otherwise a new model's period starts at
+`as_of`. Installs whose first periods were stored from an `as_of` by an older
+release get them moved back on the next load, and the entries dated before the
+old start are re-priced. A history period added later for such a model
+overlaps the moved period and is skipped with a warning; enter the older price
+as an administrator price instead (admin prices win).
 
 **Refresh** (once per release):
 

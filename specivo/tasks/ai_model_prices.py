@@ -37,10 +37,11 @@ async def load_bundled_ai_model_prices_async() -> None:
         await session.commit()
     if outcome.changed:
         logger.info(
-            "Bundled AI model prices as of %s loaded: %d new periods, %d closed",
+            "Bundled AI model prices as of %s loaded: %d new periods, %d closed, %d first periods moved back",
             outcome.as_of.isoformat(),
             outcome.inserted + outcome.history_inserted,
             outcome.closed,
+            outcome.rebased,
         )
     for message in outcome.skipped:
         logger.warning("Bundled AI model price skipped: %s", message)
