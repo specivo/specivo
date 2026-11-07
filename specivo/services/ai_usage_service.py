@@ -829,8 +829,16 @@ class AiUsageService:
 
     @staticmethod
     async def user_by_login(session: AsyncSession, login: str) -> User | None:
-        """The user with *login* (any case), or None."""
-        stmt = select(User).where(func.lower(User.login) == login.strip().lower())
+        """The real user with *login* (any case), or None: system accounts (``$git``, the anonymous user) never match.
+
+        Every login argument of AI usage (the MCP tools' ``user_login`` and
+        ``user``, on-behalf logging, the ingest API) resolves through here, so a
+        system account is "no such user" everywhere, as in the person filter
+        (``people_clause``).
+        """
+        from specivo.services.anonymous_user_service import real_users_clause
+
+        stmt = select(User).where(func.lower(User.login) == login.strip().lower(), real_users_clause())
         return (await session.execute(stmt)).scalar_one_or_none()
 
     # -- people of a report ------------------------------------------------------------

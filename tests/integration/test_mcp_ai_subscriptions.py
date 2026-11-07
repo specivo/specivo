@@ -451,3 +451,10 @@ async def test_audit(db_session: AsyncSession, w: World) -> None:
     await _call(w, "alice", "list")
     after = await _audit(db_session, AuditEvent.RESOURCE_ACCESS)
     assert after[-1].details["tool"] == "ai_subscriptions" and len(after) == len(reads) + 1
+
+
+async def test_a_system_account_is_nobody_to_hold_subscriptions(db_session: AsyncSession, w: World) -> None:
+    db_session.add(UserFactory.build(login="$mas_git", status="active", display_name="Git", password_hash=None))
+    await db_session.commit()
+    # Like an unknown login: a system account is not a person here (the shared user_by_login rule).
+    assert "No user with the login" in await _refused(w, "admin", "list", user="$mas_git")

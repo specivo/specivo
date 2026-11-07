@@ -138,3 +138,16 @@ async def test_issue_report_checks_the_project_and_visibility(db_session: AsyncS
     # Bob may not see the private issue: it is not found rather than reported empty.
     with pytest.raises(AppError):
         await _report(db_session, w.bob, issue_ref=w.private_issue.display_key)
+
+
+async def test_a_system_account_login_matches_nothing(db_session: AsyncSession, w: World) -> None:
+    from tests.factories.user import UserFactory
+
+    system = UserFactory.build(login="$rm_git", status="active", display_name="Git", password_hash=None)
+    db_session.add(system)
+    await db_session.flush()
+    await entry(db_session, system, project=w.p, day=date(2026, 3, 9), api="1")
+    await db_session.commit()
+    # Its usage counts in the report (totals stay exact), but its login names nobody.
+    assert "Git" in await _report(db_session, w.mgr, project_key="RMA")
+    assert "Rows (0):" in await _report(db_session, w.mgr, project_key="RMA", user_login="$rm_git")

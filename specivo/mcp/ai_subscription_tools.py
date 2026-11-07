@@ -31,7 +31,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_subscriptions import PLAN_PRESETS, PlanPreset
@@ -42,6 +42,7 @@ from specivo.mcp.tools import _log_tool
 from specivo.models.ai_subscription import AiSubscription, AiTool
 from specivo.models.user import User
 from specivo.services.ai_subscription_service import AiSubscriptionService, SubscriptionInput
+from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.api_key_scope import is_global_admin, is_limited_key
 from specivo.services.security_audit_service import AuditEvent
 
@@ -161,9 +162,7 @@ async def _owner(session: AsyncSession, caller: User, login: str | None) -> User
         return caller
     if not is_global_admin(caller):
         raise PermissionDeniedError(_("Only administrators manage other people's AI subscriptions."))
-    owner = (
-        await session.execute(select(User).where(func.lower(User.login) == login.strip().lower()))
-    ).scalar_one_or_none()
+    owner = await AiUsageService.user_by_login(session, login)
     if owner is None:
         raise NotFoundError(f"No user with the login '{login.strip()}'")
     if not _service.can_hold(owner):

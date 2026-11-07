@@ -614,3 +614,15 @@ async def test_entries_in_the_database(client: AsyncClient, db_session: AsyncSes
         "api",
     )
     assert stored.usage_date == date(2026, 3, 11) and stored.request_count == 3
+
+
+async def test_on_behalf_of_a_system_account_is_an_unknown_login(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    db_session.add(UserFactory.build(login="$aua_git", status="active", display_name="Git", password_hash=None))
+    await db_session.commit()
+    resp = await client.post(
+        "/api/v1/projects/AUAA/ai-usage/", json=body(on_behalf_of="$AUA_GIT"), headers=w.auth("runner")
+    )
+    assert resp.status_code == 422, resp.text
+    assert error(resp)["code"] == "ai_usage_target_unknown"
