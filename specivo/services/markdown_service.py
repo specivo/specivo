@@ -44,6 +44,7 @@ import nh3
 from markdown.extensions import Extension  # type: ignore[import-untyped]
 from markdown.extensions.attr_list import get_attrs_and_remainder  # type: ignore[import-untyped]
 from markdown.extensions.fenced_code import FencedBlockPreprocessor  # type: ignore[import-untyped]
+from markdown.extensions.tables import TableExtension, TableProcessor  # type: ignore[import-untyped]
 from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
 from markdown.preprocessors import Preprocessor  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
@@ -165,6 +166,32 @@ class _MermaidExtension(Extension):
     def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
         # Just above fenced_code (25), so mermaid fences are taken first.
         md.preprocessors.register(_MermaidPreprocessor(md), "mermaid_fences", 26)
+
+
+class _WikiTableProcessor(TableProcessor):
+    """The ``tables`` processor, reading ``[[Page|label]]`` as one cell.
+
+    Wiki links are made inline, after the table has split its rows, so the
+    ``|`` between a link's target and label would otherwise end the cell. It
+    is passed over as a ``|`` in a code span is.
+    """
+
+    def _split(self, row: str) -> list[str]:
+        # Same length, so each cell maps back to its span of the row as written.
+        masked = _WIKI_LINK_RE.sub(lambda m: m.group(0).replace("|", "\x00"), row)
+        cells = []
+        pos = 0
+        for cell in super()._split(masked):
+            cells.append(row[pos : pos + len(cell)])
+            pos += len(cell) + 1
+        return cells
+
+
+class _WikiTableExtension(TableExtension):
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        super().extendMarkdown(md)
+        # Replaces the stock processor under its own name and priority.
+        md.parser.blockprocessors.register(_WikiTableProcessor(md.parser, self.getConfigs()), "table", 75)
 
 
 # A bare URL: ``http://`` or ``https://``, ``www.`` or ``mailto:``, at the start
@@ -313,7 +340,14 @@ class _BareUrlExtension(Extension):
         md.inlinePatterns.register(_BareUrlInlineProcessor(md), "bare_urls", 75)
 
 
-_MD_EXTENSIONS: list = ["fenced_code", "tables", "toc", "codehilite", _MermaidExtension(), _BareUrlExtension()]
+_MD_EXTENSIONS: list = [
+    "fenced_code",
+    _WikiTableExtension(),
+    "toc",
+    "codehilite",
+    _MermaidExtension(),
+    _BareUrlExtension(),
+]
 _MD_EXTENSION_CONFIGS = {
     "codehilite": {"css_class": "codehilite", "guess_lang": False},
 }
@@ -680,7 +714,7 @@ def extract_links(text: str | None, instance_origin: str | None = None) -> list[
                 text,
                 extensions=[
                     "fenced_code",
-                    "tables",
+                    _WikiTableExtension(),
                     _WikiLinkExtension("", wiki_found, made),
                     _IssueRefExtension(None),
                     _BareUrlExtension(),
