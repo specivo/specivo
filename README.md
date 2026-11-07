@@ -37,7 +37,7 @@ seats and API keys. The invoice says how much. Specivo shows who spent it, and o
 </p>
 
 More on [specivo.io/ai-usage](https://specivo.io/ai-usage/) and in the user guide:
-[Reporting AI usage](https://specivo.io/docs/specivo/ai-agents/reporting-ai-usage/) · [AI spend reports](https://specivo.io/docs/specivo/projects/ai-spend-reports/).
+[Reporting AI usage](https://specivo.io/docs/specivo/ai-agents/reporting-ai-usage/) · [AI usage of a project, an issue and you](https://specivo.io/docs/specivo/projects/ai-usage/) · [AI spend reports](https://specivo.io/docs/specivo/projects/ai-spend-reports/).
 
 ## The problem
 
