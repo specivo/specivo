@@ -226,6 +226,37 @@ async def test_excluded_entries_leave_the_totals(client: AsyncClient, db_session
     assert 'data-testid="aiu-include"' in resp.text
 
 
+async def test_totals_note_unpriced_entries(client: AsyncClient, db_session: AsyncSession, w: World):
+    await _log(db_session, w, "alice")
+    resp = await _get(client, w.users["alice"], "/my/ai-usage/")
+    assert 'data-testid="aiu-unpriced-note"' not in resp.text
+
+    unknown = AiUsageInput(
+        tool="claude-code",
+        provider="testlab",
+        model="lab-unknown-7",
+        usage_date=DAY,
+        tokens={"input": 1000, "output": 100},
+        cost_type="api",
+        project_id=w.a.id,
+    )
+    entry = await _service.log(db_session, w.users["alice"], unknown)
+    await db_session.commit()
+    assert entry.cost_basis == "unpriced"
+
+    for user, url in (
+        ("alice", "/my/ai-usage/"),
+        ("alice", "/projects/AUWA/ai-usage/"),
+        ("admin", "/projects/AUWA/ai-usage/"),
+    ):
+        resp = await _get(client, w.users[user], url)
+        assert resp.status_code == 200, url
+        assert "1 of 2 entries has no price for its model and date, so it counts as 0." in resp.text, url
+        assert "<code>lab-unknown-7</code> (1)" in resp.text, url
+        link = 'data-testid="aiu-unpriced-prices-link"' in resp.text
+        assert link == (user == "admin"), url
+
+
 async def test_totals_and_rows_include_long_context_tokens(client: AsyncClient, db_session: AsyncSession, w: World):
     """1M in + 100k out in the base bucket and 500k in + 50k out in the long bucket: 1,650,000 tokens."""
     long = {"input": 500_000, "output": 50_000}

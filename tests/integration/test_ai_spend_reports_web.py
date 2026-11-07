@@ -165,6 +165,27 @@ async def test_project_report_page(client: AsyncClient, w: World) -> None:
     assert "<script>" not in html.split('data-testid="spend-presets"', 1)[1]
 
 
+async def test_report_pages_note_unpriced_entries(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/report/", **MARCH)
+    assert 'data-testid="aiu-unpriced-note"' not in resp.text
+
+    await entry(db_session, w.bob, project=w.p, day=date(2026, 3, 9), model="lab-unpriced-9")
+    await db_session.commit()
+    resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/report/", **MARCH)
+    html = resp.text
+    assert 'data-testid="aiu-unpriced-note"' in html
+    assert "1 of 3 entries has no price for its model and date, so it counts as 0." in html
+    assert "<code>lab-unpriced-9</code> (1)" in html
+    assert 'data-testid="aiu-unpriced-prices-link"' not in html  # not an administrator
+
+    resp = await _get(client, w.admin, "/admin/ai-spend/", **MARCH)
+    assert "1 of 5 entries has no price for its model and date, so it counts as 0." in resp.text
+    assert 'href="/admin/ai-model-prices/" data-testid="aiu-unpriced-prices-link"' in resp.text
+
+    body = (await _get(client, w.mgr, "/api/v1/projects/RWA/ai-usage/report/", **MARCH)).json()
+    assert body["totals"]["unpriced_entries"] == 1
+
+
 async def test_report_without_rows_skips_the_chart_bundle(client: AsyncClient, w: World) -> None:
     resp = await _get(client, w.mgr, "/projects/RWA/ai-usage/report/", from_date="2025-01-01", to_date="2025-01-31")
     assert resp.status_code == 200, resp.text

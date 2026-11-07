@@ -68,6 +68,27 @@
 {%- endif %}
 {%- endmacro %}
 
+{#
+  The note shown near totals when some counted entries have no price for their
+  model and date. unpriced: that count; entries: all counted entries;
+  models: [{model, count}] most entries first. Administrators get a link to the prices.
+#}
+{% macro unpriced_note(unpriced, entries, models) -%}
+{%- if unpriced %}
+<div class="sp-aiu-unpriced" role="note" data-testid="aiu-unpriced-note">
+  <p>{% trans count=unpriced, total=entries %}{{ count }} of {{ total }} entries has no price for its model and date, so it counts as 0.{% pluralize %}{{ count }} of {{ total }} entries have no price for their model and date, so they count as 0.{% endtrans %}</p>
+  {%- if models %}
+  <p class="sp-text-muted-xs" data-testid="aiu-unpriced-models">{% trans %}Models without a price:{% endtrans %}
+    {% for m in models %}<code>{{ m.model or "–" }}</code> ({{ m.count }}){% if not loop.last %}, {% endif %}{% endfor %}{% if unpriced > models | sum(attribute="count") %}, …{% endif %}
+  </p>
+  {%- endif %}
+  {%- if user is defined and user and user.is_admin %}
+  <p class="sp-text-muted-xs"><a href="/admin/ai-model-prices/" data-testid="aiu-unpriced-prices-link">{% trans %}Add or load prices{% endtrans %}</a></p>
+  {%- endif %}
+</div>
+{%- endif %}
+{%- endmacro %}
+
 {% macro totals_box(totals) -%}
 <div class="sp-aiu-totals" data-testid="aiu-totals">
   <div class="sp-aiu-total">
@@ -93,6 +114,7 @@
     </span>
   </div>
 </div>
+{{ unpriced_note(totals.unpriced, totals.entries, totals.unpriced_models) }}
 {%- endmacro %}
 
 {#

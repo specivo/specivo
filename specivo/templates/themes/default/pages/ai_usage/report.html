@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
-{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label with context %}
+{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note with context %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
@@ -216,6 +216,8 @@
     <span class="sp-text-muted-xs">{% trans count=totals.entries %}{{ count }} entry{% pluralize %}{{ count }} entries{% endtrans %}{% if totals.unpriced %} · {% trans count=totals.unpriced %}{{ count }} not priced{% pluralize %}{{ count }} not priced{% endtrans %}{% endif %}</span>
   </div>
 </div>
+
+{{ unpriced_note(totals.unpriced, totals.entries, unpriced_models) }}
 
 <p class="sp-text-muted-xs sp-spend-notes" data-testid="spend-notes">
   {% trans first=report.date_from.isoformat(), last=report.date_to.isoformat(), currency=report.currency %}{{ first }} to {{ last }} (UTC days), amounts in {{ currency }}.{% endtrans %}
