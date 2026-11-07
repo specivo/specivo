@@ -117,10 +117,21 @@
 {{ unpriced_note(totals.unpriced, totals.entries, totals.unpriced_models) }}
 {%- endmacro %}
 
+{% macro stack_label(key) -%}
+{% if key == "user" %}{% trans %}By user{% endtrans %}
+{%- elif key == "tool" %}{% trans %}By tool{% endtrans %}
+{%- elif key == "model" %}{% trans %}By model{% endtrans %}
+{%- else %}{% trans %}By project{% endtrans %}{% endif %}
+{%- endmacro %}
+
 {#
-  The charts of My AI usage (see web/pages/ai_usage.py, _charts_view): value
-  over time (stacked by tool or model), tokens over time, and the value by
-  project and by model, drawn by the shared chart bundle (spend-chart.min.js).
+  The AI usage charts (see web/pages/ai_usage.py, _charts_view), drawn by the
+  shared chart bundle (spend-chart.min.js): value over time (stacked by tool or
+  model; on the spend reports also by user and, on the instance report, by
+  project), tokens over time, the value by group, and subscription leverage.
+  My AI usage passes its own charts; the spend reports theirs (charts.scope
+  "project" or "instance"), with seat cost and leverage per person when the
+  reader may see seat cost.
   charts: None when nothing is counted, {too_long: True} when the entries span too long
   a period; has_rows: whether the table lists entries.
 #}
@@ -156,15 +167,19 @@
       {%- endif %}
       <fieldset class="sp-aiu-chart-switch" data-testid="aiu-chart-switch">
         <legend class="sp-visually-hidden">{% trans %}Split the value by{% endtrans %}</legend>
-        <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-chart-stack" value="tool" checked data-sp-chart-switch="aiu-chart-time"> {% trans %}By tool{% endtrans %}</label>
-        <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-chart-stack" value="model" data-sp-chart-switch="aiu-chart-time"> {% trans %}By model{% endtrans %}</label>
+        {%- for key in charts.time.stacks %}
+        <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-chart-stack" value="{{ key }}"{% if loop.first %} checked{% endif %} data-sp-chart-switch="aiu-chart-time"> {{ stack_label(key) }}</label>
+        {%- endfor %}
       </fieldset>
       </div>
     </div>
     <div id="aiu-chart-time" class="sp-spend-chart" data-testid="aiu-chart-time" role="img"
          aria-label="{{ _('API-equivalent value over time; the totals and the table hold the numbers') }}"
-         data-sp-chart-mode="tool"
+         data-sp-chart-mode="{{ (charts.time.stacks | list | first) or 'tool' }}"
          data-sp-spend-chart='{{ charts.time | tojson }}'></div>
+    {%- if charts.time.seat %}
+    <p class="sp-text-muted-xs sp-aiu-chart-caption" data-testid="aiu-chart-seat-note">{% trans %}The spend line is pay-per-use charges plus seat cost; the dashed line is the seat cost alone.{% endtrans %}</p>
+    {%- endif %}
   </div>
 
   {%- if charts.tokens_fresh or charts.tokens_cache %}
@@ -186,25 +201,109 @@
   {%- endif %}
 
   <div class="sp-aiu-chart-grid">
+    {%- if charts.by_user %}
+    <div class="card sp-aiu-chart-card">
+      <h3 class="sp-aiu-chart-title">{% trans %}By user{% endtrans %}</h3>
+      <div class="sp-spend-chart" data-testid="aiu-chart-users" role="img"
+           aria-label="{{ _('API-equivalent value by user') }}"
+           data-sp-spend-chart='{{ charts.by_user | tojson }}'
+           data-label-spend="{{ _('Pay-per-use') }}"
+           data-label-api="{{ _('API-equivalent value') }}"></div>
+    </div>
+    {%- endif %}
+    {%- if charts.by_project %}
     <div class="card sp-aiu-chart-card">
       <h3 class="sp-aiu-chart-title">{% trans %}By project{% endtrans %}</h3>
       <div class="sp-spend-chart" data-testid="aiu-chart-projects" role="img"
            aria-label="{{ _('API-equivalent value by project') }}"
            data-sp-spend-chart='{{ charts.by_project | tojson }}'
-           data-label-spend="{{ _('Spend') }}"
+           data-label-spend="{{ _('Pay-per-use') if charts.scope else _('Spend') }}"
            data-label-api="{{ _('API-equivalent value') }}"></div>
     </div>
+    {%- endif %}
     <div class="card sp-aiu-chart-card">
       <h3 class="sp-aiu-chart-title">{% trans %}By model{% endtrans %}</h3>
       <div class="sp-spend-chart" data-testid="aiu-chart-models" role="img"
            aria-label="{{ _('API-equivalent value by model') }}"
            data-sp-spend-chart='{{ charts.by_model | tojson }}'
-           data-label-spend="{{ _('Spend') }}"
+           data-label-spend="{{ _('Pay-per-use') if charts.scope else _('Spend') }}"
            data-label-api="{{ _('API-equivalent value') }}"></div>
     </div>
+    {%- if charts.by_tool %}
+    <div class="card sp-aiu-chart-card">
+      <h3 class="sp-aiu-chart-title">{% trans %}By tool{% endtrans %}</h3>
+      <div class="sp-spend-chart" data-testid="aiu-chart-tools" role="img"
+           aria-label="{{ _('API-equivalent value by tool') }}"
+           data-sp-spend-chart='{{ charts.by_tool | tojson }}'
+           data-label-spend="{{ _('Pay-per-use') }}"
+           data-label-api="{{ _('API-equivalent value') }}"></div>
+    </div>
+    {%- endif %}
   </div>
+  {%- if charts.scope %}
+  <p class="sp-text-muted-xs sp-aiu-chart-caption">{% trans %}The breakdowns show pay-per-use charges; seat cost is not split by group here, the table below holds it.{% endtrans %}</p>
+  {%- endif %}
 
-  {%- if charts.leverage %}
+  {%- if charts.scope and charts.leverage_total %}
+  <div class="card sp-aiu-chart-card" data-testid="spend-leverage-charts">
+    <h3 class="sp-aiu-chart-title">{% trans %}Subscription leverage{% endtrans %}</h3>
+    <p class="sp-text-muted-xs">{% if charts.scope == "project" %}{% trans %}Per person: the seat cost their usage in this project carries, against the API-equivalent value of that subscription usage. Plan details stay with their holders and administrators.{% endtrans %}{% else %}{% trans %}Per plan and per person: the plans' fees counted in this period, against the API-equivalent value of the usage they covered.{% endtrans %}{% endif %}</p>
+    {%- if charts.leverage %}
+    <h4 class="sp-aiu-chart-subtitle">{% trans %}Per plan{% endtrans %}</h4>
+    <div class="sp-table-scroll">
+    <table class="sp-table sp-aiu-leverage-table" data-testid="spend-leverage-plans">
+      <thead><tr>
+        <th scope="col">{% trans %}Plan{% endtrans %}</th>
+        <th scope="col">{% trans %}Holder{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Fee for the period{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>
+      </tr></thead>
+      <tbody>
+      {%- for p in charts.leverage %}
+        <tr data-testid="spend-leverage-plan">
+          <td>{{ p.plan }}</td>
+          <td>{{ p.holder }}</td>
+          <td class="sp-aiu-num">{{ p.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ p.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endfor %}
+      </tbody>
+    </table>
+    </div>
+    {%- endif %}
+    <h4 class="sp-aiu-chart-subtitle">{% trans %}Per person{% endtrans %}</h4>
+    <div class="sp-table-scroll">
+    <table class="sp-table sp-aiu-leverage-table" data-testid="spend-leverage-people">
+      <thead><tr>
+        <th scope="col">{% trans %}Person{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% if charts.scope == "project" %}{% trans %}Seat cost{% endtrans %}{% else %}{% trans %}Fees for the period{% endtrans %}{% endif %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>
+      </tr></thead>
+      <tbody>
+      {%- for p in charts.people %}
+        <tr data-testid="spend-leverage-person">
+          <td>{{ p.name }}</td>
+          <td class="sp-aiu-num">{{ p.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ p.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="sp-spend-total-row" data-testid="spend-leverage-total">
+          <td>{% trans %}Total{% endtrans %}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_total.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_total.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ charts.leverage_total.leverage or "–" }}</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>
+  </div>
+  {%- elif charts.leverage and not charts.scope %}
   <div class="card sp-aiu-chart-card" data-testid="aiu-leverage">
     <h3 class="sp-aiu-chart-title">{% trans %}Subscription leverage{% endtrans %}</h3>
     <p class="sp-text-muted-xs">{% trans %}The API-equivalent value of the usage each of your plans covered in this period, divided by the plan's fee for the same days.{% endtrans %}</p>

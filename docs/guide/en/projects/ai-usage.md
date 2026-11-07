@@ -65,6 +65,14 @@ service account's reports are easy to tell apart.
 
 **Days are UTC days.** A session that runs past midnight UTC is split into two entries.
 
+Under the totals, **Charts** show the entries you may see with the list's filters (counted ones, or
+the excluded ones when **Show** is set to excluded): the value and spend over time **by user**, **by
+tool** or **by model**, tokens over time, the value by user, model and tool, and, where you may see
+seat cost, subscription leverage per person. They work like the charts of the
+[spend report](ai-spend-reports.md#charts), with the same rules on who sees seat cost. An issue or
+branch filter, or showing excluded entries, leaves seat cost out, since a subscription fee belongs to
+no issue or branch.
+
 For totals per person, model, tool, issue or week, with subscription fees included, click
 **Spend report**: see [AI spend reports](ai-spend-reports.md).
 

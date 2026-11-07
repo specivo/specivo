@@ -52,7 +52,8 @@ A month in which a subscription was not used, or only for usage that has no pric
 Its fee is **unallocated seat cost**. The AI spend page shows it on its own row, with a
 **Subscriptions** link to the person's plans, and in the totals. Project reports never show it.
 
-The report never shows plan names. **Seat cost is shown only to administrators, and to people who can
+Project reports never show plan names; the AI spend page names them only in its leverage chart, for
+administrators. **Seat cost is shown only to administrators, and to people who can
 see every AI usage entry of the project in the period.** Anyone else sees pay-per-use spend and
 API-equivalent value, with a note that seat cost is left out. This keeps people's subscriptions
 private: a project report shows only the shares carried by that project's usage, never a whole fee.
@@ -77,6 +78,29 @@ private: a project report shows only the shares carried by that project's usage,
   everything.
 - **Seat cost**: **Leave out** to see pay-per-use spend only.
 - **Order**: rows are ordered by the group. **By spend** puts the largest spend first.
+
+## Charts
+
+Above the report table, **Charts** show the usage the report counts, with the same filters,
+currency and exchange rates, so they add up to the totals:
+
+- **API-equivalent value and spend over time**, split **by user**, **by tool** or **by model** (and
+  **by project** on the AI spend page). Spend is a line; where you may see seat cost, it includes the
+  seat cost, and a dashed line shows the seat cost alone.
+- **Tokens over time**: input and output in one chart, cache reads and writes in another.
+- The value **by user**, **by project** (AI spend page), **by model** and **by tool**: the eight
+  largest, the rest as **Other**. These show pay-per-use spend, since seat cost is not split by
+  model or tool; the table holds it.
+- **Subscription leverage**, only where you may see seat cost. The AI spend page lists every plan
+  with its holder, every person and the instance total: the fees counted in the period against the
+  API-equivalent value of the usage they covered. A project report lists people only, each with the
+  share of their fees carried by the project's usage, never plan names or whole fees.
+
+The charts run from the first to the last day with usage in the chosen period (on the AI spend page,
+also the days of plans whose fee nobody's usage carried), one point per day, week or month
+depending on how long that is. **Day**, **Week** and **Month** pick a size yourself; a size that
+would draw more than 120 points falls back to **Auto**. Entries without a price count as nothing, so
+a period that has some is marked with an asterisk, and its tooltip says how many.
 
 ## Currencies
 

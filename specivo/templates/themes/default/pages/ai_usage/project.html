@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, pagination %}
-{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label with context %}
+{% from "pages/ai_usage/_macros.html" import totals_box, entry_table, notice_text, list_error_text, cost_type_label, usage_charts with context %}
 
 {% block title %}{% trans %}AI usage{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -82,6 +82,7 @@
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-provider-filter"><span class="filter-label">{% trans %}Provider{% endtrans %}</span>{{ filters.provider }}</span>{% endif %}
   {% if filters.branch %}<input type="hidden" name="branch" value="{{ filters.branch }}">
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-branch-filter"><span class="filter-label">{% trans %}Branch{% endtrans %}</span>{% if filters.branch == "-" %}{% trans %}No branch{% endtrans %}{% else %}{{ filters.branch }}{% endif %}</span>{% endif %}
+  {% if chart_bucket %}<input type="hidden" name="bucket" value="{{ chart_bucket }}">{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
     {% if page_query %}<a class="sp-btn sp-btn-ghost" href="/projects/{{ project.key }}/ai-usage/">{% trans %}Clear{% endtrans %}</a>{% endif %}
@@ -90,6 +91,8 @@
 {% if issue_unknown %}<div class="flash flash-info" role="status">{% trans %}No issue with that key in this project, or you cannot see it.{% endtrans %}</div>{% endif %}
 
 {{ totals_box(totals) }}
+
+{{ usage_charts(charts, has_rows=(rows | length > 0), bucket_links=bucket_links) }}
 
 {% if rows %}
 <div class="card">
@@ -104,3 +107,6 @@
 </div>
 {% endif %}
 {% endblock %}
+
+{# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
+{% block chart_js %}{% if charts and not charts.too_long %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

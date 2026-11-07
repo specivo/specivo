@@ -11648,3 +11648,51 @@ msgstr "已按%(shown)s而非%(asked)s分组：该范围的时间段过多。"
 #: specivo/web/pages/ai_usage.py:506
 msgid "Auto"
 msgstr "自动"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "By user"
+msgstr "按用户"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "The spend line is pay-per-use charges plus seat cost; the dashed line is the seat cost alone."
+msgstr "支出线为按量计费加席位费用；虚线仅为席位费用。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "API-equivalent value by user"
+msgstr "按用户的 API 等值"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "API-equivalent value by tool"
+msgstr "按工具的 API 等值"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "The breakdowns show pay-per-use charges; seat cost is not split by group here, the table below holds it."
+msgstr "分项图显示按量计费；席位费用在此不按组拆分，见下方表格。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per person: the seat cost their usage in this project carries, against the API-equivalent value of that subscription usage. Plan details stay with their holders and administrators."
+msgstr "按人：其在本项目中的使用所承担的席位费用，与该订阅使用的 API 等值对比。套餐详情仅其持有人和管理员可见。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per plan and per person: the plans' fees counted in this period, against the API-equivalent value of the usage they covered."
+msgstr "按套餐和按人：本期间计入的套餐费用，与其覆盖的使用的 API 等值对比。"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per plan"
+msgstr "按套餐"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Holder"
+msgstr "持有人"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Per person"
+msgstr "按人"
+
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html
+msgid "Fees for the period"
+msgstr "期间费用"
+
+#: specivo/templates/themes/default/pages/ai_usage/report.html
+msgid "Report"
+msgstr "报表"
