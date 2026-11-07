@@ -1,0 +1,61 @@
+{# Recent activity, consecutive events by one actor on one issue or wiki page grouped into a row.
+   Context: activity (specivo.web.pages.dashboard.activity_context), user.
+   Swapped whole by the filter chips (/partials/dashboard/activity/). #}
+{% set tz = user.timezone if user is defined else 'UTC' %}
+{% macro filter_label(f) -%}
+{% if f == "agents" %}{% trans %}Agents{% endtrans %}{% elif f == "people" %}{% trans %}People{% endtrans %}{% else %}{% trans %}All{% endtrans %}{% endif %}
+{%- endmacro %}
+<section class="card sp-dash-card" id="sp-dash-activity" aria-labelledby="sp-dash-activity-title" data-testid="dash-activity" data-filter="{{ activity.who }}">
+  <div class="sp-dash-card-head sp-dash-card-head--wrap">
+    <h2 id="sp-dash-activity-title">{% trans %}Recent activity{% endtrans %}</h2>
+    <div class="sp-dash-chips" role="group" aria-label="{{ _('Show activity of') }}">
+      {% for f in activity.filters %}
+      <a class="sp-dash-chip" role="button" href="/?who={{ f }}#sp-dash-activity"
+         hx-get="/partials/dashboard/activity/?who={{ f }}" hx-target="#sp-dash-activity" hx-swap="outerHTML"
+         aria-pressed="{{ 'true' if f == activity.who else 'false' }}" data-testid="dash-activity-{{ f }}">{{ filter_label(f) }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% if activity.groups %}
+  <div class="sp-dash-groups">
+    {% for v in activity.groups %}
+    {% set g = v.group %}
+    <details class="sp-dash-group" data-testid="dash-activity-group"{% if loop.first %} open{% endif %}>
+      <summary>
+        <span class="sp-dash-group-line">
+          <span class="sp-dash-strong">{{ g.actor }}</span>{% if g.via_client is not none %} <span class="sp-dash-muted">{% if g.via_client %}{% trans client=g.via_client %}via {{ client }}{% endtrans %}{% else %}{% trans %}via an API key{% endtrans %}{% endif %}</span>{% endif %}
+          {% if g.target_kind == "issue" %}{% trans %}worked on{% endtrans %}{% else %}{% trans %}edited wiki page{% endtrans %}{% endif %}
+          {% if g.target_kind == "issue" %}<a class="sp-dash-key" href="{{ g.target_url }}">{{ g.target_key }}</a> <span class="sp-dash-group-title">&ldquo;{{ g.target_title }}&rdquo;</span>{% else %}<a class="sp-dash-group-title" href="{{ g.target_url }}">&ldquo;{{ g.target_title }}&rdquo;</a> <span class="sp-dash-muted">{{ g.target_key }}</span>{% endif %}
+          {% if v.summary %}<span class="sp-dash-group-counts">&middot; {{ v.summary }}</span>{% endif %}
+        </span>
+        <span class="sp-dash-group-meta">
+          {{ g.last_at | timeago(tz) }}
+          &middot; {% if g.is_agent %}<span class="sp-dash-tag sp-dash-tag--agent">{% trans %}Agent{% endtrans %}</span>{% else %}<span class="sp-dash-tag">{% trans %}Person{% endtrans %}</span>{% endif %}
+        </span>
+      </summary>
+      <ol class="sp-dash-events">
+        {% for item in v.events %}
+        {% set e = item.event %}
+        <li class="sp-dash-event sp-dash-event--{{ e.kind }}">
+          <time datetime="{{ e.ts.isoformat() }}">{{ e.ts | localdt(tz, 'MMMd') }} {{ e.ts | localdt(tz, 'Hm') }}</time>
+          <span>
+          {% if e.kind == "updated" %}{% trans %}Issue updated{% endtrans %}
+          {% elif e.kind == "status" %}{% if e.text %}{% trans status=e.text %}Status changed to {{ status }}{% endtrans %}{% else %}{% trans %}Status changed{% endtrans %}{% endif %}
+          {% elif e.kind == "resolved" %}{% trans status=e.text %}Resolved ({{ status }}){% endtrans %}
+          {% elif e.kind == "comment" %}{% trans %}Comment{% endtrans %}: &ldquo;{{ e.text }}&rdquo;
+          {% elif e.kind == "created" %}{% trans %}Issue created{% endtrans %}
+          {% elif e.kind == "time" %}{% trans hours=item.hours %}logged {{ hours }}h{% endtrans %}{% if e.activity %} &middot; {{ e.activity }}{% endif %}
+          {% elif e.kind == "wiki" %}{% trans %}Wiki page edited{% endtrans %}
+          {% elif e.kind == "commit" %}{% trans %}Commit{% endtrans %} <code>{{ e.text }}</code>
+          {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ol>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="sp-dash-empty" data-testid="dash-activity-empty">{% trans %}No recent activity.{% endtrans %}</p>
+  {% endif %}
+</section>

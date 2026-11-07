@@ -3,241 +3,173 @@
 {% block title %}{% trans %}Dashboard{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
-{# Greeting #}
-<div class="sp-greeting animate-in">
-  <h1>{% trans %}Dashboard{% endtrans %}</h1>
-  <div class="sp-greeting-meta">
-    <strong>{{ total_projects }}</strong> {{ _('project') if total_projects == 1 else _('projects') }}
-    &middot; {{ unread_count }} {{ _('unread notification') if unread_count == 1 else _('unread notifications') }}
-  </div>
-</div>
+{% set tz = user.timezone if user is defined else 'UTC' %}
+<div class="sp-dash">
 
-{# Quick stats chips #}
-<div class="sp-quick-stats animate-in">
-  <div class="sp-stat-chip">
-    <span class="sp-stat-dot" style="background:var(--sp-warning)"></span>
-    <span class="sp-stat-value">{{ my_issues_total }}</span>
-    <span>{% trans %}open issues assigned to you{% endtrans %}</span>
+  <div class="sp-dash-head sp-greeting">
+    <h1>{% trans %}Dashboard{% endtrans %}</h1>
+    <p class="sp-dash-head-meta sp-greeting-meta">
+      <span class="sp-dash-head-date">{{ today | localdate('yMMMMEEEEd') }}</span>
+      &middot; <strong>{{ total_projects }}</strong> {{ _('project') if total_projects == 1 else _('projects') }}
+      &middot; {{ unread_count }} {{ _('unread notification') if unread_count == 1 else _('unread notifications') }}
+    </p>
   </div>
-  <div class="sp-stat-chip">
-    <span class="sp-stat-dot" style="background:var(--sp-status-new)"></span>
-    <span class="sp-stat-value">{{ feedback_count }}</span>
-    <span>{% trans %}need your feedback{% endtrans %}</span>
-  </div>
-  <div class="sp-stat-chip">
-    <span class="sp-stat-dot" style="background:var(--sp-success)"></span>
-    <span class="sp-stat-value">{{ resolved_this_week }}</span>
-    <span>{% trans %}resolved this week{% endtrans %}</span>
-  </div>
-</div>
 
-<div class="dash-grid">
-  {# Left column #}
-  <div style="display:flex; flex-direction:column; gap:var(--sp-space-xl);">
-
-    {# My Open Issues #}
-    <div class="card accent-gold animate-in">
-      <div class="card-header">
-        <h2>{% trans %}My Open Issues{% endtrans %} <span class="card-count">{{ my_issues_total }}</span></h2>
-        <a href="/projects/">{% trans %}View all{% endtrans %} &rarr;</a>
+  {# Needs your attention #}
+  <section class="sp-dash-attention" aria-labelledby="sp-dash-attention-title" data-testid="dash-attention">
+    <div class="sp-dash-section-head">
+      <h2 id="sp-dash-attention-title">{% trans %}Needs your attention{% endtrans %}</h2>
+      <a href="#sp-dash-issues">{% trans %}My open issues{% endtrans %} &rarr;</a>
+    </div>
+    <div class="sp-dash-kpis">
+      <a class="sp-dash-kpi sp-dash-kpi--accent" href="#sp-dash-issues" data-testid="dash-kpi-open">
+        <span class="sp-dash-kpi-value">{{ attention.open_issues }}</span>
+        <span class="sp-dash-kpi-label">{% trans count=attention.open_issues %}Open issue assigned to you{% pluralize %}Open issues assigned to you{% endtrans %}</span>
+      </a>
+      <div class="sp-dash-kpi sp-dash-kpi--feedback" data-testid="dash-kpi-feedback">
+        <span class="sp-dash-kpi-value">{{ attention.feedback }}</span>
+        <span class="sp-dash-kpi-label">{% trans %}Need your feedback{% endtrans %}</span>
       </div>
-      <div id="my-issues-container">
-        {% include "pages/_my_issues.html" %}
+      <div class="sp-dash-kpi sp-dash-kpi--danger" data-testid="dash-kpi-blocked">
+        <span class="sp-dash-kpi-value">{{ attention.blocked }}</span>
+        <span class="sp-dash-kpi-label">{% trans count=attention.blocked %}Blocked issue{% pluralize %}Blocked issues{% endtrans %}</span>
+      </div>
+      <div class="sp-dash-kpi sp-dash-kpi--warning" data-testid="dash-kpi-overdue">
+        <span class="sp-dash-kpi-value">{{ attention.overdue }}</span>
+        <span class="sp-dash-kpi-label">{% trans count=attention.overdue %}Overdue issue{% pluralize %}Overdue issues{% endtrans %}</span>
       </div>
     </div>
+  </section>
 
-    {# Recent Service Account Activity #}
-    {% if sa_activity %}
-    <div class="card animate-in">
-      <div class="card-header">
-        <h2>{% trans %}Recent Service Account Activity{% endtrans %}</h2>
-      </div>
-      <div class="activity-feed">
-        {% for ev in sa_activity %}
-        <div class="activity-item">
-          {% if ev.type == 'resolved' %}
-          <div class="sp-activity-icon" style="background:var(--sp-success-subtle)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-success)" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-          </div>
-          <div class="activity-content">
-            <span class="actor">{{ ev.actor }}</span>
-            <span class="action">{% trans %}resolved{% endtrans %}</span>
-            <a class="target" href="/issue/{{ ev.issue_key }}/">{{ ev.issue_key }}</a>
-            {% if ev.summary %}<span class="action">&mdash; "{{ ev.summary }}"</span>{% endif %}
-            <div class="activity-time">{{ ev.ts | timeago(user.timezone if user is defined else 'UTC') }}</div>
-          </div>
-          {% elif ev.type == 'wiki_edit' %}
-          <div class="sp-activity-icon" style="background:var(--sp-info-subtle)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-info)" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </div>
-          <div class="activity-content">
-            <span class="actor">{{ ev.actor }}</span>
-            <span class="action">{% trans %}updated wiki page{% endtrans %}</span>
-            <a class="target" href="/projects/{{ ev.project_key }}/wiki/">{{ ev.wiki_title }}</a>
-            <span class="action">{% trans %}in{% endtrans %} {{ ev.project_key }}</span>
-            <div class="activity-time">{{ ev.ts | timeago(user.timezone if user is defined else 'UTC') }}</div>
-          </div>
-          {% elif ev.type == 'time_logged' %}
-          <div class="sp-activity-icon" style="background:var(--sp-accent-subtle)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-accent)" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          </div>
-          <div class="activity-content">
-            <span class="actor">{{ ev.actor }}</span>
-            <span class="action">{% trans %}logged{% endtrans %} {{ ev.hours }}h {% trans %}on{% endtrans %}</span>
-            <a class="target" href="/issue/{{ ev.issue_key }}/">{{ ev.issue_key }}</a>
-            <span class="action">&mdash; {{ ev.activity_name }}</span>
-            <div class="activity-time">{{ ev.ts | timeago(user.timezone if user is defined else 'UTC') }}</div>
-          </div>
-          {% elif ev.type == 'comment' %}
-          <div class="sp-activity-icon" style="background:var(--sp-info-subtle)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-info)" stroke-width="2.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-          </div>
-          <div class="activity-content">
-            <span class="actor">{{ ev.actor }}</span>
-            <span class="action">{% trans %}commented on{% endtrans %}</span>
-            <a class="target" href="/issue/{{ ev.issue_key }}/">{{ ev.issue_key }}</a>
-            {% if ev.summary %}<span class="action">&mdash; "{{ ev.summary }}"</span>{% endif %}
-            <div class="activity-time">{{ ev.ts | timeago(user.timezone if user is defined else 'UTC') }}</div>
-          </div>
-          {% elif ev.type == 'updated' %}
-          <div class="sp-activity-icon" style="background:var(--sp-warning-subtle)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-warning)" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </div>
-          <div class="activity-content">
-            <span class="actor">{{ ev.actor }}</span>
-            <span class="action">{% trans %}updated{% endtrans %}</span>
-            <a class="target" href="/issue/{{ ev.issue_key }}/">{{ ev.issue_key }}</a>
-            {% if ev.summary %}<span class="action">&mdash; "{{ ev.summary }}"</span>{% endif %}
-            <div class="activity-time">{{ ev.ts | timeago(user.timezone if user is defined else 'UTC') }}</div>
-          </div>
-          {% endif %}
+  {% include "pages/dashboard/_sessions.html" %}
+
+  {% if spend %}{% include "pages/dashboard/_spend.html" %}{% endif %}
+
+  <div class="sp-dash-grid">
+    <div class="sp-dash-col">
+
+      {# My Open Issues #}
+      <section class="card accent-gold sp-dash-card" id="sp-dash-issues" aria-labelledby="sp-dash-issues-title" data-testid="dash-my-issues">
+        <div class="sp-dash-card-head">
+          <h2 id="sp-dash-issues-title">{% trans %}My Open Issues{% endtrans %} <span class="card-count">{{ my_issues_total }}</span></h2>
+          <a href="/projects/">{% trans %}View all{% endtrans %} &rarr;</a>
         </div>
-        {% endfor %}
-      </div>
+        <div id="my-issues-container">
+          {% include "pages/_my_issues.html" %}
+        </div>
+      </section>
+
+      {% include "pages/dashboard/_activity.html" %}
+
     </div>
-    {% endif %}
 
-  </div>
+    <div class="sp-dash-col sp-dash-side">
 
-  {# Right column #}
-  <div style="display:flex; flex-direction:column; gap:var(--sp-space-xl);">
-
-    {# Release Tracking #}
-    <div class="card accent-violet animate-in">
-      <div class="card-header">
-        <h2>{% trans %}Release Tracking{% endtrans %}</h2>
-      </div>
-      <div class="sp-release-block">
+      {# Release Tracking #}
+      <section class="card sp-dash-card" aria-labelledby="sp-dash-releases-title" data-testid="dash-releases">
+        <div class="sp-dash-card-head">
+          <h2 id="sp-dash-releases-title">{% trans %}Release Tracking{% endtrans %}</h2>
+        </div>
         {% if active_versions %}
+        <ul class="sp-dash-list">
           {% for v in active_versions %}
-          <div class="sp-release-item">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-space-xs)">
-              <span class="sp-release-name"{% if v.status == 'closed' %} style="color:var(--sp-text-secondary)"{% endif %}>{{ v.name }}</span>
+          <li class="sp-dash-progress-item">
+            <div class="sp-dash-progress-top">
+              <a class="sp-dash-strong-link" href="/projects/{{ v.project_key }}/versions/{{ v.id }}/">{{ v.name }}</a>
               {% if v.status == 'open' %}
-              <span class="sp-release-badge" style="background:#EEF2FF;color:#4338CA">{% trans %}In Progress{% endtrans %}</span>
+              <span class="sp-dash-badge sp-dash-badge--release">{% trans %}In Progress{% endtrans %}</span>
               {% else %}
-              <span class="sp-release-badge" style="background:var(--sp-success-subtle);color:#15803D">{% trans %}Completed{% endtrans %}</span>
+              <span class="sp-dash-badge sp-dash-badge--done">{% trans %}Completed{% endtrans %}</span>
               {% endif %}
             </div>
-            <div class="sp-release-meta">
+            <div class="sp-dash-progress-meta">
+              <span>{{ v.project_key }}</span>
               {% if v.status == 'open' and v.due_date %}
-              <span>{% trans %}Target{% endtrans %}: <strong style="color:var(--sp-text-secondary)">{{ v.due_date }}</strong></span>
-              {% if v.days_left is defined %}<span>{{ v.days_left }} {% trans %}days left{% endtrans %}</span>{% endif %}
+              <span>{% trans %}Target{% endtrans %}: {{ v.due_date }}</span>
+              {% if v.days_left is defined %}{% if v.days_left < 0 %}<span class="sp-dash-text-danger">{% trans count=-v.days_left %}{{ count }} day overdue{% pluralize %}{{ count }} days overdue{% endtrans %}</span>{% else %}<span>{% trans count=v.days_left %}{{ count }} day left{% pluralize %}{{ count }} days left{% endtrans %}</span>{% endif %}{% endif %}
               {% elif v.status == 'closed' and v.due_date %}
-              <span>{% trans %}Released{% endtrans %}: <strong style="color:var(--sp-success)">{{ v.due_date }}</strong></span>
+              <span>{% trans %}Released{% endtrans %}: {{ v.due_date }}</span>
               {% endif %}
             </div>
-            <div class="sp-release-bar">
-              <div class="sp-release-bar-fill" style="width:{{ v.progress }}%;background:{% if v.status == 'open' %}#7C3AED{% else %}var(--sp-success){% endif %};{% if v.status == 'closed' %}opacity:0.6{% endif %}"></div>
-            </div>
-            {% if v.status == 'open' and v.total_count %}
-            <div class="sp-release-stats">
-              <span>{{ v.closed_count }} {% trans %}of{% endtrans %} {{ v.total_count }} {% trans %}issues closed{% endtrans %} ({{ v.progress }}%)</span>
-            </div>
+            <progress class="sp-dash-bar {{ 'sp-dash-bar--release' if v.status == 'open' else 'sp-dash-bar--done' }}" max="100" value="{{ v.progress }}" aria-label="{{ _('%(name)s progress') % {'name': v.name} }}">{{ v.progress }}%</progress>
+            {% if v.total_count %}
+            <div class="sp-dash-progress-stats">{{ v.closed_count }} {% trans %}of{% endtrans %} {{ v.total_count }} {% trans %}issues closed{% endtrans %} ({{ v.progress }}%)</div>
             {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="sp-dash-empty">{% trans %}No active releases.{% endtrans %}</p>
+        {% endif %}
+      </section>
+
+      {# Active Sprints #}
+      {% for sp in active_sprints %}
+      <section class="card sp-dash-card" aria-labelledby="sp-dash-sprint-{{ sp.id }}-title" data-testid="dash-sprint">
+        <div class="sp-dash-card-head">
+          <h2 id="sp-dash-sprint-{{ sp.id }}-title">{% trans %}Sprint{% endtrans %}</h2>
+          <a href="/projects/{{ sp.project_key }}/sprints/">{% trans %}All sprints{% endtrans %} &rarr;</a>
+        </div>
+        <div class="sp-dash-progress-item">
+          <div class="sp-dash-progress-top"><strong>{{ sp.name }}</strong></div>
+          <div class="sp-dash-progress-meta">
+            <span>{{ sp.project_name }}</span>
+            {% if sp.start_date and sp.end_date %}<span>{{ sp.start_date }} &ndash; {{ sp.end_date }}</span>{% endif %}
+          </div>
+          <div class="sp-dash-progress-meta sp-dash-progress-meta--split">
+            {% if sp.days_remaining is not none %}<span class="sp-dash-text-accent">{% trans count=sp.days_remaining %}{{ count }} day left{% pluralize %}{{ count }} days left{% endtrans %}</span>{% endif %}
+            {% if sp.days_total %}<span>{% trans %}Duration{% endtrans %}: {{ sp.days_total }} {% trans %}days{% endtrans %}</span>{% endif %}
+          </div>
+          <progress class="sp-dash-bar" max="100" value="{{ sp.progress }}" aria-label="{{ _('%(name)s progress') % {'name': sp.name} }}">{{ sp.progress }}%</progress>
+          <div class="sp-dash-progress-stats">{{ sp.closed }} {% trans %}of{% endtrans %} {{ sp.total }} {% trans %}issues closed{% endtrans %} ({{ sp.progress }}%)</div>
+        </div>
+      </section>
+      {% endfor %}
+
+      {# Projects (compact) #}
+      <section class="card sp-dash-card" aria-labelledby="sp-dash-projects-title" data-testid="dash-projects">
+        <div class="sp-dash-card-head">
+          <h2 id="sp-dash-projects-title">{% trans %}Projects{% endtrans %}</h2>
+        </div>
+        {% if projects %}
+          {% for p in projects %}
+          <a href="/projects/{{ p.key }}/" class="project-compact">
+            <span class="key">{{ p.key }}</span>
+            <span class="name">{{ p.name }}</span>
+            <span class="count">{{ project_stats[p.id].open_count if project_stats and p.id in project_stats else 0 }} {% trans %}open{% endtrans %}</span>
+          </a>
+          {% endfor %}
+          {% if total_projects > projects | length %}
+          <div class="sp-dash-card-foot sp-dash-card-foot--end"><a href="/projects/">{% trans count=total_projects %}All {{ count }} project{% pluralize %}All {{ count }} projects{% endtrans %} &rarr;</a></div>
+          {% endif %}
+        {% else %}
+          <p class="sp-dash-empty">{% trans %}No projects yet.{% endtrans %}</p>
+        {% endif %}
+      </section>
+
+      {# Recent Wiki #}
+      <section class="card sp-dash-card" aria-labelledby="sp-dash-wiki-title" data-testid="dash-wiki">
+        <div class="sp-dash-card-head">
+          <h2 id="sp-dash-wiki-title">{% trans %}Recent Wiki{% endtrans %}</h2>
+        </div>
+        {% if recent_wiki_pages %}
+          {% for wp in recent_wiki_pages %}
+          <div class="sp-wiki-item">
+            <div>
+              <a class="sp-wiki-title" href="/projects/{{ wp.project_key }}/wiki/{{ wp.slug }}/">{{ wp.title }}</a>
+              <div class="sp-wiki-meta">{{ wp.project_key }} &middot; {% trans %}updated{% endtrans %} {{ wp.updated_at | timeago(tz) }}{% if wp.author_name %} {% trans %}by{% endtrans %} {{ wp.author_name }}{% endif %}</div>
+            </div>
           </div>
           {% endfor %}
         {% else %}
-          <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No active releases.{% endtrans %}</div>
+          <p class="sp-dash-empty">{% trans %}No wiki pages yet.{% endtrans %}</p>
         {% endif %}
-      </div>
-    </div>
+      </section>
 
-    {# Active Sprints #}
-    {% if active_sprints %}
-    {% for sp in active_sprints %}
-    <div class="card accent-gold animate-in">
-      <div class="card-header">
-        <h2>{% trans %}Sprint{% endtrans %}</h2>
-        <a href="/projects/{{ sp.project_key }}/sprints/">{% trans %}All sprints{% endtrans %} &rarr;</a>
-      </div>
-      <div class="sp-sprint-block">
-        <div class="sp-sprint-name">{{ sp.name }}</div>
-        <div class="sp-sprint-project">{{ sp.project_name }}</div>
-        {% if sp.start_date and sp.end_date %}
-        <div class="sp-sprint-dates">
-          <span>{{ sp.start_date }} &ndash; {{ sp.end_date }}</span>
-          {% if sp.days_remaining is not none %}
-          <span class="sp-sprint-remaining">{{ sp.days_remaining }} {% trans %}days left{% endtrans %}</span>
-          {% endif %}
-        </div>
-        {% endif %}
-        {% if sp.days_total %}
-        <div class="sp-sprint-duration">
-          <span>{% trans %}Duration{% endtrans %}: {{ sp.days_total }} {% trans %}days{% endtrans %}</span>
-        </div>
-        {% endif %}
-        <div class="sp-release-bar" style="margin-top:var(--sp-space-sm)">
-          <div class="sp-release-bar-fill" style="width:{{ sp.progress }}%;background:var(--sp-accent)"></div>
-        </div>
-        <div class="sp-release-stats">
-          <span>{{ sp.closed }} {% trans %}of{% endtrans %} {{ sp.total }} {% trans %}issues closed{% endtrans %} ({{ sp.progress }}%)</span>
-        </div>
-      </div>
     </div>
-    {% endfor %}
-    {% endif %}
-
-    {# Projects (compact) #}
-    <div class="card animate-in">
-      <div class="card-header">
-        <h2>{% trans %}Projects{% endtrans %}</h2>
-      </div>
-      {% if projects is defined and projects %}
-        {% for p in projects %}
-        <a href="/projects/{{ p.key }}/" class="project-compact" style="text-decoration:none;color:inherit;">
-          <span class="key">{{ p.key }}</span>
-          <span class="name">{{ p.name }}</span>
-          <span class="count">{{ project_stats[p.id].open_count if project_stats and p.id in project_stats else 0 }} {% trans %}open{% endtrans %}</span>
-        </a>
-        {% endfor %}
-      {% else %}
-        <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">{% trans %}No projects yet.{% endtrans %}</div>
-      {% endif %}
-    </div>
-
-    {# Recent Wiki #}
-    <div class="card animate-in">
-      <div class="card-header">
-        <h2>{% trans %}Recent Wiki{% endtrans %}</h2>
-      </div>
-      {% if recent_wiki_pages %}
-        {% for wp in recent_wiki_pages %}
-        <div class="sp-wiki-item">
-          <div>
-            <a class="sp-wiki-title" href="/projects/{{ wp.project_key }}/wiki/{{ wp.slug }}/">{{ wp.title }}</a>
-            <div class="sp-wiki-meta">{{ wp.project_key }} &middot; {% trans %}updated{% endtrans %} {{ wp.updated_at | timeago(user.timezone if user is defined else 'UTC') }} {% trans %}by{% endtrans %} {{ wp.author_name }}</div>
-          </div>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No wiki pages yet.{% endtrans %}</div>
-      {% endif %}
-    </div>
-
   </div>
-</div>
 
-{# Plugin dashboard widgets #}
-{% block dashboard_plugins %}{% endblock %}
+  {# Plugin dashboard widgets #}
+  {% block dashboard_plugins %}{% endblock %}
+</div>
 {% endblock %}

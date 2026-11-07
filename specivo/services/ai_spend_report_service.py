@@ -55,8 +55,10 @@ the project (an administrator, or visibility ``all`` with every issue
 visible); otherwise the seat measures are left out and ``seat_cost_hidden`` is
 set. Unallocated seat cost and fees never appear in project reports, so a
 project viewer can see at most the shares carried by that project's entries,
-never another user's whole fee. No plan name or subscription detail is part of
-a report. :meth:`AiSpendReportService.seat_breakdown` groups the same numbers
+never another user's whole fee. A report of a set of projects (``projects``)
+shows seat cost only when the viewer reads every entry of every project in
+the set, and never shows unallocated seat cost. No plan name or subscription
+detail is part of a report. :meth:`AiSpendReportService.seat_breakdown` groups the same numbers
 by plan id too, for the charts (``ai_usage_chart_service``), which name plans
 on the instance report only.
 
@@ -80,7 +82,7 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import exists, false, func, select
+from sqlalchemy import and_, exists, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -403,6 +405,7 @@ class AiSpendReportService:
         include_seat_cost: bool = True,
         filters: ReportFilters | None = None,
         sort: str = "key",
+        projects: Sequence[Project] | None = None,
     ) -> SpendReport:
         """The report of *project* (None: the whole instance, administrators only) from *date_from* to *date_to*.
 
@@ -411,6 +414,14 @@ class AiSpendReportService:
         ``entry_date`` with the instance's maximum rate age. 403 for an
         instance report by anyone but an administrator; 422 for bad
         parameters.
+
+        *projects* (with no *project*) reports a set of projects together:
+        scope ``projects``. Each project must be reachable by *viewer* and
+        counts only the entries *viewer* may read there, exactly as in its
+        own report. Amounts are in the instance's reporting currency. Seat
+        cost is shown only when *viewer* reads every entry of every project in
+        the set (:meth:`sees_every_entry`), otherwise it is left out for the
+        whole report; unallocated seat cost never appears.
         """
         return await self._report(
             session,
@@ -425,6 +436,7 @@ class AiSpendReportService:
             include_seat_cost=include_seat_cost,
             filters=filters,
             sort=sort,
+            projects=projects,
         )
 
     async def seat_breakdown(
@@ -478,6 +490,7 @@ class AiSpendReportService:
         include_seat_cost: bool,
         filters: ReportFilters | None,
         sort: str,
+        projects: Sequence[Project] | None = None,
     ) -> SpendReport:
         from specivo.services.currency_service import CurrencyService
         from specivo.services.exchange_rate_service import ExchangeRateService, parse_policy
@@ -497,7 +510,14 @@ class AiSpendReportService:
         requested_period = period
         period = coarsen_period(date_from, date_to, period)
 
-        if project is None:
+        project_set: list[Project] | None = None
+        if projects is not None:
+            if project is not None:
+                raise _invalid("Give one project or a set of projects, not both", "project")
+            project_set = list({p.id: p for p in projects}.values())
+            for member in project_set:
+                await ProjectService().require_project_access(session, member, viewer)
+        elif project is None:
             if not is_global_admin(viewer):
                 raise PermissionDeniedError("Only administrators can see the instance AI spend report")
         else:
@@ -514,14 +534,22 @@ class AiSpendReportService:
             target = await CurrencyService().reporting_currency_for(session, project)
 
         # Who may see seat cost (see the module docstring).
-        if project is None:
+        if project_set is not None:
+            seats_allowed = True
+            for member in project_set:
+                if not await self.sees_every_entry(session, viewer, member, date_from, date_to):
+                    seats_allowed = False
+                    break
+        elif project is None:
             seats_allowed = True
         else:
             seats_allowed = await self.sees_every_entry(session, viewer, project, date_from, date_to)
         seat_shown = include_seat_cost and seats_allowed
-        unallocated_shown = seat_shown and project is None and not filters.excludes_seats
+        unallocated_shown = seat_shown and project is None and project_set is None and not filters.excludes_seats
 
         conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
+        if project_set is not None:
+            conditions.append(await self._set_clause(session, viewer, project_set))
         raw = await self._grouped_rows(session, conditions, dims)
         visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
         builder = _RowBuilder(dims, period)
@@ -551,7 +579,7 @@ class AiSpendReportService:
         rows.sort(key=_sort_key(dims, period, sort))
         missing = await unpriced_models(session, conditions) if totals.unpriced_entries else []
         return SpendReport(
-            scope="instance" if project is None else "project",
+            scope="project" if project is not None else "projects" if project_set is not None else "instance",
             project=project,
             date_from=date_from,
             date_to=date_to,
@@ -570,6 +598,17 @@ class AiSpendReportService:
             unpriced_models=missing,
             requested_period=requested_period if requested_period != period else None,
         )
+
+    async def _set_clause(self, session: AsyncSession, viewer: User, projects: list[Project]) -> ColumnElement[bool]:
+        """Entries of *projects* that *viewer* may read, each project by its own rule (``visible_entries_clause``)."""
+        if not projects:
+            return false()
+        parts: list[ColumnElement[bool]] = []
+        for member in projects:
+            clause = await self._usage.visible_entries_clause(session, viewer, member)
+            in_project = AiUsageEntry.project_id == member.id
+            parts.append(in_project if clause is None else and_(in_project, clause))
+        return or_(*parts)
 
     async def conditions(
         self,

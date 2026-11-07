@@ -168,5 +168,10 @@ async def test_dashboard_reads_a_move_to_a_done_status_as_resolved(
     resp = await client.get("/", cookies=_cookie(s.admin))
     assert resp.status_code == 200
     text = " ".join(resp.text.split())
-    assert re.search(rf'resolved</span> <a class="target" href="/issue/{s.done_issue.display_key}/"', text)
-    assert not re.search(rf'resolved</span> <a class="target" href="/issue/{s.open_issue.display_key}/"', text)
+    groups = re.findall(r'<details class="sp-dash-group".*?</details>', text)
+
+    def group_of(issue: Issue) -> str:
+        return next(g for g in groups if f'href="/issue/{issue.display_key}/"' in g)
+
+    assert "sp-dash-event--resolved" in group_of(s.done_issue)
+    assert "sp-dash-event--resolved" not in group_of(s.open_issue)
