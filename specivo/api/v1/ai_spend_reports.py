@@ -5,6 +5,8 @@
 - ``GET /ai-usage/report/``: the whole instance; administrators only.
 - ``GET /projects/{key}/ai-usage/report/people/`` and ``GET /ai-usage/report/people/``:
   a page of the people the report's person filter may name (the search behind it).
+- ``GET /projects/{key}/ai-usage/report/models/`` and ``GET /ai-usage/report/models/``:
+  a page of model names for the report's model filter.
 
 Both reports take ``format=csv`` for a CSV file of every row; the JSON answer
 is a page of the rows (``offset``, ``limit``) with the totals of all of them. Included before the
@@ -26,7 +28,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.schemas.ai_spend_report import SpendReportOut
+from specivo.schemas.ai_spend_report import SpendModelSuggestionOut, SpendReportOut
 from specivo.schemas.ai_usage import AiUsageCostType
 from specivo.schemas.project import AssigneeSuggestionOut
 from specivo.services.ai_spend_report_service import (
@@ -36,7 +38,7 @@ from specivo.services.ai_spend_report_service import (
     parse_group_by,
     report_csv,
 )
-from specivo.services.ai_usage_service import AiUsageService
+from specivo.services.ai_usage_service import AiUsageService, ModelSuggestion
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 
@@ -355,3 +357,47 @@ async def instance_ai_spend_people(
 ) -> list[AssigneeSuggestionOut]:
     """Search everyone with AI usage or a subscription: the instance report's person filter (administrators only)."""
     return _people_out(await AiUsageService().search_people(db, current_user, None, q, offset=offset, limit=limit))
+
+
+# ---------------------------------------------------------------------------
+# The model filter's search
+# ---------------------------------------------------------------------------
+
+_MODEL_Q = Query(None, max_length=200, description="Substring of the model name or an alias")
+
+
+def _models_out(models: list[ModelSuggestion]) -> list[SpendModelSuggestionOut]:
+    return [
+        SpendModelSuggestionOut(id=m.model, name=m.model, provider=m.provider, aliases=list(m.aliases)) for m in models
+    ]
+
+
+@router.get("/projects/{project_key}/ai-usage/report/models/", response_model=list[SpendModelSuggestionOut])
+async def project_ai_spend_models(
+    project_key: str,
+    db: DbSession,
+    q: str | None = _MODEL_Q,
+    offset: int = _PEOPLE_OFFSET,
+    limit: int = _PEOPLE_LIMIT,
+    current_user: User = Depends(get_current_user),
+) -> list[SpendModelSuggestionOut]:
+    """Search model names for the project report's model filter: the price list's and the project's usage you may read.
+
+    Ordered by name and paged with ``offset``/``limit``; a page shorter than
+    ``limit`` is the last.
+    """
+    project = await _projects.get_by_key(db, project_key.upper())
+    await _projects.require_project_access(db, project, current_user)
+    return _models_out(await AiUsageService().search_models(db, current_user, project, q, offset=offset, limit=limit))
+
+
+@router.get("/ai-usage/report/models/", response_model=list[SpendModelSuggestionOut])
+async def instance_ai_spend_models(
+    db: DbSession,
+    q: str | None = _MODEL_Q,
+    offset: int = _PEOPLE_OFFSET,
+    limit: int = _PEOPLE_LIMIT,
+    current_user: User = Depends(get_current_user),
+) -> list[SpendModelSuggestionOut]:
+    """Search model names for the instance report's model filter (administrators only)."""
+    return _models_out(await AiUsageService().search_models(db, current_user, None, q, offset=offset, limit=limit))

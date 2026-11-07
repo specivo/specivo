@@ -242,6 +242,15 @@ class AiUsageInput:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelSuggestion:
+    """A model name for a report's model filter, with its provider and the other names it is priced under."""
+
+    model: str
+    provider: str
+    aliases: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class UpsertResult:
     """What an upsert did: ``created``, ``updated`` or ``unchanged`` (nothing written)."""
 
@@ -870,6 +879,59 @@ class AiUsageService:
         display = func.lower(func.coalesce(func.nullif(User.display_name, ""), User.login))
         stmt = stmt.order_by(display, func.lower(User.login), User.id).offset(offset).limit(limit)
         return list((await session.execute(stmt)).scalars().all())
+
+    async def search_models(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        query: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[ModelSuggestion]:
+        """A page of model names for a report's model filter, by name: the price list's and the usage's.
+
+        *query* matches the name or an alias (substring, any case). Usage
+        names count only from the entries *viewer* may read: in *project*, or
+        on the instance report (administrators only, 403 otherwise). Each
+        name carries the provider and the other names the price list knows it
+        by, which the filter also matches (:meth:`model_names`).
+        """
+        if project is None and not is_global_admin(viewer):
+            raise PermissionDeniedError("Only administrators can see the instance AI spend report")
+        q = (query or "").strip().lower()
+        pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        priced = select(AiModelPrice.model.label("model"), AiModelPrice.provider.label("provider"))
+        used = select(AiUsageEntry.model.label("model"), AiUsageEntry.provider.label("provider")).where(
+            AiUsageEntry.model != "", *await self._list_conditions(session, viewer, project=project)
+        )
+        if q:
+            alias_text = func.lower(func.array_to_string(AiModelPrice.aliases, " "))
+            priced = priced.where(
+                or_(func.lower(AiModelPrice.model).like(pattern, escape="\\"), alias_text.like(pattern, escape="\\"))
+            )
+            used = used.where(func.lower(AiUsageEntry.model).like(pattern, escape="\\"))
+        names = priced.union(used).subquery()
+        stmt = (
+            select(names.c.model, func.min(names.c.provider))
+            .group_by(names.c.model)
+            .order_by(func.lower(names.c.model), names.c.model)
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = (await session.execute(stmt)).all()
+        aliases: dict[str, set[str]] = {}
+        if rows:
+            alias_rows = await session.execute(
+                select(AiModelPrice.model, AiModelPrice.aliases).where(AiModelPrice.model.in_([m for m, _p in rows]))
+            )
+            for model, names_ in alias_rows.all():
+                aliases.setdefault(model, set()).update(names_ or [])
+        return [
+            ModelSuggestion(model=m, provider=p or "", aliases=tuple(sorted(aliases.get(m, set()) - {m})))
+            for m, p in rows
+        ]
 
     async def person_in_scope(
         self,

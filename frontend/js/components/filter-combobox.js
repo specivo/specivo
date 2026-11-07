@@ -9,7 +9,7 @@ import { avatarIconClass, avatarInitials } from '../lib/avatar';
 
    Config (from the template):
      endpoint   search URL; receives q, offset and limit, answers a JSON list
-     kind       'user' | 'tag' | 'version' — how a row is shaped and drawn
+     kind       'user' | 'tag' | 'version' | 'model' — how a row is shaped and drawn
      listId     id of the listbox element (option ids derive from it)
      specials   fixed options listed first, e.g. Unassigned / Me / No release:
                 [{value, label, user?}]
@@ -142,6 +142,12 @@ export function filterCombobox(config) {
                 color: this.kind === 'tag' && item.color ? 'background:' + item.color : '',
                 special: false
             };
+            if (this.kind === 'model') {
+                // The provider and a few of the other names the price list knows the model by.
+                var names = (item.aliases || []).slice(0, 3);
+                if (item.provider) names.unshift(item.provider);
+                row.secondary = names.join(' · ');
+            }
             if (this.kind === 'version') {
                 var notes = [];
                 if (item.project_key && item.project_key !== this.projectKey) notes.push(item.project_key);
@@ -292,8 +298,10 @@ export function filterCombobox(config) {
             // With the list open Enter picks; otherwise it submits the form as usual.
             if (!this.open) return;
             var hasActive = this.activeIndex >= 0 && this.activeIndex < this.items.length;
-            // A free-text field with nothing to pick lets Enter submit what was typed.
-            if (this.freeText && !hasActive) { this.close(); return; }
+            // A free-text field, or a filter whose text field is submitted too (text_name), lets
+            // Enter submit what was typed when no suggestion is highlighted.
+            var typedSubmits = this.$root.querySelector('input[role="combobox"][name]');
+            if ((this.freeText || typedSubmits) && !hasActive) { this.close(); return; }
             event.preventDefault();
             if (hasActive) this.choose(this.items[this.activeIndex]);
         },
