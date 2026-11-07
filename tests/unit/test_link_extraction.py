@@ -48,6 +48,14 @@ class TestWikiLinks:
     def test_label_reads_as_written(self):
         assert extract_links("[[Page|a <b> \\_c]]") == [FoundLink("wiki", "page", label="a <b> \\_c")]
 
+    def test_labelled_links_in_a_table_are_found(self):
+        """The label's ``|`` is part of the link, not a column break."""
+        text = "| Page | What |\n|---|---|\n| [[Page_One|One]] | first |\n| [[Page Two|Two]] | second |\n"
+        assert extract_links(text) == [
+            FoundLink("wiki", "page-one", label="One"),
+            FoundLink("wiki", "page-two", label="Two"),
+        ]
+
     def test_no_links(self):
         assert extract_links("plain text") == []
         assert extract_links("") == []
