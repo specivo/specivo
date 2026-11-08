@@ -1,10 +1,10 @@
-<p align="center">
-  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og/cover-zh-cn-v2.jpg" alt="Specivo——让团队的知识终于能被找到" width="820"></a>
-</p>
-
 # Specivo
 
 [English](README.md) | **简体中文**
+
+<p align="center">
+  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og/cover-zh-cn-v2.jpg" alt="Specivo——让团队的知识终于能被找到" width="820"></a>
+</p>
 
 **看清 AI 预算到底花在了哪里**。Specivo 是自托管（私有化部署）的项目追踪、维基与知识库平台，还能告诉你团队的 AI 智能体花了多少钱：按人、按功能，细到每一次智能体会话。
 

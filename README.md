@@ -1,10 +1,10 @@
-<p align="center">
-  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og/cover-en-v2.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
-</p>
-
 # Specivo
 
 **English** | [简体中文](README.zh-CN.md)
+
+<p align="center">
+  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og/cover-en-v2.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
+</p>
 
 **See where your AI budget actually goes.** Specivo is a self-hosted project tracker, wiki and
 knowledge base that also shows what your team's AI agents cost: per person, per feature, down to
