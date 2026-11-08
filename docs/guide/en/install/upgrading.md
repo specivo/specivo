@@ -70,19 +70,33 @@ docker compose up -d
 
 ## Upgrading to 0.13.0
 
-### The btree_gist extension
+### The pg_trgm and btree_gist extensions
 
-The migration creates the PostgreSQL extension `btree_gist`, for the [AI model
+The migrations create two PostgreSQL extensions: `pg_trgm`, for the
+[similar issue suggestions](../issues/creating.md#similar-issues), and `btree_gist`, for the [AI model
 prices](ai-model-prices.md). The bundled database needs nothing. On an external database the
-migration role needs `CREATE` on the database (it is a trusted extension, no superuser needed); on
-Azure flexible server, add `btree_gist` to `azure.extensions` first. See
+migration role needs `CREATE` on the database (both are trusted extensions, no superuser needed); on
+Azure flexible server, add `pg_trgm` and `btree_gist` to `azure.extensions` first. See
 [Configuration](configuration.md).
 
 ### AI model prices replace the agent cost tables
 
 The unused `agent_token_logs` and `model_cost_configs` tables are dropped, with their unmounted
 API routes. The new [AI model prices](ai-model-prices.md) table is filled with the bundled price
-list, valid from the list's date.
+list; a model's first bundled price is valid from 1 January 2000, so older usage is priced too.
+
+### Fill in the link graph
+
+"Mentioned in" on issues and "Linked from" on wiki pages come from a stored link graph. New and
+edited texts are linked as they are saved; run this once after upgrading to link what was already
+written:
+
+```bash
+docker compose exec api python -m specivo.cli.rebuild_links
+```
+
+Project managers can do the same per project with **Rebuild link graph** in
+[Project settings → Search](../wiki/history-linking.md#the-project-link-graph).
 
 ### Metadata values are validated
 

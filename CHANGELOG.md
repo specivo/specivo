@@ -46,7 +46,7 @@ Each release also has a blog post with the details.
 - Changed signed-out visitors on the home page to go to the project list when anonymous access is on
 - Removed edition wording, the unused feature registry and placeholder admin pages; the 20-key API key limit is now a 500-key safety bound
 - Added the settings `AUDIT_LOG_RETENTION_MONTHS`, `SEARCH_ENGINE_INDEXING`, `SEARCH_RATE_LIMIT_PER_MINUTE`, `SEARCH_RATE_LIMIT_ANONYMOUS_PER_MINUTE`, `SEARCH_QUERY_EMBEDDING_CACHE_SECONDS`, `AI_REPORT_RATE_LIMIT_PER_MINUTE`, `AI_REPORT_RATE_LIMIT_ADMIN_PER_MINUTE`, `AI_USAGE_CHART_CACHE_SECONDS`, `AI_USAGE_INGEST_RATE_LIMIT_PER_MINUTE` and `EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS`
-- Changed the database requirements: migration 0052 installs the PostgreSQL `pg_trgm` extension, so an external database must allow it
+- Changed the database requirements: the migrations create the PostgreSQL extensions `pg_trgm` and `btree_gist`, so an external database must allow them
 - After upgrading, run `python -m specivo.cli.rebuild_links` once in the api container (`make rebuild-links` in a checkout) to fill in the links of existing issues and comments
 
 ### Fixed
