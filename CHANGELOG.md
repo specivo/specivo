@@ -3,7 +3,7 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
-## [0.13.0] - Unreleased
+## [0.13.0] - 2026-11-08
 
 ### Added
 - Added AI usage tracking: entries per person, project and issue, logged by hand, over the REST API and MCP, or sent by the open-source `ai-usage` reporter from Claude Code, Codex, Gemini CLI and OpenCode
