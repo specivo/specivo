@@ -1,7 +1,7 @@
 /* ============================================================
    ADMIN
    ============================================================ */
-.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); }
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); }
 .stat-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-sm); padding: var(--sp-space-xl); }
 .stat-card .stat-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-xs); }
 .stat-card .stat-value { font-family: var(--sp-font-display); font-size: var(--sp-font-size-2xl); font-weight: 700; color: var(--sp-text-primary); letter-spacing: -0.02em; }

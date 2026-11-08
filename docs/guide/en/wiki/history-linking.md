@@ -1,5 +1,5 @@
 ---
-description: Wiki version history, one-click revert, soft-delete to trash and restore, cross-linking pages with [[Page Name]], and how wiki and issues connect through search.
+description: Wiki version history, one-click revert, soft-delete to trash and restore, cross-linking pages with [[Page Name]], backlinks ("Linked from"), the project link graph, and how wiki and issues connect.
 ---
 
 # History & linking
@@ -49,8 +49,8 @@ See the [[Release Process]] page before you deploy.
 page's title or by its slug.
 
 Double brackets inside code (a code block or `` `inline code` ``) or inside a raw HTML block are shown as
-you wrote them, not linked, and they do not count as links in a page's backlinks or broken-link list. That
-lets you document the `[[...]]` syntax itself without creating dead links.
+you wrote them, not linked, and they do not count as links in a page's **Linked from** list or in the
+project's link graph. That lets you document the `[[...]]` syntax itself without creating dead links.
 
 !!! tip "Build a web, not a pile"
     Cross-linking is what turns a folder of pages into a knowledge base. Link from an overview page down
@@ -64,9 +64,41 @@ anywhere and Specivo searches issues, wiki pages, comments, and attachment descr
 keyword *and* by meaning. A decision you wrote on a wiki page turns up next to the issue that prompted
 it. See [Finding issues](../issues/finding.md).
 
-To tie a specific issue and page together, link to the issue from the wiki page (paste its URL) and
-reference the page from the issue's description or a comment. The two halves of a piece of work — the
-*what* in the issue and the *why* in the wiki — stay one click apart.
+To tie a specific issue and page together, write the issue's key (`ACME-42`) on the wiki page and
+`[[Page Name]]` in the issue's description or a comment. The two halves of a piece of work — the
+*what* in the issue and the *why* in the wiki — stay one click apart, and each side lists the other:
+
+- the issue's **Relations** tab has a **Mentioned in** section with the wiki pages, issues and comments
+  that mention it (see [Relations](../issues/relations.md#mentioned-in));
+- a wiki page has a **Linked from** section at the bottom. Open it to see the pages, issues and
+  comments that link to the page.
+
+To link to a page of **another project's** wiki, use an ordinary Markdown link to the page's address,
+such as `[Runbook](/projects/OPS/wiki/runbook/)`; a full `https://` address of your Specivo counts
+too. Links to issues (`/issue/ACME-42/`) and attachments work the same way.
+
+Both lists only show what you can open yourself: a private issue, a private note, or a page in a wiki
+you can't read is left out, never shown with its title hidden. AI agents see the same links in
+`specivo_show_issue` and `specivo_read_wiki`, and can follow them further with `specivo_get_links`
+(see [What agents can do](../ai-agents/capabilities.md)).
+
+## The project link graph
+
+Specivo keeps track of every link written in a project's wiki pages, issue descriptions and comments,
+and updates it within seconds of each save. Project managers find it in **Project settings → Search**,
+in the **Link graph** card:
+
+- how many links there are, by kind (wiki links, issue mentions, attachment links) and by where they
+  are written, next to the project's relations, parent links and attachments;
+- how many links point at something that doesn't exist yet, with the most common ones (a misspelled
+  `[[page]]` or an issue key that was never created) — only from texts you can read;
+- when the graph last changed, and the result of the last full rebuild.
+
+**Rebuild link graph** re-reads every text of the project and links what can be linked. You rarely need
+it: imports rebuild the graph themselves. Use it after a large data import from outside Specivo, after
+an upgrade that changes what counts as a link, or when links look out of date. The rebuild runs in the
+background with a progress count, and only one runs per project at a time. From the command line,
+`make rebuild-links` (or `make rebuild-links PROJECT=ACME`) does the same.
 
 ## What's next
 

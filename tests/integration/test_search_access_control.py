@@ -492,7 +492,6 @@ async def test_wiki_search_respects_project_membership(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.enterprise
 @pytest.mark.asyncio
 async def test_search_query_logged_in_audit(
     db_session: AsyncSession,

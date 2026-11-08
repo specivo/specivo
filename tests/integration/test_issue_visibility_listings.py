@@ -34,10 +34,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.agent_costs import log_tokens
 from specivo.core.config import get_settings
-from specivo.core.exceptions import NotFoundError
-from specivo.models.agent_cost import AgentTokenLog
 from specivo.models.agent_session import AgentSession
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
@@ -47,7 +44,6 @@ from specivo.models.role import Role
 from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.models.version import Version
-from specivo.schemas.agent_cost import AgentTokenLogCreate
 from specivo.services.anonymous_access_service import set_anonymous_access_enabled, set_anonymous_permissions
 from specivo.services.anonymous_user_service import get_anonymous_user
 from specivo.services.api_key_scope import ProjectScope, bound_scope
@@ -205,7 +201,7 @@ async def build_world(db: AsyncSession, prefix: str) -> World:
 
     keys = ApiKeyService()
     limited, limited_raw = await keys.create_key(session=db, user_id=manager.id, name=f"{low}-limited")
-    # Stored directly: what create_key keeps when the api_key_scopes feature is on.
+    # Stored directly, by project key: a limit stored before creation resolved it to ids still holds.
     limited.scopes = {"projects": [s.key]}
     _agent_key, agent_raw = await keys.create_key(session=db, user_id=agent.id, name=f"{low}-agent")
     await db.commit()
@@ -457,7 +453,7 @@ async def test_dashboard_agent_activity_leaves_out_hidden_issues(
 
 
 # ---------------------------------------------------------------------------
-# Agent sessions and token logs
+# Agent sessions
 # ---------------------------------------------------------------------------
 
 
@@ -467,26 +463,6 @@ async def _agent_session(db: AsyncSession, user: User, issue: Issue | None) -> A
     db.add(session)
     await db.commit()
     return session
-
-
-async def test_token_logs_are_written_only_to_the_callers_own_session(db_session: AsyncSession, world: World) -> None:
-    # The endpoint's router is mounted by an edition plugin, not by core, so
-    # the route function is called directly.
-    w = world
-    own = await _agent_session(db_session, w.agent, None)
-    others = await _agent_session(db_session, w.manager, None)
-
-    def body(session_id: int) -> AgentTokenLogCreate:
-        return AgentTokenLogCreate(session_id=session_id, model_name="claude-test", input_tokens=10, output_tokens=5)
-
-    for caller, session_id in ((w.agent, others.id), (w.agent, 987654321), (w.admin, own.id)):
-        # Not even an administrator may charge tokens to somebody else's session.
-        with pytest.raises(NotFoundError):
-            await log_tokens(body(session_id), current_user=caller, db=db_session)
-    assert (await db_session.execute(select(func.count()).select_from(AgentTokenLog))).scalar_one() == 0
-
-    logged = await log_tokens(body(own.id), current_user=w.agent, db=db_session)
-    assert logged.session_id == own.id
 
 
 async def test_agent_sessions_list_only_the_projects_visible_sessions(

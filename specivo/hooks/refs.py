@@ -14,6 +14,10 @@ before it says what the commit claims:
   ``resolves``, ``resolved``, ``resolve`` → ``fixes``;
 - ``refs``, ``references``, ``ref``, ``see``, or no keyword → ``refs``.
 
+- ``ignore`` → the issue is not linked at all: no reference from this text
+  counts, not even one elsewhere in it or in the branch name
+  (:func:`extract_ignored`; the callers drop the branch reference too).
+
 A list after one keyword (``Fixes ACME-1, ACME-2 and ACME-3``) shares it.
 
 Time: ``@2h``, ``@1h30m``, ``@90m`` or ``@1.5h`` right after a reference, on
@@ -39,6 +43,7 @@ Keyword = Literal["refs", "fixes"]
 
 _FIXING_WORDS = ("fixes", "fixed", "fix", "closes", "closed", "close", "resolves", "resolved", "resolve")
 _REFERENCING_WORDS = ("refs", "references", "ref", "see")
+_IGNORING_WORDS = ("ignore",)
 
 # Not preceded by a word character, ``#`` (``x#KEY-1``), or anything that makes
 # it part of a path or URL (``/``, ``.``, ``-``).
@@ -47,7 +52,7 @@ _REFERENCING_WORDS = ("refs", "references", "ref", "see")
 _MESSAGE_REF = re.compile(r"(?<![\w/.\-#])#?(?P<key>[A-Z][A-Z0-9]*)-(?P<number>\d{1,9})(?!\w)")
 _KEYWORD_BEFORE = re.compile(
     r"\b(?P<word>"
-    + "|".join(_FIXING_WORDS + _REFERENCING_WORDS)
+    + "|".join(_FIXING_WORDS + _REFERENCING_WORDS + _IGNORING_WORDS)
     + r")\b[ \t]*(?::[ \t]*)?$",  # one way to split the blanks: linear on long gaps
     re.IGNORECASE,
 )
@@ -102,10 +107,17 @@ def extract_time(text_after_ref: str) -> Decimal | None:
     return _time_at(text_after_ref, 0)[0]
 
 
-def _keyword_for(gap: str, previous: Keyword | None) -> Keyword:
+_IGNORE = "ignore"
+
+
+def _keyword_for(gap: str, previous: str | None) -> str:
+    """``fixes``, ``refs`` or ``ignore`` for the reference after *gap*."""
     match = _KEYWORD_BEFORE.search(gap)
     if match is not None:
-        return "fixes" if match.group("word").lower() in _FIXING_WORDS else "refs"
+        word = match.group("word").lower()
+        if word in _IGNORING_WORDS:
+            return _IGNORE
+        return "fixes" if word in _FIXING_WORDS else "refs"
     if previous is not None and _LIST_SEPARATOR.fullmatch(gap):
         return previous
     return "refs"
@@ -125,12 +137,13 @@ def _dedupe(refs: Iterable[Ref]) -> list[Ref]:
     return list(seen.values())
 
 
-def extract_refs(text: str, known_keys: frozenset[str] | set[str]) -> list[Ref]:
-    """Return the in-scope issue references in a commit message, one per issue."""
+def _scan(text: str, known_keys: frozenset[str] | set[str]) -> tuple[list[Ref], set[str]]:
+    """The references in *text*, and the display keys an ``Ignore`` names."""
     if not text or not known_keys:
-        return []
+        return [], set()
     found: list[Ref] = []
-    previous: Keyword | None = None
+    ignored: set[str] = set()
+    previous: str | None = None
     last_end = 0
     for match in _MESSAGE_REF.finditer(text):
         number = int(match.group("number"))
@@ -138,9 +151,23 @@ def extract_refs(text: str, known_keys: frozenset[str] | set[str]) -> list[Ref]:
             continue
         keyword = _keyword_for(text[last_end : match.start()], previous)
         hours, last_end = _time_at(text, match.end())
-        found.append(Ref(match.group("key"), number, keyword, hours))
+        if keyword == _IGNORE:
+            ignored.add(f"{match.group('key')}-{number}")
+        else:
+            found.append(Ref(match.group("key"), number, "fixes" if keyword == "fixes" else "refs", hours))
         previous = keyword
-    return _dedupe(found)
+    return found, ignored
+
+
+def extract_refs(text: str, known_keys: frozenset[str] | set[str]) -> list[Ref]:
+    """Return the in-scope issue references in a commit message, one per issue; ignored issues are left out."""
+    found, ignored = _scan(text, known_keys)
+    return [ref for ref in _dedupe(found) if ref.display_key not in ignored]
+
+
+def extract_ignored(text: str, known_keys: frozenset[str] | set[str]) -> set[str]:
+    """The display keys (``KEY-1``) that *text* says to ignore (``Ignore KEY-1``)."""
+    return _scan(text, known_keys)[1]
 
 
 def extract_branch_refs(branch: str, known_keys: frozenset[str] | set[str]) -> list[Ref]:

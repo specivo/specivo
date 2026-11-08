@@ -136,7 +136,14 @@ class Settings(BaseSettings):
     allowed_hosts: list[str] = ["*"]
 
     # robots.txt — default content. Overridable from admin settings (key: "robots_txt").
+    # When this is not set explicitly and search engine indexing applies, a
+    # robots.txt allowing the anonymously readable pages is generated instead
+    # (``specivo.services.search_engine_service``).
     robots_txt: str = "User-agent: *\nDisallow: /\n"
+    # Let search engines index the pages anonymous visitors can read (public
+    # projects opted in to anonymous access while that switch is on). Off by
+    # default; the admin setting "search_engine_indexing" overrides it.
+    search_engine_indexing: bool = False
 
     # SMTP — email notification delivery
     smtp_host: str = "localhost"
@@ -188,10 +195,20 @@ class Settings(BaseSettings):
     # Agent sessions
     agent_session_timeout: int = 1800
 
-    # MCP transport session metadata (Redis-backed).
-    # Sliding TTL refreshed on every session access; entries are dropped
-    # automatically after this many seconds of inactivity.
-    mcp_session_ttl_seconds: int = 7 * 24 * 60 * 60
+    # Security audit log: whole months kept, 0 keeps everything. An environment
+    # setting on purpose, not an admin setting: how long security evidence is
+    # kept must not be changeable from an admin session or key.
+    audit_log_retention_months: int = Field(default=12, ge=0)
+
+    # MCP Streamable HTTP sessions.
+    # How long a session may go unused before it expires: the Redis entry's
+    # sliding TTL, refreshed on every request. Until then a client returning
+    # with its Mcp-Session-Id (after sleep, a network drop or an api restart)
+    # keeps its session; after it, the client gets HTTP 404 and re-initializes.
+    mcp_session_ttl_seconds: int = Field(default=7 * 24 * 60 * 60, gt=0)
+    # How long an idle session's live transport is kept in memory. Only frees
+    # memory: a session reaped here is rebuilt from Redis on its next request.
+    mcp_session_idle_timeout_seconds: int = Field(default=60 * 60, gt=0)
 
     # i18n
     default_language: str = "en"
@@ -225,6 +242,32 @@ class Settings(BaseSettings):
     # chunks are fetched per wanted result before visibility filtering.
     search_hnsw_ef_search: int = Field(default=100, ge=10, le=1000)
     search_semantic_overfetch: int = Field(default=4, ge=1, le=50)
+    # Minimum cosine similarity (-1 to 1) a semantic hit needs, in semantic
+    # search and for semantic-only hits in hybrid search. Unset: the default
+    # for the embedding model's family (0.82 for multilingual-e5); -1 keeps
+    # every nearest neighbour. See specivo.services.similarity_threshold.
+    search_semantic_min_similarity: float | None = Field(default=None, ge=-1.0, le=1.0)
+    # Searches per minute one client address may run, in every mode, on the
+    # search page and the REST search endpoint (specivo.core.search_limits).
+    # Visitors without an account and signed-in callers have separate buckets;
+    # a hybrid or semantic query runs the embedding model, so neither is
+    # unlimited. The signed-in limit is higher because an office behind one
+    # NAT address shares it.
+    search_rate_limit_anonymous_per_minute: int = Field(default=10, ge=1)
+    search_rate_limit_per_minute: int = Field(default=60, ge=1)
+    # Seconds a query's embedding is kept in Redis, so a repeated or paged
+    # query does not run the model again. 0 turns the cache off.
+    search_query_embedding_cache_seconds: int = Field(default=300, ge=0)
+    # AI usage charts and spend reports per minute one user may load (the My
+    # AI usage page, the report pages, the report API and CSV, the MCP report
+    # tool; specivo.core.ai_report_limits). Each one groups and converts a
+    # user's or a project's whole usage, so a script cannot loop on them.
+    # Administrators, who read the instance report, get the higher budget.
+    ai_report_rate_limit_per_minute: int = Field(default=30, ge=1)
+    ai_report_rate_limit_admin_per_minute: int = Field(default=120, ge=1)
+    # Seconds the My AI usage chart data is kept in Redis per user and
+    # filters (refreshed at once when the user's entries change). 0: off.
+    ai_usage_chart_cache_seconds: int = Field(default=60, ge=0)
 
     # CPU seconds one Markdown field may use to render before it is abandoned
     # and shown as plain text; the wall-clock ceiling is 4x this. A backstop:
@@ -254,6 +297,9 @@ class Settings(BaseSettings):
     git_hook_rate_limit_per_minute: int = Field(default=120, ge=1)
     git_hook_unknown_rate_limit_per_minute: int = Field(default=30, ge=1)
 
+    # AI usage ingest (``/api/v1/ai-usage/ingest``): batches per minute per account.
+    ai_usage_ingest_rate_limit_per_minute: int = Field(default=60, ge=1)
+
     # SCIM provisioning (``/scim/v2/{provider_slug}/``): the largest request
     # body, requests per minute per provider (and per client address for
     # requests that fail authentication), and the most resources one list
@@ -272,6 +318,15 @@ class Settings(BaseSettings):
     sso_allow_insecure_http: bool = False
     # Timeout for each request to an identity provider.
     sso_http_timeout_seconds: float = Field(default=5.0, gt=0)
+    # Let the optional exchange rate fetch reach loopback and private networks
+    # (a self-hosted Frankfurter on the internal network). Off: only public
+    # addresses. Link-local and cloud metadata addresses are refused always.
+    # An environment setting on purpose, so the admin UI cannot open it.
+    exchange_rate_feed_allow_private_networks: bool = False
+    # Through a proxy, let the fetch use a feed host that does not resolve on
+    # this server (DNS only behind the proxy). Its address then cannot be
+    # checked here: the proxy must enforce egress rules. Off: refused.
+    exchange_rate_feed_allow_unresolved_via_proxy: bool = False
     # Leeway for exp / iat / nbf when validating ID and logout tokens.
     # Values above the cap are lowered to it.
     sso_clock_skew_seconds: int = Field(default=60, ge=0)

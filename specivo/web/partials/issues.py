@@ -12,6 +12,7 @@ from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.services.activity_lookups import activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
+from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
@@ -20,6 +21,7 @@ from specivo.web.deps import get_current_user_optional, get_templates
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
+    from specivo.models.issue import Issue
     from specivo.models.user import User
 
 router = APIRouter(prefix="/partials", tags=["web-partials"], include_in_schema=False)
@@ -40,6 +42,8 @@ async def issue_table_partial(
     tracker_id: str = Query(""),
     assigned_to_id: str = Query(""),
     priority_id: str = Query(""),
+    tag_id: str = Query(""),
+    fixed_version_id: str = Query(""),
     sort: str = Query("created_at:desc"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
@@ -61,10 +65,16 @@ async def issue_table_partial(
     filters: dict = {"status": status}
     if safe_int(tracker_id) is not None:
         filters["tracker_id"] = safe_int(tracker_id)
-    if safe_int(assigned_to_id) is not None:
-        filters["assigned_to_id"] = safe_int(assigned_to_id)
+    assignee = parse_assignee(assigned_to_id, me_id=user.id)
+    if assignee is not None:
+        filters["assigned_to_id"] = assignee
     if safe_int(priority_id) is not None:
         filters["priority_id"] = safe_int(priority_id)
+    if parse_id(tag_id) is not None:
+        filters["tag_id"] = parse_id(tag_id)
+    version = parse_version(fixed_version_id)
+    if version is not None:
+        filters["version_id"] = version
 
     issues, total = await _issue_svc.list_issues(
         db,
@@ -233,5 +243,100 @@ async def issue_attachments_partial(
             "issue": issue,
             "issue_attachments_json": issue_attachments_json,
             "user": user,
+        },
+    )
+
+
+async def _development_reader(request: Request, db: AsyncSession, issue_ref: str) -> tuple[User, Issue] | Response:
+    """The signed-in reader and the issue, or the response that refuses them.
+
+    Like the REST endpoint: the issue must be visible to the reader and they
+    need ``view_issues`` in its project; anything else is 404. A visitor
+    without an account never gets development activity.
+    """
+    from specivo.services.permission_service import Permission, check_permission
+
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+    try:
+        issue = await _issue_svc.get_by_display_key(db, issue_ref, user=user)
+    except NotFoundError:
+        return HTMLResponse("<p>Issue not found</p>", status_code=404)
+    if not await check_permission(user, issue.project_id, Permission.VIEW_ISSUES, db):
+        return HTMLResponse("<p>Issue not found</p>", status_code=404)
+    return user, issue
+
+
+@router.get("/issues/{issue_ref}/development/", response_class=HTMLResponse)
+async def issue_development_partial(
+    issue_ref: str,
+    request: Request,
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """The whole Development tab body: summary and the first page of the timeline.
+
+    Loaded again after a commit or pull request is detached or moved. The
+    tab's count in the tab row is updated with it (an out-of-band swap).
+    """
+    from specivo.web.issue_development import can_edit_development, development_context, load_development
+
+    resolved = await _development_reader(request, db, issue_ref)
+    if isinstance(resolved, Response):
+        return resolved
+    user, issue = resolved
+    project = await _project_svc.get_by_key(db, issue.project_key)
+    development = await load_development(db, issue)
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/issues/_development.html",
+        context={
+            "user": user,
+            "issue": issue,
+            "project": project,
+            "dev_count_oob": True,
+            **development_context(development, can_edit=await can_edit_development(db, user, project.id)),
+        },
+    )
+
+
+@router.get("/issues/{issue_ref}/development/timeline/", response_class=HTMLResponse)
+async def issue_development_timeline_partial(
+    issue_ref: str,
+    request: Request,
+    kinds: list[str] = Query(default=[]),  # noqa: B008
+    offset: int = Query(0, ge=0, le=10_000),
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """The Development tab's timeline of *kinds* (all when none).
+
+    At offset 0 the whole timeline block with its filter (a filter change);
+    further on only the next entries and the next "Show more" (appended).
+    """
+    from specivo.web.issue_development import (
+        can_edit_development,
+        development_context,
+        load_development,
+        selected_kinds,
+    )
+
+    resolved = await _development_reader(request, db, issue_ref)
+    if isinstance(resolved, Response):
+        return resolved
+    user, issue = resolved
+    project = await _project_svc.get_by_key(db, issue.project_key)
+    chosen = selected_kinds(kinds)
+    development = await load_development(db, issue, kinds=chosen, offset=offset)
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/issues/_development_timeline.html" if offset == 0 else "pages/issues/_development_items.html",
+        context={
+            "user": user,
+            "issue": issue,
+            "project": project,
+            **development_context(development, kinds=chosen, can_edit=await can_edit_development(db, user, project.id)),
         },
     )

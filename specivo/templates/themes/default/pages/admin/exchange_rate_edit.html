@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Edit rate{% endtrans %} - {% trans %}Exchange rates{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/exchange-rates/">{% trans %}Exchange rates{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Edit rate{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}Edit rate{% endtrans %}</h1>
+
+{% if error %}
+<div class="flash flash-error" role="alert" data-testid="rate-edit-error">
+{% if error == "currency_inactive" %}{% trans %}That currency is disabled. Enable it on the Currencies page first.{% endtrans %}
+{% elif error == "currency_unknown" %}{% trans %}Unknown currency code.{% endtrans %}
+{% elif error == "exchange_rate_invalid" %}{% trans %}Enter the rate as a positive decimal number with at most 12 decimal places, such as 36.5123.{% endtrans %}
+{% elif error == "exchange_rate_same_currency" %}{% trans %}The two currencies of a rate must differ.{% endtrans %}
+{% elif error == "exchange_rate_exists" %}{% trans %}A manual rate for that day and pair already exists. Edit it instead.{% endtrans %}
+{% else %}{% trans %}Enter a valid date.{% endtrans %}{% endif %}
+</div>
+{% endif %}
+
+<div class="card sp-card-pad">
+  <form method="post" action="/admin/exchange-rates/{{ rate.id }}/edit/" class="sp-xr-form">
+    <label class="form-label" for="xr-edit-date">{% trans %}Date{% endtrans %}</label>
+    <input id="xr-edit-date" type="date" name="rate_date" class="form-input" value="{{ rate.rate_date.isoformat() }}" required>
+    <span class="sp-xr-equation">
+      <span>1</span>
+      <select name="base" class="form-input sp-xr-select" aria-label="{{ _('Base currency') }}">
+        {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == rate.base_code else '' }}>{{ c.code }}</option>{% endfor %}
+      </select>
+      <span>=</span>
+      <input type="text" name="rate" class="form-input sp-xr-rate" inputmode="decimal" value="{{ rate_value }}" aria-label="{{ _('Rate') }}" required>
+      <select name="quote" class="form-input sp-xr-select" aria-label="{{ _('Quote currency') }}">
+        {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == rate.quote_code else '' }}>{{ c.code }}</option>{% endfor %}
+      </select>
+    </span>
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Save{% endtrans %}</button>
+    <a href="/admin/exchange-rates/" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
+  </form>
+</div>
+{% endblock %}

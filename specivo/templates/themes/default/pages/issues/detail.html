@@ -4,6 +4,12 @@
 
 {% block title %}{{ issue.display_key }} - {{ issue.subject }} - {{ brand_name }}{% endblock %}
 
+{% block head %}
+{% if canonical_url %}{% set _description = issue.description | meta_description %}{% if _description %}
+<meta name="description" content="{{ _description }}">
+{% endif %}{% endif %}
+{% endblock %}
+
 {% block content %}
 {{ breadcrumbs([
   {"label": "Home", "url": "/"},
@@ -121,7 +127,8 @@
       "no": _("No"),
       "countFields": _("%(filled)s/%(total)s fields"),
       "saving": _("Saving..."),
-      "saveMetadata": _("Save Metadata")
+      "saveMetadata": _("Save Metadata"),
+      "saveFailed": _("The metadata could not be saved.")
     } | tojson }} })'>
       {# Toggle header (always visible) #}
       <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
@@ -248,8 +255,9 @@
         </div>
 
         {# Save bar #}
-        <div class="sp-metadata-save" x-show="dirty">
-          <span class="sp-save-hint" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">{% trans %}You have unsaved metadata changes{% endtrans %}</span>
+        <div class="sp-metadata-save" x-show="dirty || error">
+          <span class="sp-save-hint" x-show="!error" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">{% trans %}You have unsaved metadata changes{% endtrans %}</span>
+          <span class="sp-metadata-error" x-show="error" x-text="error" role="alert"></span>
           <button class="sp-btn sp-btn-ghost sp-btn-sm" type="button" @click="revert()">{% trans %}Discard{% endtrans %}</button>
           <button class="sp-btn sp-btn-primary sp-btn-sm" type="button" :disabled="saving" @click="save()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -260,21 +268,29 @@
     </div>
     {% endif %}
 
-    {% include "pages/issues/_development.html" %}
-
-    {# Activity tabs #}
-    <div class="activity-tabs" x-data="{ tab: 'activity' }">
+    {# Activity tabs. Development is there only for a signed-in reader
+       (``development`` is None for a visitor without an account) and only
+       when pull requests or commits are linked: a branch alone is not work
+       to show. ``#<tab>`` in the address opens a tab (issueTabs). #}
+    {% set dev_count = (development.pull_requests | length) + development.commit_count if development else 0 %}
+    <div class="activity-tabs" x-data="issueTabs()">
       <div class="activity-tabs-header">
-        <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        <a class="activity-tab" data-tab="activity" :class="{ active: tab === 'activity' }" @click.prevent="show('activity')" href="#activity">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        {% if dev_count %}
+        <a class="activity-tab" data-tab="development" data-testid="development-tab" :class="{ active: tab === 'development' }" @click.prevent="show('development')" href="#development">{% trans %}Development{% endtrans %} <span class="tab-count" id="development-tab-count">{{ dev_count }}</span></a>
+        {% endif %}
         {# Time entries name people and hours, and attachments are outside the
            anonymous scope, so neither tab exists for a visitor without an
            account. Relations stay: the list is visibility-filtered already. #}
         {% if can_view_time_entries or can_log_time %}
-        <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
+        <a class="activity-tab" data-tab="time" :class="{ active: tab === 'time' }" @click.prevent="show('time')" href="#time">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         {% endif %}
-        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        {% if show_ai_usage_tab %}
+        <a class="activity-tab" data-tab="ai-usage" data-testid="ai-usage-tab" :class="{ active: tab === 'ai-usage' }" @click.prevent="show('ai-usage')" href="#ai-usage">{% trans %}AI usage{% endtrans %}</a>
+        {% endif %}
+        <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
-        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">{% trans %}Attachments{% endtrans %}</a>
+        <a class="activity-tab" data-tab="attachments" :class="{ active: tab === 'attachments' }" @click.prevent="show('attachments')" href="#attachments">{% trans %}Attachments{% endtrans %}</a>
         {% endif %}
       </div>
 
@@ -316,6 +332,67 @@
         </div>
         {% endif %}
       </div>
+
+      {# Development tab: a summary of the linked work and its timeline. The
+         body reloads itself (sp-dev-refresh) after a detach or move. #}
+      {% if dev_count %}
+      <div x-show="tab === 'development'" x-cloak data-testid="development-tab-panel"
+           x-data='issueDevelopment({ issueKey: {{ issue.display_key | tojson }}, i18n: {{ {
+             "confirmDetach": _("Detach {item} from this issue? It will not be linked to it again, even when the forge sends it again."),
+             "detachFailed": _("Could not detach it."),
+             "moveFailed": _("Could not move it."),
+             "connectFailed": _("Unable to connect."),
+             "enterIssue": _("Enter the key of the issue to move it to."),
+             "moveLead": _("Move {item} to the issue below. It is detached from this issue and will not be linked to it again.")
+           } | tojson }} })'>
+        <div class="flash flash-error sp-dev-error" role="alert" x-show="error" x-cloak data-testid="development-error"><span x-text="error"></span></div>
+        <div id="issue-development" x-ref="body"
+             hx-get="/partials/issues/{{ issue.display_key }}/development/"
+             hx-trigger="sp-dev-refresh"
+             hx-swap="innerHTML">
+          {% include "pages/issues/_development.html" %}
+        </div>
+        {% if can_edit_development %}
+        <template x-if="move">
+          <div class="sp-scrim open" @click.self="closeMove()" @keydown.escape="closeMove()">
+            <div class="sp-modal sp-modal--xs" role="dialog" aria-modal="true" aria-labelledby="dev-move-title" data-testid="development-move-dialog">
+              <div class="sp-modal-header">
+                <h2 id="dev-move-title">{% trans %}Move to another issue{% endtrans %}</h2>
+                <button type="button" class="sp-modal-close" @click="closeMove()" aria-label="{{ _('Close') }}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="sp-modal-body">
+                <p class="sp-modal-lead" x-text="move.lead"></p>
+                <div class="form-group sp-dev-picker">
+                  <label class="form-label" for="dev-move-target">{% trans %}Issue{% endtrans %}</label>
+                  <input class="form-input" id="dev-move-target" type="text" autocomplete="off" placeholder="{{ _('e.g. PROJ-42') }}"
+                         x-model="target" x-init="focusLater($el)"
+                         @keydown="onKeydown($event)" @blur="closeSuggestions()"
+                         :aria-invalid="moveError ? 'true' : null" :aria-describedby="moveError ? 'dev-move-target-error' : null"
+                         data-testid="development-move-target">
+                  <div class="sp-dev-suggestions" x-show="showSuggestions" x-cloak role="listbox">
+                    <template x-for="(s, idx) in suggestions" :key="s.key">
+                      <div class="sp-dev-suggestion" role="option" :class="{ active: idx === highlightIndex }"
+                           @mousedown.prevent="selectSuggestion(s)" @mouseenter="highlightIndex = idx">
+                        <span class="sp-dev-suggestion-key" x-text="s.key"></span>
+                        <span class="sp-dev-suggestion-subject" x-text="s.subject"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="form-error" id="dev-move-target-error" x-show="moveError" x-text="moveError" data-testid="development-move-error"></div>
+                </div>
+              </div>
+              <div class="sp-modal-footer">
+                <button type="button" class="sp-btn sp-btn-ghost" @click="closeMove()">{% trans %}Cancel{% endtrans %}</button>
+                <button type="button" class="sp-btn sp-btn-primary" @click="submitMove()" :disabled="busy" data-testid="development-move-submit">{% trans %}Move{% endtrans %}</button>
+              </div>
+            </div>
+          </div>
+        </template>
+        {% endif %}
+      </div>
+      {% endif %}
 
       {# Time entries tab #}
       {% if can_view_time_entries or can_log_time %}
@@ -395,7 +472,7 @@
               <td style="font-size:var(--sp-font-size-sm);">{{ te.spent_on.strftime('%Y-%m-%d') if te.spent_on else '--' }}</td>
               <td style="font-size:var(--sp-font-size-sm);">
                 <div style="display:flex;align-items:center;gap:var(--sp-space-xs);">
-                  {{ avatar(te.user.login if te.user else '?', size='xs', color=te.user.preferences.avatar_color|default('') if te.user else '', avatar_url=te.user.avatar_url|default('') if te.user else '') }}
+                  {{ avatar(te.user.login if te.user else '?', size='xs', color=te.user.preferences.avatar_color|default('') if te.user else '', avatar_url=te.user.avatar_url|default('') if te.user else '', display_name=te.user.display_name|default('') if te.user else '') }}
                   {{ te.user.login if te.user else _('Unknown') }}
                 </div>
               </td>
@@ -410,7 +487,9 @@
           <tfoot>
             <tr>
               <td colspan="2" style="font-weight:600;font-size:var(--sp-font-size-sm);">{% trans %}Total{% endtrans %}</td>
-              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}{% trans %}h est.{% endtrans %}</td>
+              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}{% trans %}h est.{% endtrans %}
+                {%- if issue.original_estimate is not none %} · {{ '%.1f' | format(issue.original_estimate) }}{% trans %}h original{% endtrans %}{% endif %}
+                {%- if issue.remaining_estimate is not none %} · {{ '%.1f' | format(issue.remaining_estimate) }}{% trans %}h remaining{% endtrans %}{% endif %}</td>
               <td colspan="2"></td>
             </tr>
           </tfoot>
@@ -420,6 +499,18 @@
           {% trans %}No time entries logged.{% endtrans %}
         </div>
         {% endif %}
+      </div>
+      {% endif %}
+
+      {# AI usage tab: loaded via htmx when first opened #}
+      {% if show_ai_usage_tab %}
+      <div x-show="tab === 'ai-usage'" x-cloak
+           id="issue-ai-usage-tab"
+           data-testid="ai-usage-tab-panel"
+           hx-get="/partials/issues/{{ issue.display_key }}/ai-usage/"
+           hx-trigger="sp-show-tab-ai-usage from:body once"
+           hx-swap="innerHTML">
+        <div class="sp-aiu-empty">{% trans %}Loading AI usage…{% endtrans %}</div>
       </div>
       {% endif %}
 
@@ -516,6 +607,21 @@
           </div>
         </div>
         {% endif %}
+
+        {# Mentioned in: wiki pages, issues and comments that link to this issue.
+           Lazy-loaded on the first opening of the tab, so the page itself runs
+           no link query; a signed-in reader only, as for every partial. #}
+        {% if not anonymous %}
+        <section class="sp-mentions">
+          <h3 class="sp-mentions-title">{% trans %}Mentioned in{% endtrans %}</h3>
+          <div id="issue-mentions"
+               hx-get="/partials/issues/{{ issue.display_key }}/mentions/"
+               hx-trigger="sp-show-tab-relations from:body once"
+               hx-swap="innerHTML">
+            <div class="sp-backlinks-empty">{% trans %}Loading mentions…{% endtrans %}</div>
+          </div>
+        </section>
+        {% endif %}
       </div>
 
       {# Attachments tab — lazy-loaded via htmx on first click #}
@@ -547,7 +653,7 @@
     </div>
     {% endif %}
 
-    {# Pro: reaction picker, additional plugins #}
+    {# Plugin slot for the issue detail page #}
     {% block issue_detail_plugins %}{% endblock %}
   </div>
 

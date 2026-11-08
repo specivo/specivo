@@ -29,22 +29,6 @@
     <div class="stat-label">{% trans %}Active Projects{% endtrans %}</div>
     <div class="stat-value">{{ stats.active_projects if stats is defined else 0 }}</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon info">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M2 12h20"/></svg>
-    </div>
-    <div class="stat-label">{% trans %}Agent Sessions{% endtrans %}</div>
-    <div class="stat-value">{{ stats.agent_sessions if stats is defined else 0 }}</div>
-  </div>
-  {% if has_feature("kill_switch") %}
-  <div class="stat-card">
-    <div class="stat-icon success">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-    </div>
-    <div class="stat-label">{% trans %}Kill Events{% endtrans %}</div>
-    <div class="stat-value">{{ stats.kill_events if stats is defined else 0 }}</div>
-  </div>
-  {% endif %}
 </div>
 
 {# Admin sections #}
@@ -131,6 +115,56 @@
       <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
+  <a href="/admin/currencies/" class="admin-card" style="text-decoration:none;color:inherit;">
+    <div class="admin-card-icon gold">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/></svg>
+    </div>
+    <div class="admin-card-body">
+      <h3>{% trans %}Currencies{% endtrans %}</h3>
+      <p>{% trans %}Choose the reporting currency and which currencies pickers offer.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
+    </div>
+  </a>
+  <a href="/admin/exchange-rates/" class="admin-card" style="text-decoration:none;color:inherit;">
+    <div class="admin-card-icon gold">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+    </div>
+    <div class="admin-card-body">
+      <h3>{% trans %}Exchange rates{% endtrans %}</h3>
+      <p>{% trans %}Enter, import or fetch the daily rates reports convert with.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
+    </div>
+  </a>
+  <a href="/admin/ai-model-prices/" class="admin-card" style="text-decoration:none;color:inherit;">
+    <div class="admin-card-icon gold">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+    </div>
+    <div class="admin-card-body">
+      <h3>{% trans %}AI model prices{% endtrans %}</h3>
+      <p>{% trans %}Prices per token that value AI usage, with their history.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
+    </div>
+  </a>
+  <a href="/admin/ai-subscriptions/" class="admin-card" style="text-decoration:none;color:inherit;">
+    <div class="admin-card-icon gold">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+    </div>
+    <div class="admin-card-body">
+      <h3>{% trans %}AI subscriptions{% endtrans %}</h3>
+      <p>{% trans %}Flat-rate AI plans people pay for, and the AI tools list.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
+    </div>
+  </a>
+  <a href="/admin/ai-spend/" class="admin-card" style="text-decoration:none;color:inherit;" data-testid="admin-ai-spend-card">
+    <div class="admin-card-icon gold">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+    </div>
+    <div class="admin-card-body">
+      <h3>{% trans %}AI spend{% endtrans %}</h3>
+      <p>{% trans %}AI spend across the instance by person, model, tool and project, with subscription fees.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Open{% endtrans %} &rarr;</span>
+    </div>
+  </a>
   <a href="/admin/metadata-presets/" class="admin-card" style="text-decoration:none;color:inherit;">
     <div class="admin-card-icon gold">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -161,29 +195,15 @@
       <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
-  {% if has_feature("agent_groups") %}
-  <a href="/admin/agent-groups/" class="admin-card" style="text-decoration:none;color:inherit;">
-    <div class="admin-card-icon violet">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+  <a href="/admin/audit-log/" class="admin-card" style="text-decoration:none;color:inherit;">
+    <div class="admin-card-icon muted">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8m8 4H8m2-8H8"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>{% trans %}Agent Groups{% endtrans %}</h3>
-      <p>{% trans %}Manage agent groups, members, and access policies.{% endtrans %}</p>
-      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
+      <h3>{% trans %}Audit log{% endtrans %}</h3>
+      <p>{% trans %}Sign-ins, access and administration changes, and everything agents do.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}View{% endtrans %} &rarr;</span>
     </div>
   </a>
-  {% endif %}
-  {% if has_feature("kill_switch") %}
-  <a href="/admin/kill-switch/" class="admin-card danger" style="text-decoration:none;color:inherit;">
-    <div class="admin-card-icon danger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m-7-7H2m20 0h-3m-1.3-5.7l2.1-2.1M4.2 19.8l2.1-2.1M19.8 19.8l-2.1-2.1M6.3 6.3L4.2 4.2"/></svg>
-    </div>
-    <div class="admin-card-body">
-      <h3>{% trans %}Kill Switch{% endtrans %}</h3>
-      <p>{% trans %}Emergency agent access revocation and event log.{% endtrans %}</p>
-      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
-    </div>
-  </a>
-  {% endif %}
 </div>
 {% endblock %}

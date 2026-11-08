@@ -135,6 +135,47 @@ def test_link_inside_other_markup(text, expected):
     assert expected in render(text)
 
 
+# ---------------------------------------------------------------------------
+# Tables: the ``|`` in ``[[Page|label]]`` is not a column break
+# ---------------------------------------------------------------------------
+
+
+def test_labelled_links_in_a_table_stay_in_their_cell():
+    html = render(
+        "| Page | What |\n"
+        "|------|------|\n"
+        "| [[Tracker|Product & Architecture]] | Vision, architecture |\n"
+        "| [[Tracker_CI_CD|CI/CD]] | Docker, build pipeline |\n"
+    )
+    assert f"<td>{link('tracker', 'Product &amp; Architecture')}</td>" in html
+    assert "<td>Vision, architecture</td>" in html
+    assert f"<td>{link('tracker-ci-cd', 'CI/CD')}</td>" in html
+    assert "<td>Docker, build pipeline</td>" in html
+    assert "[[" not in html
+    assert html.count("<td>") == 4
+
+
+def test_labelled_link_in_a_table_header():
+    html = render("| [[Page|Label]] | b |\n|---|---|\n| x | y |")
+    assert f"<th>{link('page', 'Label')}</th>" in html
+    assert html.count("<th>") == 2
+
+
+def test_table_without_outer_pipes_keeps_labelled_link():
+    html = render("a | b\n--|--\n[[Page|Label]] | x")
+    assert f"<td>{link('page', 'Label')}</td>" in html
+    assert "<td>x</td>" in html
+
+
+@pytest.mark.parametrize(
+    "row",
+    ["| `[[a|b]]` | x |", "| \\| | x |", "| a | b |"],
+    ids=["code-span", "escaped-pipe", "plain"],
+)
+def test_other_table_cells_split_as_before(row):
+    assert render(f"| h1 | h2 |\n|---|---|\n{row}").count("<td>") == 2
+
+
 def test_heading_link_keeps_its_anchor():
     html = render("# [[Heading Link]]")
     assert link("heading-link", "Heading Link") in html

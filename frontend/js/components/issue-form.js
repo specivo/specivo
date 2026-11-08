@@ -1,3 +1,27 @@
+/* Scripts written without spaces between words (Han, Hiragana, Katakana,
+   Thai, Lao, Myanmar, Khmer): a few characters already make a title. */
+var UNSEGMENTED_SCRIPT = /[\u0E00-\u0EFF\u1000-\u109F\u1780-\u17FF\u19E0-\u19FF\u3040-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uA9E0-\uA9FF\uAA60-\uAA7F\uF900-\uFAFF\uFF66-\uFF9F\u{20000}-\u{3134F}]/u;
+var SIMILAR_DEBOUNCE_MS = 1000;
+var SIMILAR_MIN_LENGTH = 10;
+var SIMILAR_MIN_LENGTH_UNSEGMENTED = 4;
+var SIMILAR_MAX_QUERY = 255;
+
+/* Whole hours and minutes of a stored hours value ("1.75" -> 1 and 45); '' when unset. */
+function hoursPart(value) {
+    return (value === null || value === undefined || value === '') ? '' : Math.floor(parseFloat(value));
+}
+function minutesPart(value) {
+    return (value === null || value === undefined || value === '') ? '' : Math.round((parseFloat(value) % 1) * 60);
+}
+
+/* Hours from the hour and minute inputs, rounded to 0.01; null when both are blank. */
+function toHours(hours, minutes) {
+    if ((hours === '' || hours === null) && (minutes === '' || minutes === null)) {
+        return null;
+    }
+    return Math.round(((parseInt(hours) || 0) + Math.min(parseInt(minutes) || 0, 59) / 60) * 100) / 100;
+}
+
 export function issueForm(initial) {
         return {
             submitting: false,
@@ -11,6 +35,10 @@ export function issueForm(initial) {
             due_date: initial.due_date || '',
             est_hours: initial.estimated_hours ? Math.floor(parseFloat(initial.estimated_hours)) : '',
             est_minutes: initial.estimated_hours ? Math.round((parseFloat(initial.estimated_hours) % 1) * 60) : '',
+            orig_hours: hoursPart(initial.original_estimate),
+            orig_minutes: minutesPart(initial.original_estimate),
+            rem_hours: hoursPart(initial.remaining_estimate),
+            rem_minutes: minutesPart(initial.remaining_estimate),
             done_ratio: initial.done_ratio || 0,
             is_private: initial.is_private || false,
             canSetPrivate: initial.canSetPrivate || false,
@@ -27,6 +55,12 @@ export function issueForm(initial) {
             newRelationType: 'relates',
             newRelationKey: '',
             pendingTags: initial.tags || [],
+            similarEnabled: initial.similarEnabled === true,
+            canManageRelations: initial.canManageRelations === true,
+            similarIssues: [],
+            _similarTimer: null,
+            _similarController: null,
+            _similarLastSent: null,
 
             get canSubmit() {
                 return !this.submitting && this.subject.trim() !== '';
@@ -48,6 +82,97 @@ export function issueForm(initial) {
                 this.$el.addEventListener('relation-issue-selected', function (e) {
                     self.newRelationKey = e.detail.key;
                 });
+                if (this.mode === 'create' && this.similarEnabled) {
+                    this.$watch('subject', function () { self._subjectChanged(); });
+                }
+            },
+
+            destroy() {
+                clearTimeout(this._similarTimer);
+                if (this._similarController) this._similarController.abort();
+            },
+
+            /* Similar issues: ask once the subject has rested for a second.
+               Nothing here may get in the way of filing the issue: a failure
+               only empties the list. */
+            _similarQuery() {
+                return this.subject.trim().slice(0, SIMILAR_MAX_QUERY);
+            },
+
+            _longEnough(q) {
+                var min = UNSEGMENTED_SCRIPT.test(q) ? SIMILAR_MIN_LENGTH_UNSEGMENTED : SIMILAR_MIN_LENGTH;
+                return Array.from(q).length >= min;
+            },
+
+            _subjectChanged() {
+                var self = this;
+                clearTimeout(this._similarTimer);
+                if (!this._longEnough(this._similarQuery())) {
+                    this._clearSimilar();
+                    return;
+                }
+                this._similarTimer = setTimeout(function () { self._fetchSimilar(); }, SIMILAR_DEBOUNCE_MS);
+            },
+
+            _clearSimilar() {
+                if (this._similarController) this._similarController.abort();
+                this._similarController = null;
+                this._similarLastSent = null;
+                this.similarIssues = [];
+            },
+
+            async _fetchSimilar() {
+                var q = this._similarQuery();
+                if (!this._longEnough(q) || q === this._similarLastSent) return;
+                if (this._similarController) this._similarController.abort();
+                var controller = new AbortController();
+                this._similarController = controller;
+                this._similarLastSent = q;
+                try {
+                    var res = await spFetch(
+                        '/api/v1/projects/' + encodeURIComponent(this.projectKey) +
+                        '/issues/similar/?q=' + encodeURIComponent(q),
+                        {signal: controller.signal}
+                    );
+                    if (!res.ok) throw new Error('similar issues: ' + res.status);
+                    var data = await res.json();
+                    if (controller !== this._similarController) return;
+                    this.similarIssues = Array.isArray(data) ? data : [];
+                } catch (_e) {
+                    /* A newer request replaced this one: it owns the list. */
+                    if (controller !== this._similarController) return;
+                    this.similarIssues = [];
+                    this._similarLastSent = null;
+                } finally {
+                    if (controller === this._similarController) this._similarController = null;
+                }
+            },
+
+            markDuplicate(item) {
+                var already = this.pendingRelations.some(function (r) {
+                    return r.issue_key === item.key && r.relation_type === 'duplicates';
+                });
+                if (already) return;
+                this.pendingRelations.push({
+                    issue_key: item.key,
+                    relation_type: 'duplicates',
+                    type_label: this._relationLabel('duplicates')
+                });
+            },
+
+            _relationLabel(type) {
+                // Labels are translated in the template (i18n.relationTypes);
+                // the English defaults only cover a caller that omits them.
+                var typeLabels = Object.assign({
+                    relates: 'Relates to',
+                    blocks: 'Blocks',
+                    blocked: 'Blocked by',
+                    duplicates: 'Duplicates',
+                    duplicated: 'Duplicated by',
+                    precedes: 'Precedes',
+                    follows: 'Follows'
+                }, (initial.i18n && initial.i18n.relationTypes) || {});
+                return typeLabels[type] || type;
             },
 
             addFiles(fileList) {
@@ -65,21 +190,10 @@ export function issueForm(initial) {
 
             addPendingRelation() {
                 if (!this.newRelationKey) return;
-                // Labels are translated in the template (i18n.relationTypes);
-                // the English defaults only cover a caller that omits them.
-                var typeLabels = Object.assign({
-                    relates: 'Relates to',
-                    blocks: 'Blocks',
-                    blocked: 'Blocked by',
-                    duplicates: 'Duplicates',
-                    duplicated: 'Duplicated by',
-                    precedes: 'Precedes',
-                    follows: 'Follows'
-                }, (initial.i18n && initial.i18n.relationTypes) || {});
                 this.pendingRelations.push({
                     issue_key: this.newRelationKey,
                     relation_type: this.newRelationType,
-                    type_label: typeLabels[this.newRelationType] || this.newRelationType
+                    type_label: this._relationLabel(this.newRelationType)
                 });
                 this.newRelationKey = '';
                 this.newRelationType = 'relates';
@@ -139,6 +253,8 @@ export function issueForm(initial) {
                     start_date: this.start_date || null,
                     due_date: this.due_date || null,
                     estimated_hours: (this.est_hours || this.est_minutes) ? Math.round(((parseInt(this.est_hours) || 0) + (parseInt(this.est_minutes) || 0) / 60) * 100) / 100 : null,
+                    original_estimate: toHours(this.orig_hours, this.orig_minutes),
+                    remaining_estimate: toHours(this.rem_hours, this.rem_minutes),
                     done_ratio: this.done_ratio,
                     // Without set_issues_private the server applies the tracker's
                     // default on create and keeps the current value on edit.

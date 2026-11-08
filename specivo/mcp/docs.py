@@ -16,8 +16,16 @@ if TYPE_CHECKING:
 _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
-    "specivo_list_issues": "List issues (with tags); filter by status/sprint/metadata/parent, sort, paginate",
-    "specivo_show_issue": "Issue details incl. parent, children, tags, commits, pull requests; search= for a section",
+    "specivo_list_issues": (
+        "List issues (with tags); filter by status/sprint/metadata/parent/assignee/tag/release, sort, paginate"
+    ),
+    "specivo_show_issue": (
+        "Issue details: parent, children, tags, commits, PRs, links to/from, source number; search= for a section"
+    ),
+    "specivo_issue_development": (
+        "Development activity of an issue as JSON: commits, PRs, reviews, CI, deployments, releases; "
+        "summary and a paged timeline (kinds=, limit=, offset=)"
+    ),
     "specivo_create_issue": "Create an issue, optionally with parent_ref and tags (call list_lookups first for IDs)",
     "specivo_update_issue": "Update issue fields or re-parent (parent_ref); lock_version handled automatically",
     "specivo_move_issue": "Move an issue to another project (new KEY-N; the old ref still resolves)",
@@ -26,7 +34,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_list_comments": "List comments on an issue, paginated; include_changes=true adds named field changes",
     "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
     "specivo_list_wiki_pages": "List wiki pages for a project",
-    "specivo_read_wiki": "Read a wiki page by slug",
+    "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
+    "specivo_get_links": (
+        "Link graph of an issue or wiki page: backlinks (direction='in'), outgoing links, relations; depth 1-2"
+    ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
     "specivo_delete_wiki": "Soft-delete a wiki page (moves to trash)",
@@ -41,7 +52,7 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_create_metadata_schema": "Create a metadata schema (manage_project; audited)",
     "specivo_update_metadata_schema": "Patch a metadata schema (manage_project; audited)",
     "specivo_delete_metadata_schema": "Delete a metadata schema, safe-delete (manage_project; audited)",
-    "specivo_metadata": "Get, set or delete one metadata key on an issue or wiki page",
+    "specivo_metadata": "Get, set or delete one metadata key on an issue or wiki page (values checked against schemas)",
     "specivo_list_tags": "List a project's tags with usage counts -- call before tagging and reuse names",
     "specivo_tag": "Get, add, remove or set the tags on an issue (ACME-12) or wiki page (wiki:ACME/<slug>)",
     "specivo_create_tag": "Create a project tag with an optional color (manage_project)",
@@ -52,6 +63,18 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_remove_relation": "Remove a relation by ID",
     "specivo_log_time": "Log time against a project or issue",
     "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
+    "specivo_log_ai_usage": (
+        "Log AI tokens an AI tool used (from a hook, the reporter or /cost output -- never estimated)"
+    ),
+    "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
+    "specivo_ai_usage_report": (
+        "AI spend report: usage grouped by user, model, tool, project, issue, cost type, branch and period, "
+        "in one currency"
+    ),
+    "specivo_ai_subscriptions": (
+        "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
+        "or 'delete'; warns about overlaps and gaps"
+    ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -61,8 +84,11 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_list_sprint_issues": "List the issues of a sprint, or backlog issues (sprint_id=0)",
     "specivo_create_sprint": "Create a new sprint (starts as planned)",
     "specivo_update_sprint": "Update sprint name, goal, or dates",
-    "specivo_start_sprint": "Start a planned sprint (one active per project)",
-    "specivo_complete_sprint": "Complete an active sprint with velocity snapshot",
+    "specivo_start_sprint": "Start a planned sprint (one active per project); noted in each issue's history",
+    "specivo_complete_sprint": (
+        "Complete an active sprint with velocity snapshot; unfinished issues move to backlog or another "
+        "open sprint of the project, and each issue's history notes it"
+    ),
     "specivo_list_recurring_patterns": "List recurring task patterns with rule and next occurrence",
     "specivo_create_recurring_pattern": "Create a recurring task pattern that generates issues on a schedule",
     "specivo_update_recurring_pattern": "Update a recurring task pattern",
@@ -104,9 +130,21 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 1. `specivo_search(query, project_key)` -- relevant issues/wiki (default `mode="hybrid"`)
 2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Parent:`, `Children:`, `Tags:` and
    `Comments: N`, and `Commits: N` with the newest linked commits and `Pull requests: N` with their state
-   when a connected repository referenced the issue)
+   when a connected repository referenced the issue; an imported issue also has `Imported from: RT #123`,
+   and `specivo_search` finds it by that number: `RT #123`, `#123`, or a key such as `PROJ-7`)
+   For builds, deployments and releases call `specivo_issue_development(issue_ref)` (filter with
+   `kinds=["ci", "deployment"]`); `specivo_show_issue` only sums them up on its `Development:` line.
 3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
 4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
+5. Follow the links: `specivo_show_issue` and `specivo_read_wiki` list `Links to:`, `Linked from:`
+   (backlinks from issues, comments and wiki pages) and `Related:`. For more, filters or a second hop,
+   `specivo_get_links(ref, direction="in"|"out"|"both", depth=1|2, types=[...])` -- `ref` is `ACME-12`
+   or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see.
+
+### Link issues and pages so the graph finds them
+Write `ACME-42` for an issue, `[[Page title]]` for a wiki page of the same project, or a Markdown link
+to an issue, wiki page or attachment URL of this instance (for another project's wiki page). These are
+the links `specivo_get_links` and the backlink lines follow; a key inside code is not a link.
 
 ### Search modes
 - `mode="hybrid"` *(default)* -- FTS + pgvector semantic via RRF fusion.
@@ -155,6 +193,45 @@ Tags are flat labels shared by a project's issues and wiki pages; agents and peo
 3. `specivo_timer(op="stop", activity="Development", comments="...")` -- logs the time (activity name
    or ID; the default activity when omitted), or `op="discard"` to drop it without logging
 
+### Log AI usage
+You cannot see your own token counters. Never estimate tokens: log only numbers that come from a
+hook, the Specivo reporter, or the tool's own usage output (Claude Code's `/cost`, for example).
+The reporter (`POST /api/v1/ai-usage/ingest/`) is the routine way; the tools are for one-off entries
+and corrections.
+1. `specivo_log_ai_usage(tool="claude-code", model="claude-sonnet-4-5", input_tokens=N, output_tokens=N,
+   cache_read_tokens=N, issue_ref="ACME-12")` -- without `issue_ref` / `project_key` the entry goes to
+   the issue this agent session works on, else stays unassigned; the server prices it
+2. `specivo_ai_usage(op="list")` -- the entries logged in your name (unassigned ones included);
+   `project_key="ACME"` for a project's entries you may read. Your own entries show the agent
+   session they came from (`session=`); `session_id="..."` lists just that session's entries, to
+   check which issue each part of a session went to
+3. `specivo_ai_usage(op="update", entry_id=N, issue_ref="ACME-12")` -- attribute or correct an entry;
+   entries from the reporter only take a project, issue and comments
+4. `specivo_ai_usage(op="exclude", entry_id=N)` -- leave an entry out of reports (`include` undoes it)
+5. `specivo_ai_usage_report(project_key="ACME", group_by="user,model", preset="last_month")` -- spend and
+   API-equivalent value per group in the reporting currency; `period="week"` adds buckets, no
+   `project_key` reports the whole instance (administrators). Spend includes seat cost (subscription
+   fees spread over the entries that used them) when you read every entry of the project.
+   `issue_ref="ACME-12"` (with `include_sub_issues=true` for the issues below it) totals one issue,
+   e.g. for the spend line of a closing note
+
+### Register AI subscriptions from invoices
+When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):
+1. `specivo_ai_subscriptions(op="presets")` -- map each invoice to a `plan_key` (`custom` for any
+   other plan, with `provider` and `plan_name`)
+2. `specivo_ai_subscriptions(op="list")` -- see what is registered already, so you do not add it twice
+3. `specivo_ai_subscriptions(op="add", periods=[{{"plan_key": "claude-max-5x", "amount": "100",
+   "currency": "USD", "starts_on": "2026-01-21", "ends_on": "2026-02-25"}}, ...])` -- one period per
+   plan and price, all in one call: the amount actually charged, tax included, in its currency, as a
+   string; `ends_on` on every period that ended, none on the one that runs. Days are UTC and both
+   ends count. All or nothing: if any period is invalid, nothing is added and every problem is listed
+4. Read the warnings: a gap or overlap between periods of one plan family (same provider and tools)
+   is reported, never refused. Ask the person about a gap (a cancelled month?) rather than filling it
+5. `op="end"` (`subscription_id`, `ends_on`) when a plan is cancelled; `op="update"` to correct one.
+   Prefer `end` to `delete`: deleting removes the plan from past spend reports
+Needs an unlimited personal API key: a project-limited key and a service account are refused, since
+subscriptions belong to a person. Administrators pass `user="login"` for someone else's.
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -184,6 +261,14 @@ Diagrams render with Mermaid's strict security level: HTML labels, `click` callb
 `%%{{init}}%%` overrides of security or theme settings are ignored, so keep labels plain text. A
 diagram that fails to parse shows its source and an error instead, so check the syntax. The source
 stays in the text, so search, `specivo_read_wiki` and `specivo_show_issue` return it unchanged.
+
+### Filter issues by assignee, tag or release
+`specivo_list_issues` narrows like the issue list's filters:
+- `assignee="alex"` (login or user id), `assignee="me"`, `assignee="none"` (unassigned)
+- `tag="frontend"` (name, case-insensitive, or tag id)
+- `release="0.13.0"` (version name or id; versions shared with the project count), `release="none"`
+
+An unknown name or id is an error naming the argument, never an empty list.
 
 ### Filter issues by metadata
 `specivo_list_issues` accepts `metadata_filters=["key=value", ...]`. Pairs are
@@ -247,6 +332,18 @@ the security audit log. Notable cases:
   permission and emit `ISSUE_*` / `WIKI_*` audit events.
 - `specivo_log_time` and `specivo_timer` (`start`, `stop`) require **`log_time`** on the project.
   Reading logged time needs **`view_time_entries`**; the seeded Agent role has both.
+- `specivo_log_ai_usage` requires **`log_ai_usage`** on the project (nothing for unassigned usage in
+  your own name); `on_behalf_of` requires **`log_ai_usage_for_others`** and an active member as the
+  target, and gives the same refusal for every login otherwise. `specivo_ai_usage` changes entries
+  logged in your name, or any with **`manage_ai_usage`**. Everyone reads what is logged in their
+  name; others' entries need **`view_ai_usage`** with visibility `all`.
+- `specivo_ai_usage_report` reads only the entries you may read; the instance report (no
+  `project_key`) is for administrators. Seat cost shows to administrators and to whoever reads every
+  entry of the project in the period; plan names never appear.
+- `specivo_ai_subscriptions` works on the key owner's own subscriptions, and only with an unlimited
+  key of a person (not a service account); changing them needs self-service on. Administrators reach
+  anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events. Every
+  change over MCP writes `ai_subscriptions_changed`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
@@ -260,6 +357,8 @@ in the project security log.
 - Do NOT assume tracker/status/priority IDs -- call `specivo_list_lookups` first.
 - Do NOT replace full description via `update_issue` -- use `edit_description` for patches.
 - Do NOT call `log_time` without a valid `activity_id` from `list_lookups`.
+- Do NOT invent or estimate token counts for `specivo_log_ai_usage` -- you cannot see them; use a
+  hook, the reporter or `/cost` output.
 - Do NOT use `X-Api-Key` or `?key=` for REST API auth -- only `Authorization: Bearer spv_...` works.
 - Do NOT omit the trailing slash on REST API URLs -- FastAPI requires it.
 - Do NOT write tags or other tracked properties (status, assignee, metadata) into an issue description

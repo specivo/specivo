@@ -1,16 +1,16 @@
 """API v1 router — aggregates all sub-routers.
 
-Core routes include: auth, issues, journals, reactions, saved filters, bulk
+Routes include: auth, issues, journals, reactions, saved filters, bulk
 operations, notifications (inbox + preferences), wiki, search, outgoing
-webhooks, and admin.
+webhooks, and admin (including the security audit log).
 
-Enterprise-only routes (admin agent groups, credentials, kill switch, audit logs,
-model costs, agent costs, admin metadata_schemas) are NOT included here.
-They are mounted by the EnterprisePlugin via ``get_routers()``.
+A router module that is not included here (such as ``billing_rates``) is not
+served; a plugin may add routes of its own through ``get_routers()``.
 """
 
 from fastapi import APIRouter
 
+from specivo.api.v1.admin.audit import router as admin_audit_router
 from specivo.api.v1.admin.email import router as admin_email_router
 from specivo.api.v1.admin.embedding_models import router as admin_embedding_models_router
 from specivo.api.v1.admin.metadata_presets import router as admin_metadata_presets_router
@@ -21,11 +21,21 @@ from specivo.api.v1.admin.sso import router as admin_sso_router
 from specivo.api.v1.admin.user_groups import router as admin_user_groups_router
 from specivo.api.v1.admin.users import router as admin_users_router
 from specivo.api.v1.admin.workflows import router as admin_workflows_router
+from specivo.api.v1.admin_ai_usage import router as admin_ai_usage_router
 from specivo.api.v1.agent_sessions import router as agent_sessions_router
+from specivo.api.v1.ai_model_prices import router as ai_model_prices_router
+from specivo.api.v1.ai_spend_reports import router as ai_spend_reports_router
+from specivo.api.v1.ai_subscriptions import router as ai_subscriptions_router
+from specivo.api.v1.ai_usage import router as ai_usage_router
+from specivo.api.v1.ai_usage_ingest import router as ai_usage_ingest_router
 from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
+from specivo.api.v1.currencies import router as currencies_router
+from specivo.api.v1.exchange_rates import router as exchange_rates_router
 from specivo.api.v1.issues import router as issues_router
+from specivo.api.v1.link_graph_admin import router as link_graph_admin_router
+from specivo.api.v1.links import router as links_router
 from specivo.api.v1.markdown import router as markdown_router
 from specivo.api.v1.metadata import router as metadata_router
 from specivo.api.v1.notifications import router as notifications_router
@@ -52,6 +62,8 @@ api_router.include_router(api_keys_router, tags=["api-keys"])
 api_router.include_router(projects_router)
 api_router.include_router(issues_router)
 api_router.include_router(relations_router)
+api_router.include_router(links_router)
+api_router.include_router(link_graph_admin_router)
 api_router.include_router(versions_router)
 api_router.include_router(recurring_patterns_router)
 api_router.include_router(sprints_router)
@@ -61,6 +73,16 @@ api_router.include_router(time_entries_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(repositories_router)
 api_router.include_router(admin_settings_router)
+api_router.include_router(currencies_router)
+api_router.include_router(exchange_rates_router)
+api_router.include_router(ai_model_prices_router)
+api_router.include_router(ai_subscriptions_router)
+api_router.include_router(admin_ai_usage_router)
+api_router.include_router(ai_usage_ingest_router)
+# Before the entries: /ai-usage/report/ is matched before /ai-usage/{entry_id}/.
+api_router.include_router(ai_spend_reports_router)
+# After the ingest: /ai-usage/ingest/ is matched before /ai-usage/{entry_id}/.
+api_router.include_router(ai_usage_router)
 api_router.include_router(wiki_router)
 api_router.include_router(search_router)
 api_router.include_router(search_admin_router)
@@ -76,6 +98,7 @@ api_router.include_router(admin_user_groups_router)
 api_router.include_router(admin_sso_router)
 api_router.include_router(admin_projects_router)
 api_router.include_router(admin_email_router)
+api_router.include_router(admin_audit_router)
 api_router.include_router(admin_metadata_presets_router)
 api_router.include_router(admin_metadata_schemas_router)
 api_router.include_router(metadata_router)

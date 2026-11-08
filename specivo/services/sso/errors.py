@@ -212,6 +212,14 @@ class SsoProviderAlreadyLinkedError(SsoError):
     default_status = 409
 
 
+class SsoReauthMismatchError(SsoError):
+    """A fresh sign-in (``reauth``) came back as an identity that is not the signed-in user's."""
+
+    default_code = "sso_reauth_mismatch"
+    default_message = "Sign in with the identity provider account connected to your profile"
+    default_status = 403
+
+
 class SsoAccessPolicyError(SsoError):
     """The provider's access policy refused the login (domain, required groups, group overage).
 

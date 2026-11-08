@@ -7,6 +7,7 @@ that fail in CI/test environments where env vars aren't yet set.
 import os
 
 from celery import Celery
+from celery.schedules import crontab  # type: ignore[import-untyped]
 from celery.signals import worker_init  # type: ignore[import-untyped]
 
 from specivo.core.celery_beat import default_schedule_file
@@ -71,6 +72,12 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.recurring.generate_recurring_tasks",
                 "schedule": _RECURRING_BEAT_INTERVAL_SECONDS,
             },
+            # Daily, after the ECB publishes (about 16:00 CET, 14:00-15:00 UTC).
+            # Does nothing unless an administrator switched the fetch on.
+            "fetch-exchange-rates": {
+                "task": "specivo.tasks.exchange_rates.fetch_exchange_rates",
+                "schedule": crontab(minute=15, hour=16),
+            },
         },
     }
 )
@@ -88,6 +95,20 @@ def _bootstrap_worker(**_kwargs) -> None:
     from specivo.core.plugin_manager import bootstrap
 
     bootstrap()
+    _warn_about_app_url()
+
+
+def _warn_about_app_url() -> None:
+    """Log once at worker start when ``APP_URL`` is local: emails sent from here carry its links."""
+    import logging
+
+    try:
+        from specivo.core.app_url import log_app_url_warning
+        from specivo.core.config import get_settings
+
+        log_app_url_warning(get_settings(), component="worker")
+    except Exception as exc:  # noqa: BLE001 - a start-up check must not stop the worker
+        logging.getLogger(__name__).warning("APP_URL check at worker start failed: %s", exc)
 
 
 # Eagerly import every task module so that @celery_app.task decorators
@@ -102,12 +123,15 @@ def _bootstrap_worker(**_kwargs) -> None:
 # (no @celery_app.task) and is imported on demand by cleanup, so it
 # does not need a top-level import here.
 from specivo.tasks import (  # noqa: E402, F401
+    ai_model_prices,
+    ai_usage,
     cleanup,
     embeddings,
+    entity_links,
+    exchange_rates,
     notifications,
     recurring,
     repositories,
     search,
     webhooks,
-    wiki_links,
 )

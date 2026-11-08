@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, pagination, empty_state %}
+
+{% block title %}{% trans %}Audit log{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": "/"},
+  {"label": _("Admin"), "url": "/admin/"},
+  {"label": _("Audit log")}
+]) }}
+
+<div class="page-header">
+  <h1>{% trans %}Audit log{% endtrans %}</h1>
+</div>
+
+<p class="sp-audit-intro">
+  {% trans %}Sign-ins, access changes, administration, single sign-on and provisioning, and everything agents do. People's edits to issues and wiki pages are in their history instead.{% endtrans %}
+  {% trans zone=zone %}Times are shown in your timezone (%(zone)s).{% endtrans %}
+</p>
+
+<form method="get" action="/admin/audit-log/" class="card sp-audit-filters">
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}Category{% endtrans %}</span>
+    <select name="category" class="filter-select">
+      <option value="">{% trans %}All categories{% endtrans %}</option>
+      {% for value, label in categories %}
+      <option value="{{ value }}"{% if filters.category == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}Event type{% endtrans %}</span>
+    <select name="event_type" class="filter-select">
+      <option value="">{% trans %}All event types{% endtrans %}</option>
+      {% for value in event_types %}
+      <option value="{{ value }}"{% if filters.event_type == value %} selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}User login{% endtrans %}</span>
+    <input type="text" name="login" value="{{ filters.login }}" class="filter-input" autocomplete="off">
+  </label>
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}Project key{% endtrans %}</span>
+    <input type="text" name="project" value="{{ filters.project }}" class="filter-input" autocomplete="off">
+  </label>
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}From{% endtrans %}</span>
+    <input type="date" name="date_from" value="{{ filters.date_from }}" class="filter-input">
+  </label>
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}To{% endtrans %}</span>
+    <input type="date" name="date_to" value="{{ filters.date_to }}" class="filter-input">
+  </label>
+  <label class="sp-audit-field">
+    <span class="form-label">{% trans %}IP address{% endtrans %}</span>
+    <input type="text" name="ip" value="{{ filters.ip }}" class="filter-input" maxlength="45" autocomplete="off">
+  </label>
+  <input type="hidden" name="limit" value="{{ limit }}">
+  <div class="sp-audit-actions">
+    <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Filter{% endtrans %}</button>
+    <a href="/admin/audit-log/" class="sp-btn sp-btn-ghost">{% trans %}Reset{% endtrans %}</a>
+  </div>
+</form>
+
+{% for message in errors %}
+<div class="flash flash-error">{{ message }}</div>
+{% endfor %}
+
+{% if rows %}
+<div class="card sp-audit-card">
+  <div class="sp-table-scroll">
+    <table class="sp-table sp-audit-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Time{% endtrans %}</th>
+          <th>{% trans %}Event{% endtrans %}</th>
+          <th>{% trans %}User{% endtrans %}</th>
+          <th>{% trans %}Project{% endtrans %}</th>
+          <th>{% trans %}Resource{% endtrans %}</th>
+          <th>{% trans %}IP address{% endtrans %}</th>
+          <th>{% trans %}Details{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="sp-audit-time">{{ row.created_at | localtime(user.timezone) }}</td>
+          <td>
+            <code class="sp-audit-code">{{ row.event_type }}</code>
+            {% if row.from_agent %}<span class="sp-badge-info">MCP</span>{% endif %}
+            {% if row.category %}<div class="sp-audit-sub">{{ row.category }}</div>{% endif %}
+          </td>
+          <td>
+            {% if row.user_login %}{{ row.user_login }}
+            {% elif row.user_id is not none %}<span class="sp-audit-missing">#{{ row.user_id }}</span>
+            {% else %}<span class="sp-audit-missing">&mdash;</span>{% endif %}
+          </td>
+          <td>
+            {% if row.project_key %}<a href="/projects/{{ row.project_key }}/" class="sp-audit-code">{{ row.project_key }}</a>
+            {% elif row.project_id is not none %}<span class="sp-audit-missing">#{{ row.project_id }}</span>
+            {% else %}<span class="sp-audit-missing">&mdash;</span>{% endif %}
+          </td>
+          <td>
+            {% if row.resource_type %}{{ row.resource_type }}{% if row.resource_id is not none %} #{{ row.resource_id }}{% endif %}
+            {% elif row.permission %}{{ row.permission }}
+            {% else %}<span class="sp-audit-missing">&mdash;</span>{% endif %}
+          </td>
+          <td class="sp-audit-code">{{ row.ip_address or "" }}</td>
+          <td class="sp-audit-details">
+            <details>
+              <summary>{% trans %}Show{% endtrans %}</summary>
+              <pre class="sp-audit-json">{{ row.details_json }}</pre>
+              {% if row.request_id %}<div class="sp-audit-sub">{% trans %}Request{% endtrans %}: <code>{{ row.request_id }}</code></div>{% endif %}
+              {% if row.user_agent %}<div class="sp-audit-sub">{% trans %}User agent{% endtrans %}: {{ row.user_agent }}</div>{% endif %}
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ pagination(total, offset, limit, "/admin/audit-log/", page_query) }}
+{% elif not errors %}
+<div class="card">
+  {{ empty_state(_("No events match these filters"), _("Widen the dates or clear a filter.")) }}
+</div>
+{% endif %}
+{% endblock %}

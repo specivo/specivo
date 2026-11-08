@@ -104,7 +104,7 @@ The provider form has five cards. The tables list every field.
 | Client authentication | How Specivo proves itself at the token endpoint: `client_secret_basic` (default), `client_secret_post`, or `none` for a public client that relies on PKCE alone. Use `client_secret_basic` unless your IdP's documentation says otherwise. |
 | Client secret | See [The client secret](#the-client-secret). Not used with `none`. |
 | Scopes | Space-separated. Default `openid profile email`. `openid` is required and is always sent first. Add `groups` or other scopes your IdP needs to release a claim. |
-| Extra sign-in parameters | Optional `prompt`, `domain_hint`, `login_hint`, `acr_values` and `max_age`, added to the sign-in request. Nothing else can be set here. With `max_age`, the ID token must carry an `auth_time` no older than `max_age` seconds (plus `SSO_CLOCK_SKEW_SECONDS`), or the sign-in is refused with `sso_token_invalid`. **Connect** from the profile always sends `prompt=login` and `max_age=0`, whatever is set here. |
+| Extra sign-in parameters | Optional `prompt`, `domain_hint`, `login_hint`, `acr_values` and `max_age`, added to the sign-in request. Nothing else can be set here. With `max_age`, the ID token must carry an `auth_time` no older than `max_age` seconds (plus `SSO_CLOCK_SKEW_SECONDS`), or the sign-in is refused with `sso_token_invalid`. **Connect** from the profile, and **Sign in again** before a person without a password [changes their email address](../../getting-started/your-profile.md#accounts-that-sign-in-through-single-sign-on), always send `prompt=login` and `max_age=0`, whatever is set here. |
 | Enabled | Shows the button on the login page. A provider cannot be enabled while a confidential client has no secret. Turning it off signs out everyone whose session came from this provider (see [Sessions](#sessions-and-logout)). |
 | Button order | Lower numbers come first. |
 
@@ -452,8 +452,10 @@ the IdP's keys less than a minute ago (right after a key rotation). It answers 4
 | End every session of that person from this provider | Every session that came from this identity, whichever IdP session it belongs to. |
 | End all of their sessions and switch off their API keys | As above; and if the account signs in only through SSO (it has no password), every one of its sessions, also from other providers, and all of its API keys, MCP keys included, are switched off. The security audit log records `user_deprovisioned` with reason `sso_backchannel`. |
 
-The last choice never deactivates the account and never touches an account with a password or a
-service account (those get the second behaviour). If the person signs in through the IdP again
+The last choice never deactivates the account and never touches an account with a password, a
+service account or an administrator (those get the second behaviour; for an administrator Specivo
+logs `sso.deprovision.skipped ... reason=administrator`). Offboard an administrator in Specivo:
+remove the administrator rights or deactivate the account. If the person signs in through the IdP again
 later, that works, but their API keys stay off until they or an administrator switch them back on.
 IdPs send the same logout for a person who signed out as for one who was disabled, so choose it
 only if you accept that signing out at the IdP also switches off that person's API keys. A repeated
@@ -582,6 +584,7 @@ To see them: `docker compose logs api | grep specivo.sso`. Logs never contain to
 | `sso_email_conflict` | "An account with this email address already exists." | JIT would create a second account with an email that exists. The person should sign in with their password and connect the account from their profile. |
 | `sso_identity_in_use` | "This identity provider account is already connected to another account." | Seen when connecting. The IdP identity belongs to another Specivo user. Disconnect it there first. |
 | `sso_provider_already_linked` | "An account at this identity provider is already connected to your profile." | Seen when connecting. The user already has an account at this provider. |
+| `sso_reauth_mismatch` | "Sign in again with the identity provider account connected to your profile, not another one." | Seen when a person without a password signs in again before [changing their email address](../../getting-started/your-profile.md#accounts-that-sign-in-through-single-sign-on). They signed in at the IdP as an account not connected to their profile, or have no account connected at that provider. |
 | `sso_domain_not_allowed` | "Your email domain is not allowed to sign in here." | The email domain is not in the list, or the email is not verified, or the provider is not set to trust email verification, or the IdP sent no email. See [Limiting who can sign in](#limiting-who-can-sign-in). |
 | `sso_not_in_required_group` | "Your identity provider account is not in a group that may sign in here." | The person is in none of the required groups, or the token has no groups claim. Check the **Groups claim** path, the IdP's group mapper, the scopes, and that group names match exactly, including case. |
 | `sso_groups_overage` | "Your identity provider sent too many groups to read." | Entra ID overage. See [Microsoft Entra ID](entra-id.md#group-overage). |

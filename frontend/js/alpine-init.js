@@ -35,10 +35,13 @@ import { descriptionEditor } from './components/description-editor';
 import { issueSidebar } from './components/issue-sidebar';
 import { tagField } from './components/tag-field';
 import { tagFilter } from './components/tag-filter';
+import { filterCombobox } from './components/filter-combobox';
 import { projectTagsSettings } from './components/project-tags-settings';
 import { projectWebhooks } from './components/project-webhooks';
 import { projectRepositories } from './components/project-repositories';
 import { copyBranchName } from './components/copy-branch-name';
+import { issueTabs } from './components/issue-tabs';
+import { issueDevelopment } from './components/issue-development';
 import { projectBranchName } from './components/project-branch-name';
 import { entityAutocomplete } from './components/entity-autocomplete';
 import { projectCreateModal } from './components/project-create-modal';
@@ -63,6 +66,7 @@ import { kanbanScroll } from './components/kanban-scroll';
 import { wikiToc } from './components/wiki-toc';
 import { adminMetadataPresets } from './components/admin-metadata-presets';
 import { ftsReindex } from './components/fts-reindex';
+import { linkGraphRebuild } from './components/link-graph-rebuild';
 
 document.addEventListener('alpine:init', function () {
   Alpine.store('notifications', notifications);
@@ -99,10 +103,13 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('issueSidebar', issueSidebar);
   Alpine.data('tagField', tagField);
   Alpine.data('tagFilter', tagFilter);
+  Alpine.data('filterCombobox', filterCombobox);
   Alpine.data('projectTagsSettings', projectTagsSettings);
   Alpine.data('projectWebhooks', projectWebhooks);
   Alpine.data('projectRepositories', projectRepositories);
   Alpine.data('copyBranchName', copyBranchName);
+  Alpine.data('issueTabs', issueTabs);
+  Alpine.data('issueDevelopment', issueDevelopment);
   Alpine.data('projectBranchName', projectBranchName);
   Alpine.data('entityAutocomplete', entityAutocomplete);
   Alpine.data('projectCreateModal', projectCreateModal);
@@ -128,4 +135,5 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('wikiToc', wikiToc);
   Alpine.data('adminMetadataPresets', adminMetadataPresets);
   Alpine.data('ftsReindex', ftsReindex);
+  Alpine.data('linkGraphRebuild', linkGraphRebuild);
 });

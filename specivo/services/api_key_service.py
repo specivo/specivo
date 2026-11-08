@@ -10,6 +10,8 @@ Key design decisions:
   SSO (no password, at least one connected identity) can neither create keys
   nor use the ones they hold (403 ``api_keys_not_allowed_for_sso_users``).
   Service accounts and users with a password are never affected.
+- A project limit (``scopes``) is validated and resolved to project ids at
+  creation; see ``specivo.services.api_key_scope``.
 """
 
 from __future__ import annotations
@@ -20,17 +22,18 @@ import secrets
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import CursorResult, delete, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.constants import API_KEY_ENTROPY_BYTES, API_KEY_PREFIX
-from specivo.core.exceptions import AppError, NotFoundError
-from specivo.core.features import get_feature_registry
+from specivo.core.constants import API_KEY_ENTROPY_BYTES, API_KEY_MAX_PER_USER, API_KEY_PREFIX
+from specivo.core.exceptions import AppError, NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import ApiKey
 from specivo.models.user import User
+from specivo.schemas.auth import ApiKeyScopes, parse_api_key_scopes
 from specivo.services.anonymous_user_service import AnonymousUserProtectedError
+from specivo.services.api_key_scope import UnknownScopeProjectError, resolve_scope_for_creation
 from specivo.services.auth_utils import is_sso_only_user
 
 # Debounce interval for last_used_at updates
@@ -114,33 +117,36 @@ async def sso_api_keys_refused(session: AsyncSession, user: User) -> bool:
 class ApiKeyService:
     """Stateless service class — all state lives in the DB session."""
 
-    _MAX_KEYS_FREE = 20
-
-    async def _check_key_limit_exceeded(self, session: AsyncSession, user_id: int) -> bool:
-        """Return True if user has reached the core-tier key limit (20 keys)."""
-        from sqlalchemy import func
-
-        count_result = await session.execute(select(func.count()).where(ApiKey.user_id == user_id))
-        current_count = count_result.scalar_one()
-        return isinstance(current_count, int) and current_count >= self._MAX_KEYS_FREE
+    async def _key_count(self, session: AsyncSession, user_id: int) -> int:
+        """Return how many keys *user_id* holds, active and inactive."""
+        return int((await session.execute(select(func.count()).where(ApiKey.user_id == user_id))).scalar_one())
 
     async def create_key(
         self,
         session: AsyncSession,
         user_id: int,
         name: str,
-        scopes: dict | None = None,
+        scopes: ApiKeyScopes | dict | None = None,
         expires_at: datetime | None = None,
         ip_allowlist: list[str] | None = None,
+        *,
+        check_scope_access: bool = True,
     ) -> tuple[ApiKey, str]:
         """Create a new API key for *user_id*.
 
         Returns *(model, raw_key)*. The raw key is shown once and never
         retrievable again — callers must return it to the user immediately.
 
-        Feature gates:
-        - Without ``unlimited_api_keys``: max 20 keys per user.
-        - Without ``api_key_scopes``: scopes are silently ignored.
+        *scopes* limits the key to some projects (``{"projects": [...]}``, by
+        key or id) and is stored as ``{"projects": [ids]}``. Anything else
+        than None or that shape, and a project that does not exist, raise
+        ``ValidationError`` on ``scopes``. With *check_scope_access* (self
+        service) each project must also be visible to the owner; the admin
+        route turns it off, since a service account may be given membership
+        later. A key never exceeds its owner's roles either way.
+
+        A user holds at most ``API_KEY_MAX_PER_USER`` keys, active or not
+        (422 ``api_key_limit``).
         """
         owner = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
         if owner is not None and owner.is_system_principal:
@@ -148,22 +154,16 @@ class ApiKeyService:
         if owner is not None and await sso_api_keys_refused(session, owner):
             raise sso_api_keys_refused_error()
 
-        registry = get_feature_registry()
+        if await self._key_count(session, user_id) >= API_KEY_MAX_PER_USER:
+            raise AppError(
+                code="api_key_limit",
+                message=_(
+                    "This account has reached the limit of {limit} API keys. Delete keys it no longer needs."
+                ).format(limit=API_KEY_MAX_PER_USER),
+                status_code=422,
+            )
 
-        # Gate: enforce 5-key limit unless unlimited_api_keys feature is available
-        if not registry.has_feature("unlimited_api_keys"):
-            if await self._check_key_limit_exceeded(session, user_id):
-                raise AppError(
-                    code="api_key_limit",
-                    message=_("API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited keys.").format(
-                        limit=self._MAX_KEYS_FREE
-                    ),
-                    status_code=422,
-                )
-
-        # Gate: ignore scopes unless api_key_scopes feature is available
-        if not registry.has_feature("api_key_scopes"):
-            scopes = None
+        stored_scopes = await self._resolve_scopes(session, scopes, owner, check_access=check_scope_access)
 
         raw_key = _generate_raw_key()
         key_hash = _hash_key(raw_key)
@@ -175,7 +175,7 @@ class ApiKeyService:
             name=name,
             key_prefix=key_prefix,
             key_hash=key_hash,
-            scopes=scopes,
+            scopes=stored_scopes,
             expires_at=expires_at,
             ip_allowlist=ip_allowlist,
             is_active=True,
@@ -183,6 +183,25 @@ class ApiKeyService:
         session.add(record)
         await session.flush()
         return record, raw_key
+
+    async def _resolve_scopes(
+        self, session: AsyncSession, scopes: ApiKeyScopes | dict | None, owner: User | None, *, check_access: bool
+    ) -> dict | None:
+        """Validate a new key's project limit and return what to store: ``{"projects": [ids]}`` or None."""
+        try:
+            parsed = parse_api_key_scopes(scopes)
+        except ValueError as exc:
+            raise ValidationError(str(exc), field="scopes") from None
+        if parsed is None:
+            return None
+        try:
+            ids = await resolve_scope_for_creation(session, parsed.projects, owner, check_access=check_access)
+        except UnknownScopeProjectError as exc:
+            raise ValidationError(
+                _('There is no project "{project}" that this key can be limited to.').format(project=exc.entry),
+                field="scopes",
+            ) from None
+        return {"projects": ids}
 
     async def authenticate(
         self,

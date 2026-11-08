@@ -8,6 +8,11 @@ Endpoints:
     GET    /auth/sessions        - List active sessions
     DELETE /auth/sessions/{id}   - Revoke a specific session
     POST   /auth/change-password - Change your own password (authenticated)
+    GET    /auth/me/email        - Your address and its pending change
+    POST   /auth/me/email        - Ask to change your address (a link goes to the new one)
+    DELETE /auth/me/email        - Cancel the pending change
+    POST   /auth/me/email/resend - Send the link again (the previous one stops working)
+    POST   /auth/confirm-email   - Use the link's token (no sign-in needed)
 """
 
 from __future__ import annotations
@@ -23,14 +28,20 @@ from specivo.core.constants import API_KEY_PREFIX
 from specivo.core.database import DbSession
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
-from specivo.core.security import get_account_user
+from specivo.core.security import get_account_user, request_session, request_session_id
 from specivo.models.user import User
 from specivo.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponse,
+    EmailChangeAccepted,
+    EmailChangeConfirmed,
+    EmailChangeConfirmRequest,
+    EmailChangeRequest,
+    EmailChangeStateOut,
     ForgotPasswordRequest,
     LoginRequest,
     LogoutResponse,
+    PendingEmailChangeOut,
     RefreshRequest,
     ResetPasswordRequest,
     SessionOut,
@@ -38,9 +49,11 @@ from specivo.schemas.auth import (
 )
 from specivo.services.auth_service import AuthService
 from specivo.services.auth_utils import validate_password_policy
+from specivo.services.email_change_service import EmailChangeService
 
 router = APIRouter()
 _service = AuthService()
+_email_change = EmailChangeService()
 
 
 def _request_access_token(request: Request, cookie_value: str | None) -> str | None:
@@ -126,10 +139,13 @@ async def login(
             from specivo.services.security_audit_service import SecurityAuditService
 
             audit = SecurityAuditService()
+            # Only the login of an account the attempt named, never the typed text:
+            # a password typed into the login field must not reach the audit log.
+            named = await _service.find_account(db, body.login)
             await audit.log_login_failure(
                 session=db,
                 request=request,
-                login_hint=body.login,
+                login_hint=named.login if named is not None else None,
                 reason=exc.code,
             )
             await db.commit()
@@ -518,4 +534,149 @@ async def change_password(
     return ChangePasswordResponse(
         detail="Password changed successfully.",
         revoked_sessions=revoked,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Email change: /auth/me/email/ and /auth/confirm-email/
+# ---------------------------------------------------------------------------
+
+#: Same wording whether or not another account uses the address (no enumeration).
+EMAIL_CHANGE_ACCEPTED_DETAIL = (
+    "Check the inbox of the new address and open the link to confirm the change. "
+    "Your current address stays in use until then."
+)
+_confirm_email_rate_limit = rate_limit("auth_confirm_email", max_requests=20, window_seconds=60)
+
+
+def _pending_out(pending) -> PendingEmailChangeOut:
+    return PendingEmailChangeOut(
+        new_email=pending.new_email,
+        requested_at=pending.requested_at,
+        expires_at=pending.expires_at,
+        expired=pending.expired,
+    )
+
+
+@router.get(
+    "/me/email/",
+    response_model=EmailChangeStateOut,
+    summary="Your email address and its pending change",
+)
+async def get_email_change(
+    request: Request,
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_account_user)],
+) -> EmailChangeStateOut:
+    """The current address, the pending change (``null`` without one) and whether a change is possible."""
+    session_id = await request_session_id(request, db, current_user.id)
+    state = await _email_change.state(db, current_user, session_id=session_id)
+    return EmailChangeStateOut(
+        email=state.email,
+        pending=_pending_out(state.pending) if state.pending is not None else None,
+        managed_by_idp=state.managed_by_idp,
+        requires_reauth=state.requires_reauth,
+        reauthenticated=state.reauthenticated,
+        available=not (state.managed_by_idp or state.unavailable),
+    )
+
+
+@router.post(
+    "/me/email/",
+    response_model=EmailChangeAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Ask to change your email address",
+    responses={
+        400: {"description": "Wrong current password, the current address, or the account cannot change it"},
+        403: {"description": "Managed by the identity provider, or a fresh sign-in at the IdP is needed"},
+        422: {"description": "Not a valid email address"},
+        429: {"description": "Too many requests for this account or this address"},
+    },
+)
+async def request_email_change(
+    body: EmailChangeRequest,
+    request: Request,
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_account_user)],
+) -> EmailChangeAccepted:
+    """Send a confirmation link to ``new_email``; the address changes when the link is used.
+
+    The answer is the same whether or not another account uses the address.
+    A new request replaces the pending one: only the latest link works.
+    """
+    session_id = await request_session_id(request, db, current_user.id)
+    pending = await _email_change.request_change(
+        db,
+        current_user,
+        new_email=body.new_email,
+        current_password=body.current_password,
+        session_id=session_id,
+    )
+    await db.commit()
+    return EmailChangeAccepted(detail=EMAIL_CHANGE_ACCEPTED_DETAIL, pending=_pending_out(pending))
+
+
+@router.post(
+    "/me/email/resend/",
+    response_model=EmailChangeAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Send the confirmation link again",
+    responses={404: {"description": "No pending change"}, 429: {"description": "Too many requests"}},
+)
+async def resend_email_change(
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_account_user)],
+) -> EmailChangeAccepted:
+    """Send a new link for the pending change; the previous link stops working."""
+    pending = await _email_change.resend(db, current_user)
+    await db.commit()
+    return EmailChangeAccepted(detail=EMAIL_CHANGE_ACCEPTED_DETAIL, pending=_pending_out(pending))
+
+
+@router.delete(
+    "/me/email/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cancel the pending email change",
+)
+async def cancel_email_change(
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_account_user)],
+) -> Response:
+    """Cancel the pending change, if any; its link stops working."""
+    await _email_change.cancel(db, current_user)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/confirm-email/",
+    response_model=EmailChangeConfirmed,
+    summary="Confirm an email change with the token from the link",
+    responses={
+        400: {"description": "Unknown, used, replaced, cancelled or expired link"},
+        409: {"description": "Another account uses the address now"},
+        429: {"description": "Rate limit exceeded"},
+    },
+)
+async def confirm_email_change(
+    body: EmailChangeConfirmRequest,
+    request: Request,
+    db: DbSession,
+    _rl: Annotated[None, Depends(_confirm_email_rate_limit)],
+) -> EmailChangeConfirmed:
+    """Change the address. No sign-in is needed: the token is the proof.
+
+    Every other session of the account ends; a caller signed in as the same
+    user keeps the session it called with.
+    """
+    caller = await request_session(request, db)
+    result = await _email_change.confirm(
+        db,
+        body.token,
+        caller_user_id=caller[0] if caller else None,
+        caller_session_id=caller[1] if caller else None,
+    )
+    await db.commit()
+    return EmailChangeConfirmed(
+        detail="Your email address was changed.", email=result.new_email, revoked_sessions=result.revoked_sessions
     )

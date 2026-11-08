@@ -11,6 +11,7 @@ import logging
 import os
 
 import redis.asyncio as aioredis
+from celery.signals import worker_ready  # type: ignore[import-untyped]
 from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.tasks import celery_app
@@ -67,6 +68,13 @@ async def _cleanup_async() -> None:
                 used_result = await session.execute(used_stmt)
                 used_count = used_result.rowcount
 
+                # Email change links, a week after they expired (used or not)
+                from specivo.models.auth import EmailChangeToken
+
+                await session.execute(
+                    delete(EmailChangeToken).where(EmailChangeToken.expires_at < now - timedelta(days=7))
+                )
+
                 # Delete expired refresh tokens
                 refresh_stmt = delete(RefreshToken).where(RefreshToken.expires_at < now)
                 refresh_result = await session.execute(refresh_stmt)
@@ -109,18 +117,37 @@ async def _cleanup_async() -> None:
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
 def ensure_audit_partitions(self) -> None:  # type: ignore[no-untyped-def]
-    """Create monthly partitions for security_audit_logs 3 months ahead."""
+    """Create the audit log's monthly partitions 3 months ahead and drop those past retention.
+
+    Retention is ``AUDIT_LOG_RETENTION_MONTHS`` (default 12, ``0`` keeps everything).
+    """
     try:
         run_async(_ensure_audit_partitions_async())
     except Exception as exc:
-        logger.warning("Audit partition creation failed: %s", exc)
+        logger.warning("Audit partition maintenance failed: %s", exc)
         raise self.retry(exc=exc)
 
 
 async def _ensure_audit_partitions_async() -> None:
+    from specivo.core.config import get_settings
     from specivo.tasks._async import task_session
-    from specivo.tasks.partition_management import ensure_partitions
+    from specivo.tasks.partition_management import ensure_partitions, prune_partitions
 
     async with task_session() as session:
         await ensure_partitions(session)
+        await prune_partitions(session, get_settings().audit_log_retention_months)
         await session.commit()
+
+
+@worker_ready.connect
+def _ensure_audit_partitions_at_start(**_kwargs) -> None:  # type: ignore[no-untyped-def]
+    """Run the partition check once when a worker starts.
+
+    The beat entry first fires a day after start; without this a fresh
+    install would write its first audit rows into the default partition.
+    """
+    try:
+        run_async(_ensure_audit_partitions_async())
+        logger.info("Audit log partitions checked at worker start")
+    except Exception as exc:  # noqa: BLE001 - a start-up check must not stop the worker
+        logger.warning("Audit partition check at worker start failed: %s", exc)

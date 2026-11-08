@@ -1,0 +1,93 @@
+{# Labels and small pieces shared by the Development tab's templates.
+   Macros, not variables: an imported template is cached, and labels must
+   follow each reader's language. #}
+
+{% macro kind_label(kind) -%}
+{%- if kind == "commit" %}{% trans %}Commits{% endtrans %}
+{%- elif kind == "pull_request" %}{% trans %}Pull requests{% endtrans %}
+{%- elif kind == "review" %}{% trans %}Reviews{% endtrans %}
+{%- elif kind == "ci" %}{% trans %}Builds{% endtrans %}
+{%- elif kind == "deployment" %}{% trans %}Deployments{% endtrans %}
+{%- elif kind == "release" %}{% trans %}Releases{% endtrans %}
+{%- else %}{{ kind }}{% endif -%}
+{%- endmacro %}
+
+{# One entry's kind, as the timeline names it. #}
+{% macro item_kind(kind) -%}
+{%- if kind == "commit" %}{% trans %}Commit{% endtrans %}
+{%- elif kind == "pull_request" %}{% trans %}Pull request{% endtrans %}
+{%- elif kind == "review" %}{% trans %}Review{% endtrans %}
+{%- elif kind == "ci" %}{% trans %}Build{% endtrans %}
+{%- elif kind == "deployment" %}{% trans %}Deployment{% endtrans %}
+{%- elif kind == "release" %}{% trans %}Release{% endtrans %}
+{%- else %}{{ kind }}{% endif -%}
+{%- endmacro %}
+
+{# "3 commits", "1 pull request": the count with its noun. #}
+{% macro kind_count(kind, n) -%}
+{%- if kind == "commit" %}{% trans count=n %}%(count)s commit{% pluralize %}%(count)s commits{% endtrans %}
+{%- elif kind == "pull_request" %}{% trans count=n %}%(count)s pull request{% pluralize %}%(count)s pull requests{% endtrans %}
+{%- elif kind == "review" %}{% trans count=n %}%(count)s review{% pluralize %}%(count)s reviews{% endtrans %}
+{%- elif kind == "ci" %}{% trans count=n %}%(count)s build{% pluralize %}%(count)s builds{% endtrans %}
+{%- elif kind == "deployment" %}{% trans count=n %}%(count)s deployment{% pluralize %}%(count)s deployments{% endtrans %}
+{%- elif kind == "release" %}{% trans count=n %}%(count)s release{% pluralize %}%(count)s releases{% endtrans %}
+{%- else %}{{ n }} {{ kind }}{% endif -%}
+{%- endmacro %}
+
+{# The state of an entry or a combined status, in words. #}
+{% macro state_label(state) -%}
+{%- if state == "open" %}{% trans %}Open{% endtrans %}
+{%- elif state == "draft" %}{% trans %}Draft{% endtrans %}
+{%- elif state == "merged" %}{% trans %}Merged{% endtrans %}
+{%- elif state == "closed" %}{% trans %}Closed{% endtrans %}
+{%- elif state == "approved" %}{% trans %}Approved{% endtrans %}
+{%- elif state == "changes_requested" %}{% trans %}Changes requested{% endtrans %}
+{%- elif state == "commented" %}{% trans %}Commented{% endtrans %}
+{%- elif state == "dismissed" %}{% trans %}Dismissed{% endtrans %}
+{%- elif state == "failing" %}{% trans %}Failing{% endtrans %}
+{%- elif state == "running" %}{% trans %}Running{% endtrans %}
+{%- elif state == "passing" %}{% trans %}Passing{% endtrans %}
+{%- elif state == "neutral" %}{% trans %}Neutral{% endtrans %}
+{%- elif state == "pending" %}{% trans %}Pending{% endtrans %}
+{%- elif state == "success" %}{% trans %}Success{% endtrans %}
+{%- elif state == "failure" %}{% trans %}Failed{% endtrans %}
+{%- elif state == "cancelled" %}{% trans %}Cancelled{% endtrans %}
+{%- elif state == "skipped" %}{% trans %}Skipped{% endtrans %}
+{%- elif state == "inactive" %}{% trans %}Inactive{% endtrans %}
+{%- elif state == "released" %}{% trans %}Released{% endtrans %}
+{%- elif state == "tagged" %}{% trans %}Tagged{% endtrans %}
+{%- else %}{{ state | replace("_", " ") }}{% endif -%}
+{%- endmacro %}
+
+{# The tone of a state's badge: good, bad, busy, done or quiet. #}
+{% macro state_tone(state) -%}
+{%- if state in ("open", "approved", "passing", "success", "released") %}good
+{%- elif state in ("closed", "changes_requested", "failing", "failure") %}bad
+{%- elif state in ("running", "pending") %}busy
+{%- elif state in ("merged", "tagged") %}done
+{%- else %}quiet{% endif -%}
+{%- endmacro %}
+
+{% macro state_badge(state) -%}
+<span class="sp-dev-state sp-dev-state-{{ state_tone(state) }}" data-state="{{ state }}">{{ state_label(state) }}</span>
+{%- endmacro %}
+
+{# An environment type in words; an unclassified one goes by its name. #}
+{% macro environment_label(env_type, name) -%}
+{%- if env_type == "production" %}{% trans %}production{% endtrans %}
+{%- elif env_type == "staging" %}{% trans %}staging{% endtrans %}
+{%- elif env_type == "testing" %}{% trans %}testing{% endtrans %}
+{%- elif env_type == "development" %}{% trans %}development{% endtrans %}
+{%- else %}{{ name }}{% endif -%}
+{%- endmacro %}
+
+{# A time as the page shows times: relative, with the absolute time on hover. #}
+{% macro when(dt, tz, mode="smart") -%}
+{%- if dt %}<time class="sp-dev-time" datetime="{{ dt.isoformat() }}" title="{{ dt | localdt(tz) }}">{{ dt | timeago(tz, mode) }}</time>{% endif -%}
+{%- endmacro %}
+
+{# A link to the forge when *url* is a web address, else the text alone. #}
+{% macro forge_link(url, text, cls="") -%}
+{%- if url and url.startswith(("http://", "https://")) %}<a{% if cls %} class="{{ cls }}"{% endif %} href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ text }}</a>
+{%- else %}<span{% if cls %} class="{{ cls }}"{% endif %}>{{ text }}</span>{% endif -%}
+{%- endmacro %}

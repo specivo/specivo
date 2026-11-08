@@ -10,6 +10,7 @@ export function ftsReindex(initial) {
             saveLanguageFailed: 'Failed to save language.',
             connectFailed: 'Unable to connect.',
             reindexStarted: 'Reindex started.',
+            reindexWaiting: 'Reindex queued: it starts when the project reindexes in progress have finished.',
             startFailed: 'Failed to start reindex.',
             reindexComplete: 'Reindex complete.',
             reindexFailed: 'Reindex failed.',
@@ -55,7 +56,8 @@ export function ftsReindex(initial) {
 
             get busy() {
                 return this.running ||
-                    this.state === 'PENDING' || this.state === 'STARTED' || this.state === 'PROGRESS';
+                    this.state === 'PENDING' || this.state === 'STARTED' || this.state === 'PROGRESS' ||
+                    this.state === 'WAITING' || this.state === 'PENDING_INSTANCE';
             },
 
             // True when the language select differs from the persisted value
@@ -166,7 +168,7 @@ export function ftsReindex(initial) {
                         this.state = data.state || 'PENDING';
                         this.running = true;
                         this.progress = null;
-                        this.message = i18n.reindexStarted;
+                        this.message = this.state === 'PENDING_INSTANCE' ? i18n.reindexWaiting : i18n.reindexStarted;
                         this.messageError = false;
                         this._startPoll();
                     } else {

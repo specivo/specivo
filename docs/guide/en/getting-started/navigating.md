@@ -35,6 +35,7 @@ Running across the top of the main area:
   **Preferences** lists your active sessions and how each one signed in. When your administrator has
   set up [single sign-on](../install/single-sign-on/index.md), **Profile** has a **Connected
   accounts** section, and an account with no password has nothing to change on the password page.
+  [Your profile](your-profile.md) explains changing your email address.
 
 !!! tip "Running timer"
     If you start a time-tracking timer on an issue, a live timer appears in the header so you can stop and

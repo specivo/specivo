@@ -32,7 +32,7 @@
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, i18n: {{ {
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, reportingCurrency: {{ (project.reporting_currency_code or "") | tojson }}, i18n: {{ {
     "saved": _("Saved successfully."),
     "errorWithMessage": _("Error: %(message)s"),
     "saveFailed": _("Failed to save"),
@@ -63,6 +63,27 @@
       <div class="form-group sp-form-group-mb-md">
         <label class="form-label">{% trans %}Description{% endtrans %}</label>
         <textarea class="form-input" rows="4" x-model="description"></textarea>
+      </div>
+      <div class="form-group sp-form-group-mb-md">
+        <label class="checkbox-row" for="project-similar-issues">
+          <input type="checkbox" id="project-similar-issues" x-model="similarIssues" class="sp-checkbox-accent-pointer">
+          {% trans %}Suggest similar issues on the new issue form{% endtrans %}
+        </label>
+        {% if similar_issues_instance %}
+        <div class="form-hint">{% trans %}While someone types a subject, issues of this project with a similar subject are listed, to help avoid duplicates.{% endtrans %}</div>
+        {% else %}
+        <div class="form-hint" data-testid="similar-issues-instance-off">{% trans %}This setting has no effect while similar issues are turned off for the whole instance.{% endtrans %}{% if user.is_admin %} <a href="/admin/settings/">{% trans %}Instance settings{% endtrans %}</a>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="form-group sp-form-group-mb-md">
+        <label class="form-label" for="project-reporting-currency">{% trans %}Reporting currency{% endtrans %}</label>
+        <select class="form-input" id="project-reporting-currency" x-model="reportingCurrency" data-testid="project-reporting-currency">
+          <option value="">{% trans code=instance_reporting_currency %}Instance default ({{ code }}){% endtrans %}</option>
+          {% for c in currency_choices %}
+          <option value="{{ c.code }}">{{ c.code }} · {{ c.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-hint">{% trans %}The currency this project's money reports are shown in.{% endtrans %}{% if user.is_admin %} <a href="/admin/currencies/">{% trans %}Currencies{% endtrans %}</a>{% endif %}</div>
       </div>
       <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
       <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>
@@ -99,6 +120,7 @@
     projectKey: {{ project.key | tojson }},
     roles: {{ roles | tojson }},
     allGroups: {{ all_groups | tojson }},
+    canCreateUsers: {{ user.is_admin | tojson }},
     i18n: {
       onePerson: {{ _("1 person") | tojson }},
       nPeople: {{ _("%d people") | tojson }},
@@ -108,7 +130,12 @@
       confirmRemoveUser: {{ _("Remove %s from this project?") | tojson }},
       confirmRemoveGroup: {{ _("Remove the group %s? %d people lose the access it grants.") | tojson }},
       kindGroup: {{ _("Group") | tojson }},
-      kindUser: {{ _("User") | tojson }}
+      kindUser: {{ _("User") | tojson }},
+      noMatch: {{ _("No user or group matches “%s”.") | tojson }},
+      createUserFor: {{ _("Create user “%s”…") | tojson }},
+      userCreated: {{ _("%s created. Choose a role and click Add.") | tojson }},
+      passwordRequired: {{ _("Password: required for regular users.") | tojson }},
+      createFailed: {{ _("Failed to create user.") | tojson }}
     }
   })'>
 
@@ -116,7 +143,7 @@
     <div class="card sp-card-pad-mb-md">
       <h3 class="sp-card-h3">{% trans %}Add Member{% endtrans %}</h3>
       <p class="sp-text-muted-xs sp-mb-md">
-        {% trans %}Grant access to one person, or to a group so everyone in it gets the same roles.{% endtrans %}
+        {% trans %}Grant access to one person, or to a group so everyone in it gets the same roles. Start typing and pick an existing user or group from the list.{% endtrans %}
       </p>
       <div class="sp-form-row-end-wrap">
         <div class="sp-suggest-field">
@@ -125,7 +152,7 @@
             x-model="userQuery" @input.debounce.300ms="searchPrincipals()" @focus="searchPrincipals()"
             @input="clearSelection()"
             @click.outside="showSuggestions = false" autocomplete="off">
-          <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0" x-cloak>
+          <div class="sp-suggest-panel" x-show="showSuggestions" x-cloak data-testid="member-suggestions">
             <template x-for="s in suggestions" :key="suggestionKey(s)">
               <div class="sp-suggest-item" @click="selectPrincipal(s)">
                 <span class="sp-principal-kind" :class="s.kind === 'group' ? 'sp-principal-kind-group' : 'sp-principal-kind-user'"
@@ -134,6 +161,17 @@
                 <span class="sp-text-muted" x-text="s.subtitle"></span>
               </div>
             </template>
+            <div class="sp-suggest-empty" x-show="noMatches" data-testid="member-no-match">
+              <span x-text="noMatchText()"></span>
+              {% if not user.is_admin %}
+              <span class="sp-suggest-empty-hint">{% trans %}Only existing users can be added. If they have no account yet, ask an administrator to create one.{% endtrans %}</span>
+              {% endif %}
+            </div>
+            {% if user.is_admin %}
+            <button type="button" class="sp-suggest-item sp-suggest-create" @click="startCreateUser()" data-testid="member-create-user">
+              <span x-text="createUserLabel()"></span>
+            </button>
+            {% endif %}
           </div>
         </div>
         <div class="sp-field-min-160">
@@ -152,9 +190,14 @@
           </button>
         </div>
       </div>
+      <div class="sp-suggest-hint" x-show="needsPick" x-cloak data-testid="member-pick-hint">{% trans %}Pick a user or group from the list to enable Add.{% endtrans %}</div>
       <div x-show="addError" class="sp-msg-danger" x-text="addError"></div>
       <div x-show="addSuccess" class="sp-msg-success" x-text="addSuccess"></div>
     </div>
+
+    {% if user.is_admin %}
+    {% include "pages/admin/_user_create_modal.html" %}
+    {% endif %}
 
     <!--
       The access table lists membership *rows*: one per user or group that has
@@ -1267,7 +1310,20 @@
     "statusDuplicate": _("Duplicate"),
     "statusIgnored": _("Ignored"),
     "statusProcessed": _("Processed"),
-    "statusFailed": _("Failed")
+    "statusFailed": _("Failed"),
+    "errRepoName": _("Enter the repository as owner/name."),
+    "errRepoUrl": _("Enter the repository's http(s) address."),
+    "errMergeStatus": _("Choose a merge status, or turn merge automation off."),
+    "detected": _("Detected {provider} repository {repo}"),
+    "filledRepo": _("Filled in repository {repo} from the URL"),
+    "providerChanging": _("Changing the provider gives this repository a new webhook URL and secret. The current webhook stops working at once; set it up again on {provider}."),
+    "providerChanged": _("The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret."),
+    "errEnvName": _("Enter an environment name, or a prefix ending in *."),
+    "errEnvStar": _("A prefix needs at least one character before the *."),
+    "errEnvLong": _("Use at most 255 characters."),
+    "errEnvDuplicate": _("This environment is listed twice."),
+    "errEnvType": _("Choose a type."),
+    "errEnvTooMany": _("At most 100 environments can be listed.")
   } | tojson }} })'>
 
     <div class="card" data-testid="repositories-card">
@@ -1282,10 +1338,16 @@
         </button>
       </div>
 
+      {% from "components/app_url_warning.html" import app_url_warning %}
+      {{ app_url_warning(request) }}
+
       <!-- Hook URL and secret, shown once, with setup steps for the provider -->
       <template x-if="reveal">
         <div class="sp-key-reveal sp-webhook-reveal" data-testid="repository-secret">
           <div class="sp-key-reveal-label"><span x-text="providerLabel(reveal.provider)"></span> · <span x-text="reveal.repo"></span></div>
+          <template x-if="reveal.previousProvider">
+            <div class="sp-repo-warning" role="note" data-testid="repository-provider-changed" x-text="providerChangedText()"></div>
+          </template>
           <div class="sp-repo-field">
             <div class="sp-repo-field-label">{% trans %}Webhook URL{% endtrans %}</div>
             <div class="sp-key-reveal-value sp-webhook-secret">
@@ -1416,7 +1478,7 @@
                 <template x-for="d in deliveries" :key="d.id">
                   <tr>
                     <td><span class="sp-webhook-time" x-text="formatTime(d.received_at)" :title="d.delivery_id"></span></td>
-                    <td><span x-text="d.event"></span></td>
+                    <td><span class="sp-repo-provider" x-text="providerLabel(d.provider)" data-testid="repository-delivery-provider"></span> <span x-text="d.event"></span></td>
                     <td><span :class="statusClass(d.status)" x-text="statusLabel(d.status)"></span></td>
                     <td><span class="sp-repo-detail" x-text="d.detail || ''"></span></td>
                   </tr>
@@ -1448,21 +1510,34 @@
               <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
             </template>
             <div class="form-group">
+              <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
+              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository" @input="onUrlInput()" @paste="onUrlPaste()" @change="onUrlCommit()" @blur="touch('repo_url')" :aria-invalid="invalid('repo_url')" :aria-describedby="describedBy('repo_url', 'repository-url-hint')" data-testid="repository-url">
+              <div class="form-error" id="repository-url-error" x-show="errorFor('repo_url')" x-text="errorFor('repo_url')" data-testid="repository-url-error"></div>
+              <div class="form-hint" id="repository-url-hint">{% trans %}Paste the address of the repository's page, or its clone address. Provider and Repository are filled in from it.{% endtrans %}</div>
+              <template x-if="fillNote">
+                <div class="sp-repo-fill-note" role="status" data-testid="repository-fill-note">
+                  <span x-text="fillNote.text"></span>
+                  <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="undoFill()" data-testid="repository-fill-undo">{% trans %}Undo{% endtrans %}</button>
+                </div>
+              </template>
+            </div>
+            <div class="form-group">
               <label class="form-label" for="repository-provider">{% trans %}Provider{% endtrans %}</label>
-              <select class="form-input" id="repository-provider" x-model="form.provider" :disabled="editing !== null">
+              <select class="form-input" id="repository-provider" x-model="form.provider" @change="onManualChange('provider')" :aria-invalid="invalid('provider')" :aria-describedby="describedBy('provider')" data-testid="repository-provider">
                 <template x-for="p in providers" :key="p">
                   <option :value="p" x-text="providerLabel(p)" :selected="p === form.provider"></option>
                 </template>
               </select>
+              <div class="form-error" id="repository-provider-error" x-show="errorFor('provider')" x-text="errorFor('provider')" data-testid="repository-provider-error"></div>
+              <template x-if="providerChanging">
+                <div class="sp-repo-warning" role="note" data-testid="repository-provider-warning" x-text="providerChangingText()"></div>
+              </template>
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-name">{% trans %}Repository{% endtrans %}</label>
-              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository">
-              <div class="form-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
-              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository">
+              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository" @input="onManualChange('repo_full_name')" @blur="touch('repo_full_name')" :aria-invalid="invalid('repo_full_name')" :aria-describedby="describedBy('repo_full_name', 'repository-name-hint')" data-testid="repository-name">
+              <div class="form-error" id="repository-name-error" x-show="errorFor('repo_full_name')" x-text="errorFor('repo_full_name')" data-testid="repository-name-error"></div>
+              <div class="form-hint" id="repository-name-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-scope">{% trans %}Issues commits may link to{% endtrans %}</label>
@@ -1503,12 +1578,13 @@
               <div class="sp-repo-sub" x-show="form.merge_automation_enabled">
                 <div class="form-group">
                   <label class="form-label" for="repository-merge-status">{% trans %}Merge status{% endtrans %}</label>
-                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" data-testid="repository-merge-status">
+                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" @change="touch('merge_status_id')" @blur="touch('merge_status_id')" :aria-invalid="invalid('merge_status_id')" :aria-describedby="describedBy('merge_status_id')" data-testid="repository-merge-status">
                     <option value="">{% trans %}Choose a status{% endtrans %}</option>
                     <template x-for="st in statuses" :key="st.id">
                       <option :value="st.value" x-text="st.name" :selected="st.value === form.merge_status_id"></option>
                     </template>
                   </select>
+                  <div class="form-error" id="repository-merge-status-error" x-show="errorFor('merge_status_id')" x-text="errorFor('merge_status_id')" data-testid="repository-merge-status-error"></div>
                 </div>
                 <div class="form-group">
                   <label class="form-label" for="repository-git-role">{% trans %}Role of Git in this project{% endtrans %}</label>
@@ -1527,13 +1603,52 @@
               </label>
               <div class="form-hint">{% trans %}Requests from another repository, or on GitHub by someone who is not a collaborator, are not linked to issues until they are merged.{% endtrans %}</div>
             </fieldset>
+            <fieldset class="sp-repo-options sp-repo-envs" data-testid="repository-environments">
+              <legend class="form-label">{% trans %}Environment types{% endtrans %}</legend>
+              <div class="form-hint" id="repository-env-hint">{% trans %}Deployments are grouped by environment type, guessed from the environment's name ("prod-eu" is production). List the environments the guess gets wrong. A name ending in * covers every environment that starts with it, such as review/*. Names match in any case.{% endtrans %}</div>
+              <div id="repository-env-list" class="sp-repo-env-list" tabindex="-1" aria-describedby="repository-env-hint">
+                <template x-for="(row, idx) in form.environment_types" :key="row.key">
+                  <div class="sp-repo-env-row" data-testid="repository-env-row">
+                    <div class="sp-repo-env-field">
+                      <label class="sp-repo-env-label" :for="'repository-env-' + row.key + '-name'">{% trans %}Environment name or prefix*{% endtrans %}</label>
+                      <input class="form-input" type="text" maxlength="300" placeholder="{{ _('e.g. github-pages or review/*') }}"
+                             :id="'repository-env-' + row.key + '-name'" x-model="row.name" @blur="touchEnv(row, 'name')"
+                             :aria-invalid="envInvalid(row, 'name')" :aria-describedby="envDescribedBy(row, 'name')"
+                             data-testid="repository-env-name">
+                      <div class="form-error" :id="'repository-env-' + row.key + '-name-error'" x-show="envErrorFor(row, 'name')" x-text="envErrorFor(row, 'name')" data-testid="repository-env-name-error"></div>
+                    </div>
+                    <div class="sp-repo-env-field">
+                      <label class="sp-repo-env-label" :for="'repository-env-' + row.key + '-type'">{% trans %}Type{% endtrans %}</label>
+                      <select class="form-input" :id="'repository-env-' + row.key + '-type'" x-model="row.type" @change="touchEnv(row, 'type')" @blur="touchEnv(row, 'type')"
+                              :aria-invalid="envInvalid(row, 'type')" :aria-describedby="envDescribedBy(row, 'type')"
+                              data-testid="repository-env-type">
+                        <option value="">{% trans %}Choose a type{% endtrans %}</option>
+                        <option value="production" :selected="row.type === 'production'">{% trans %}Production{% endtrans %}</option>
+                        <option value="staging" :selected="row.type === 'staging'">{% trans %}Staging{% endtrans %}</option>
+                        <option value="testing" :selected="row.type === 'testing'">{% trans %}Testing{% endtrans %}</option>
+                        <option value="development" :selected="row.type === 'development'">{% trans %}Development{% endtrans %}</option>
+                      </select>
+                      <div class="form-error" :id="'repository-env-' + row.key + '-type-error'" x-show="envErrorFor(row, 'type')" x-text="envErrorFor(row, 'type')" data-testid="repository-env-type-error"></div>
+                    </div>
+                    <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm sp-repo-env-remove" @click="removeEnvRow(row)" aria-label="{{ _('Remove this environment') }}" title="{{ _('Remove') }}" data-testid="repository-env-remove">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </template>
+              </div>
+              <div class="form-error" x-show="envListError()" x-text="envListError()" data-testid="repository-env-list-error"></div>
+              <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="addEnvRow()" data-testid="repository-env-add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                {% trans %}Add an environment{% endtrans %}
+              </button>
+            </fieldset>
             <template x-if="!editing">
               <div class="form-hint">{% trans %}A webhook URL and a secret are generated and shown once after the repository is connected.{% endtrans %}</div>
             </template>
           </div>
           <div class="sp-modal-footer">
             <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
-            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="!canSave" data-testid="repository-save">
+            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" data-testid="repository-save">
               <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
               <span x-show="!saving" x-text="editing ? i18n.saveChanges : i18n.createRepository"></span>
             </button>
@@ -1613,6 +1728,10 @@
       </p>
       {% include "pages/_fts_card.html" %}
     </div>
+    {% if can_manage_search %}
+    {% from "pages/_link_graph_card.html" import link_graph_card %}
+    {{ link_graph_card("/api/v1/projects/" ~ project.key ~ "/links", can_manage_search) }}
+    {% endif %}
   </div>
 </div>
 {% endblock %}

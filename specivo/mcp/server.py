@@ -23,7 +23,15 @@ from pydantic import Field
 
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
+from specivo.mcp.ai_subscription_tools import SubscriptionPeriod, _ai_subscriptions
+from specivo.mcp.ai_usage_tools import _ai_usage, _ai_usage_report, _log_ai_usage
 from specivo.mcp.auth import authenticate_mcp_tool
+from specivo.mcp.client_context import (
+    ClientInfoMiddleware,
+    agent_session_id_var,
+    mcp_api_key_id_var,
+    mcp_client_var,
+)
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools import (
     _add_comment,
@@ -44,6 +52,8 @@ from specivo.mcp.tools import (
     _delete_wiki,
     _edit_description,
     _edit_wiki,
+    _get_links,
+    _issue_development,
     _list_comments,
     _list_issues,
     _list_lookups,
@@ -90,6 +100,7 @@ logger = logging.getLogger(__name__)
 mcp = MCPServer(
     "specivo",
     version=_pkg_version("specivo"),
+    middleware=[ClientInfoMiddleware()],
     instructions=(
         "Specivo -- self-hosted platform for project tracking, knowledge base, and AI-safe automation. "
         "Call specivo_setup_guide() to get the full agent configuration guide, "
@@ -111,6 +122,11 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     Here we re-validate it against the DB on every tool call so that
     key revocation, expiry, or user deactivation takes effect immediately.
 
+    The key's ``AgentSession`` is found or started, named after the calling
+    client (``mcp_client_var``), and its id is published in
+    ``agent_session_id_var`` for the tool call, so a tool can record the
+    issue the agent is working on (``record_working_issue``).
+
     The session is committed on clean exit and rolled back on error.
 
     Any failure is re-raised as ``ToolError`` (see ``_to_tool_error``) so
@@ -131,12 +147,28 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
             try:
                 user, api_key = await authenticate_mcp_tool(session)
                 await activate_api_key_scope(session, api_key)
-                # Track agent session
+                # Track the agent session, named after the calling client
+                # (ClientInfoMiddleware), so tools can record its issue.
+                # A savepoint, so a failure cannot poison the tool's transaction.
+                agent_session_id: int | None = None
+                savepoint = await session.begin_nested()
                 try:
-                    await _agent_session_svc.get_or_create_session(session, api_key.id, user.id, user_agent=None)
+                    agent_session = await _agent_session_svc.get_or_create_session(
+                        session, api_key.id, user.id, client=mcp_client_var.get()
+                    )
+                    await savepoint.commit()
+                    agent_session_id = agent_session.id
                 except Exception:
+                    if savepoint.is_active:
+                        await savepoint.rollback()
                     logger.debug("AgentSession tracking failed", exc_info=True)
-                yield session, user
+                session_token = agent_session_id_var.set(agent_session_id)
+                key_token = mcp_api_key_id_var.set(api_key.id)
+                try:
+                    yield session, user
+                finally:
+                    mcp_api_key_id_var.reset(key_token)
+                    agent_session_id_var.reset(session_token)
                 await session.commit()
             except Exception as exc:
                 await session.rollback()
@@ -255,6 +287,28 @@ async def specivo_list_issues(
         str | None,
         Field(description="Only the direct children of this issue (display key, e.g. ACME-12)."),
     ] = None,
+    assignee: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Only issues assigned to this person: a login or numeric user id of someone issues in "
+                "the project can be assigned to, 'me' (you), or 'none' (unassigned)."
+            ),
+        ),
+    ] = None,
+    tag: Annotated[
+        str | None,
+        Field(description="Only issues with this tag: a tag name (case-insensitive) or numeric tag id."),
+    ] = None,
+    release: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Only issues targeting this release: a version name (case-insensitive; versions shared "
+                "with the project count) or numeric version id, or 'none' (no release)."
+            ),
+        ),
+    ] = None,
 ) -> str:
     """List issues for a project with filtering and sorting.
 
@@ -263,12 +317,26 @@ async def specivo_list_issues(
     Pass metadata_filters to narrow by JSONB metadata (e.g. component=frontend).
     Pass parent_ref to list only the direct children of that issue that belong
     to this project.
+    Pass assignee, tag or release to narrow like the issue list's filters. An
+    unknown name or id is an error naming the argument, never an empty list.
     Each issue line carries its tags as '[tags: a, b]' when it has any, so no
     follow-up specivo_tag(op='get') call is needed.
     """
     async with _get_session_and_user() as (session, user):
         return await _list_issues(
-            session, user, project_key, status, sort, offset, limit, sprint_id, metadata_filters, parent_ref,
+            session,
+            user,
+            project_key,
+            status,
+            sort,
+            offset,
+            limit,
+            sprint_id,
+            metadata_filters,
+            parent_ref,
+            assignee=assignee,
+            tag=tag,
+            release=release,
         )
 
 
@@ -289,12 +357,52 @@ async def specivo_show_issue(
     requests that reference it follow as ``Pull requests: N``, open ones
     first: number, state (``open``, ``draft``, ``merged``, ``closed``, plus
     ``closing`` when it says it fixes the issue), title, source branch, URL.
+    ``Links to:`` and ``Linked from:`` list the issues, wiki pages and
+    attachments the issue's description and comments link to and the issues,
+    comments and wiki pages that link to it; ``Related:`` lists its relations
+    and ``Broken links:`` targets that do not exist. Only items you may see are
+    listed, at most 20 per line; use specivo_get_links for more.
+    A ``Development:`` line then sums up reviews, CI, deployments and releases
+    when there are any; use specivo_issue_development for the details.
     Use metadata_only=true to skip the description body and save tokens
-    (tags, commits and pull requests are still included).
+    (tags, commits, pull requests and links are still included).
     Use search= to extract only the section containing specific text.
     """
     async with _get_session_and_user() as (session, user):
         return await _show_issue(session, user, issue_ref, metadata_only, search)
+
+
+@mcp.tool()
+async def specivo_issue_development(
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12. Never pass a numeric ID.")],
+    kinds: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Timeline kinds to include; all when omitted: commit, pull_request, review, ci, deployment, release."
+            )
+        ),
+    ] = None,
+    limit: Annotated[int, Field(description="Timeline entries per page (1-200).", ge=1, le=200)] = 50,
+    offset: Annotated[int, Field(description="Timeline entries to skip, for the next page.", ge=0, le=10_000)] = 0,
+) -> str:
+    """Development activity of an issue as JSON: the same document as GET /api/v1/issues/{ref}/development/.
+
+    Holds the linked commits, pull/merge requests and branches; reviews (one
+    verdict per reviewer); CI runs (GitHub checks and Actions, GitLab
+    pipelines and jobs) and deployments of the issue's commits, pull requests
+    and branches, each deployment with its environment type (development,
+    testing, staging, production, or null); and the tags/releases it was
+    released in, with the project version of the same name when there is one.
+    ``summary`` has counts per kind and one combined status per kind (pull
+    requests open/merged/closed, reviews, CI failing/running/passing), the
+    latest deployment per environment type and the releases.
+    ``timeline`` is everything in one list, newest first, filtered by
+    ``kinds`` and paged with ``offset``/``limit`` (``total_count``).
+    You see it only when you may see the issue.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _issue_development(session, user, issue_ref, kinds, limit, offset)
 
 
 @mcp.tool()
@@ -336,10 +444,7 @@ async def specivo_create_issue(
     parent_ref: Annotated[
         str | None,
         Field(
-            description=(
-                "Parent issue's display key, e.g. ACME-12, to create a sub-issue. "
-                "Omit for a top-level issue."
-            )
+            description=("Parent issue's display key, e.g. ACME-12, to create a sub-issue. Omit for a top-level issue.")
         ),
     ] = None,
     tags: Annotated[
@@ -364,6 +469,8 @@ async def specivo_create_issue(
     limit, returns an error string and nothing is created.
     Pass tags to tag the issue in the same call; invalid names return an
     error string and nothing is created.
+    An issue created in an in-progress status or assigned to you becomes the
+    issue this agent session works on (an AI usage attribution hint).
     """
     async with _get_session_and_user() as (session, user):
         return await _create_issue(
@@ -417,6 +524,8 @@ async def specivo_update_issue(
     parent or one you may not see, a parent that is the issue itself or one
     of its descendants (a cycle), or one that would exceed the hierarchy
     depth limit returns an error string and nothing is changed.
+    An issue that ends up in progress and assigned to you becomes the issue
+    this agent session works on, even when the call changes nothing.
     """
     async with _get_session_and_user() as (session, user):
         return await _update_issue(
@@ -513,11 +622,61 @@ async def specivo_read_wiki(
 ) -> str:
     """Read a wiki page by its slug.
 
+    ``Links to:`` lists the issues, wiki pages and attachments the page links
+    to, ``Linked from:`` (backlinks) the issues, comments and wiki pages that
+    link to it, and ``Broken links:`` link targets that do not exist; only items
+    you may see, at most 20 per line. Use specivo_get_links for more.
     Use specivo_list_wiki_pages to discover available slugs.
     Use search= to extract only the section containing specific text from long pages.
     """
     async with _get_session_and_user() as (session, user):
         return await _read_wiki(session, user, project_key, slug, metadata_only, search)
+
+
+@mcp.tool()
+async def specivo_get_links(
+    ref: Annotated[
+        str,
+        Field(description="An issue (ACME-12) or a wiki page (wiki:ACME/<slug>)."),
+    ],
+    direction: Annotated[
+        str,
+        Field(description="'in' = what links here (backlinks), 'out' = what it links to, 'both' (default)."),
+    ] = "both",
+    depth: Annotated[
+        int,
+        Field(description="1 (default), or 2 to also expand the linked issues and wiki pages once.", ge=1, le=2),
+    ] = 1,
+    types: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Edge kinds to keep; all when omitted. Text links: wiki_link, mention, attachment_link. "
+                "Structured: relation, parent, child, attachment, commit, pull_request."
+            )
+        ),
+    ] = None,
+    limit: Annotated[int, Field(description="Neighbour nodes at most (1-200).", ge=1, le=200)] = 50,
+) -> str:
+    """Navigate the link graph around an issue or wiki page: what links to it (backlinks) and what it links to.
+
+    Combines links written in text -- ``[[Page]]`` wiki links, issue keys such as
+    ``ACME-42``, links to issues, wiki pages and attachments of this instance --
+    in issue descriptions, comments and wiki pages, with relations, parent and
+    children, attachments, commits and pull requests. Use it to find the wiki
+    pages that document an issue, the issues a design page drives, or everything
+    that would be affected by a change.
+
+    Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url), ``edges``
+    (source, target, kind, direction relative to the root, label, relation_type,
+    ``via`` = the comment a link is written in, ``broken`` for a link to
+    something that does not exist) and ``truncated``. Only what you may see is
+    returned: a link to or from an item you cannot see is left out entirely.
+    ``specivo_show_issue`` and ``specivo_read_wiki`` already list the direct
+    text links and relations inline; call this for depth 2, filters or JSON.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _get_links(session, user, ref, direction, depth, types, limit)
 
 
 @mcp.tool()
@@ -924,6 +1083,12 @@ async def specivo_metadata(
     all other ops require edit_issues. Use specivo_list_metadata_schemas
     first to discover available fields. Recoverable errors are returned
     as 'Error: ...' strings.
+
+    The new value of the key is checked against the issue's schemas; one
+    that does not match (wrong type, a choice not listed, a list item that
+    breaks the pattern, a key the schema does not allow) returns an error
+    naming the key, and nothing is written. Only the key you change is
+    checked, so old values under other keys never block the call.
     """
     async with _get_session_and_user() as (session, user):
         return await _metadata(session, user, target_ref, key, op, value)
@@ -1039,6 +1204,319 @@ async def specivo_timer(
     """
     async with _get_session_and_user() as (session, user):
         return await _timer(session, user, op, issue_ref, activity, comments)
+
+
+_NO_COUNTERS = (
+    "You cannot see your own token counters: never estimate or invent the numbers. Log only figures that come "
+    "from a hook, the Specivo reporter, or the tool's own usage output (for example Claude Code's /cost). "
+    "Prefer the reporter (POST /api/v1/ai-usage/ingest/) for routine logging; this tool is for one-off entries."
+)
+
+
+@mcp.tool(
+    description=(
+        "Log one AI usage entry (tokens an AI tool used), the sibling of specivo_log_time. "
+        + _NO_COUNTERS
+        + "\n\nWhere it goes: issue_ref (its project), else project_key, else the issue this agent session works "
+        "on (self-assigned, moved to an active status or timed) when you may log there, else unassigned. "
+        "Needs log_ai_usage in the project (none for unassigned usage in your own name). on_behalf_of logs in "
+        "another user's name: it needs log_ai_usage_for_others in the project and the user must be an active "
+        "member; unassigned usage for someone else is for administrators only. "
+        "The server prices the tokens itself. cost_type (subscription, api, local, free, unknown) defaults "
+        "from the user's AI subscriptions; cost_amount + cost_currency is what the usage actually cost, used as "
+        "the spend for cost_type 'api'. Entries are stored with source 'mcp' and the calling key."
+    )
+)
+async def specivo_log_ai_usage(
+    tool: Annotated[str, Field(description="AI tool slug, e.g. 'claude-code', 'codex', 'cursor'.")],
+    model: Annotated[str, Field(description="Model name as the tool reports it, e.g. 'claude-sonnet-4-5'.")],
+    input_tokens: Annotated[int, Field(ge=0, description="Input tokens, from a hook, the reporter or /cost.")],
+    output_tokens: Annotated[int, Field(ge=0, description="Output tokens.")],
+    project_key: Annotated[str | None, Field(description="Uppercase project identifier, e.g. ACME.")] = None,
+    issue_ref: Annotated[str | None, Field(description="Issue display key, e.g. ACME-12.")] = None,
+    cache_write_tokens: Annotated[int, Field(ge=0, description="Cache write tokens (5-minute cache).")] = 0,
+    cache_write_1h_tokens: Annotated[int, Field(ge=0, description="Cache write tokens (1-hour cache).")] = 0,
+    cache_read_tokens: Annotated[int, Field(ge=0, description="Cache read tokens.")] = 0,
+    reasoning_tokens: Annotated[int, Field(ge=0, description="Reasoning (thinking) tokens.")] = 0,
+    request_count: Annotated[int, Field(ge=0, description="Number of model requests, if known.")] = 0,
+    provider: Annotated[str | None, Field(description="e.g. 'anthropic', 'openai'. Defaults from the tool.")] = None,
+    cost_type: Annotated[
+        str | None, Field(description="subscription, api, local, free or unknown. Omit to derive it.")
+    ] = None,
+    cost_amount: Annotated[
+        str | None, Field(description="What the usage cost, as a decimal string, e.g. '0.42'. Needs cost_currency.")
+    ] = None,
+    cost_currency: Annotated[str | None, Field(description="ISO currency code of cost_amount, e.g. 'USD'.")] = None,
+    usage_date: Annotated[str | None, Field(description="UTC day YYYY-MM-DD. Defaults to today (UTC).")] = None,
+    on_behalf_of: Annotated[str | None, Field(description="Login of the user whose usage this is.")] = None,
+    comments: Annotated[str | None, Field(description="A short note. Never paste prompts or code.")] = None,
+    session_id: Annotated[str | None, Field(description="The tool's own session id, if known.")] = None,
+) -> str:
+    tokens = {
+        "input": input_tokens,
+        "output": output_tokens,
+        "cache_write_5m": cache_write_tokens,
+        "cache_write_1h": cache_write_1h_tokens,
+        "cache_read": cache_read_tokens,
+        "reasoning": reasoning_tokens,
+    }
+    async with _get_session_and_user() as (session, user):
+        return await _log_ai_usage(
+            session,
+            user,
+            tool=tool,
+            model=model,
+            tokens=tokens,
+            project_key=project_key,
+            issue_ref=issue_ref,
+            provider=provider,
+            request_count=request_count,
+            cost_type=cost_type,
+            cost_amount=cost_amount,
+            cost_currency=cost_currency,
+            usage_date=usage_date,
+            on_behalf_of=on_behalf_of,
+            comments=comments,
+            session_id=session_id,
+        )
+
+
+@mcp.tool(
+    description=(
+        "Read and manage AI usage entries. Ops: list (a project's entries you may read with project_key, or "
+        "issue_ref; without either, the entries logged in your name, unassigned ones included; filters "
+        "user_login, tool, model, cost_type, date_from, date_to, excluded, unassigned, session_id, offset, limit; "
+        "your own entries show the agent session they came from as session=, and session_id lists just that "
+        "session's entries, to check what was attributed where); get "
+        "(entry_id); update (entry_id plus the fields to change: project_key moves the entry, '' makes it "
+        "unassigned; issue_ref, '' clears it; comments; and for entries not from the reporter the usage: tool, "
+        "model, provider, usage_date, the token counts, request_count, cost_type, cost_amount + cost_currency); "
+        "exclude / include (entry_id: leave an entry out of reports, or count it again). "
+        "You may change entries logged in your name, or any with manage_ai_usage in their project. Entries "
+        "from the reporter or an import keep their usage (only project, issue and comments change) and are "
+        "excluded rather than deleted. " + _NO_COUNTERS
+    )
+)
+async def specivo_ai_usage(
+    op: Annotated[str, Field(description="One of: list, get, update, exclude, include.")],
+    entry_id: Annotated[int | None, Field(description="Entry ID, for get, update, exclude and include.")] = None,
+    project_key: Annotated[
+        str | None, Field(description="list: the project. update: move the entry there ('' = unassigned).")
+    ] = None,
+    issue_ref: Annotated[
+        str | None, Field(description="list: only this issue. update: attribute to this issue ('' clears it).")
+    ] = None,
+    user_login: Annotated[str | None, Field(description="list with a project: only this user's entries.")] = None,
+    tool: Annotated[str | None, Field(description="list: filter. update: new tool slug.")] = None,
+    model: Annotated[str | None, Field(description="list: filter (aliases match). update: new model.")] = None,
+    provider: Annotated[str | None, Field(description="update: new provider ('' clears it).")] = None,
+    cost_type: Annotated[
+        str | None, Field(description="list: filter. update: subscription, api, local, free or unknown.")
+    ] = None,
+    date_from: Annotated[str | None, Field(description="list: first day, YYYY-MM-DD.")] = None,
+    date_to: Annotated[str | None, Field(description="list: last day, YYYY-MM-DD.")] = None,
+    usage_date: Annotated[str | None, Field(description="update: new UTC day, YYYY-MM-DD.")] = None,
+    excluded: Annotated[
+        bool | None, Field(description="list: true for excluded entries only, false for counted ones only.")
+    ] = None,
+    unassigned: Annotated[bool | None, Field(description="list without a project: true for unassigned only.")] = None,
+    session_id: Annotated[
+        str | None,
+        Field(description="list: only your own entries from this agent session (the session= value on your entries)."),
+    ] = None,
+    input_tokens: Annotated[int | None, Field(ge=0, description="update: new input token count.")] = None,
+    output_tokens: Annotated[int | None, Field(ge=0, description="update: new output token count.")] = None,
+    cache_write_tokens: Annotated[int | None, Field(ge=0, description="update: cache writes (5-minute).")] = None,
+    cache_write_1h_tokens: Annotated[int | None, Field(ge=0, description="update: cache writes (1-hour).")] = None,
+    cache_read_tokens: Annotated[int | None, Field(ge=0, description="update: cache reads.")] = None,
+    reasoning_tokens: Annotated[int | None, Field(ge=0, description="update: reasoning tokens.")] = None,
+    request_count: Annotated[int | None, Field(ge=0, description="update: number of requests.")] = None,
+    cost_amount: Annotated[
+        str | None, Field(description="update: what it cost, e.g. '0.42' ('' with no currency clears it).")
+    ] = None,
+    cost_currency: Annotated[str | None, Field(description="update: ISO currency of cost_amount.")] = None,
+    comments: Annotated[str | None, Field(description="update: new note ('' clears it).")] = None,
+    offset: Annotated[int, Field(description="list: entries to skip.")] = 0,
+    limit: Annotated[int, Field(description="list: max entries (1-100).")] = 25,
+) -> str:
+    sent = {
+        "input": input_tokens,
+        "output": output_tokens,
+        "cache_write_5m": cache_write_tokens,
+        "cache_write_1h": cache_write_1h_tokens,
+        "cache_read": cache_read_tokens,
+        "reasoning": reasoning_tokens,
+    }
+    tokens = {name: count for name, count in sent.items() if count is not None}
+    async with _get_session_and_user() as (session, user):
+        return await _ai_usage(
+            session,
+            user,
+            op,
+            entry_id=entry_id,
+            project_key=project_key,
+            issue_ref=issue_ref,
+            user_login=user_login,
+            tool=tool,
+            model=model,
+            provider=provider,
+            cost_type=cost_type,
+            date_from=date_from,
+            date_to=date_to,
+            usage_date=usage_date,
+            excluded=excluded,
+            unassigned=unassigned,
+            session_id=session_id,
+            tokens=tokens or None,
+            request_count=request_count,
+            cost_amount=cost_amount,
+            cost_currency=cost_currency,
+            comments=comments,
+            offset=offset,
+            limit=limit,
+        )
+
+
+@mcp.tool(
+    description=(
+        "AI spend report: AI usage grouped and totalled in one reporting currency. With project_key, the "
+        "project's entries you may read; without it, the whole instance (administrators only). group_by is a "
+        "comma list of user, project, issue, tool, provider, model, cost_type, branch (default 'user'; '' for "
+        "one total); period adds day, week or month buckets. Dates are UTC days (date_from, date_to) or a "
+        "preset: 7d, 30d (default), this_month, last_month. Each row: entries, tokens, spend (marginal spend "
+        "plus seat cost: subscription fees spread over the entries that used them, weighted by API-equivalent "
+        "value), API-equivalent value (the same tokens at pay-per-use prices, not a bill) and leverage. "
+        "Amounts without an exchange rate are listed apart, never dropped. Seat cost shows only to "
+        "administrators and to whoever reads every entry of the project. Rows are sorted by the grouping key; "
+        "sort='spend' orders by spend. issue_ref narrows the report to one issue (its project's report; "
+        "include_sub_issues adds the issues below it), e.g. for the spend total of a closing note."
+    )
+)
+async def specivo_ai_usage_report(
+    project_key: Annotated[str | None, Field(description="Uppercase project key; omit for the instance.")] = None,
+    group_by: Annotated[
+        str | None, Field(description="Comma list: user, project, issue, tool, provider, model, cost_type, branch.")
+    ] = None,
+    period: Annotated[
+        str | None, Field(description="day, week or month buckets; coarsened when the range would need over 120.")
+    ] = None,
+    date_from: Annotated[str | None, Field(description="First UTC day, YYYY-MM-DD.")] = None,
+    date_to: Annotated[str | None, Field(description="Last UTC day, YYYY-MM-DD (included).")] = None,
+    preset: Annotated[str | None, Field(description="7d, 30d, this_month or last_month (without dates).")] = None,
+    currency: Annotated[str | None, Field(description="ISO code; default the reporting currency.")] = None,
+    rate_policy: Annotated[
+        str | None, Field(description="entry_date (default), latest, or a fixed date YYYY-MM-DD.")
+    ] = None,
+    include_seat_cost: Annotated[bool, Field(description="Allocate subscription fees (default true).")] = True,
+    user_login: Annotated[str | None, Field(description="Only this user's usage.")] = None,
+    tool: Annotated[str | None, Field(description="Only this tool slug.")] = None,
+    model: Annotated[str | None, Field(description="Only this model.")] = None,
+    cost_type: Annotated[str | None, Field(description="subscription, api, local, free or unknown.")] = None,
+    sort: Annotated[str, Field(description="key (default) or spend.")] = "key",
+    issue_ref: Annotated[
+        str | None, Field(description="Only this issue's usage, e.g. ACME-12 (project_key may be left out).")
+    ] = None,
+    include_sub_issues: Annotated[
+        bool, Field(description="With issue_ref: also the usage of the issues below it.")
+    ] = False,
+) -> str:
+    async with _get_session_and_user() as (session, user):
+        return await _ai_usage_report(
+            session,
+            user,
+            project_key=project_key,
+            date_from=date_from,
+            date_to=date_to,
+            preset=preset,
+            group_by=group_by,
+            period=period,
+            currency=currency,
+            rate_policy=rate_policy,
+            include_seat_cost=include_seat_cost,
+            user_login=user_login,
+            tool=tool,
+            model=model,
+            cost_type=cost_type,
+            sort=sort,
+            issue_ref=issue_ref,
+            include_sub_issues=include_sub_issues,
+        )
+
+
+@mcp.tool(
+    description=(
+        "Manage the personal flat-rate AI subscriptions (Claude Pro/Max, ChatGPT Plus/Pro, Cursor, Copilot, "
+        "Google AI) of the person behind your API key, e.g. registered from their invoices. Ops: list (your "
+        "subscriptions; administrators may pass user, a login, for someone else's; active_on, offset, limit); "
+        "presets (the plan presets with suggested US list prices, to map an invoice to a plan_key); add "
+        "(periods: one or more periods in one call, each with plan_key, or a custom plan with provider and "
+        "plan_name, plus amount, currency, billing_period, starts_on, ends_on, notes; all or nothing: when "
+        "any period is invalid nothing is added and every problem is listed; administrators may pass user); "
+        "update (subscription_id plus the fields to change; ends_on='' reopens it); end (subscription_id, "
+        "ends_on, default today UTC); delete (subscription_id; prefer end: deleting removes the plan from "
+        "past spend reports). One invoice period is one subscription period: register the amount actually "
+        "charged, tax included, in its currency, and set ends_on on each period that was followed by "
+        "another. Days are UTC and both ends count. Results show the plan, amount, dates and the tools "
+        "covered, and warn when periods of one plan family (same provider and tools) overlap or leave a "
+        "gap; warnings never refuse anything. Needs an unlimited personal API key: a project-limited key "
+        "and a service account are refused. Changing needs self-service on (the default) unless you are an "
+        "administrator."
+    )
+)
+async def specivo_ai_subscriptions(
+    op: Annotated[str, Field(description="One of: list, presets, add, update, end, delete.")],
+    user: Annotated[str | None, Field(description="list, add: another person's login (administrators only).")] = None,
+    periods: Annotated[
+        list[SubscriptionPeriod] | None, Field(description="add: the periods to register (1-50).")
+    ] = None,
+    subscription_id: Annotated[int | None, Field(description="update, end, delete: the subscription ID.")] = None,
+    plan_key: Annotated[str | None, Field(description="update: a preset key or 'custom'.")] = None,
+    provider: Annotated[str | None, Field(description="update: the provider.")] = None,
+    plan_name: Annotated[str | None, Field(description="update: the plan name.")] = None,
+    tool_slugs: Annotated[
+        list[str] | None, Field(description="update: the tools covered ([] = the tools of the provider).")
+    ] = None,
+    amount: Annotated[
+        str | int | float | None, Field(description="update: the fee per period as a string, e.g. '112.00'.")
+    ] = None,
+    currency: Annotated[str | None, Field(description="update: ISO currency code.")] = None,
+    billing_period: Annotated[str | None, Field(description="update: month or year.")] = None,
+    starts_on: Annotated[str | None, Field(description="update: first day, YYYY-MM-DD.")] = None,
+    ends_on: Annotated[
+        str | None,
+        Field(description="update, end: last day, YYYY-MM-DD (update: '' reopens; end: default today UTC)."),
+    ] = None,
+    notes: Annotated[str | None, Field(description="update: new notes ('' clears them).")] = None,
+    active_on: Annotated[str | None, Field(description="list: only subscriptions running on this UTC day.")] = None,
+    offset: Annotated[int, Field(description="list: subscriptions to skip.")] = 0,
+    limit: Annotated[int, Field(description="list: max subscriptions (1-200).")] = 50,
+) -> str:
+    changes = {
+        "plan_key": plan_key,
+        "provider": provider,
+        "plan_name": plan_name,
+        "tool_slugs": tool_slugs,
+        "amount": amount,
+        "currency": currency,
+        "billing_period": billing_period,
+        "starts_on": starts_on,
+        "ends_on": ends_on,
+        "notes": notes,
+    }
+    async with _get_session_and_user() as (session, caller):
+        return await _ai_subscriptions(
+            session,
+            caller,
+            op,
+            user_login=user,
+            periods=periods,
+            subscription_id=subscription_id,
+            changes=changes,
+            ends_on=ends_on,
+            active_on=active_on,
+            offset=offset,
+            limit=limit,
+        )
 
 
 @mcp.tool()
@@ -1209,8 +1687,7 @@ async def specivo_tag(
         str,
         Field(
             description=(
-                "Entity to tag: an issue ref ('ACME-12' or 'issue:ACME-12') "
-                "or a wiki page ('wiki:ACME/some-slug')."
+                "Entity to tag: an issue ref ('ACME-12' or 'issue:ACME-12') or a wiki page ('wiki:ACME/some-slug')."
             ),
         ),
     ],
@@ -1284,9 +1761,7 @@ async def specivo_create_recurring_pattern(
             )
         ),
     ],
-    rrule_interval: Annotated[
-        int, Field(description="Interval between occurrences (e.g. 2 = every other week).")
-    ] = 1,
+    rrule_interval: Annotated[int, Field(description="Interval between occurrences (e.g. 2 = every other week).")] = 1,
     byday: Annotated[
         str | None,
         Field(
@@ -1296,9 +1771,7 @@ async def specivo_create_recurring_pattern(
             )
         ),
     ] = None,
-    rrule_count: Annotated[
-        int | None, Field(description="Total number of occurrences before the series ends.")
-    ] = None,
+    rrule_count: Annotated[int | None, Field(description="Total number of occurrences before the series ends.")] = None,
     rrule_raw: Annotated[
         str | None,
         Field(
@@ -1352,16 +1825,12 @@ async def specivo_create_recurring_pattern(
     template_priority_id: Annotated[
         int | None, Field(description="Priority ID for generated issues (from specivo_list_lookups).")
     ] = None,
-    template_assigned_to_id: Annotated[
-        int | None, Field(description="User ID to assign generated issues to.")
-    ] = None,
+    template_assigned_to_id: Annotated[int | None, Field(description="User ID to assign generated issues to.")] = None,
     creation_lead_time_days: Annotated[
         int,
         Field(description="How many days ahead occurrences are materialised into issues."),
     ] = 30,
-    enabled: Annotated[
-        bool, Field(description="Whether the pattern actively generates issues.")
-    ] = True,
+    enabled: Annotated[bool, Field(description="Whether the pattern actively generates issues.")] = True,
 ) -> str:
     """Create a recurring task pattern that generates issues on a schedule.
 
@@ -1408,37 +1877,23 @@ async def specivo_update_recurring_pattern(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
     name: Annotated[str | None, Field(description="New pattern name.")] = None,
-    template_subject: Annotated[
-        str | None, Field(description="New subject for generated issues.")
-    ] = None,
-    template_description: Annotated[
-        str | None, Field(description="New description for generated issues.")
-    ] = None,
-    freq: Annotated[
-        str | None, Field(description="New frequency: daily, weekly, monthly, or yearly.")
-    ] = None,
+    template_subject: Annotated[str | None, Field(description="New subject for generated issues.")] = None,
+    template_description: Annotated[str | None, Field(description="New description for generated issues.")] = None,
+    freq: Annotated[str | None, Field(description="New frequency: daily, weekly, monthly, or yearly.")] = None,
     rrule_interval: Annotated[int | None, Field(description="New interval between occurrences.")] = None,
     byday: Annotated[
         str | None,
         Field(description="New comma-separated weekday tokens, e.g. 'MO,WE,FR'."),
     ] = None,
     rrule_count: Annotated[int | None, Field(description="New total occurrence count.")] = None,
-    rrule_raw: Annotated[
-        str | None, Field(description="New raw RFC 5545 RRULE string (overrides BY* fields).")
-    ] = None,
-    anchor_mode: Annotated[
-        str | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")
-    ] = None,
+    rrule_raw: Annotated[str | None, Field(description="New raw RFC 5545 RRULE string (overrides BY* fields).")] = None,
+    anchor_mode: Annotated[str | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")] = None,
     base_date_strategy: Annotated[
         str | None, Field(description="New base-date strategy: 'scheduled' or 'completion'.")
     ] = None,
-    dtstart: Annotated[
-        str | None, Field(description="New ISO-8601 series anchor datetime.")
-    ] = None,
+    dtstart: Annotated[str | None, Field(description="New ISO-8601 series anchor datetime.")] = None,
     timezone: Annotated[str | None, Field(description="New IANA timezone.")] = None,
-    creation_lead_time_days: Annotated[
-        int | None, Field(description="New look-ahead window in days.")
-    ] = None,
+    creation_lead_time_days: Annotated[int | None, Field(description="New look-ahead window in days.")] = None,
     enabled: Annotated[bool | None, Field(description="Enable or disable the pattern.")] = None,
 ) -> str:
     """Update a recurring task pattern. Only pass fields you want to change.
@@ -1618,7 +2073,8 @@ async def specivo_start_sprint(
     """Start a planned sprint (transitions to 'active').
 
     Only one sprint per project can be active at a time.
-    Fails if another sprint is already active.
+    Fails if another sprint is already active. Each issue in the sprint gets a
+    "sprint started" entry in its history, by the calling user.
     """
     async with _get_session_and_user() as (session, user):
         return await _start_sprint(session, user, project_key, sprint_id)
@@ -1629,13 +2085,21 @@ async def specivo_complete_sprint(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     sprint_id: Annotated[int, Field(description="Sprint ID to complete.")],
     move_incomplete_to_sprint_id: Annotated[
-        int | None, Field(description="Sprint ID to move incomplete issues to. Null = move to backlog.")
+        int | None,
+        Field(
+            description="Sprint ID to move incomplete issues to: another active or planned sprint of the same "
+            "project. Null = move to backlog."
+        ),
     ] = None,
 ) -> str:
     """Complete an active sprint (transitions to 'completed').
 
     Incomplete issues are moved to the specified sprint, or to the backlog if null.
-    Builds a velocity snapshot with total and completed issue counts.
+    The target must be another active or planned sprint of the same project; an
+    unknown, completed or other-project sprint, or the sprint itself, is refused
+    and nothing changes. Builds a velocity snapshot with total and completed issue
+    counts. Issues that stay get a "sprint completed" history entry and moved
+    issues a sprint change, by the calling user.
     """
     async with _get_session_and_user() as (session, user):
         return await _complete_sprint(session, user, project_key, sprint_id, move_incomplete_to_sprint_id)

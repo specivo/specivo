@@ -48,7 +48,7 @@ def test_embedding_tasks_are_routed_to_the_embedding_queue(task_name):
 
 @pytest.mark.parametrize(
     "task_name",
-    ["specivo.tasks.notifications.send_notification_email", "specivo.tasks.wiki_links.rebuild_wiki_page_links"],
+    ["specivo.tasks.notifications.send_notification_email", "specivo.tasks.entity_links.rebuild_entity_links"],
 )
 def test_other_tasks_stay_on_the_default_queue(task_name):
     route = celery_app.amqp.router.route({}, task_name, args=(), kwargs={})

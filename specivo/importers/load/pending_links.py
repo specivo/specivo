@@ -303,14 +303,14 @@ async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool
 
 
 async def _refresh_derived(session: AsyncSession, linked: list[tuple[str, int]]) -> None:
-    """Bring the wiki link graph and the search chunks up to date with the linked texts.
+    """Bring the entity link graph and the search chunks up to date with the linked texts.
 
     An import does this in its later phases; on demand it is done here, best
     effort: a failure is logged, and the backfill command can catch up.
     """
     from specivo.schemas.search import SearchSourceType
     from specivo.services.embedding_service import EmbeddingService
-    from specivo.services.wiki_link_service import WikiLinkService
+    from specivo.services.entity_link_service import EntityLinkService
 
     issues = sorted({row_id for entity, row_id in linked if entity == "issue"})
     journals = sorted({row_id for entity, row_id in linked if entity == "journal"})
@@ -332,8 +332,14 @@ async def _refresh_derived(session: AsyncSession, linked: list[tuple[str, int]])
     try:
         # In a savepoint, so a failure here cannot take the linked texts down with it.
         async with session.begin_nested():
-            for page_id, wiki_id in pages:
-                await WikiLinkService().rebuild_page_links(session, wiki_id, page_id)
+            link_service = EntityLinkService()
+            for source_type, ids in (
+                ("issue", issues),
+                ("journal", journals),
+                ("wiki_page", [page_id for page_id, _ in pages]),
+            ):
+                for entity_id in ids:
+                    await link_service.rebuild_source(session, source_type, entity_id)
             embedder = EmbeddingService()
             for source_type, ids in (
                 (SearchSourceType.ISSUE, issues),

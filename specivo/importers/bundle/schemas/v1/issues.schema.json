@@ -17,6 +17,25 @@
     "source_ref": {
       "$ref": "common.schema.json#/$defs/sourceRef"
     },
+    "source_key": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/sourceNumber"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Since 1.1. The number people know the issue by, when it is not source_ref, e.g. PROJ-7. Default: source_ref."
+    },
+    "source_aliases": {
+      "type": "array",
+      "description": "Since 1.1. Other numbers that now mean this issue: merged tickets, keys it had before moving.",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "common.schema.json#/$defs/sourceNumber"
+      }
+    },
     "project_ref": {
       "$ref": "common.schema.json#/$defs/sourceRef"
     },

@@ -24,34 +24,40 @@
 {% endif %}
 
 {% if my_issues %}
-<table class="issue-table">
+<table class="issue-table sp-dash-issues">
   <thead>
     <tr>
-      <th style="width:12px"></th>
-      <th>{% trans %}Key{% endtrans %}</th>
-      <th>{% trans %}Subject{% endtrans %}</th>
-      <th>{% trans %}Status{% endtrans %}</th>
-      <th>{% trans %}Type{% endtrans %}</th>
-      <th>{% trans %}Project{% endtrans %}</th>
-      <th>{% trans %}Updated{% endtrans %}</th>
+      <th scope="col" class="sp-dash-issues-prio"><span class="sp-visually-hidden">{% trans %}Priority{% endtrans %}</span></th>
+      <th scope="col">{% trans %}Key{% endtrans %}</th>
+      <th scope="col">{% trans %}Subject{% endtrans %}</th>
+      <th scope="col">{% trans %}Status{% endtrans %}</th>
+      <th scope="col">{% trans %}Type{% endtrans %}</th>
+      <th scope="col">{% trans %}Project{% endtrans %}</th>
+      <th scope="col">{% trans %}Updated{% endtrans %}</th>
     </tr>
   </thead>
   <tbody>
     {% for issue in my_issues %}
+    {% set flags = issue_flags[issue.id] if issue_flags is defined and issue.id in issue_flags else {} %}
     <tr>
-      <td><span class="badge-priority {{ issue.priority.name | lower | replace(' ', '-') if issue.priority else 'normal' }}"></span></td>
-      <td><a class="issue-key" href="/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
-      <td class="issue-subject">{{ issue.subject }}</td>
-      <td><span class="badge-status {{ issue.status.name | lower | replace(' ', '-') if issue.status else '' }}">{{ issue.status.name if issue.status else '' }}</span></td>
-      <td><span class="badge-tracker {{ issue.tracker.name | lower if issue.tracker else '' }}">{{ issue.tracker.name if issue.tracker else '' }}</span></td>
-      <td style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">{{ issue.project_name if issue.project_name is defined else '' }}</td>
-      <td class="issue-updated">{{ issue.updated_at | timeago(user.timezone if user is defined else 'UTC') }}</td>
+      <td class="sp-dash-issues-prio"><span class="badge-priority {{ issue.priority.name | lower | replace(' ', '-') if issue.priority else 'normal' }}" title="{{ issue.priority.name if issue.priority else '' }}"></span></td>
+      <td data-label="{{ _('Key') }}"><a class="issue-key" href="/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
+      <td class="issue-subject sp-dash-issues-subject">
+        <a class="sp-dash-issues-link" href="/issue/{{ issue.display_key }}/">{{ issue.subject }}</a>
+        {% if flags.agent %}<span class="sp-dash-flag sp-dash-flag--agent" data-testid="dash-flag-agent">{% trans %}Agent active{% endtrans %}</span>{% endif %}
+        {% if flags.blocked %}<span class="sp-dash-flag sp-dash-flag--danger" data-testid="dash-flag-blocked">{% trans %}Blocked{% endtrans %}</span>{% endif %}
+        {% if flags.overdue %}<span class="sp-dash-flag sp-dash-flag--warning" data-testid="dash-flag-overdue">{% trans %}Overdue{% endtrans %}</span>{% endif %}
+      </td>
+      <td data-label="{{ _('Status') }}"><span class="badge-status {{ issue.status.name | lower | replace(' ', '-') if issue.status else '' }}">{{ issue.status.name if issue.status else '' }}</span></td>
+      <td data-label="{{ _('Type') }}"><span class="badge-tracker {{ issue.tracker.name | lower if issue.tracker else '' }}">{{ issue.tracker.name if issue.tracker else '' }}</span></td>
+      <td data-label="{{ _('Project') }}" class="sp-dash-issues-project">{{ issue.project_name if issue.project_name is defined else '' }}</td>
+      <td data-label="{{ _('Updated') }}" class="issue-updated">{{ issue.updated_at | timeago(user.timezone if user is defined else 'UTC') }}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% else %}
-  <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No open issues assigned to you.{% endtrans %}</div>
+  <p class="sp-dash-empty">{% trans %}No open issues assigned to you.{% endtrans %}</p>
 {% endif %}
 
 {# Pagination #}

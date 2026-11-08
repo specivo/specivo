@@ -1,14 +1,21 @@
 # Import all models here so that Alembic's autogenerate sees them
 # when it inspects Base.metadata.
-from specivo.models.agent_cost import AgentTokenLog, BillingRate, ModelCostConfig
 from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPolicy
 from specivo.models.agent_session import AgentSession
+from specivo.models.ai_model_price import AiModelPrice
+from specivo.models.ai_subscription import AiSubscription, AiTool
+from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
+from specivo.models.billing_rate import BillingRate
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
+from specivo.models.currency import Currency
+from specivo.models.entity_link import EntityLink
+from specivo.models.exchange_rate import ExchangeRate
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
+from specivo.models.issue_source_ref import IssueSourceRef
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.kill_switch import KillEvent, KillTriggerConfig
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
@@ -21,12 +28,18 @@ from specivo.models.recurrence_exception import RecurrenceException
 from specivo.models.recurring_pattern import RecurringPattern
 from specivo.models.relation import IssueRelation
 from specivo.models.repository import (
+    CiRun,
+    Deployment,
+    DevelopmentDetachment,
     IssueCommitLink,
     IssuePullRequestLink,
+    IssueReleaseLink,
     PullRequest,
+    PullRequestReview,
     RepositoryCommit,
     RepositoryDelivery,
     RepositoryIntegration,
+    RepositoryRelease,
 )
 from specivo.models.role import Role
 from specivo.models.saved_filter import SavedFilter
@@ -43,16 +56,18 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.version import Version
 from specivo.models.watcher import Watcher
 from specivo.models.webhook import Webhook, WebhookDelivery
-from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiPageLink, WikiRedirect
+from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.models.workflow import WorkflowFieldRule, WorkflowTransition
 
 __all__ = [
     "AgentGroup",
     "AgentGroupMembership",
     "AgentSession",
-    "AgentTokenLog",
+    "AiModelPrice",
+    "AiSubscription",
+    "AiTool",
+    "AiUsageEntry",
     "BillingRate",
-    "ModelCostConfig",
     "Base",
     "LockVersionMixin",
     "TimestampMixin",
@@ -60,10 +75,18 @@ __all__ = [
     "ApiKey",
     "RefreshToken",
     "Attachment",
+    "Currency",
     "ImportIdMapping",
+    "IssueSourceRef",
     "Issue",
     "IssueCommitLink",
     "IssuePullRequestLink",
+    "CiRun",
+    "Deployment",
+    "DevelopmentDetachment",
+    "IssueReleaseLink",
+    "PullRequestReview",
+    "RepositoryRelease",
     "PullRequest",
     "Journal",
     "JournalDetail",
@@ -94,6 +117,8 @@ __all__ = [
     "Tracker",
     "GroupPolicy",
     "EnabledModule",
+    "EntityLink",
+    "ExchangeRate",
     "ProjectKeyAlias",
     "Member",
     "MemberRole",
@@ -116,7 +141,6 @@ __all__ = [
     "Wiki",
     "WikiContent",
     "WikiPage",
-    "WikiPageLink",
     "WikiRedirect",
     "CredentialAuditLog",
     "ExternalSystem",
@@ -127,7 +151,8 @@ __all__ = [
     "WorkflowTransition",
 ]
 
-# Registers the session events that keep search chunks in step with content.
-# Imported here, after every model, so that any process that loads the models
-# (api, worker, CLI, tests) indexes the same way.
+# Registers the session events that keep search chunks and the entity link
+# graph in step with content. Imported here, after every model, so that any
+# process that loads the models (api, worker, CLI, tests) indexes the same way.
+import specivo.services.entity_link_index  # noqa: E402, F401
 import specivo.services.search_index_service  # noqa: E402, F401

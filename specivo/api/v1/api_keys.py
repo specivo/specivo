@@ -19,6 +19,7 @@ from specivo.core.database import DbSession
 from specivo.core.security import get_account_user
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut, ApiKeyPatch
+from specivo.services.api_key_scope import project_keys_by_api_key
 from specivo.services.api_key_service import ApiKeyService
 
 router = APIRouter()
@@ -39,9 +40,10 @@ async def list_api_keys(
     db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> list[ApiKeyOut]:
-    """Return all API keys for the current user (no raw key or hash)."""
+    """Return all API keys for the current user (no raw key or hash), with the projects each is limited to."""
     keys = await _service.list_keys(session=db, user_id=current_user.id)
-    return [ApiKeyOut.model_validate(k) for k in keys]
+    project_keys = await project_keys_by_api_key(db, keys)
+    return [ApiKeyOut.model_validate(k).model_copy(update={"project_keys": project_keys[k.id]}) for k in keys]
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +63,12 @@ async def create_api_key(
     db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> ApiKeyCreated:
-    """Create an API key. The raw_key in the response is shown ONCE and not stored."""
+    """Create an API key. The raw_key in the response is shown ONCE and not stored.
+
+    ``scopes`` optionally limits the key to some projects: ``{"projects": ["ACME", 12]}``,
+    by key or id, each one the caller can see. It is stored as project ids and answered
+    with ``project_keys``. An empty list or any other shape answers 422.
+    """
     key, raw_key = await _service.create_key(
         session=db,
         user_id=current_user.id,
@@ -76,6 +83,7 @@ async def create_api_key(
         key_prefix=key.key_prefix,
         raw_key=raw_key,
         scopes=key.scopes,
+        project_keys=(await project_keys_by_api_key(db, [key]))[key.id],
         expires_at=key.expires_at,
         created_at=key.created_at,
     )
@@ -104,7 +112,8 @@ async def patch_api_key(
         key_id=key_id,
         is_active=body.is_active,
     )
-    return ApiKeyOut.model_validate(key)
+    project_keys = await project_keys_by_api_key(db, [key])
+    return ApiKeyOut.model_validate(key).model_copy(update={"project_keys": project_keys[key.id]})
 
 
 # ---------------------------------------------------------------------------

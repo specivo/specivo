@@ -12,6 +12,19 @@
 - ``PullRequest``: a pull/merge request; unique per (integration, number).
 - ``IssuePullRequestLink``: a pull request linked to an issue; its primary
   key makes each (pull request, issue) journal happen once.
+- ``PullRequestReview``: one reviewer's latest verdict on a pull request.
+- ``CiRun``: a CI run, job or check (GitHub checks and Actions, GitLab
+  pipelines and jobs, Gitea/Forgejo Actions).
+- ``Deployment``: a deployment to an environment and its latest status.
+- ``RepositoryRelease``: a tag, and the release made from it if any.
+- ``IssueReleaseLink``: an issue released in a tag ("Released in v1.2").
+- ``DevelopmentDetachment``: a commit or pull request someone detached from
+  an issue; links are never made again for that pair.
+
+CI runs and deployments have no link table: they belong to an issue through
+its linked commits and pull requests, worked out when read (see
+``specivo.services.repository_activity``), so detaching or moving a commit
+moves its builds and deployments with it.
 """
 
 from __future__ import annotations
@@ -51,7 +64,8 @@ DELIVERY_PROCESSED = "processed"
 DELIVERY_FAILED = "failed"
 DELIVERY_STATUSES = (DELIVERY_ACCEPTED, DELIVERY_DUPLICATE, DELIVERY_IGNORED, DELIVERY_PROCESSED, DELIVERY_FAILED)
 
-LINK_SOURCES = ("message", "branch")
+#: ``manual``: moved to the issue by a person (``specivo.services.repository_activity``).
+LINK_SOURCES = ("message", "branch", "manual")
 LINK_KEYWORDS = ("refs", "fixes")
 
 PR_OPEN = "open"
@@ -59,7 +73,14 @@ PR_DRAFT = "draft"
 PR_MERGED = "merged"
 PR_CLOSED = "closed"
 PR_STATES = (PR_OPEN, PR_DRAFT, PR_MERGED, PR_CLOSED)
-PR_LINK_SOURCES = ("title", "body", "branch")
+PR_LINK_SOURCES = ("title", "body", "branch", "manual")
+
+CI_STATUSES = ("pending", "running", "success", "failure", "cancelled", "skipped", "neutral")
+CI_RUN_TYPES = ("check_run", "check_suite", "workflow_run", "workflow_job", "pipeline", "job")
+DEPLOYMENT_STATUSES = ("pending", "running", "success", "failure", "cancelled", "inactive")
+REVIEW_STATES = ("approved", "changes_requested", "commented", "dismissed")
+RELEASE_LINK_SOURCES = ("tag_commit", "tag_push", "default_branch")
+DETACHED_ITEM_TYPES = ("commit", "pull_request")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -116,14 +137,16 @@ class RepositoryDelivery(Base):
     """One webhook delivery received for an integration.
 
     ``payload`` is kept for processing and the delivery log, without the
-    per-commit file lists. Rows older than the retention period are pruned by
-    the scheduled cleanup.
+    per-commit file lists. ``provider`` is the forge that sent it: an
+    integration's provider can change, and old rows keep theirs. Rows older
+    than the retention period are pruned by the scheduled cleanup.
     """
 
     __tablename__ = "repository_deliveries"
     __table_args__ = (
         UniqueConstraint("integration_id", "delivery_id", name="uq_repository_deliveries_integration_delivery"),
         CheckConstraint(_in("status", DELIVERY_STATUSES), name="ck_repository_deliveries_status"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_repository_deliveries_provider"),
         # The delivery log, newest first; also serves as the FK index.
         Index("ix_repository_deliveries_integration_received", "integration_id", text("received_at DESC")),
         # The sweeper looks for accepted rows that were never processed.
@@ -140,6 +163,8 @@ class RepositoryDelivery(Base):
         ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
     )
     delivery_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    # The provider the integration had when this arrived; it may have changed since.
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
     event: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -210,6 +235,11 @@ class IssueCommitLink(Base):
     issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
     source: Mapped[str] = mapped_column(String(10), nullable=False)
     keyword: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # When the message's ``Fixes`` command ran for this issue, whatever its
+    # outcome: the first time Specivo saw the commit on the default branch.
+    # NULL while a fixing link waits on another branch; never reset, so the
+    # command runs at most once per (commit, issue).
+    fix_ran_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     def __repr__(self) -> str:
@@ -227,14 +257,18 @@ class PullRequest(Base, TimestampMixin):
     __tablename__ = "pull_requests"
     __table_args__ = (
         # Leads with integration_id, so it also serves as the FK index.
-        UniqueConstraint("integration_id", "number", name="uq_pull_requests_integration_number"),
+        UniqueConstraint("integration_id", "provider", "number", name="uq_pull_requests_integration_provider_number"),
         CheckConstraint(_in("state", PR_STATES), name="ck_pull_requests_state"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_pull_requests_provider"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     integration_id: Mapped[int] = mapped_column(
         ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
     )
+    # The forge the request lives on. Numbers are per forge, so a provider
+    # change starts a new numbering and the old requests stay as they were.
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
     url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
@@ -281,3 +315,163 @@ class IssuePullRequestLink(Base):
 
     def __repr__(self) -> str:
         return f"<IssuePullRequestLink pull_request_id={self.pull_request_id} issue_id={self.issue_id}>"
+
+
+class PullRequestReview(Base):
+    """One reviewer's latest verdict on a pull request; unique per (pull request, reviewer login)."""
+
+    __tablename__ = "pull_request_reviews"
+    __table_args__ = (
+        UniqueConstraint("pull_request_id", "reviewer_login", name="uq_pull_request_reviews_pr_reviewer"),
+        CheckConstraint(_in("state", REVIEW_STATES), name="ck_pull_request_reviews_state"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    pull_request_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id", ondelete="CASCADE"), nullable=False)
+    reviewer_login: Mapped[str] = mapped_column(String(255), nullable=False)
+    state: Mapped[str] = mapped_column(String(20), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    # The forge's time of the review; the time it was received when the forge sends none.
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provider_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CiRun(Base, TimestampMixin):
+    """A CI run, job or check, one row per forge object, holding its latest state.
+
+    ``provider_updated_at``, ``attempt`` and ``status`` order the events (see
+    ``specivo.hooks.development.ci_order_key``); ``occurred_at`` is when it
+    last changed, by the forge's clock when it says.
+    """
+
+    __tablename__ = "ci_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "integration_id", "provider", "run_type", "external_id", name="uq_ci_runs_integration_provider_type_id"
+        ),
+        CheckConstraint(_in("status", CI_STATUSES), name="ck_ci_runs_status"),
+        CheckConstraint(_in("run_type", CI_RUN_TYPES), name="ck_ci_runs_run_type"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_ci_runs_provider"),
+        Index("ix_ci_runs_integration_sha", "integration_id", "head_sha"),
+        Index("ix_ci_runs_integration_branch", "integration_id", "branch"),
+        Index("ix_ci_runs_integration_pr", "integration_id", "provider", "pull_request_number"),
+        Index("ix_ci_runs_integration_occurred", "integration_id", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    run_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    external_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    head_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pull_request_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Deployment(Base, TimestampMixin):
+    """A deployment to one environment, holding its latest status.
+
+    ``deployed_at`` is set when a success status is applied and kept when the
+    deployment later becomes ``inactive`` (replaced by a newer one).
+    """
+
+    __tablename__ = "deployments"
+    __table_args__ = (
+        UniqueConstraint("integration_id", "provider", "external_id", name="uq_deployments_integration_provider_id"),
+        CheckConstraint(_in("status", DEPLOYMENT_STATUSES), name="ck_deployments_status"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_deployments_provider"),
+        Index("ix_deployments_integration_sha", "integration_id", "sha"),
+        Index("ix_deployments_integration_ref", "integration_id", "ref"),
+        Index("ix_deployments_integration_occurred", "integration_id", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    external_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    environment: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    provider_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deployed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RepositoryRelease(Base, TimestampMixin):
+    """A tag, unique per (integration, provider, tag name), and the release made from it.
+
+    ``sha`` is the commit the tag points at, when a payload said so;
+    ``is_release`` is true while a published release exists for the tag.
+    """
+
+    __tablename__ = "repository_releases"
+    __table_args__ = (
+        UniqueConstraint("integration_id", "provider", "tag_name", name="uq_repository_releases_integration_tag"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_repository_releases_provider"),
+        Index("ix_repository_releases_integration_occurred", "integration_id", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    tag_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    is_release: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IssueReleaseLink(Base):
+    """An issue released in a tag; ``version_id`` is the issue's project version of the same name, if any."""
+
+    __tablename__ = "issue_release_links"
+    __table_args__ = (
+        CheckConstraint(_in("source", RELEASE_LINK_SOURCES), name="ck_issue_release_links_source"),
+        Index("ix_issue_release_links_issue_id", "issue_id"),
+        Index("ix_issue_release_links_version_id", "version_id"),
+    )
+
+    release_id: Mapped[int] = mapped_column(ForeignKey("repository_releases.id", ondelete="CASCADE"), primary_key=True)
+    issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    version_id: Mapped[int | None] = mapped_column(ForeignKey("versions.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class DevelopmentDetachment(Base):
+    """A commit or pull request detached from an issue by a person; never linked to it again automatically."""
+
+    __tablename__ = "development_detachments"
+    __table_args__ = (
+        UniqueConstraint("item_type", "item_id", "issue_id", name="uq_development_detachments_item_issue"),
+        CheckConstraint(_in("item_type", DETACHED_ITEM_TYPES), name="ck_development_detachments_item_type"),
+        Index("ix_development_detachments_issue_id", "issue_id"),
+        Index("ix_development_detachments_detached_by_id", "detached_by_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    item_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # A repository_commits or pull_requests id; the row goes when the issue goes, and is pruned with the item.
+    item_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), nullable=False)
+    detached_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -1,5 +1,5 @@
 ---
-description: Specivo is a self-hosted project tracker, team wiki, and AI-safe automation platform. Track issues, link related work, search by meaning, and let AI agents work inside the tracker.
+description: Specivo is a self-hosted project tracker, team wiki, and AI-safe automation platform. Track issues, link related work, search by meaning, let AI agents work inside the tracker, and see what your AI work costs per person and feature.
 ---
 
 # Specivo user guide
@@ -14,7 +14,7 @@ pages, and connecting AI assistants. If you want to install and operate Specivo,
 
 ![The Specivo dashboard](../assets/img/hero-dashboard.webp)
 
-## Three things Specivo does
+## Four things Specivo does
 
 - **Track work.** Issues with types, statuses, priorities, assignees, subtasks, and
   [relations](issues/relations.md) between them. Group work into
@@ -22,7 +22,12 @@ pages, and connecting AI assistants. If you want to install and operate Specivo,
 - **Keep knowledge.** A per-project [wiki](wiki/index.md) with Markdown, full version history, and
   one-click revert. Cross-link pages and issues so decisions never get lost.
 - **Work with AI agents.** A built-in [MCP server](ai-agents/index.md) lets AI assistants read and
-  update issues, wiki pages, and search — safely, with every action recorded in an audit log.
+  update issues, wiki pages, and search — safely, with everything they do over MCP recorded in the
+  [audit log](install/audit-log.md). People's own edits are kept in issue and wiki history.
+- **Track AI spending.** See what each person, project and feature costs in AI, across Claude Code,
+  Codex, Gemini CLI, OpenCode and other tools, on personal plans, team seats and API keys. Usage is
+  [reported automatically](ai-agents/reporting-ai-usage.md), tied to the issue it was spent on, and
+  rolled up in [AI spend reports](projects/ai-spend-reports.md).
 
 ## New here?
 
@@ -44,6 +49,7 @@ sprint, wiki) that the rest of this guide uses.
 | Link commits and pull requests from GitHub, GitLab, Gitea or Forgejo to issues | [Repository integrations](integrations/repositories.md) |
 | Notify another system when issues or wiki pages change | [Outgoing webhooks](integrations/webhooks.md) |
 | Connect Claude Code, Codex, or another AI client | [AI agents & MCP](ai-agents/index.md) |
+| See what your team spends on AI, per person, project and feature | [AI usage](projects/ai-usage.md), [AI spend reports](projects/ai-spend-reports.md) |
 | Install or self-host Specivo | [Installing Specivo](install/index.md) |
 | Let people sign in with your identity provider | [Single sign-on](install/single-sign-on/index.md) |
 | Move over from another tracker, such as Jira | [Importing from another tracker](install/importing.md) |

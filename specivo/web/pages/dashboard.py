@@ -3,38 +3,50 @@
 from __future__ import annotations
 
 import datetime
-from typing import cast
+import logging
+from decimal import Decimal
+from typing import Any, cast
+from urllib.parse import urlencode
 
+from babel.numbers import format_compact_decimal, format_decimal
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import ColumnElement, and_, func, or_, select, true
+from sqlalchemy import ColumnElement, and_, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
+from specivo.core.config import get_settings
 from specivo.core.database import DB_SESSION
-from specivo.core.i18n import format_date
+from specivo.core.i18n import format_date, get_locale, ngettext
+from specivo.core.i18n import gettext as _
+from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal
 from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
 from specivo.models.sprint import Sprint
-from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.models.wiki import Wiki, WikiContent, WikiPage
-from specivo.services.issue_service import IssueService
+from specivo.services import dashboard_service as dash
+from specivo.services.ai_spend_report_service import ReportRow
 from specivo.services.notification_service import NotificationService
-from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
-from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.pages.ai_usage import _money_view
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["web-dashboard"], include_in_schema=False)
 
 _project_svc = ProjectService()
-_issue_svc = IssueService()
 _notif_svc = NotificationService()
-_time_svc = TimeEntryService()
+
+
+async def _notification_actors(db: AsyncSession, notifications: list) -> dict[int, User]:
+    """The users who acted in *notifications*, by id: the header's notification list shows their avatars."""
+    actor_ids = {n.actor_id for n in notifications[:5]}
+    if not actor_ids:
+        return {}
+    return {u.id: u for u in (await db.execute(select(User).where(User.id.in_(actor_ids)))).scalars()}
 
 
 def _visible(clause: ColumnElement[bool] | None) -> ColumnElement[bool]:
@@ -42,450 +54,417 @@ def _visible(clause: ColumnElement[bool] | None) -> ColumnElement[bool]:
     return true() if clause is None else clause
 
 
+async def _anonymous_landing(request: Request, db: AsyncSession) -> Response:
+    """Where a visitor refused by the dashboard is sent.
+
+    A visitor without any credentials goes to the project list when anonymous
+    access is live, that is when the instance switch is on and at least one
+    project is readable without an account, so the site's main URL does not
+    look private while its public projects are open. Everyone else, and that
+    includes a visitor whose session failed (they are asked to sign in again,
+    as on every other page), goes to the login screen as before.
+
+    The decision reuses ``resolve_anonymous_principal`` and
+    ``ProjectService.accessible_projects_clause``, the same definitions the
+    project list applies, and reads both on every request. The answer depends
+    on the cookies sent and on settings that can change at any time, so it is
+    marked uncacheable either way.
+    """
+    from specivo.core.security import has_credentials, resolve_anonymous_principal
+
+    target = "/login/"
+    if not has_credentials(request):
+        try:
+            anonymous = await resolve_anonymous_principal(db)
+            if anonymous is not None:
+                readable = await _project_svc.accessible_projects_clause(db, anonymous)
+                if readable is not None and await db.scalar(select(select(Project.id).where(readable).exists())):
+                    target = "/projects/"
+        except Exception:
+            # Fail closed, as ``get_web_reader`` does: a visitor is never sent
+            # to the public pages on a guess. The login screen is what the
+            # dashboard always answered.
+            logger.warning("Could not resolve anonymous access for the home page", exc_info=True)
+            target = "/login/"
+
+    response = RedirectResponse(target, status_code=302)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie, Authorization"
+    return response
+
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
     db: AsyncSession = DB_SESSION,
+    period: str = Query("month"),
+    who: str = Query("all"),
 ) -> Response:
-    """Render the main dashboard page."""
+    """Render the main dashboard page.
+
+    The dashboard itself is never served anonymously (it is not in
+    ``ANONYMOUS_WEB_ROUTES``). Only the destination of a refused visitor
+    depends on anonymous access: see :func:`_anonymous_landing`.
+
+    ``period`` picks the spend period (``today``, ``7d``, ``month``) and
+    ``who`` the activity filter (``all``, ``agents``, ``people``); the
+    switches also reload just their block through the htmx partials.
+    """
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return await _anonymous_landing(request, db)
     user = cast("User", user_obj)
 
-    # list_projects already enforces visibility (admins see all,
-    # regular users see public + their memberships).
-    projects, total_projects = await _project_svc.list_projects(db, user, offset=0, limit=10)
+    today = datetime.date.today()
+    scope = await dash.load_scope(db, user)
     notifications, _ = await _notif_svc.list_notifications(db, user.id, limit=5)
     unread_count = await _notif_svc.get_unread_count(db, user.id)
 
-    # Derive the set of project IDs the user is allowed to see.
-    # All downstream queries are scoped through this set.
-    visible_pids = {p.id for p in projects}
-    # Every issue count and listing below covers only the issues the reader
-    # may see, and wiki entries only the projects whose wiki they may read.
-    issue_visibility = await _issue_svc.visible_issues_clause(db, user)
-    wiki_pids = {pid for pid in visible_pids if await check_permission(user, pid, Permission.VIEW_WIKI, db)}
-
-    # ------------------------------------------------------------------
-    # My open issues (assigned to user, not closed), sorted by updated_at.
-    # Scoped to visible projects. First page (10 items) + total count.
-    # ------------------------------------------------------------------
-    my_issues: list[Issue] = []
-    my_issues_total = 0
     my_issues_limit = 10
-    if visible_pids:
-        _open_where = (
-            Issue.assigned_to_id == user.id,
-            IssueStatus.category != "closed",
-            Issue.project_id.in_(visible_pids),
-            _visible(issue_visibility),
-        )
-        count_stmt = (
-            select(func.count())
-            .select_from(Issue)
-            .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(*_open_where)
-        )
-        my_issues_total = (await db.execute(count_stmt)).scalar() or 0
+    my_issues, my_issues_total = await dash.my_open_issues(db, scope, offset=0, limit=my_issues_limit)
+    _label_projects(scope, my_issues)
 
-        my_issues_stmt = (
-            select(Issue)
-            .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(*_open_where)
-            .options(
-                selectinload(Issue.tracker),
-                selectinload(Issue.status),
-                selectinload(Issue.priority),
-            )
-            .order_by(Issue.updated_at.desc())
-            .limit(my_issues_limit)
-        )
-        my_issues = list((await db.execute(my_issues_stmt)).scalars().all())
+    context: dict[str, Any] = {
+        "user": user,
+        "active_page": "dashboard",
+        "projects": scope.projects[:10],
+        "total_projects": len(scope.projects),
+        "notifications": notifications,
+        "notification_actors": await _notification_actors(db, notifications),
+        "unread_count": unread_count,
+        "today": today,
+        "attention": await dash.attention_counts(db, scope, today),
+        "my_issues": my_issues,
+        "my_issues_total": my_issues_total,
+        "my_issues_offset": 0,
+        "my_issues_limit": my_issues_limit,
+        "issue_flags": await dash.issue_flags(db, scope, my_issues, today),
+        "active_versions": await _active_versions(db, scope, today),
+        "active_sprints": await _active_sprints(db, scope, today),
+        "project_stats": (
+            await _project_svc.load_project_stats(db, [p.id for p in scope.projects[:10]], reader=user)
+            if scope.projects
+            else {}
+        ),
+        "recent_wiki_pages": await _recent_wiki(db, scope),
+    }
+    context.update(await sessions_context(db, scope))
+    # Spend is reported in UTC days, like the AI spend reports.
+    context.update(await spend_context(db, scope, period, utcnow().date()))
+    context.update(await activity_context(db, scope, who))
+    return get_templates().TemplateResponse(request, "pages/dashboard.html", context=context)
 
-    # Batch-load project names for the issues
-    issue_project_ids = list({i.project_id for i in my_issues})
-    if issue_project_ids:
-        proj_rows = (await db.execute(select(Project.id, Project.name).where(Project.id.in_(issue_project_ids)))).all()
-        proj_names = {r.id: r.name for r in proj_rows}
-        for issue in my_issues:
-            issue.project_name = proj_names.get(issue.project_id, "")  # type: ignore[attr-defined]
 
-    # ------------------------------------------------------------------
-    # Active versions (2 most relevant: open first, then recent closed).
-    # Scoped to visible projects — no admin-level list_all().
-    # ------------------------------------------------------------------
-    active_versions: list[dict] = []
-    today = datetime.date.today()
-    if visible_pids:
-        # Fetch versions with issue progress counts, scoped to visible projects
-        done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
-        ver_stmt = (
-            select(
-                Version,
-                Project.key.label("project_key"),
-                func.count(Issue.id).label("total"),
-                func.count(Issue.id).filter(Issue.status_id.in_(done_sub)).label("closed_count"),
-            )
-            .join(Project, Project.id == Version.project_id)
-            .outerjoin(Issue, and_(Issue.fixed_version_id == Version.id, _visible(issue_visibility)))
-            .where(Version.project_id.in_(visible_pids))
-            .group_by(Version.id, Project.key)
-            .order_by(
-                # open first, then by due date
-                (Version.status == "open").desc(),
-                Version.effective_date.asc().nullslast(),
-            )
-            .limit(4)  # fetch a few extra to pick best 2
-        )
-        ver_rows = (await db.execute(ver_stmt)).all()
+# ---------------------------------------------------------------------------
+# Blocks (shared with the htmx partials)
+# ---------------------------------------------------------------------------
 
-        open_versions = []
-        closed_versions = []
-        for version, project_key, total, closed in ver_rows:
-            closed = int(closed or 0)
-            total = int(total or 0)
-            progress = int(closed / total * 100) if total > 0 else 0
-            v_dict: dict = {
-                "name": version.name,
-                "status": version.status,
-                "due_date": format_date(version.effective_date, "MMMd") if version.effective_date else None,
-                "progress": progress,
-                "open_count": total - closed,
-                "closed_count": closed,
-                "total_count": total,
-                "project_key": project_key,
-            }
-            if version.status == "open" and version.effective_date:
-                v_dict["days_left"] = (version.effective_date - today).days
-            if version.status == "open":
-                open_versions.append(v_dict)
-            else:
-                closed_versions.append(v_dict)
 
-        active_versions = (open_versions + closed_versions)[:2]
+def _label_projects(scope: dash.DashboardScope, issues: list[Issue]) -> None:
+    """Set ``project_name`` on *issues* from the scope's projects (no query)."""
+    names = {p.id: p.name for p in scope.projects}
+    for issue in issues:
+        issue.project_name = names.get(issue.project_id, "")  # type: ignore[attr-defined]
 
-    # ------------------------------------------------------------------
-    # Active sprints across visible projects (one per project max).
-    # Show sprint name, status, dates, duration, and issue progress.
-    # ------------------------------------------------------------------
-    active_sprints: list[dict] = []
-    if visible_pids:
-        done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
-        sprint_stmt = (
-            select(
-                Sprint,
-                Project.key.label("project_key"),
-                Project.name.label("project_name"),
-                func.count(Issue.id).label("total"),
-                func.count(Issue.id).filter(Issue.status_id.in_(done_sub)).label("closed_count"),
-            )
-            .join(Project, Project.id == Sprint.project_id)
-            .outerjoin(Issue, and_(Issue.sprint_id == Sprint.id, _visible(issue_visibility)))
-            .where(Sprint.project_id.in_(visible_pids), Sprint.status == "active")
-            .group_by(Sprint.id, Project.key, Project.name)
-            .order_by(Sprint.start_date.asc().nullslast())
-        )
-        sprint_rows = (await db.execute(sprint_stmt)).all()
 
-        for sprint, project_key, project_name, total, closed in sprint_rows:
-            closed = int(closed or 0)
-            total = int(total or 0)
-            progress = int(closed / total * 100) if total > 0 else 0
-            days_total = None
-            days_remaining = None
-            if sprint.start_date and sprint.end_date:
-                days_total = (sprint.end_date - sprint.start_date).days
-                days_remaining = max(0, (sprint.end_date - today).days)
-            active_sprints.append(
-                {
-                    "id": sprint.id,
-                    "name": sprint.name,
-                    "project_key": project_key,
-                    "project_name": project_name,
-                    "start_date": format_date(sprint.start_date, "MMMd") if sprint.start_date else None,
-                    "end_date": format_date(sprint.end_date, "MMMd") if sprint.end_date else None,
-                    "days_total": days_total,
-                    "days_remaining": days_remaining,
-                    "total": total,
-                    "closed": closed,
-                    "progress": progress,
-                }
-            )
+async def sessions_context(db: AsyncSession, scope: dash.DashboardScope) -> dict[str, Any]:
+    sessions, total = await dash.active_sessions(db, scope)
+    return {
+        "agent_sessions": sessions,
+        "agent_sessions_total": total,
+        "session_timeout_minutes": max(1, get_settings().agent_session_timeout // 60),
+    }
 
-    # ------------------------------------------------------------------
-    # Project stats (open issue counts per project)
-    # ------------------------------------------------------------------
-    all_project_ids = list(visible_pids)
-    project_stats = await _project_svc.load_project_stats(db, all_project_ids, reader=user) if all_project_ids else {}
 
-    # ------------------------------------------------------------------
-    # Recent wiki pages (3 most recently updated, in the projects whose
-    # wiki the reader may read)
-    # ------------------------------------------------------------------
-    recent_wiki_pages: list[dict] = []
-    if wiki_pids:
-        wiki_stmt = (
-            select(
-                WikiPage.title,
-                WikiPage.slug,
-                WikiPage.updated_at,
-                Project.key.label("project_key"),
-                User.display_name.label("author_name"),
-            )
-            .join(Wiki, WikiPage.wiki_id == Wiki.id)
-            .join(Project, Wiki.project_id == Project.id)
-            .outerjoin(
-                WikiContent,
-                (WikiContent.page_id == WikiPage.id)
-                & (
-                    WikiContent.version
-                    == (
-                        select(func.max(WikiContent.version))
-                        .where(WikiContent.page_id == WikiPage.id)
-                        .correlate(WikiPage)
-                        .scalar_subquery()
-                    )
-                ),
-            )
-            .outerjoin(User, WikiContent.author_id == User.id)
-            .where(WikiPage.deleted_at.is_(None), Wiki.project_id.in_(wiki_pids))
-            .order_by(WikiPage.updated_at.desc())
-            .limit(3)
-        )
-        wiki_rows = (await db.execute(wiki_stmt)).all()
-        recent_wiki_pages = [
+def _compact(value: int, locale: str) -> str:
+    return format_compact_decimal(value, locale=locale, fraction_digits=1)
+
+
+def _hours(value: Decimal, locale: str) -> str:
+    return format_decimal(value.quantize(Decimal("0.1")), format="#,##0.0", locale=locale)
+
+
+def _breakdown(rows: list[ReportRow], dim: str, locale: str, project_url: str = "") -> dict[str, Any]:
+    """Up to ``BREAKDOWN_LIMIT`` rows with the largest actual spend, shown in the report's order (by name).
+
+    *project_url* (``{key}`` and the query) links each project row to that project's spend report.
+    """
+
+    def spend_of(row: ReportRow) -> Decimal:
+        return row.total_spend.total.amount if row.total_spend is not None else Decimal(0)
+
+    ranked = sorted(range(len(rows)), key=lambda i: -spend_of(rows[i]))
+    shown = sorted(ranked[: dash.BREAKDOWN_LIMIT])
+    peak = max((spend_of(rows[i]) for i in shown), default=Decimal(0))
+    items = []
+    for i in shown:
+        row = rows[i]
+        spend = row.total_spend
+        amount = spend_of(row)
+        if row.seat_only:
+            label, kind = _("Seat cost without usage"), "seat"
+        elif row.key.get(dim) is None:
+            label, kind = (_("No project") if dim == "project" else _("Unknown model")), "none"
+        else:
+            label, kind = row.labels.get(dim) or str(row.key.get(dim)), "value"
+        url = project_url.format(key=label) if project_url and dim == "project" and kind == "value" else ""
+        items.append(
             {
-                "title": r.title,
-                "slug": r.slug,
-                "project_key": r.project_key,
-                "updated_at": r.updated_at,
-                "author_name": r.author_name or "",
+                "label": label,
+                "url": url,
+                "kind": kind,
+                "spend": _money_view(spend, locale) if spend is not None else None,
+                "unpriced": row.unpriced_entries,
+                "percent": int(amount * 100 / peak) if peak and amount > 0 else 0,
             }
-            for r in wiki_rows
-        ]
-
-    # ------------------------------------------------------------------
-    # Stats: resolved this week, feedback count.
-    # Both are scoped to the user's own issues in visible projects.
-    # ------------------------------------------------------------------
-    week_start = today - datetime.timedelta(days=today.weekday())
-
-    resolved_this_week = 0
-    feedback_count = 0
-    if visible_pids:
-        resolved_stmt = (
-            select(func.count())
-            .select_from(Issue)
-            .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(
-                Issue.assigned_to_id == user.id,
-                Issue.project_id.in_(visible_pids),
-                IssueStatus.category.in_(["done", "closed"]),
-                Issue.updated_at >= week_start,
-                _visible(issue_visibility),
-            )
         )
-        resolved_this_week = (await db.execute(resolved_stmt)).scalar() or 0
+    return {"items": items, "more": max(0, len(rows) - len(shown))}
 
-        feedback_stmt = (
-            select(func.count())
-            .select_from(Issue)
-            .where(
-                Issue.assigned_to_id == user.id,
-                Issue.project_id.in_(visible_pids),
-                Issue.status_id == 4,
-                _visible(issue_visibility),
-            )
-        )
-        feedback_count = (await db.execute(feedback_stmt)).scalar() or 0
 
-    # ------------------------------------------------------------------
-    # Recent service account activity (last 20 events).
-    # Journals from service-account users in visible projects, plus
-    # time entries logged by service accounts.
-    # ------------------------------------------------------------------
-    sa_activity: list[dict] = []
-    if visible_pids:
-        # Find service account user IDs
-        sa_user_stmt = select(User.id, User.login).where(User.is_service_account.is_(True))
-        sa_rows = (await db.execute(sa_user_stmt)).all()
-        sa_user_ids = [r.id for r in sa_rows]
-        sa_user_names = {r.id: r.login for r in sa_rows}
+def _report_url(projects: list[Project] | None, first: datetime.date, last: datetime.date, group: str) -> str:
+    """The full report behind the spend block, or "" when no single page covers it.
 
-        if sa_user_ids:
-            # --- Journals: issue status changes, comments, wiki edits ---
-            journal_stmt = (
-                select(Journal)
-                .options(
-                    selectinload(Journal.user),
-                    selectinload(Journal.details),
-                )
-                .where(
-                    Journal.user_id.in_(sa_user_ids),
-                    Journal.project_id.in_(visible_pids),
-                    # A wiki edit only where the reader may read the wiki.
-                    or_(Journal.wiki_page_id.is_(None), Journal.project_id.in_(wiki_pids)),
-                )
-                .order_by(Journal.created_at.desc(), Journal.id.desc())
-                .limit(20)
-            )
-            # Private notes are shown to administrators only, as on the issue page.
-            if not user.is_admin:
-                journal_stmt = journal_stmt.where(Journal.is_private.is_(False))
-            journals = list((await db.execute(journal_stmt)).scalars().all())
+    Administrators: the admin AI spend report. A manager of one project: that
+    project's spend report. A manager of several: none (each project row of
+    the breakdown links to its own report).
+    """
+    query = _report_query(first, last, group)
+    if projects is None:
+        return f"/admin/ai-spend/?{query}"
+    if len(projects) == 1:
+        return f"/projects/{projects[0].key}/ai-usage/report/?{query}"
+    return ""
 
-            # Batch-load issue display keys for journal entries
-            journal_issue_ids = [j.issue_id for j in journals if j.issue_id]
-            issue_key_map: dict[int, str] = {}
-            issue_subject_map: dict[int, str] = {}
-            # Only issues the reader may see; journals on any other are left out.
-            if journal_issue_ids:
-                ik_stmt = select(Issue.id, Issue.project_key, Issue.sequence_number, Issue.subject).where(
-                    Issue.id.in_(journal_issue_ids)
-                )
-                if issue_visibility is not None:
-                    ik_stmt = ik_stmt.where(issue_visibility)
-                ik_rows = (await db.execute(ik_stmt)).all()
-                for r in ik_rows:
-                    issue_key_map[r.id] = f"{r.project_key}-{r.sequence_number}"
-                    issue_subject_map[r.id] = r.subject
 
-            # Batch-load wiki page titles
-            journal_wiki_ids = [j.wiki_page_id for j in journals if j.wiki_page_id]
-            wiki_title_map: dict[int, tuple[str, str]] = {}  # id -> (title, project_key)
-            if journal_wiki_ids:
-                wp_rows = (
-                    await db.execute(
-                        select(WikiPage.id, WikiPage.title, Project.key.label("project_key"))
-                        .join(Wiki, WikiPage.wiki_id == Wiki.id)
-                        .join(Project, Wiki.project_id == Project.id)
-                        .where(WikiPage.id.in_(journal_wiki_ids))
-                    )
-                ).all()
-                wiki_title_map = {r.id: (r.title, r.project_key) for r in wp_rows}
+def _report_query(first: datetime.date, last: datetime.date, group: str) -> str:
+    return urlencode({"preset": "custom", "from_date": first.isoformat(), "to_date": last.isoformat(), "group": group})
 
-            # A status change counts as "resolved" when the new status is in the
-            # done or closed category, whatever it is called or numbered.
-            done_status_ids = {
-                str(sid)
-                for sid in (
-                    await db.execute(select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])))
-                ).scalars()
+
+async def spend_context(
+    db: AsyncSession, scope: dash.DashboardScope, period: str, today: datetime.date
+) -> dict[str, Any]:
+    """The spend block's context; ``spend`` is None for a viewer who does not get the block."""
+    projects = await dash.spend_projects(db, scope)
+    if projects is not None and not projects:
+        return {"spend": None}
+    period = period if period in dash.SPEND_PERIODS else "month"
+    locale = get_locale()
+    summary = await dash.spend_summary(db, scope, period, today, projects)
+    totals = summary.totals
+    report = summary.by_project
+    seat_total = marginal = None
+    if report.seat_cost_shown and totals.seat_allocated is not None and totals.seat_unallocated is not None:
+        seats = totals.seat_allocated.total + totals.seat_unallocated.total
+        if seats.amount > 0:
+            seat_total = seats.format(locale)
+            marginal = totals.marginal.total.format(locale) if totals.marginal is not None else None
+    tokens = totals.tokens
+    return {
+        "spend": {
+            "period": period,
+            "periods": dash.SPEND_PERIODS,
+            "managed": len(projects) if projects is not None else None,
+            "seat_hidden": report.seat_cost_hidden,
+            "first": summary.date_from,
+            "last": summary.date_to,
+            "currency": report.currency,
+            "entries": totals.entries,
+            "unpriced": totals.unpriced_entries,
+            "actual": _money_view(totals.total_spend, locale) if totals.total_spend is not None else None,
+            "seats": seat_total,
+            "marginal": marginal,
+            "seat_shown": report.seat_cost_shown,
+            "api_equivalent": _money_view(totals.api_equivalent, locale) if totals.api_equivalent else None,
+            "leverage": f"{totals.leverage}×" if totals.leverage is not None else None,
+            "tokens": _compact(totals.total_tokens, locale),
+            "tokens_detail": {
+                "input": _compact(tokens["input"], locale),
+                "output": _compact(tokens["output"], locale),
+                "cache_write": _compact(tokens["cache_write_5m"] + tokens["cache_write_1h"], locale),
+                "cache_read": _compact(tokens["cache_read"], locale),
+                "reasoning": _compact(tokens["reasoning"], locale),
+            },
+            "agent_hours": _hours(summary.agent_hours, locale),
+            "people_hours": _hours(summary.people_hours, locale),
+            "by_project": _breakdown(
+                summary.by_project.rows,
+                "project",
+                locale,
+                "/projects/{key}/ai-usage/report/?" + _report_query(summary.date_from, summary.date_to, "user"),
+            ),
+            "by_model": _breakdown(summary.by_model.rows, "model", locale),
+            "report_url": _report_url(projects, summary.date_from, summary.date_to, "project"),
+            "model_report_url": _report_url(projects, summary.date_from, summary.date_to, "model"),
+        }
+    }
+
+
+def _group_summary(group: dash.ActivityGroup, locale: str) -> str:
+    """What a group holds, in words: "4 updates, 1 comment, 2.5h logged (Development), resolved"."""
+    parts: list[str] = []
+    if group.count("created"):
+        parts.append(_("created"))
+    if updates := group.count("updated", "status"):
+        parts.append(ngettext("%(num)d update", "%(num)d updates", updates) % {"num": updates})
+    if comments := group.count("comment"):
+        parts.append(ngettext("%(num)d comment", "%(num)d comments", comments) % {"num": comments})
+    if group.count("time"):
+        logged = _("%(hours)sh logged") % {"hours": _hours(group.hours, locale)}
+        parts.append(f"{logged} ({', '.join(group.activities)})" if group.activities else logged)
+    if commits := group.count("commit"):
+        parts.append(ngettext("%(num)d commit", "%(num)d commits", commits) % {"num": commits})
+    if edits := group.count("wiki"):
+        parts.append(ngettext("%(num)d edit", "%(num)d edits", edits) % {"num": edits})
+    if group.count("resolved"):
+        parts.append(_("resolved"))
+    return ", ".join(parts)
+
+
+async def activity_context(db: AsyncSession, scope: dash.DashboardScope, who: str) -> dict[str, Any]:
+    who = who if who in dash.ACTIVITY_FILTERS else "all"
+    locale = get_locale()
+    groups = await dash.activity_groups(db, scope, who)
+    views = []
+    for group in groups:
+        views.append(
+            {
+                "group": group,
+                "summary": _group_summary(group, locale),
+                "events": [
+                    {"event": e, "hours": _hours(e.hours, locale) if e.kind == "time" else ""} for e in group.events
+                ],
             }
+        )
+    return {"activity": {"who": who, "filters": dash.ACTIVITY_FILTERS, "groups": views}}
 
-            for j in journals:
-                actor = sa_user_names.get(j.user_id, "agent")
-                entry: dict = {"ts": j.created_at, "actor": actor}
 
-                # Determine activity type from journal details
-                if j.issue_id:
-                    if j.issue_id not in issue_key_map:
-                        continue
-                    issue_key = issue_key_map[j.issue_id]
-                    issue_subject = issue_subject_map.get(j.issue_id, "")
-
-                    # Check for status change to resolved/closed
-                    status_detail = next(
-                        (d for d in j.details if d.prop_key == "status_id"),
-                        None,
-                    )
-                    if status_detail and status_detail.new_value in done_status_ids:
-                        entry.update(
-                            type="resolved",
-                            issue_key=issue_key,
-                            summary=issue_subject,
-                        )
-                    elif j.notes and not j.details:
-                        entry.update(type="comment", issue_key=issue_key, summary=j.notes[:80])
-                    elif j.details:
-                        entry.update(type="updated", issue_key=issue_key, summary=issue_subject)
-                    else:
-                        continue
-                elif j.wiki_page_id:
-                    wiki_info = wiki_title_map.get(j.wiki_page_id, ("", ""))
-                    entry.update(
-                        type="wiki_edit",
-                        wiki_title=wiki_info[0],
-                        project_key=wiki_info[1],
-                    )
-                else:
-                    continue
-
-                sa_activity.append(entry)
-
-            # --- Time entries from service accounts ---
-            te_stmt = (
-                select(TimeEntry)
-                .options(
-                    selectinload(TimeEntry.activity),
-                )
-                .where(
-                    TimeEntry.user_id.in_(sa_user_ids),
-                    TimeEntry.project_id.in_(visible_pids),
-                )
-                .order_by(TimeEntry.created_at.desc())
-                .limit(10)
-            )
-            te_visible = await _time_svc.visible_entries_clause_any(db, user)
-            if te_visible is not None:
-                te_stmt = te_stmt.where(te_visible)
-            time_entries = list((await db.execute(te_stmt)).scalars().all())
-
-            # Batch-load issue keys for time entries
-            te_issue_ids = [te.issue_id for te in time_entries if te.issue_id]
-            if te_issue_ids:
-                te_ik_stmt = select(Issue.id, Issue.project_key, Issue.sequence_number).where(
-                    Issue.id.in_(te_issue_ids)
-                )
-                if issue_visibility is not None:
-                    te_ik_stmt = te_ik_stmt.where(issue_visibility)
-                for te_row in (await db.execute(te_ik_stmt)).all():
-                    issue_key_map[te_row.id] = f"{te_row.project_key}-{te_row.sequence_number}"
-
-            for te in time_entries:
-                actor = sa_user_names.get(te.user_id, "agent")
-                issue_key = issue_key_map.get(te.issue_id, "") if te.issue_id else ""
-                activity_name = te.activity.name if te.activity else "Development"
-                sa_activity.append(
-                    {
-                        "ts": te.created_at,
-                        "actor": actor,
-                        "type": "time_logged",
-                        "issue_key": issue_key,
-                        "hours": float(te.hours),
-                        "activity_name": activity_name,
-                    }
-                )
-
-            # Sort combined activity by timestamp desc, limit 20
-            sa_activity.sort(key=lambda x: x["ts"], reverse=True)
-            sa_activity = sa_activity[:20]
-
-    templates = get_templates()
-    return templates.TemplateResponse(
-        request,
-        "pages/dashboard.html",
-        context={
-            "user": user,
-            "active_page": "dashboard",
-            "projects": projects,
-            "total_projects": total_projects,
-            "notifications": notifications,
-            "unread_count": unread_count,
-            "my_issues": my_issues,
-            "my_issues_total": my_issues_total,
-            "my_issues_offset": 0,
-            "my_issues_limit": my_issues_limit,
-            "active_versions": active_versions,
-            "project_stats": project_stats,
-            "recent_wiki_pages": recent_wiki_pages,
-            "resolved_this_week": resolved_this_week,
-            "feedback_count": feedback_count,
-            "active_sprints": active_sprints,
-            "sa_activity": sa_activity,
-        },
+async def _active_versions(db: AsyncSession, scope: dash.DashboardScope, today: datetime.date) -> list[dict]:
+    """The two most relevant versions: open ones first (by due date), then recently closed ones."""
+    if not scope.project_ids:
+        return []
+    done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
+    ver_stmt = (
+        select(
+            Version,
+            Project.key.label("project_key"),
+            func.count(Issue.id).label("total"),
+            func.count(Issue.id).filter(Issue.status_id.in_(done_sub)).label("closed_count"),
+        )
+        .join(Project, Project.id == Version.project_id)
+        .outerjoin(Issue, and_(Issue.fixed_version_id == Version.id, _visible(scope.issue_visibility)))
+        .where(Version.project_id.in_(scope.project_ids))
+        .group_by(Version.id, Project.key)
+        .order_by((Version.status == "open").desc(), Version.effective_date.asc().nullslast())
+        .limit(4)
     )
+    open_versions: list[dict] = []
+    closed_versions: list[dict] = []
+    for version, project_key, total, closed in (await db.execute(ver_stmt)).all():
+        closed = int(closed or 0)
+        total = int(total or 0)
+        v_dict: dict = {
+            "id": version.id,
+            "name": version.name,
+            "status": version.status,
+            "due_date": format_date(version.effective_date, "MMMd") if version.effective_date else None,
+            "progress": int(closed / total * 100) if total > 0 else 0,
+            "open_count": total - closed,
+            "closed_count": closed,
+            "total_count": total,
+            "project_key": project_key,
+        }
+        if version.status == "open" and version.effective_date:
+            v_dict["days_left"] = (version.effective_date - today).days
+        (open_versions if version.status == "open" else closed_versions).append(v_dict)
+    return (open_versions + closed_versions)[:2]
+
+
+async def _active_sprints(db: AsyncSession, scope: dash.DashboardScope, today: datetime.date) -> list[dict]:
+    """Active sprints across the reader's projects, with the progress of the issues they may see."""
+    if not scope.project_ids:
+        return []
+    done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
+    sprint_stmt = (
+        select(
+            Sprint,
+            Project.key.label("project_key"),
+            Project.name.label("project_name"),
+            func.count(Issue.id).label("total"),
+            func.count(Issue.id).filter(Issue.status_id.in_(done_sub)).label("closed_count"),
+        )
+        .join(Project, Project.id == Sprint.project_id)
+        .outerjoin(Issue, and_(Issue.sprint_id == Sprint.id, _visible(scope.issue_visibility)))
+        .where(Sprint.project_id.in_(scope.project_ids), Sprint.status == "active")
+        .group_by(Sprint.id, Project.key, Project.name)
+        .order_by(Sprint.start_date.asc().nullslast())
+        .limit(5)
+    )
+    sprints: list[dict] = []
+    for sprint, project_key, project_name, total, closed in (await db.execute(sprint_stmt)).all():
+        closed = int(closed or 0)
+        total = int(total or 0)
+        days_total = days_remaining = None
+        if sprint.start_date and sprint.end_date:
+            days_total = (sprint.end_date - sprint.start_date).days
+            days_remaining = max(0, (sprint.end_date - today).days)
+        sprints.append(
+            {
+                "id": sprint.id,
+                "name": sprint.name,
+                "project_key": project_key,
+                "project_name": project_name,
+                "start_date": format_date(sprint.start_date, "MMMd") if sprint.start_date else None,
+                "end_date": format_date(sprint.end_date, "MMMd") if sprint.end_date else None,
+                "days_total": days_total,
+                "days_remaining": days_remaining,
+                "total": total,
+                "closed": closed,
+                "progress": int(closed / total * 100) if total > 0 else 0,
+            }
+        )
+    return sprints
+
+
+async def _recent_wiki(db: AsyncSession, scope: dash.DashboardScope) -> list[dict]:
+    """The three most recently updated wiki pages in the projects whose wiki the reader may read."""
+    if not scope.wiki_project_ids:
+        return []
+    latest_version = (
+        select(func.max(WikiContent.version))
+        .where(WikiContent.page_id == WikiPage.id)
+        .correlate(WikiPage)
+        .scalar_subquery()
+    )
+    wiki_stmt = (
+        select(
+            WikiPage.title,
+            WikiPage.slug,
+            WikiPage.updated_at,
+            Project.key.label("project_key"),
+            Project.name.label("project_name"),
+            User.display_name.label("author_name"),
+            User.login.label("author_login"),
+            User.is_service_account.label("author_is_agent"),
+        )
+        .join(Wiki, WikiPage.wiki_id == Wiki.id)
+        .join(Project, Wiki.project_id == Project.id)
+        .outerjoin(WikiContent, (WikiContent.page_id == WikiPage.id) & (WikiContent.version == latest_version))
+        .outerjoin(User, WikiContent.author_id == User.id)
+        .where(WikiPage.deleted_at.is_(None), Wiki.project_id.in_(scope.wiki_project_ids))
+        .order_by(WikiPage.updated_at.desc())
+        .limit(3)
+    )
+    return [
+        {
+            "title": r.title,
+            "slug": r.slug,
+            "project_key": r.project_key,
+            "project_name": r.project_name,
+            "updated_at": r.updated_at,
+            "author_name": (r.author_login if r.author_is_agent else r.author_name) or "",
+        }
+        for r in (await db.execute(wiki_stmt)).all()
+    ]
 
 
 @router.get("/my/notifications/", response_class=HTMLResponse)
@@ -515,6 +494,7 @@ async def notifications_page(
             "user": user,
             "active_page": "notifications",
             "notifications": notifications,
+            "notification_actors": await _notification_actors(db, notifications),
             "total": total,
             "unread_count": unread_count,
             "unread_only": unread_only,

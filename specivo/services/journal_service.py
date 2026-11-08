@@ -15,7 +15,8 @@ from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import ATTACHMENT_DETAIL, Journal, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, SPRINT_EVENTS, Journal, JournalDetail
+from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.webhook_events import emit_issue_commented
@@ -35,6 +36,8 @@ _JOURNALIZED_ATTRS: list[tuple[str, str]] = [
     ("start_date", "start_date"),
     ("due_date", "due_date"),
     ("estimated_hours", "estimated_hours"),
+    ("original_estimate", "original_estimate"),
+    ("remaining_estimate", "remaining_estimate"),
     ("done_ratio", "done_ratio"),
     ("is_private", "is_private"),
     ("fixed_version_id", "fixed_version_id"),
@@ -153,9 +156,7 @@ class JournalService:
             new_str = _to_str(new_raw)
 
             if old_str != new_str:
-                details.append(
-                    ("attr", prop_key, _truncate_for_storage(old_str), _truncate_for_storage(new_str))
-                )
+                details.append(("attr", prop_key, _truncate_for_storage(old_str), _truncate_for_storage(new_str)))
 
         if not details and not notes:
             return None
@@ -387,6 +388,51 @@ class JournalService:
             new_value=pattern_name,
         )
         session.add(detail)
+        return journal
+
+    async def record_sprint_event(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        sprint: Sprint,
+        event: str,
+        api_key_id: int | None = None,
+    ) -> Journal:
+        """Record that the sprint *issue* is in was started or completed.
+
+        *event* is ``"started"`` or ``"completed"`` and becomes the detail's
+        ``prop_key``. Renders in the activity feed as a "Sprint «name» started"
+        (or completed) line linking to the sprint. ``old_value`` carries the
+        sprint id and ``new_value`` its name when the event happened; readers
+        name the sprint from its id (``activity_lookups``), so the stored name
+        is a record, not what is shown.
+        """
+        if event not in SPRINT_EVENTS:
+            raise ValueError(f"Unknown sprint event: {event!r}")
+        sequence = await self._next_sequence(session, issue.id)
+        journal = Journal(
+            issue_id=issue.id,
+            wiki_page_id=None,
+            project_id=issue.project_id,
+            user_id=user.id,
+            notes=None,
+            is_private=False,
+            sequence=sequence,
+            api_key_id=api_key_id,
+        )
+        session.add(journal)
+        await session.flush()
+
+        session.add(
+            JournalDetail(
+                journal_id=journal.id,
+                property=SPRINT_DETAIL,
+                prop_key=event,
+                old_value=str(sprint.id),
+                new_value=sprint.name,
+            )
+        )
         return journal
 
     async def add_comment(

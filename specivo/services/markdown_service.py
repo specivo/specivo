@@ -17,8 +17,9 @@ Pipeline:
              (the browser draws the diagram, see frontend/js/modules/mermaid.js)
            + wiki link inline pattern: [[Page]] -> <a href="/projects/X/wiki/page/">
            + issue ref inline pattern: PROJ-123 -> <a href="/issue/PROJ-123/">
-             (both on parsed text only, so code and raw HTML blocks are never
-             touched; issue refs stay out of link text too)
+           + bare URL inline pattern: https://x.example/a -> <a href="https://x.example/a">
+             (all three on parsed text only, so code and raw HTML blocks are
+             never touched; issue refs and URLs stay out of link text too)
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
@@ -33,7 +34,8 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import unquote
+from dataclasses import dataclass
+from urllib.parse import unquote, urlsplit
 from xml.etree.ElementTree import Element
 
 import markdown as _md
@@ -42,9 +44,11 @@ import nh3
 from markdown.extensions import Extension  # type: ignore[import-untyped]
 from markdown.extensions.attr_list import get_attrs_and_remainder  # type: ignore[import-untyped]
 from markdown.extensions.fenced_code import FencedBlockPreprocessor  # type: ignore[import-untyped]
+from markdown.extensions.tables import TableExtension, TableProcessor  # type: ignore[import-untyped]
 from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
 from markdown.preprocessors import Preprocessor  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
+from markdown.util import HTML_PLACEHOLDER_RE, AtomicString  # type: ignore[import-untyped]
 
 from specivo.core.i18n import gettext as _
 from specivo.services import markdown_budget
@@ -164,7 +168,186 @@ class _MermaidExtension(Extension):
         md.preprocessors.register(_MermaidPreprocessor(md), "mermaid_fences", 26)
 
 
-_MD_EXTENSIONS: list = ["fenced_code", "tables", "toc", "codehilite", _MermaidExtension()]
+class _WikiTableProcessor(TableProcessor):
+    """The ``tables`` processor, reading ``[[Page|label]]`` as one cell.
+
+    Wiki links are made inline, after the table has split its rows, so the
+    ``|`` between a link's target and label would otherwise end the cell. It
+    is passed over as a ``|`` in a code span is.
+    """
+
+    def _split(self, row: str) -> list[str]:
+        # Same length, so each cell maps back to its span of the row as written.
+        masked = _WIKI_LINK_RE.sub(lambda m: m.group(0).replace("|", "\x00"), row)
+        cells = []
+        pos = 0
+        for cell in super()._split(masked):
+            cells.append(row[pos : pos + len(cell)])
+            pos += len(cell) + 1
+        return cells
+
+
+class _WikiTableExtension(TableExtension):
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        super().extendMarkdown(md)
+        # Replaces the stock processor under its own name and priority.
+        md.parser.blockprocessors.register(_WikiTableProcessor(md.parser, self.getConfigs()), "table", 75)
+
+
+# A bare URL: ``http://`` or ``https://``, ``www.`` or ``mailto:``, at the start
+# of the text or after a blank, an opening bracket or quote, an emphasis marker
+# or an inline element (whose placeholder ends in ``\x03``), and running to the
+# next blank, ``<``, ``>`` or placeholder. One scan to the end of the run per
+# match, so linear; :func:`_trim_bare_url` then cuts it to what is linked.
+BARE_URL_PATTERN = r"(?<![^\s(\[{*_~\"'\x03])((?:https?://|www\.|mailto:)[^\s<>\x02\x03]+)"
+# Host of an http(s) or www URL: dot-separated labels and an optional port.
+# No userinfo (``user:pass@``), so a link never hides a different host.
+_URL_HOST_RE = re.compile(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.?(?::\d{1,5})?")
+_MAILTO_RE = re.compile(r"mailto:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+# Characters a URL may not end in: they read as the sentence's punctuation.
+_URL_TRAILING_PUNCTUATION = "?!.,:;*_~'\""
+# An entity reference (``&amp;``) at the end of a URL is text after it.
+_URL_TRAILING_ENTITY_RE = re.compile(r"&[A-Za-z0-9]+;$")
+# A raw inline ``<a ...>`` or ``</a>`` tag, as Python-Markdown stashes it.
+_RAW_ANCHOR_RE = re.compile(r"<(/?)a(?:\s[^>]*)?>", re.IGNORECASE)
+_INLINE_PLACEHOLDER_PREFIX = "\x02klzzwxh:"
+
+
+def _trim_bare_url(url: str) -> str:
+    """Cut what GFM leaves out of an autolink off the end of *url*.
+
+    Trailing punctuation (``.``, ``,``, ``?``, quotes, ...) and an entity
+    reference are dropped, and so is a closing ``)`` without a matching ``(``
+    in the URL. Each step removes at least one character, so this is linear.
+    """
+    opened = url.count("(")
+    closed = url.count(")")
+    while url:
+        last = url[-1]
+        if last == ";" and (entity := _URL_TRAILING_ENTITY_RE.search(url[-33:])):
+            url = url[: len(url) - len(entity.group())]
+        elif last in _URL_TRAILING_PUNCTUATION:
+            url = url[:-1]
+        elif last == ")" and closed > opened:
+            url = url[:-1]
+            closed -= 1
+        else:
+            break
+    return url
+
+
+def bare_url_href(url: str) -> str | None:
+    """Return the ``href`` for bare *url* (already trimmed), or None if it is not linked.
+
+    ``www.`` gets an ``http://`` scheme. An http(s) or www URL needs a host
+    (labels and an optional port, no user info); a ``mailto:`` URL needs an
+    address with a domain.
+    """
+    if url.startswith("mailto:"):
+        return url if _MAILTO_RE.fullmatch(url) else None
+    if url.startswith("www."):
+        href = "http://" + url
+        rest = url
+    else:
+        href = url
+        rest = url.split("://", 1)[1]
+    host = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if not host or not _URL_HOST_RE.fullmatch(host):
+        return None
+    if url.startswith("www.") and "." not in host[len("www.") :].strip("."):
+        return None
+    return href
+
+
+class _BareUrlInlineProcessor(InlineProcessor):
+    """Link bare ``https://``, ``http://``, ``www.`` and ``mailto:`` URLs in parsed text.
+
+    An inline pattern only sees text Python-Markdown parses as Markdown, so
+    code spans, fenced and indented code blocks and raw HTML blocks keep their
+    URLs as written. ``ANCESTOR_EXCLUDES`` keeps it out of the text of a
+    Markdown link or ``<url>`` autolink, and a URL between a raw inline
+    ``<a ...>`` and its ``</a>`` is left alone too. Only http, https and
+    mailto targets are made; the sanitizer enforces the same list.
+    """
+
+    ANCESTOR_EXCLUDES = ("a",)
+
+    def __init__(self, md: _md.Markdown) -> None:
+        super().__init__(BARE_URL_PATTERN, md)
+        # Whether the text right after an inline placeholder is inside a raw
+        # ``<a>``, by placeholder id. Each placeholder is looked at once, so
+        # the checks of all the URLs in a text add up to one pass over it.
+        self._inside_anchor_after: dict[str, bool] = {}
+        self._stash_seen: object = None
+
+    def _raw_anchor_tag(self, node: object) -> bool | None:
+        """True for a stashed raw ``<a ...>``, False for ``</a>``, None for anything else."""
+        if not isinstance(node, str):
+            return None
+        m = HTML_PLACEHOLDER_RE.fullmatch(node)
+        if m is None:
+            return None
+        index = int(m.group(1))
+        blocks = self.md.htmlStash.rawHtmlBlocks
+        if index >= len(blocks):
+            return None
+        tag = _RAW_ANCHOR_RE.fullmatch(str(blocks[index]).strip())
+        return None if tag is None else not tag.group(1)
+
+    def _inside_raw_anchor(self, data: str, pos: int) -> bool:
+        """Whether *pos* in *data* follows a raw inline ``<a ...>`` not closed before it."""
+        stash = self.md.treeprocessors["inline"].stashed_nodes
+        if stash is not self._stash_seen:
+            self._stash_seen = stash
+            self._inside_anchor_after.clear()
+        known = self._inside_anchor_after
+        unseen: list[str] = []
+        inside = False
+        end = pos
+        while (start := data.rfind(_INLINE_PLACEHOLDER_PREFIX, 0, end)) >= 0:
+            close = data.find("\x03", start, end)
+            key = data[start + len(_INLINE_PLACEHOLDER_PREFIX) : close] if close >= 0 else ""
+            if key in known:
+                inside = known[key]
+                break
+            unseen.append(key)
+            end = start
+        for key in reversed(unseen):
+            tag = self._raw_anchor_tag(stash.get(key))
+            if tag is not None:
+                inside = tag
+            known[key] = inside
+        return inside
+
+    def handleMatch(  # noqa: N802 - Python-Markdown API
+        self, m: re.Match[str], data: str
+    ) -> tuple[Element | None, int | None, int | None]:
+        url = _trim_bare_url(m.group(1))
+        href = bare_url_href(url) if url else None
+        if href is None or self._inside_raw_anchor(data, m.start(1)):
+            return None, None, None
+        element = Element("a", {"href": href})
+        # Atomic, so issue refs, wiki links and emphasis are not looked for in it.
+        element.text = AtomicString(url)
+        return element, m.start(1), m.start(1) + len(url)
+
+
+class _BareUrlExtension(Extension):
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below links (160), ``<url>`` autolinks (120), inline HTML (90) and
+        # entities (80), so those are settled first; above emphasis (60), so
+        # ``*`` and ``_`` in a URL stay part of it.
+        md.inlinePatterns.register(_BareUrlInlineProcessor(md), "bare_urls", 75)
+
+
+_MD_EXTENSIONS: list = [
+    "fenced_code",
+    _WikiTableExtension(),
+    "toc",
+    "codehilite",
+    _MermaidExtension(),
+    _BareUrlExtension(),
+]
 _MD_EXTENSION_CONFIGS = {
     "codehilite": {"css_class": "codehilite", "guess_lang": False},
 }
@@ -350,10 +533,17 @@ class _WikiLinkInlineProcessor(InlineProcessor):
     The slug is made from the target as the author wrote it.
     """
 
-    def __init__(self, md: _md.Markdown, project_key: str, found: list[tuple[str, str | None]] | None = None) -> None:
+    def __init__(
+        self,
+        md: _md.Markdown,
+        project_key: str,
+        found: list[tuple[str, str | None]] | None = None,
+        made: set[int] | None = None,
+    ) -> None:
         super().__init__(_WIKI_LINK_RE.pattern, md)
         self.project_key = project_key
         self.found = found
+        self.made = made
 
     def _written(self, text: str) -> str:
         """Return *text* with its escapes and code spans read back as the author typed them."""
@@ -371,47 +561,184 @@ class _WikiLinkInlineProcessor(InlineProcessor):
         # As entities, so the entity pattern shows them as written rather than
         # the inline HTML pattern reading a tag.
         element.text = label.replace("<", "&lt;").replace(">", "&gt;")
+        if self.made is not None:
+            self.made.add(id(element))
         return element, m.start(0), m.end(0)
 
 
 class _WikiLinkExtension(Extension):
-    def __init__(self, project_key: str, found: list[tuple[str, str | None]] | None = None) -> None:
+    def __init__(
+        self,
+        project_key: str,
+        found: list[tuple[str, str | None]] | None = None,
+        made: set[int] | None = None,
+    ) -> None:
         super().__init__()
         self.project_key = project_key
         self.found = found
+        self.made = made
 
     def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
         # Below backticks (190) and escapes (180), so code spans and escaped
         # brackets are settled first; above references (170) and links (160),
         # which would otherwise read ``[[Page]]`` as bracketed text.
-        md.inlinePatterns.register(_WikiLinkInlineProcessor(md, self.project_key, self.found), "wiki_links", 175)
+        md.inlinePatterns.register(
+            _WikiLinkInlineProcessor(md, self.project_key, self.found, self.made), "wiki_links", 175
+        )
 
 
-def find_wiki_links(text: str) -> list[tuple[str, str | None]]:
-    """Return the ``(target, label or None)`` of each ``[[Page]]`` link the renderer makes of *text*, in order.
+@dataclass(frozen=True, slots=True)
+class FoundLink:
+    """A link :func:`extract_links` found in a text.
 
-    Found by the parser, as rendering finds them, so a link written in code or
-    in a raw HTML block is not one. Text the renderer would show as plain text
-    (over the render budget, see :func:`render_hazard`), or whose parse runs
-    out of time, is scanned as written instead, code and all.
+    ``kind`` is ``"wiki"`` (``target`` is a page slug, in ``project_key``'s
+    wiki, or the text's own wiki when ``project_key`` is None), ``"issue"``
+    (``target`` is ``KEY-123``), ``"file"`` (``target`` is a bare attachment
+    filename) or ``"attachment"`` (``target`` is an attachment id).
     """
-    if not text or "[[" not in text:
+
+    kind: str
+    target: str
+    label: str | None = None
+    project_key: str | None = None
+
+
+# Paths of this instance a link may point at. The wiki route's literal
+# segments (``new``, ``pages``, ``trash``) are pages of the wiki, not slugs.
+_ISSUE_PATH_RE = re.compile(r"^/(?:issue|projects/[A-Za-z0-9_-]+/issues)/([A-Z][A-Z0-9]+-\d+)(?:/|$)")
+_WIKI_PATH_RE = re.compile(r"^/projects/([A-Za-z0-9_-]+)/wiki/([A-Za-z0-9-]+)(?:/|$)")
+_ATTACHMENT_PATH_RE = re.compile(r"^/attachments/(\d+)(?:/|$)")
+_WIKI_RESERVED_SEGMENTS = frozenset({"new", "pages", "trash", "graph"})
+
+
+def _origin(url: str) -> str | None:
+    parts = urlsplit(url)
+    if parts.scheme not in {"http", "https"} or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}".lower()
+
+
+def classify_link_target(target: str, instance_origin: str | None = None) -> FoundLink | None:
+    """Return what an ``href``/``src`` *target* points at in this instance, or None.
+
+    A bare filename names an attachment. Otherwise the target must be a path
+    on this instance: relative (``/issue/ACME-1/``) or absolute on
+    *instance_origin* (``https://tracker.example.com/issue/ACME-1/``), and
+    point at an issue, a wiki page or an attachment.
+    """
+    filename = _attachment_filename(target)
+    if filename is not None:
+        return FoundLink("file", filename)
+    parts = urlsplit(target.strip())
+    if parts.scheme or parts.netloc:
+        origin = _origin(target.strip())
+        if origin is None or instance_origin is None or origin != _origin(instance_origin):
+            return None
+    path = unquote(parts.path)
+    if m := _ISSUE_PATH_RE.match(path):
+        return FoundLink("issue", m.group(1))
+    if m := _WIKI_PATH_RE.match(path):
+        if m.group(2).lower() in _WIKI_RESERVED_SEGMENTS:
+            return None
+        return FoundLink("wiki", m.group(2).lower(), project_key=m.group(1).upper())
+    if m := _ATTACHMENT_PATH_RE.match(path):
+        return FoundLink("attachment", m.group(1))
+    return None
+
+
+class _LinkCollector(Treeprocessor):
+    """Record every ``<a href>`` and ``<img src>`` the parse made, except ``[[...]]`` links (found apart)."""
+
+    def __init__(self, md: _md.Markdown, found: list[FoundLink], skip: set[int], instance_origin: str | None) -> None:
+        super().__init__(md)
+        self.found = found
+        self.skip = skip
+        self.instance_origin = instance_origin
+
+    def run(self, root: Element) -> None:
+        for element in root.iter():
+            attribute = {"img": "src", "a": "href"}.get(element.tag)
+            if attribute is None or id(element) in self.skip:
+                continue
+            target = element.get(attribute)
+            if not target:
+                continue
+            link = classify_link_target(target, self.instance_origin)
+            if link is None:
+                continue
+            label = element.get("alt") if element.tag == "img" else "".join(element.itertext())
+            label = (label or "").strip() or None
+            if label in (link.target, target):
+                label = None
+            self.found.append(FoundLink(link.kind, link.target, label=label, project_key=link.project_key))
+
+
+class _LinkCollectorExtension(Extension):
+    def __init__(self, found: list[FoundLink], skip: set[int], instance_origin: str | None) -> None:
+        super().__init__()
+        self.found = found
+        self.skip = skip
+        self.instance_origin = instance_origin
+
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below "inline" (20), so wiki links and issue refs are elements by now.
+        md.treeprocessors.register(_LinkCollector(md, self.found, self.skip, self.instance_origin), "link_collector", 4)
+
+
+def extract_links(text: str | None, instance_origin: str | None = None) -> list[FoundLink]:
+    """Return the links the renderer makes of *text*, in order, duplicates included.
+
+    Parsed with the renderer's own wiki-link and issue-ref patterns, so a link
+    in a code span or block, in a raw HTML block or (for issue refs) in link
+    text is not one, exactly as on the page. ``[[Page]]`` targets come back as
+    slugs, ``KEY-123`` tokens and links to ``/issue/KEY-123/`` as issue refs,
+    links to a wiki page or an attachment of this instance (relative, or
+    absolute on *instance_origin*) as such, and bare-filename link and image
+    targets as attachment filenames. A bare URL counts as the link the
+    renderer makes of it, so ``https://<instance>/issue/ACME-1/`` written as
+    plain text is a link to ACME-1.
+
+    Text the renderer would show as plain text (over the render budget, see
+    :func:`render_hazard`), or whose parse runs out of time, is scanned as
+    written instead for ``[[...]]`` links and ``KEY-123`` tokens, code and all.
+    """
+    if not text:
         return []
     if render_hazard(text, count_issue_ref_candidates(text)) is None:
-        found: list[tuple[str, str | None]] = []
+        wiki_found: list[tuple[str, str | None]] = []
+        found: list[FoundLink] = []
+        made: set[int] = set()
         started = markdown_budget._cpu_clock()
         try:
             _md.markdown(
                 text,
-                extensions=["fenced_code", "tables", _WikiLinkExtension("", found), RenderDeadline(render_allowance())],
+                extensions=[
+                    "fenced_code",
+                    _WikiTableExtension(),
+                    _WikiLinkExtension("", wiki_found, made),
+                    _IssueRefExtension(None),
+                    _BareUrlExtension(),
+                    _LinkCollectorExtension(found, made, instance_origin),
+                    RenderDeadline(render_allowance()),
+                ],
             )
         except (RenderDeadlineError, RecursionError):
             pass
         else:
-            return found
+            wiki = [FoundLink("wiki", _wiki_slugify(target), label=label) for target, label in wiki_found]
+            return wiki + found
         finally:
             charge_render(markdown_budget._cpu_clock() - started)
-    return [(m.group(1).strip(), m.group(2).strip() if m.group(2) else None) for m in _WIKI_LINK_RE.finditer(text)]
+    links = [
+        FoundLink(
+            "wiki",
+            _wiki_slugify(m.group(1).strip()),
+            label=m.group(2).strip() if m.group(2) else None,
+        )
+        for m in _WIKI_LINK_RE.finditer(text)
+    ]
+    links.extend(FoundLink("issue", m.group(1)) for m in _ISSUE_REF_RE.finditer(text))
+    return links
 
 
 def render_wiki_markdown(

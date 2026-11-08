@@ -7,9 +7,16 @@
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-xl); }
 .form-hint { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); }
 .form-label { display: block; font-size: var(--sp-font-size-sm); font-weight: 500; color: var(--sp-text-primary); margin-bottom: var(--sp-space-xs); }
-.form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-base); color: var(--sp-text-primary); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.form-input { width: 100%; min-height: var(--sp-control-height); padding: 6px var(--sp-control-padding-x); line-height: 1.5; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-base); color: var(--sp-text-primary); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .form-input:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
 .form-input::placeholder { color: var(--sp-text-muted); }
+/* A field that failed validation: aria-invalid="true" is the one switch, so
+   assistive tech and the red border never disagree. The message under it uses
+   .form-error and is linked to the field with aria-describedby. */
+.form-input[aria-invalid="true"] { border-color: var(--sp-danger); }
+.form-input[aria-invalid="true"]:focus { border-color: var(--sp-danger); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2); }
+.form-error { display: flex; align-items: center; gap: var(--sp-space-xs); margin-top: var(--sp-space-xs); font-size: var(--sp-font-size-xs); color: var(--sp-danger); }
+.form-error svg { width: 14px; height: 14px; flex-shrink: 0; }
 .form-checkbox { display: flex; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); cursor: pointer; }
 .form-checkbox input { accent-color: var(--sp-accent); width: 15px; height: 15px; }
 .form-link { font-size: var(--sp-font-size-sm); color: var(--sp-text-link); }
@@ -31,3 +38,17 @@
 .form-actions .cancel-link:hover { color: var(--sp-text-primary); }
 .form-divider { height: 1px; background: var(--sp-border); margin: var(--sp-space-xl) 0; }
 
+
+/* Similar issues under the subject (new issue form only) */
+.sp-similar-issues-panel { margin-top: var(--sp-space-sm); padding: var(--sp-space-sm) var(--sp-space-md); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-input); }
+.sp-similar-issues-title { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-secondary); margin: 0 0 var(--sp-space-xs); }
+.sp-similar-issues-list { list-style: none; margin: 0; padding: 0; }
+.sp-similar-issues-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-xs) var(--sp-space-sm); padding: var(--sp-space-xs) 0; border-top: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm); }
+.sp-similar-issues-row:first-child { border-top: none; }
+.sp-similar-issues-link { flex: 1 1 16rem; min-width: 0; color: var(--sp-text-primary); text-decoration: none; overflow-wrap: anywhere; }
+.sp-similar-issues-link:hover .sp-similar-issues-subject { text-decoration: underline; }
+.sp-similar-issues-link:focus-visible, .sp-similar-issues-mark:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
+.sp-similar-issues-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-link); margin-right: var(--sp-space-xs); white-space: nowrap; }
+.sp-similar-issues-status { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: 0 var(--sp-space-xs); white-space: nowrap; }
+.sp-similar-issues-status-closed { color: var(--sp-status-closed); border-style: dashed; }
+.sp-similar-issues-mark { font-size: var(--sp-font-size-xs); }

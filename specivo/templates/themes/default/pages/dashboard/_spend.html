@@ -1,0 +1,111 @@
+{# AI spend and agent time for one period, from the AI spend report.
+   Context: spend (specivo.web.pages.dashboard.spend_context), user.
+   Swapped whole by the period switch (/partials/dashboard/spend/). #}
+{% from "pages/ai_usage/_macros.html" import money_total %}
+{% macro period_label(p) -%}
+{% if p == "today" %}{% trans %}Today{% endtrans %}{% elif p == "7d" %}{% trans %}7 days{% endtrans %}{% else %}{% trans %}This month{% endtrans %}{% endif %}
+{%- endmacro %}
+{% macro breakdown(title, data, url) -%}
+<div class="sp-dash-breakdown">
+  <div class="sp-dash-breakdown-head">
+    <h3>{{ title }}</h3>
+    <span class="sp-dash-muted">{% trans %}A–Z{% endtrans %}</span>
+  </div>
+  {% if data["items"] %}
+  <ul class="sp-dash-breakdown-list">
+    {% for item in data["items"] %}
+    <li>
+      <div class="sp-dash-breakdown-row">
+        <span class="sp-dash-breakdown-label{{ ' sp-dash-muted' if item.kind != 'value' else '' }}">{% if item.url %}<a href="{{ item.url }}">{{ item.label }}</a>{% else %}{{ item.label }}{% endif %}</span>
+        <span class="sp-dash-num">{% if item.spend %}{{ item.spend.total }}{% endif %}{% if item.unpriced %} <span class="sp-dash-text-warning">{% trans count=item.unpriced %}+ {{ count }} unpriced{% pluralize %}+ {{ count }} unpriced{% endtrans %}</span>{% endif %}</span>
+      </div>
+      <progress class="sp-dash-bar sp-dash-bar--thin" max="100" value="{{ item.percent }}" aria-hidden="true"></progress>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if data.more %}
+  {% if url %}<a class="sp-dash-more-link" href="{{ url }}">{% trans count=data.more %}and {{ count }} more in the report{% pluralize %}and {{ count }} more in the report{% endtrans %} &rarr;</a>
+  {% else %}<span class="sp-dash-more-link sp-dash-muted">{% trans count=data.more %}and {{ count }} more{% pluralize %}and {{ count }} more{% endtrans %}</span>{% endif %}
+  {% endif %}
+  {% else %}
+  <p class="sp-dash-muted sp-dash-breakdown-empty">{% trans %}Nothing in this period.{% endtrans %}</p>
+  {% endif %}
+</div>
+{%- endmacro %}
+<section class="card sp-dash-card" id="sp-dash-spend" aria-labelledby="sp-dash-spend-title" data-testid="dash-spend" data-period="{{ spend.period }}">
+  <div class="sp-dash-card-head sp-dash-card-head--wrap">
+    <div>
+      <h2 id="sp-dash-spend-title">{% trans %}AI spend & agent time{% endtrans %}</h2>
+      <p class="sp-dash-card-sub">
+        {% if spend.first == spend.last %}{{ spend.first | localdate('yMMMd') }}{% else %}{{ spend.first | localdate('MMMd') }} &ndash; {{ spend.last | localdate('yMMMd') }}{% endif %}
+        &middot; {% trans currency=spend.currency %}Amounts in {{ currency }}{% endtrans %} &middot; {% trans %}UTC days{% endtrans %}
+      </p>
+    </div>
+    <div class="sp-dash-segmented" role="group" aria-label="{{ _('Reporting period') }}">
+      {% for p in spend.periods %}
+      <a class="sp-dash-segment" role="button" href="/?period={{ p }}#sp-dash-spend"
+         hx-get="/partials/dashboard/spend/?period={{ p }}" hx-target="#sp-dash-spend" hx-swap="outerHTML"
+         aria-pressed="{{ 'true' if p == spend.period else 'false' }}" data-testid="dash-period-{{ p }}">{{ period_label(p) }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="sp-dash-metrics">
+    <div class="sp-dash-metric">
+      <span class="sp-dash-metric-label">{% trans %}Actual spend{% endtrans %}</span>
+      <span class="sp-dash-metric-value" data-testid="dash-spend-actual">{% if spend.actual %}{{ money_total(spend.actual) }}{% endif %}</span>
+      <span class="sp-dash-metric-note">
+        {% if spend.seats %}{% trans seats=spend.seats, marginal=spend.marginal %}{{ seats }} seats + {{ marginal }} pay-per-use{% endtrans %}
+        {% elif spend.seat_shown %}{% trans %}Pay-per-use plus seat cost{% endtrans %}
+        {% else %}{% trans %}Pay-per-use charges{% endtrans %}{% endif %}
+      </span>
+    </div>
+    <div class="sp-dash-metric">
+      <span class="sp-dash-metric-label">{% trans %}API-equivalent value{% endtrans %}</span>
+      <span class="sp-dash-metric-value" data-testid="dash-spend-api">{% if spend.api_equivalent %}{{ money_total(spend.api_equivalent) }}{% endif %}</span>
+      <span class="sp-dash-metric-note">{% trans %}Estimate at pay-per-use prices, not a bill{% endtrans %}</span>
+    </div>
+    {% if spend.leverage %}
+    <div class="sp-dash-metric">
+      <span class="sp-dash-metric-label">{% trans %}Leverage{% endtrans %}</span>
+      <span class="sp-dash-metric-value sp-aiu-amount" data-testid="dash-spend-leverage">{{ spend.leverage }}</span>
+      <span class="sp-dash-metric-note">{% trans %}On subscriptions: their API-equivalent value per unit of seat cost{% endtrans %}</span>
+    </div>
+    {% endif %}
+    <div class="sp-dash-metric">
+      <span class="sp-dash-metric-label">{% trans %}Tokens{% endtrans %}</span>
+      <span class="sp-dash-metric-value sp-aiu-amount" data-testid="dash-spend-tokens">{{ spend.tokens }}</span>
+      {% set t = spend.tokens_detail %}
+      <span class="sp-dash-metric-note">{% trans input=t.input, output=t.output, write=t.cache_write, read=t.cache_read, reasoning=t.reasoning %}{{ input }} in · {{ output }} out · {{ write }} cache write · {{ read }} cache read · {{ reasoning }} reasoning{% endtrans %}</span>
+    </div>
+    <div class="sp-dash-metric">
+      <span class="sp-dash-metric-label">{% trans %}Agent time logged{% endtrans %}</span>
+      <span class="sp-dash-metric-value sp-aiu-amount" data-testid="dash-spend-agent-hours">{% trans hours=spend.agent_hours %}{{ hours }} h{% endtrans %}</span>
+      <span class="sp-dash-metric-note" data-testid="dash-spend-people-hours">{% trans hours=spend.people_hours %}People: {{ hours }} h{% endtrans %}</span>
+    </div>
+  </div>
+
+  {% if spend.unpriced %}
+  <p class="sp-dash-notes">
+    <span class="sp-dash-text-warning" data-testid="dash-spend-unpriced">{% trans count=spend.unpriced %}{{ count }} usage entry has no known price; it is not counted as zero.{% pluralize %}{{ count }} usage entries have no known price; they are not counted as zero.{% endtrans %}</span>
+  </p>
+  {% endif %}
+
+  {% if spend.entries or spend.seats %}
+  <div class="sp-dash-breakdowns">
+    {{ breakdown(_('By project'), spend.by_project, spend.report_url) }}
+    {{ breakdown(_('By model'), spend.by_model, spend.model_report_url) }}
+  </div>
+  {% else %}
+  <p class="sp-dash-empty" data-testid="dash-spend-empty">{% trans %}No AI usage recorded in this period.{% endtrans %}</p>
+  {% endif %}
+
+  <div class="sp-dash-card-foot sp-dash-card-foot--split">
+    <span>
+      {% if spend.managed is none %}{% trans %}All AI usage on this instance, including subscription fees no usage carries. Agent time is time logged by service accounts.{% endtrans %}
+      {% else %}{% trans count=spend.managed %}AI usage and hours of the project where you see everyone's AI usage. Agent time is time logged by service accounts.{% pluralize %}AI usage and hours of the {{ count }} projects where you see everyone's AI usage. Agent time is time logged by service accounts.{% endtrans %}{% endif %}
+      {% if spend.seat_hidden %}<span data-testid="dash-spend-seat-hidden">{% trans %}Seat cost is left out: some entries of these projects are hidden from you.{% endtrans %}</span>{% endif %}
+    </span>
+    {% if spend.report_url %}<a href="{{ spend.report_url }}" data-testid="dash-spend-report">{% trans %}Full spend report{% endtrans %} &rarr;</a>{% endif %}
+  </div>
+</section>

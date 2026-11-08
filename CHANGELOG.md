@@ -3,6 +3,72 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
+## [0.13.0] - 2026-11-08
+
+### Added
+- Added AI usage tracking: entries per person, project and issue, logged by hand, over the REST API and MCP, or sent by the open-source `ai-usage` reporter from Claude Code, Codex, Gemini CLI and OpenCode
+- Added automatic attribution of reported usage to the issue the agent worked on, from its own Specivo calls, commits, branch names or the repository; long sessions are split per issue
+- Added AI spend reports for projects and the whole instance, with seat cost spread over usage, API-equivalent value, currency conversion, charts and CSV
+- Added a drill-down from company to project, person, feature and sessions, and a "Spend by person" view, to the AI spend reports
+- Added an AI usage tab on issues showing what the feature cost, sub-issues included, by person, tool, model and over time, with its sessions
+- Added My AI usage with charts of value, spend, tokens and subscription leverage
+- Added AI model prices with a price history, cache and long-context rates, a bundled list from LiteLLM, past periods and recompute of logged usage
+- Added personal AI subscriptions with plan presets, used to price subscription usage, also over MCP with `specivo_ai_subscriptions`
+- Added currencies with a reporting currency, exchange rates with an optional ECB feed, and billing rates in any currency
+- Added the MCP tools `specivo_log_ai_usage`, `specivo_ai_usage` and `specivo_ai_usage_report`; agents mark the issue they work on when they create or resume it
+- Added a redesigned dashboard with a needs-attention row, agents working now, AI spend and agent time, and grouped activity
+- Added CI runs, deployments, tags, releases and reviews to the issue's Development tab, with a summary, a timeline, detach and move, `Ignore KEY-N` and the `specivo_issue_development` MCP tool
+- Added the full security audit log on every install, with an admin viewer, an API and monthly retention
+- Added API keys limited to chosen projects on every install, with a project picker in the key forms
+- Added similar-issue suggestions while typing a new issue's subject, with Mark as duplicate
+- Added a stored link graph: "Mentioned in" on issues, "Linked from" on wiki pages, a rebuild card per project and the `specivo_get_links` MCP tool
+- Added the original ticket numbers of imported issues: shown on the issue, searchable, and redirected from `/imported/...`
+- Added self-service email change with a confirmation link to the new address
+- Added original and remaining estimates on issues, in the API and over MCP
+- Added hybrid search for anonymous visitors, per-address search limits and a friendly rate-limit page
+- Added opt-in search engine indexing of public projects, with robots headers, a generated robots.txt and a sitemap
+- Added assignee, tag and release filters to the issue list and to the `specivo_list_issues` MCP tool
+- Added notification emails in each recipient's language, emails for @mentions and links to the issue or comment
+- Added filling the repository form from a pasted URL, and changing an integration's provider later
+- Added sprint start and completion to the history of affected issues and to the audit log
+- Added links for bare URLs in wiki pages, issues and comments
+- Added a warning on the repository, SSO and SCIM pages and at startup when `APP_URL` is unset or local
+- Added guide pages for AI usage, spend reports, model prices, subscriptions, currencies, exchange rates, the audit log and your profile, in English and Chinese
+
+### Changed
+- Changed metadata saves to be validated against schemas and to enforce workflow field rules, judging only what a save changes; after upgrading, run `python -m specivo.cli.admin metadata-check` in the api container and fix what it lists
+- Changed MCP sessions to survive client sleep and idle gaps (`MCP_SESSION_TTL_SECONDS`, `MCP_SESSION_IDLE_TIMEOUT_SECONDS`) and to answer 404 for gone sessions; reverse proxies need long read timeouts and no buffering on `/mcp/`
+- Changed semantic search to drop results below a minimum similarity (`SEARCH_SEMANTIC_MIN_SIMILARITY`)
+- Changed `Fixes KEY-1` commit commands to run when a known commit first reaches the default branch
+- Changed completed sprints to be closed to new issues in every picker
+- Changed the issue list's assignee and tag filters to search fields
+- Changed Add Member to explain when nobody matches and to let administrators create the user in place
+- Changed signed-out visitors on the home page to go to the project list when anonymous access is on
+- Removed edition wording, the unused feature registry and placeholder admin pages; the 20-key API key limit is now a 500-key safety bound
+- Added the settings `AUDIT_LOG_RETENTION_MONTHS`, `SEARCH_ENGINE_INDEXING`, `SEARCH_RATE_LIMIT_PER_MINUTE`, `SEARCH_RATE_LIMIT_ANONYMOUS_PER_MINUTE`, `SEARCH_QUERY_EMBEDDING_CACHE_SECONDS`, `AI_REPORT_RATE_LIMIT_PER_MINUTE`, `AI_REPORT_RATE_LIMIT_ADMIN_PER_MINUTE`, `AI_USAGE_CHART_CACHE_SECONDS`, `AI_USAGE_INGEST_RATE_LIMIT_PER_MINUTE` and `EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS`
+- Changed the database requirements: the migrations create the PostgreSQL extensions `pg_trgm` and `btree_gist`, so an external database must allow them
+- After upgrading, run `python -m specivo.cli.rebuild_links` once in the api container (`make rebuild-links` in a checkout) to fill in the links of existing issues and comments
+
+### Fixed
+- Fixed the legacy MCP SSE transport failing every call after a client stream reconnect
+- Fixed a parent change ignoring the moved issue's own sub-tasks in the depth check
+- Fixed a push to a branch named after an issue not recording the branch when the commit message also named the issue
+- Fixed the Connect repository form showing a silently disabled button instead of what is missing
+- Fixed a back-channel deprovision switching off SSO-only administrators' API keys, and sign-in holding a database connection while it asks the identity provider
+- Fixed labelled `[[Page|Label]]` wiki links breaking inside Markdown tables
+- Fixed mismatched heights of inputs, selects and buttons in form rows, and the cramped select arrow
+- Fixed missing and wrong interface translations left as fuzzy or empty catalogue entries
+- Fixed SCIM not saying how to map an email when it refuses a user without one
+
+### Security
+- Fixed API keys refused by the MCP endpoint not being recorded in the audit log
+
+### Internal
+- Database migrations 0052 to 0067: `pg_trgm`, imported ticket numbers, the link graph, email change, repository provider history, currencies, development activity, exchange rates, billing rates, AI model prices, AI tools and subscriptions, AI usage entries, agent sessions and AI usage attribution
+- Replaced Observable Plot and D3 with Apache ECharts for the AI spend charts
+- Kept the webhook delivery purge fast on large delivery logs, and ran one search reindex at a time per scope
+- Removed the visual regression snapshot tests in favour of the structural responsive tests
+
 ## [0.12.0] - 2026-10-31
 
 ### Added

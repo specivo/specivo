@@ -837,9 +837,10 @@ class AttachmentService:
                 resource_type="Attachment",
                 resource_id=attachment.id,
                 project_id=project_id,
+                # Whether there was a description, not its text: the audit log holds no body text.
                 details={
-                    "old_description": old_description,
-                    "new_description": new_description,
+                    "had_description": bool(old_description),
+                    "has_description": bool(new_description),
                     "filename": attachment.filename,
                     "updated_by": user.login,
                 },

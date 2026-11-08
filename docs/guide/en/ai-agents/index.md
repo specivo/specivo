@@ -24,8 +24,8 @@ Two things make this safe to hand to an agent:
 
 - **Permissions are enforced.** The agent acts as the user behind the key. A key from an account
   with no write role on a project can read but not change it. See [API keys & scopes](api-keys.md).
-- **Everything is audited.** Every write goes to the security audit log tagged `source=mcp`, so a
-  project manager can see exactly what an agent did and when. See [What agents can do](capabilities.md).
+- **Everything is audited.** Every MCP call goes to the security audit log tagged `source=mcp`, so
+  an administrator can see exactly what an agent did and when. See [What agents can do](capabilities.md).
 
 ## Two endpoints
 
@@ -46,6 +46,8 @@ See [Connecting an AI client](connecting.md) for the exact configuration each on
 - **[Connecting an AI client](connecting.md)** — copy-paste config for SSE clients and Codex.
 - **[What agents can do](capabilities.md)** — the tool catalog by area, read vs write, and auditing.
 - **[Common workflows](workflows.md)** — concrete things to ask your agent to do.
+- **[Reporting AI usage to Specivo](reporting-ai-usage.md)** — send the token usage of AI coding
+  tools to Specivo, attributed to issues.
 
 !!! note "The agent works as a teammate"
     An MCP-connected agent is not a separate integration sitting beside Specivo — it logs in as a

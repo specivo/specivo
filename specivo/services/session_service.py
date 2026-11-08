@@ -16,8 +16,7 @@ identity helpers below.
 
 Every revocation that ends at least one session is logged on
 ``specivo.auth.sessions`` and recorded as the ``SESSIONS_REVOKED`` security
-audit event (persisted when the ``security_audit_log`` feature is
-registered): the reason, the counts and the affected user ids. Its actor is
+audit event: the reason, the counts and the affected user ids. Its actor is
 ``actor_id`` when the caller names one (the user signing out, the admin),
 ``None`` for what the system or the IdP starts.
 """

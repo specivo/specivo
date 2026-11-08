@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +63,12 @@ async def lifespan(app: FastAPI):
     from specivo.services.sso.log import log_startup_warnings
 
     log_startup_warnings(settings)
+
+    # Webhook, SSO, SCIM and email URLs are built from APP_URL: say so when a
+    # production instance still points it at this machine.
+    from specivo.core.app_url import log_app_url_warning
+
+    log_app_url_warning(settings, component="web app")
 
     # Eagerly validate DB and Redis connectivity at startup so the container
     # fails fast rather than surfacing errors on the first request.
@@ -251,7 +257,7 @@ def create_app() -> FastAPI:
         for locale_dir, domain in plugin.get_locale_dirs():
             _extra_locale_dirs.append((locale_dir, domain))
 
-    # Mount plugin static directories (e.g. pro/enterprise CSS/JS).
+    # Mount plugin static directories (plugin CSS/JS).
     for plugin in pm.plugins:
         for dir_path, url_path in plugin.get_static_dirs():
             if dir_path.exists():
@@ -270,7 +276,7 @@ def create_app() -> FastAPI:
     # Collect plugin CSS/JS asset URLs for auto-inclusion in base.html.
     setup_plugin_assets(pm.plugins)
 
-    # Run plugin on_startup hooks (e.g. enterprise audit middleware activation)
+    # Run plugin on_startup hooks (e.g. a plugin adding its own middleware)
     for plugin in pm.plugins:
         plugin.on_startup(application)
 
@@ -282,22 +288,11 @@ def create_app() -> FastAPI:
     application.add_exception_handler(HTTPException, http_exception_handler)
     application.add_exception_handler(Exception, unhandled_exception_handler)
 
-    # robots.txt — always at root, not behind stealth prefix.
-    # Overridable: admin settings key "robots_txt" > env ROBOTS_TXT > default (disallow all).
-    @application.get("/robots.txt", response_class=PlainTextResponse, include_in_schema=False)
-    async def robots_txt():
-        from specivo.core.database import get_db
-        from specivo.services.settings_service import SettingsService
+    # robots.txt and the sitemap — always at the root, not behind the stealth
+    # prefix. See specivo.web.search_engines.
+    from specivo.web.search_engines import router as search_engines_router
 
-        try:
-            async for db in get_db():
-                all_settings = await SettingsService().get_all(db)
-                custom = all_settings.get("robots_txt")
-                if custom:
-                    return custom
-        except Exception:
-            pass
-        return settings.robots_txt
+    application.include_router(search_engines_router)
 
     # PWA manifest — dynamic so it reflects the current brand_name setting.
     @application.get("/manifest.json", include_in_schema=False)
@@ -326,7 +321,7 @@ def create_app() -> FastAPI:
     # API router — behind stealth prefix when configured
     application.include_router(api_router, prefix=sp)
 
-    # Plugin routers — mounted after core API router so pro endpoints
+    # Plugin routers — mounted after core API router so plugin endpoints
     # are available under the same /api/v1 prefix.
     api_v1_prefix = f"{sp}{settings.api_v1_prefix}"
     for plugin in pm.plugins:
@@ -364,7 +359,7 @@ def create_app() -> FastAPI:
         """Check database and Redis connectivity.
 
         The public (unauthenticated) response only contains ``{"status": "ok"}``.
-        Detailed fields (version, tier, database/redis status) are included
+        Detailed fields (version, database/redis status) are included
         only for admin users to prevent information disclosure.
         """
         db_status = "ok"
@@ -387,13 +382,12 @@ def create_app() -> FastAPI:
 
         overall = "ok" if db_status == "ok" and redis_status == "ok" else "degraded"
 
-        # Public response: only status field (no version/tier/component details)
+        # Public response: only status field (no version/component details)
         return HealthResponse(
             status=overall,
             database=db_status,
             redis=redis_status,
             version="",
-            tier="",
         )
 
     # ------------------------------------------------------------------

@@ -10,6 +10,7 @@ Every term Specivo uses, defined in one line. Heavier terms link to their full p
 |---|---|
 | **% done** | An issue's completion percentage (0–100). Reaching a *done* status such as **Resolved** sets it to 100. See [Statuses & workflow](../issues/statuses-workflow.md). |
 | **Agent** (role) | The member role intended for API and automation accounts that act through the [MCP server](../ai-agents/index.md). |
+| **AI usage visibility** | A role setting under **Administration → Roles**: see **all** AI usage entries in a project, or only your **own**. Your own entries are always visible to you. See [What a role can see](../projects/index.md#what-a-role-can-see). |
 | **API key** | A secret string starting `spv_…` that authenticates REST and MCP requests on behalf of a user. See [API keys](../ai-agents/api-keys.md). |
 | **attachment** | A file uploaded to an issue, wiki page, or comment, with its own filename, size, type, and searchable description. See [Attachments](../issues/attachments.md). |
 | **backlog** | The pool of unscheduled issues a team draws from when planning a sprint. See [Sprints](../projects/sprints.md). |
@@ -32,7 +33,7 @@ Every term Specivo uses, defined in one line. Heavier terms link to their full p
 | **slug** | The normalized URL form of a wiki page title; `My Page`, `my-page`, and `My_Page` all resolve to the same slug. See [Linking & history](../wiki/history-linking.md). |
 | **sprint** | A time-boxed iteration with a goal, a start and end date, and its own board. See [Sprints](../projects/sprints.md). |
 | **status** | Where an issue sits in its lifecycle — New, In Progress, Resolved, Feedback, Closed, Rejected. See [Statuses & workflow](../issues/statuses-workflow.md). |
-| **subtask** | An issue nested under a parent issue (up to 16 levels deep). See [Subtasks](../issues/subtasks.md). |
+| **subtask** | An issue nested under a parent issue (up to 10 levels deep). See [Subtasks](../issues/subtasks.md). |
 | **time entries visibility** | A role setting under **Administration → Roles**: see **all** time entries in a project, or only your **own**. See [Time tracking](../projects/time-tracking.md#who-can-do-what). |
 | **tracker** | The *type* of an issue: Bug, Feature, Task, or Support. See [Issues](../issues/index.md). |
 | **users visibility** | A role setting under **Administration → Roles**: find **all active users**, or only the members of projects you can open. See [What a role can see](../projects/index.md#what-a-role-can-see). |

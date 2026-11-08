@@ -13,6 +13,7 @@ from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.project import (
+    AssigneeSuggestionOut,
     BranchNameConfig,
     MemberAdd,
     MemberOut,
@@ -26,9 +27,11 @@ from specivo.schemas.project import (
 from specivo.services.api_key_scope import is_global_admin
 from specivo.services.branch_name import BranchNameSettings
 from specivo.services.computed_metadata_service import computed_values
+from specivo.services.currency_service import reporting_currency_for
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
 from specivo.services.security_audit_service import MemberAction, SecurityAuditService
+from specivo.services.similar_issues import project_setting_enabled
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 _service = ProjectService()
@@ -102,11 +105,19 @@ def _branch_name(project) -> BranchNameConfig:
 
 
 def _project_out(
-    project, parent_key: str | None, computed_metadata: dict | None = None, *, detail: bool = False
+    project,
+    parent_key: str | None,
+    computed_metadata: dict | None = None,
+    *,
+    detail: bool = False,
+    reporting_currency: str | None = None,
 ) -> ProjectOut:
     return ProjectOut(
         computed_metadata=computed_metadata,
         branch_name=_branch_name(project) if detail else None,
+        similar_issues=project_setting_enabled(project.settings) if detail else None,
+        reporting_currency_code=project.reporting_currency_code,
+        reporting_currency=reporting_currency,
         id=project.id,
         name=project.name,
         identifier=project.identifier,
@@ -204,7 +215,13 @@ async def create_project(
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # Creation is admin-only, so the creator may always see the map.
-    return _project_out(project, parent_key, computed_values(project.settings), detail=True)
+    return _project_out(
+        project,
+        parent_key,
+        computed_values(project.settings),
+        detail=True,
+        reporting_currency=await reporting_currency_for(db, project),
+    )
 
 
 @router.get("/{key}/", response_model=ProjectOut)
@@ -218,7 +235,9 @@ async def get_project(
 
     parent_key = await _service.get_parent_key(db, project)
     computed = await _disclosed_computed_metadata(project, current_user, db)
-    return _project_out(project, parent_key, computed, detail=True)
+    return _project_out(
+        project, parent_key, computed, detail=True, reporting_currency=await reporting_currency_for(db, project)
+    )
 
 
 @router.patch("/{key}/", response_model=ProjectOut)
@@ -236,7 +255,13 @@ async def update_project(
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # _require_manage passed, so the caller may always see the map.
-    return _project_out(project, parent_key, computed_values(project.settings), detail=True)
+    return _project_out(
+        project,
+        parent_key,
+        computed_values(project.settings),
+        detail=True,
+        reporting_currency=await reporting_currency_for(db, project),
+    )
 
 
 @router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)
@@ -346,6 +371,38 @@ async def list_members(
     rows = await _service.list_members(db, project)
     rows += await _service.list_group_memberships(db, project)
     return [MemberOut(**row) for row in rows]
+
+
+@router.get("/{key}/assignees/search/", response_model=list[AssigneeSuggestionOut])
+async def search_assignees(
+    key: str,
+    q: str | None = Query(default=None, max_length=100, description="Substring of the login or display name."),
+    offset: int = Query(default=0, ge=0, description="Matches to skip, to page through them."),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> list[AssigneeSuggestionOut]:
+    """Search the people issues of the project can be assigned to.
+
+    The same people the issue form's assignee field offers: users holding a
+    membership on the project themselves, never a system account. Ordered by
+    display name and paged with ``offset``/``limit``; a page shorter than
+    ``limit`` is the last. Needs an account and access to the project (404
+    otherwise, for a private project).
+    """
+    project = await _service.get_by_key(db, key.upper())
+    await _require_project_access(project, current_user, db)
+    users = await _service.search_assignable_users(db, project, q, offset=offset, limit=limit)
+    return [
+        AssigneeSuggestionOut(
+            id=u.id,
+            login=u.login,
+            display_name=u.display_name,
+            avatar_url=u.avatar_url,
+            avatar_color=str((u.preferences or {}).get("avatar_color") or ""),
+        )
+        for u in users
+    ]
 
 
 @router.post("/{key}/members/", response_model=MemberOut, status_code=status.HTTP_201_CREATED)

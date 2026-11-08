@@ -34,6 +34,8 @@
        start_date: {{ (issue.start_date.isoformat() if issue and issue.start_date else "") | tojson }},
        due_date: {{ (issue.due_date.isoformat() if issue and issue.due_date else "") | tojson }},
        estimated_hours: {{ (issue.estimated_hours | string if issue and issue.estimated_hours else "") | tojson }},
+       original_estimate: {{ (issue.original_estimate | string if issue and issue.original_estimate is not none else "") | tojson }},
+       remaining_estimate: {{ (issue.remaining_estimate | string if issue and issue.remaining_estimate is not none else "") | tojson }},
        done_ratio: {{ issue.done_ratio if issue else 0 }},
        is_private: {{ "true" if (issue.is_private if issue else (trackers[0].private_by_default if trackers else false)) else "false" }},
        canSetPrivate: {{ "true" if can_set_private else "false" }},
@@ -44,6 +46,8 @@
        displayKey: {{ (issue.display_key if issue else "") | tojson }},
        lockVersion: {{ issue.lock_version if issue else 0 }},
        tags: {{ (issue_tags if issue_tags is defined else []) | tojson }},
+       similarEnabled: {{ "true" if (mode == 'create' and similar_issues_enabled) else "false" }},
+       canManageRelations: {{ "true" if can_manage_relations else "false" }},
        i18n: {{ {
          "relationTypes": {
            "relates": _("Relates to"),
@@ -62,6 +66,28 @@
     <div class="form-group">
       <label class="modal-label" for="subject">{% trans %}Subject{% endtrans %}</label>
       <input type="text" id="subject" class="input-subject" x-model="subject" placeholder="{{ _('Brief summary of the issue...') }}" autofocus>
+      {% if mode == 'create' and similar_issues_enabled %}
+      {# Always in the DOM, so screen readers announce the list when it fills. #}
+      <div class="sp-similar-issues" aria-live="polite" data-testid="similar-issues">
+        <div class="sp-similar-issues-panel" x-show="similarIssues.length" x-cloak>
+          <p class="sp-similar-issues-title">{% trans %}Similar issues{% endtrans %}</p>
+          <ul class="sp-similar-issues-list">
+            <template x-for="item in similarIssues" :key="item.key">
+              <li class="sp-similar-issues-row" data-testid="similar-issue">
+                <a class="sp-similar-issues-link" :href="'/issue/' + item.key + '/'" target="_blank" rel="noopener">
+                  <span class="sp-similar-issues-key" x-text="item.key"></span>
+                  <span class="sp-similar-issues-subject" x-text="item.subject"></span>
+                </a>
+                <span class="sp-similar-issues-status" :class="{ 'sp-similar-issues-status-closed': item.is_closed }" x-text="item.status.name"></span>
+                {% if can_manage_relations %}
+                <button type="button" class="sp-btn sp-btn-ghost sp-btn-auto sp-similar-issues-mark" @click="markDuplicate(item)">{% trans %}Mark as duplicate{% endtrans %}</button>
+                {% endif %}
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     {# Tracker #}
@@ -148,6 +174,24 @@
             <input type="number" class="modal-input" x-model="est_hours" min="0" step="1" placeholder="0" style="width:80px;font-family:var(--sp-font-mono);">
             <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">h</span>
             <input type="number" class="modal-input" x-model="est_minutes" min="0" max="59" step="1" placeholder="0" style="width:80px;font-family:var(--sp-font-mono);">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">m</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="modal-label">{% trans %}Original estimate{% endtrans %}</label>
+          <div style="display:flex;gap:var(--sp-space-sm);align-items:center;">
+            <input type="number" class="modal-input" x-model="orig_hours" min="0" step="1" placeholder="0" aria-label="{% trans %}Original estimate{% endtrans %} ({% trans %}hours{% endtrans %})" style="width:80px;font-family:var(--sp-font-mono);">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">h</span>
+            <input type="number" class="modal-input" x-model="orig_minutes" min="0" max="59" step="1" placeholder="0" aria-label="{% trans %}Original estimate{% endtrans %} ({% trans %}minutes{% endtrans %})" style="width:80px;font-family:var(--sp-font-mono);">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">m</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="modal-label">{% trans %}Remaining estimate{% endtrans %}</label>
+          <div style="display:flex;gap:var(--sp-space-sm);align-items:center;">
+            <input type="number" class="modal-input" x-model="rem_hours" min="0" step="1" placeholder="0" aria-label="{% trans %}Remaining estimate{% endtrans %} ({% trans %}hours{% endtrans %})" style="width:80px;font-family:var(--sp-font-mono);">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">h</span>
+            <input type="number" class="modal-input" x-model="rem_minutes" min="0" max="59" step="1" placeholder="0" aria-label="{% trans %}Remaining estimate{% endtrans %} ({% trans %}minutes{% endtrans %})" style="width:80px;font-family:var(--sp-font-mono);">
             <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">m</span>
           </div>
         </div>

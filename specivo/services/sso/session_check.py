@@ -7,7 +7,7 @@ IdP that issues refresh tokens refuses them (``invalid_grant``) once that
 happens, whether or not it sends a back-channel logout, so a session is
 renewed only after the IdP accepted its refresh token:
 
-**At sign-in** (:func:`seal_sign_in_refresh_token`), when the provider has
+**At sign-in** (:func:`probe_sign_in_refresh_token`), when the provider has
 ``verify_session_at_idp`` on and the token response carried a refresh token,
 the token is tried once right away. Some IdPs (authentik among them) hand out
 a refresh token even when the client may not use the refresh grant and refuse
@@ -83,8 +83,9 @@ __all__ = [
     "plan_recheck",
     "recheck_guard",
     "report_rejected",
+    "probe_sign_in_refresh_token",
+    "record_sign_in_probe",
     "run_recheck",
-    "seal_sign_in_refresh_token",
 ]
 
 #: Session revocation reason: the IdP refused the session's refresh token.
@@ -117,6 +118,9 @@ class SignInRefreshToken:
 
     encrypted: str | None = field(default=None, repr=False)
     checked_at: datetime | None = None
+    #: What the probe found, for the provider's ``session_recheck_status``;
+    #: ``None`` when nothing was tried (the check is off, or the IdP could not be asked).
+    status: RecheckStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -152,20 +156,22 @@ async def _record_status(db: AsyncSession, provider: SsoProvider, status: Rechec
     logger.info("sso.session.recheck_status provider=%s status=%s", provider.slug, status)
 
 
-async def seal_sign_in_refresh_token(
-    db: AsyncSession,
+async def probe_sign_in_refresh_token(
     provider: SsoProvider,
     metadata: ProviderMetadata,
     tokens: TokenResponse,
     *,
     settings: Settings | None = None,
 ) -> SignInRefreshToken:
-    """Decide what a new session keeps of the IdP's refresh token (see the module docstring)."""
+    """Decide what a new session keeps of the IdP's refresh token (see the module docstring).
+
+    Network only: the sign-in calls this with no database transaction open,
+    and records the outcome afterwards with :func:`record_sign_in_probe`.
+    """
     if not provider.verify_session_at_idp:
         return SignInRefreshToken()
     if tokens.refresh_token is None:
-        await _record_status(db, provider, "no_refresh_token")
-        return SignInRefreshToken()
+        return SignInRefreshToken(status="no_refresh_token")
     try:
         result = await refresh_at_idp(provider, metadata, tokens.refresh_token, settings=settings)
     except SsoTokenExchangeFailedError as exc:
@@ -175,15 +181,19 @@ async def seal_sign_in_refresh_token(
             provider.slug,
             exc.idp_error or exc.reason,
         )
-        await _record_status(db, provider, "refresh_refused")
-        return SignInRefreshToken()
+        return SignInRefreshToken(status="refresh_refused")
     except SsoError as exc:
         # Could not try it (IdP slow, ...): keep the token; renewal applies idp_check_failure.
         logger.info("sso.session.refresh_probe_failed provider=%s code=%s", provider.slug, exc.code)
         return SignInRefreshToken(encrypted=_seal(tokens.refresh_token, provider, metadata), checked_at=utcnow())
-    await _record_status(db, provider, "ok")
     sealed = _seal(result.refresh_token or tokens.refresh_token, provider, metadata)
-    return SignInRefreshToken(encrypted=sealed, checked_at=utcnow())
+    return SignInRefreshToken(encrypted=sealed, checked_at=utcnow(), status="ok")
+
+
+async def record_sign_in_probe(db: AsyncSession, provider: SsoProvider, probe: SignInRefreshToken) -> None:
+    """Store what :func:`probe_sign_in_refresh_token` found on the provider, for Test connection."""
+    if probe.status is not None:
+        await _record_status(db, provider, probe.status)
 
 
 @dataclass(frozen=True)

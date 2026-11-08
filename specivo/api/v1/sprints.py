@@ -120,10 +120,12 @@ async def search_sprints(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
-    """Autocomplete search for sprints.
+    """Autocomplete search for the sprints an issue may be put in.
 
-    Empty/missing ``q`` returns the 10 most recent sprints. Non-empty ``q``
-    performs a case-insensitive substring match on name, capped at ``limit``.
+    Completed sprints are left out, since they take no new issues; list them
+    with ``GET .../sprints/``. Empty/missing ``q`` returns the 10 most recent
+    active or planned sprints. Non-empty ``q`` performs a case-insensitive
+    substring match on name, capped at ``limit``.
     Requires ``view_issues`` on the project.
     """
     project = await _get_project(project_key, current_user, db)
@@ -242,7 +244,7 @@ async def start_sprint(
     sprint = await _sprint_service.get_by_id(db, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
-    sprint = await _sprint_service.start_sprint(db, sprint)
+    sprint = await _sprint_service.start_sprint(db, sprint, current_user)
     return (await _sprints_out(db, [sprint], current_user))[0]
 
 
@@ -263,7 +265,7 @@ async def complete_sprint(
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
     move_to = data.move_incomplete_to_sprint_id if data else None
-    sprint = await _sprint_service.complete_sprint(db, sprint, move_to_sprint_id=move_to)
+    sprint = await _sprint_service.complete_sprint(db, sprint, current_user, move_to_sprint_id=move_to)
     return (await _sprints_out(db, [sprint], current_user))[0]
 
 

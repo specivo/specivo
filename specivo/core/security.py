@@ -216,6 +216,42 @@ def access_token_session(token: str | None) -> AccessTokenSession | None:
         return None
 
 
+async def request_session(request: Request, db: AsyncSession) -> tuple[int, uuid.UUID] | None:
+    """``(user id, session id)`` of the session this request carries, or ``None`` (an API key, no session).
+
+    Read from a live access token: the one the silent refresh just minted,
+    else the ``Authorization: Bearer`` JWT, else the ``access_token`` cookie.
+    The signature is verified and an expired token does not count. Without
+    one, the session of the ``refresh_token`` cookie is used. Revocation is
+    not checked here: callers use the answer to *spare* a session or to key
+    something to it, never to authenticate.
+    """
+    refreshed = getattr(request.state, "refreshed_tokens", None)
+    token: str | None = refreshed.get("access_token") if isinstance(refreshed, dict) else None
+    if token is None:
+        header = request.headers.get("Authorization", "")
+        bearer = header[len("Bearer ") :] if header.startswith("Bearer ") else ""
+        token = bearer if bearer and not bearer.startswith(API_KEY_PREFIX) else request.cookies.get("access_token")
+    found = access_token_session(token)
+    if found is not None and not found.expired and found.user_id is not None:
+        return found.user_id, found.session_id
+    refresh_raw = request.cookies.get("refresh_token")
+    if not refresh_raw:
+        return None
+    import hashlib
+
+    from specivo.services.session_service import SessionService
+
+    row = await SessionService().session_for_refresh_token(db, hashlib.sha256(refresh_raw.encode()).hexdigest())
+    return (row[1], row[0]) if row is not None else None
+
+
+async def request_session_id(request: Request, db: AsyncSession, user_id: int) -> uuid.UUID | None:
+    """The session ``user_id`` made this request with (:func:`request_session`), or ``None``."""
+    found = await request_session(request, db)
+    return found[1] if found is not None and found[0] == user_id else None
+
+
 # ---------------------------------------------------------------------------
 # Forced password change
 # ---------------------------------------------------------------------------
@@ -508,7 +544,8 @@ async def authenticate_request(
                 if enforce_password_change:
                     _enforce_password_change(refreshed, request)
                 return refreshed
-        await _log_auth_failure(db, "no_credentials", request)
+        # Not audited: a request without credentials is routine (a signed-out
+        # tab, a probe), and would be one row per request.
         raise AppError(
             code="unauthorized",
             message="Authentication required",
@@ -517,16 +554,21 @@ async def authenticate_request(
 
     if use_api_key:
         client_ip = get_client_ip(request)
-        user, api_key = await _api_key_service.authenticate(
-            session=db,
-            raw_key=token,
-            client_ip=client_ip,
-        )
+        try:
+            user, api_key = await _api_key_service.authenticate(
+                session=db,
+                raw_key=token,
+                client_ip=client_ip,
+            )
+        except AppError as exc:
+            await _log_auth_failure(db, exc.code, request)
+            raise
         # No API key can name the anonymous row or another ``$`` system
         # account: ApiKeyService refuses to create or accept one. Refused again
         # here so that "get_current_user never returns a system principal"
         # does not quietly depend on that staying true.
         if user.is_system_principal:
+            await _log_auth_failure(db, "api_key_invalid", request)
             raise AppError(code="api_key_invalid", message="Invalid API key", status_code=401)
 
         # A project-limited key reaches only its projects for the rest of the
@@ -567,6 +609,8 @@ async def authenticate_request(
                 if enforce_password_change:
                     _enforce_password_change(refreshed, request)
                 return refreshed
+            # Not audited: a browser session that ran out is routine.
+            raise
         await _log_auth_failure(db, "invalid_jwt", request)
         raise
 
@@ -597,27 +641,25 @@ ANONYMOUS_READ_ROUTES: frozenset[str] = frozenset(
     }
 )
 
-# Per-IP budgets for anonymous traffic, kept in their own Redis buckets so a
-# crawler cannot spend a signed-in user's allowance or vice versa.
+# Per-IP budget for anonymous reads, kept in its own Redis bucket so a
+# crawler cannot spend a signed-in user's allowance or vice versa. Searches
+# are metered separately, for everyone (specivo.core.search_limits).
 ANONYMOUS_READ_RATE_LIMIT = (120, 60)
-ANONYMOUS_SEARCH_RATE_LIMIT = (10, 60)
 
 # How long a single statement may run for an anonymous visitor. Every query on
 # the allowlisted routes is an indexed read that finishes far inside this; the
 # limit is here so a crafted search cannot hold a connection open.
 ANONYMOUS_STATEMENT_TIMEOUT_MS = 2000
 
-# What a visitor without an account may ask of search. Keyword only: semantic
-# and hybrid both run an embedding model, and that is cost a stranger must not
-# be able to spend. The page is short and close to the surface so the result
-# set cannot be walked wholesale.
+# How far a visitor without an account may page through search results. The
+# page is short and close to the surface so the result set cannot be walked
+# wholesale. Every mode is served (keyword, semantic, hybrid); what bounds the
+# embedding model's cost is the per-IP search budget, not the mode.
 #
 # Declared here rather than beside either caller because both enforce them and
 # they must not drift: the JSON API refuses a request outside these bounds,
-# while the search *page* narrows one to them — a browser arrives with whatever
-# the form put in the URL, and refusing the default mode would turn the page
-# into a refusal for everyone.
-ANONYMOUS_SEARCH_MODE = "keyword"
+# while the search *page* narrows one to them, since a browser arrives with
+# whatever the form put in the URL.
 ANONYMOUS_SEARCH_MAX_LIMIT = 25
 ANONYMOUS_SEARCH_MAX_OFFSET = 500
 
@@ -727,12 +769,10 @@ async def get_reader(
         # Nothing to serve: either the switch is off, or the row is missing.
         # With the switch off this is just an unauthenticated request to a
         # protected route, which is what it was before this dependency
-        # existed — so it is audited exactly as ``get_current_user`` audits
-        # it, and turning the switch off leaves the route's behaviour
-        # unchanged down to the audit trail. Refusals that happen *because*
-        # of a project's settings, once the switch is on, are routine and are
-        # deliberately not logged; see the route handlers.
-        await _log_auth_failure(db, "no_credentials", request)
+        # existed, and like ``get_current_user`` it is not audited: a request
+        # without credentials is routine. Refusals that happen *because* of a
+        # project's settings, once the switch is on, are routine too; see the
+        # route handlers.
         raise AnonymousAccessDeniedError()
 
     async with anonymous_read_scope(request, response, db):
@@ -744,8 +784,34 @@ async def get_reader(
 # ---------------------------------------------------------------------------
 
 
+#: One ``auth_failure`` row per client address and reason in this many seconds.
+AUTH_FAILURE_AUDIT_WINDOW_SECONDS = 60
+
+
+async def first_auth_failure_in_window(ip: str | None, reason: str) -> bool:
+    """Whether this is the first refusal for *ip* and *reason* in the window.
+
+    A ``SET NX EX`` in Redis, so a script retrying a bad token or key writes
+    one row a minute, not one per request. When Redis cannot be asked the
+    answer is yes: losing the throttle is better than losing the row.
+    """
+    try:
+        from specivo.core.redis import get_redis
+
+        redis = await get_redis()
+        key = f"audit:auth_failure:{ip or '-'}:{reason}"
+        return bool(await redis.set(key, "1", nx=True, ex=AUTH_FAILURE_AUDIT_WINDOW_SECONDS))
+    except Exception:
+        logger.debug("Auth failure audit throttle unavailable", exc_info=True)
+        return True
+
+
 async def _log_auth_failure(db: AsyncSession, reason: str, request: Request) -> None:
-    """Log an authentication failure to the security audit trail.
+    """Log a refused credential (a bad API key or token) to the security audit trail.
+
+    Only credentials that were presented and refused are recorded, at most
+    once a minute per client address and reason; a request with no
+    credentials and an expired browser session are routine and are not.
 
     Non-critical — swallows exceptions to never block auth flow.
     Uses batch mode (request.state.audit_events) when available so the
@@ -756,14 +822,16 @@ async def _log_auth_failure(db: AsyncSession, reason: str, request: Request) -> 
         from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
         audit = SecurityAuditService()
-        ip = get_client_ip(request)
-        request_id = request.headers.get("x-request-id")
+        info = audit.request_info(request)
+        if not await first_auth_failure_in_window(info["ip_address"], reason):
+            return
         await audit.log_event(
             session=db,
             event_type=AuditEvent.AUTH_FAILURE,
             user_id=None,
-            ip_address=ip,
-            request_id=request_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
             details={"reason": reason},
             request=request,
         )

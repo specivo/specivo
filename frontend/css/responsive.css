@@ -90,6 +90,8 @@
   /* Filter bar: wrap selects */
   .filter-bar { flex-wrap: wrap; gap: var(--sp-space-sm); }
   .filter-select { font-size: var(--sp-font-size-xs); padding: 5px 8px; }
+  .sp-filter-combo { flex: 1 1 9rem; }
+  .sp-filter-chip { max-width: 100%; font-size: var(--sp-font-size-xs); }
   .view-toggle { width: 100%; justify-content: flex-end; }
 
   /* Issue table: hide more columns on very narrow screens */
@@ -133,7 +135,7 @@
   .analytics-layout { grid-template-columns: 1fr; }
 
   /* Issue detail layout: single column */
-  .issue-detail-layout { grid-template-columns: 1fr; }
+  .issue-detail-layout { grid-template-columns: minmax(0, 1fr); }
 
   /* Settings versions table: wrap in scrollable container */
   .card { overflow-x: auto; }

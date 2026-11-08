@@ -139,8 +139,9 @@
 /* Read-only input style. Scope to real text fields only: <select>, <button>,
    and other non-editable elements always match :read-only (they have no
    readonly attribute) and would otherwise be rendered as disabled — e.g. a
-   <button class="form-input"> combobox trigger getting cursor: not-allowed. */
-input.form-input:read-only,
+   <button class="form-input"> combobox trigger getting cursor: not-allowed.
+   A file input always matches :read-only too, and turned grey. */
+input.form-input:read-only:not([type="file"]),
 textarea.form-input:read-only { background: var(--sp-bg-input); color: var(--sp-text-muted); cursor: not-allowed; }
 textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 

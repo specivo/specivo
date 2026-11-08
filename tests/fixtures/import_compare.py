@@ -35,6 +35,7 @@ from specivo.importers.core.progress import NullProgressReporter
 from specivo.importers.core.source import build_source_registry
 from specivo.models.attachment import Attachment
 from specivo.models.issue import Issue
+from specivo.models.issue_source_ref import IssueSourceRef
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
@@ -67,6 +68,7 @@ COUNTED = (
     IssueCategory,
     MetadataSchema,
     Issue,
+    IssueSourceRef,
     Journal,
     JournalDetail,
     IssueRelation,
@@ -182,6 +184,10 @@ class Snapshot:
             ),
             "time_entries": _ordered(self._time_entry(t) for t in await self._all(TimeEntry)),
             "lookups": await self._lookups(),
+            "source_refs": _ordered(
+                (self.keys[r.issue_id], r.source_system, r.ref, r.label, r.is_primary)
+                for r in await self._all(IssueSourceRef)
+            ),
         }
 
     async def _tags(self) -> list[tuple]:

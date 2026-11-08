@@ -196,17 +196,10 @@ async def test_outsider_cannot_delete_schema(
 
 
 # ---------------------------------------------------------------------------
-# Audit-logging tests — only meaningful when security_audit_log feature is on.
+# Audit logging
 # ---------------------------------------------------------------------------
 
 
-def _audit_enabled() -> bool:
-    from specivo.services.security_audit_service import SecurityAuditService
-
-    return SecurityAuditService._audit_enabled()
-
-
-@pytest.mark.skipif(not _audit_enabled(), reason="security_audit_log feature not loaded")
 async def test_update_writes_audit_event(
     client: AsyncClient,
     admin_client: AsyncClient,

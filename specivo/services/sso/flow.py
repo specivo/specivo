@@ -19,8 +19,10 @@ the callback checks. Every transaction:
   request;
 * records the provider and its issuer, so the callback can refuse a response
   meant for another provider (mix-up, RFC 9207) without trusting the request;
-* forces re-authentication for a link (``prompt=login`` and ``max_age=0``,
-  over any configured value), and records the ``max_age`` it sent, so the
+* forces re-authentication for a link and for a ``reauth`` (a person
+  without a password proving it is them before changing their email
+  address): ``prompt=login`` and ``max_age=0``, over any configured value.
+  It records the ``max_age`` it sent, so the
   callback can require a fresh ``auth_time`` in the ID token (Core 1.0,
   section 3.1.3.7, item 13).
 
@@ -51,6 +53,7 @@ from specivo.services.sso.log import logger
 
 __all__ = [
     "ALLOWED_EXTRA_AUTH_PARAMS",
+    "FRESH_SIGN_IN_INTENTS",
     "TX_COOKIE_NAME",
     "LINK_REAUTH_PARAMS",
     "TX_TTL_SECONDS",
@@ -74,13 +77,15 @@ TX_COOKIE_NAME = "spv_sso_tx"
 #: The only ``SsoProvider.extra_auth_params`` keys sent to the IdP.
 ALLOWED_EXTRA_AUTH_PARAMS: tuple[str, ...] = ("prompt", "domain_hint", "login_hint", "acr_values", "max_age")
 
-Intent = Literal["login", "link"]
-_INTENTS: frozenset[str] = frozenset({"login", "link"})
+Intent = Literal["login", "link", "reauth"]
+_INTENTS: frozenset[str] = frozenset({"login", "link", "reauth"})
+#: Intents that make the person authenticate at the IdP again, now.
+FRESH_SIGN_IN_INTENTS: frozenset[str] = frozenset({"link", "reauth"})
 _RECORD_VERSION = 1
 # token_urlsafe(32) is 43 characters; anything far longer is not ours.
 _MAX_STATE_LENGTH = 128
 _MAX_EXTRA_PARAM_LENGTH = 512
-#: Sent with a link: the person proves at the IdP, now, that they own the account.
+#: Sent with a link or a reauth: the person proves at the IdP, now, that they own the account.
 LINK_REAUTH_PARAMS: dict[str, str] = {"prompt": "login", "max_age": "0"}
 
 
@@ -172,9 +177,9 @@ def _extra_params(provider: SsoProvider) -> dict[str, str]:
 
 
 def auth_params_for(provider: SsoProvider, intent: Intent) -> dict[str, str]:
-    """The optional authorization parameters for ``intent``: allowlisted extras, link overrides on top."""
+    """The optional authorization parameters for ``intent``: allowlisted extras, fresh sign-in on top."""
     params = _extra_params(provider)
-    if intent == "link":
+    if intent in FRESH_SIGN_IN_INTENTS:
         params.update(LINK_REAUTH_PARAMS)
     return params
 

@@ -1,0 +1,471 @@
+{# Shared pieces of the AI usage pages: labels, messages, the totals box and the entry table. #}
+{% from "components/filter_combobox.html" import filter_combobox %}
+
+{#
+  The person filter of the spend reports and the project's AI usage tab: a search
+  field (filterCombobox) over the people the reader may see there, never a list of
+  everyone; the chosen person shows as a chip with a clear link. Without JS the
+  field takes a login (sent as "user"). pf: {offered, endpoint, chip}.
+#}
+{% macro person_filter_field(pf) -%}
+{% if pf and (pf.offered or pf.chip) %}
+<div class="sp-aiu-filter" data-testid="aiu-person-filter">
+  {% if pf.chip %}<span class="filter-label">{% trans %}User{% endtrans %}</span>
+  {% else %}<label class="filter-label" for="sp-aiu-person">{% trans %}User{% endtrans %}</label>{% endif %}
+  {{ filter_combobox("user_id", _("User"), _("Everyone"), pf.endpoint, "user", chip=pf.chip, text_name="user", input_id="sp-aiu-person") }}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro cost_type_label(value) -%}
+{% if value == "subscription" %}{% trans %}Subscription{% endtrans %}
+{%- elif value == "api" %}{% trans %}API (pay per use){% endtrans %}
+{%- elif value == "local" %}{% trans %}Local model{% endtrans %}
+{%- elif value == "free" %}{% trans %}Free{% endtrans %}
+{%- else %}{% trans %}Unknown{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro source_label(value) -%}
+{% if value == "manual" %}{% trans %}Logged by hand{% endtrans %}
+{%- elif value == "api" %}{% trans %}REST API{% endtrans %}
+{%- elif value == "mcp" %}{% trans %}MCP{% endtrans %}
+{%- elif value == "reporter" %}{% trans %}Reporter{% endtrans %}
+{%- else %}{% trans %}Import{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro notice_text(code) -%}
+{% if code == "logged" %}{% trans %}AI usage logged.{% endtrans %}
+{%- elif code == "saved" %}{% trans %}Entry saved.{% endtrans %}
+{%- elif code == "excluded" %}{% trans %}Entry excluded. It no longer counts in totals and reports.{% endtrans %}
+{%- elif code == "included" %}{% trans %}Entry counted again.{% endtrans %}
+{%- elif code == "deleted" %}{% trans %}Entry deleted.{% endtrans %}
+{%- elif code == "reassigned" %}{% trans %}Entries moved.{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro list_error_text(code) -%}
+{% if code == "nothing_selected" %}{% trans %}Select at least one entry to move.{% endtrans %}
+{%- elif code == "project_unknown" %}{% trans %}No project with that key, or you cannot reach it.{% endtrans %}
+{%- elif code == "issue_unknown" %}{% trans %}No issue with that key, or you cannot see it.{% endtrans %}
+{%- elif code == "issue_other_project" %}{% trans %}That issue belongs to another project.{% endtrans %}
+{%- elif code == "permission_denied" %}{% trans %}You cannot log AI usage in that project.{% endtrans %}
+{%- else %}{% trans %}The entries could not be moved. Nothing was changed.{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro error_text(error) -%}
+{% set code = error.code %}{% set field = error.field %}
+{% if code == "permission_denied" and field == "on_behalf_of" %}{% trans %}You cannot log AI usage for this user here.{% endtrans %}
+{%- elif code == "permission_denied" %}{% trans %}You cannot log AI usage in this project.{% endtrans %}
+{%- elif code == "ai_usage_target_unknown" %}{% trans %}No user with that login.{% endtrans %}
+{%- elif code == "ai_usage_target_invalid" %}{% trans %}AI usage can be logged only for an active user.{% endtrans %}
+{%- elif code == "ai_usage_target_not_member" %}{% trans %}That user is not an active member of the project.{% endtrans %}
+{%- elif code == "ai_usage_field_locked" %}{% trans %}Reported usage keeps its tokens, model and tool. Only the project, the issue and the comments can change.{% endtrans %}
+{%- elif code in ("project_unknown", "issue_unknown", "issue_other_project") %}{{ list_error_text(code) }}
+{%- elif code == "not_found" %}{% trans %}The project or issue was not found, or you cannot see it.{% endtrans %}
+{%- elif code == "validation_error" and field == "issue_id" %}{% trans %}The issue must belong to the chosen project.{% endtrans %}
+{%- elif code == "date_invalid" or field == "usage_date" %}{% trans %}Enter the day of the usage as YYYY-MM-DD, no later than tomorrow.{% endtrans %}
+{%- elif code == "tokens_missing" %}{% trans %}Enter at least one token count.{% endtrans %}
+{%- elif code == "tokens_invalid" or field == "tokens" %}{% trans %}Token counts are whole numbers of zero or more.{% endtrans %}
+{%- elif code == "request_count_invalid" or field == "request_count" %}{% trans %}The number of requests is a whole number of zero or more.{% endtrans %}
+{%- elif code in ("amount_invalid", "currency_unknown") or field == "reported_cost" %}{% trans %}Enter the cost as a number of zero or more, in an active currency.{% endtrans %}
+{%- elif field == "model" %}{% trans %}Enter the model name, such as claude-sonnet-4-5.{% endtrans %}
+{%- elif field == "provider" %}{% trans %}Enter a provider such as anthropic or openai, or leave it empty.{% endtrans %}
+{%- elif field == "tool" %}{% trans %}Choose a tool.{% endtrans %}
+{%- elif field == "comments" %}{% trans %}The comments are too long.{% endtrans %}
+{%- else %}{% trans %}The entry could not be saved. Check the values and try again.{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro money_total(view) -%}
+<span class="sp-aiu-amount">{{ view.total }}</span>
+{%- if view.unconverted %}
+<span class="sp-aiu-unconverted" data-testid="aiu-unconverted">
+  {% trans %}plus, not converted:{% endtrans %}
+  {% for g in view.unconverted %}{{ g.amount }}
+  ({% if g.reason == "stale" %}{% trans %}rate too old{% endtrans %}{% else %}{% trans %}no exchange rate{% endtrans %}{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}
+</span>
+{%- endif %}
+{%- endmacro %}
+
+{#
+  The note shown near totals when some counted entries have no price for their
+  model and date. unpriced: that count; entries: all counted entries;
+  models: [{model, count}] most entries first. Administrators get a link to the prices.
+#}
+{% macro unpriced_note(unpriced, entries, models) -%}
+{%- if unpriced %}
+<div class="sp-aiu-unpriced" role="note" data-testid="aiu-unpriced-note">
+  <p>{% trans count=unpriced, total=entries %}{{ count }} of {{ total }} entries has no price for its model and date, so it counts as 0.{% pluralize %}{{ count }} of {{ total }} entries have no price for their model and date, so they count as 0.{% endtrans %}</p>
+  {%- if models %}
+  <p class="sp-text-muted-xs" data-testid="aiu-unpriced-models">{% trans %}Models without a price:{% endtrans %}
+    {% for m in models %}<code>{{ m.model or "–" }}</code> ({{ m.count }}){% if not loop.last %}, {% endif %}{% endfor %}{% if unpriced > models | sum(attribute="count") %}, …{% endif %}
+  </p>
+  {%- endif %}
+  {%- if user is defined and user and user.is_admin %}
+  <p class="sp-text-muted-xs"><a href="/admin/ai-model-prices/" data-testid="aiu-unpriced-prices-link">{% trans %}Add or load prices{% endtrans %}</a></p>
+  {%- endif %}
+</div>
+{%- endif %}
+{%- endmacro %}
+
+{% macro totals_box(totals) -%}
+<div class="sp-aiu-totals" data-testid="aiu-totals">
+  <div class="sp-aiu-total">
+    <span class="sp-aiu-total-label">{% trans %}Tokens{% endtrans %}</span>
+    <span class="sp-aiu-amount" data-testid="aiu-total-tokens">{{ totals.total_tokens }}</span>
+    <span class="sp-text-muted-xs">{% trans input=totals.input, output=totals.output, cache=totals.cache %}{{ input }} in · {{ output }} out · {{ cache }} cache{% endtrans %}</span>
+  </div>
+  <div class="sp-aiu-total">
+    <span class="sp-aiu-total-label">{% trans %}Spend{% endtrans %}</span>
+    <span data-testid="aiu-total-spend">{{ money_total(totals.spend) }}</span>
+    <span class="sp-text-muted-xs">{% trans %}What the usage cost on top of flat-rate plans{% endtrans %}</span>
+  </div>
+  <div class="sp-aiu-total">
+    <span class="sp-aiu-total-label">{% trans %}API-equivalent value{% endtrans %}</span>
+    <span data-testid="aiu-total-api">{{ money_total(totals.api_equivalent) }}</span>
+    <span class="sp-text-muted-xs">{% trans %}The same tokens at pay-per-use prices{% endtrans %}</span>
+  </div>
+  <div class="sp-aiu-total">
+    <span class="sp-aiu-total-label">{% trans %}Entries{% endtrans %}</span>
+    <span class="sp-aiu-amount" data-testid="aiu-total-entries">{{ totals.entries }}</span>
+    <span class="sp-text-muted-xs">
+      {% trans currency=totals.currency %}Amounts in {{ currency }}{% endtrans %}{% if totals.excluded %} · {% trans count=totals.excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}{% endif %}
+    </span>
+  </div>
+</div>
+{{ unpriced_note(totals.unpriced, totals.entries, totals.unpriced_models) }}
+{%- endmacro %}
+
+{% macro stack_label(key) -%}
+{% if key == "user" %}{% trans %}By user{% endtrans %}
+{%- elif key == "tool" %}{% trans %}By tool{% endtrans %}
+{%- elif key == "model" %}{% trans %}By model{% endtrans %}
+{%- else %}{% trans %}By project{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{#
+  The AI usage charts (see web/pages/ai_usage.py, _charts_view), drawn by the
+  shared chart bundle (spend-chart.min.js): value over time (stacked by tool or
+  model; on the spend reports also by user and, on the instance report, by
+  project), tokens over time, the value by group, and subscription leverage.
+  My AI usage passes its own charts; the spend reports theirs (charts.scope
+  "project" or "instance"), with seat cost and leverage per person when the
+  reader may see seat cost.
+  charts: None when nothing is counted, {too_long: True} when the entries span too long
+  a period; has_rows: whether the table lists entries.
+#}
+{# A breakdown chart's "Show" switch: how many groups it names before "Other" (spend reports only). #}
+{% macro _show_switch(links, name) -%}
+{%- if links %}
+<nav class="sp-aiu-chart-switch" aria-label="{{ _('Groups shown') }}" data-testid="aiu-chart-show-{{ name }}">
+  {%- for l in links %}
+  <a class="sp-aiu-chart-switch-option{{ ' active' if l.active }}" href="{{ l.url }}"{% if l.active %} aria-current="true"{% endif %} data-show="{{ l.value }}">{{ l.value }}</a>
+  {%- endfor %}
+</nav>
+{%- endif %}
+{%- endmacro %}
+
+{% macro _breakdown_title(title, links, name) -%}
+{%- if links %}
+<div class="sp-aiu-chart-head">
+  <h3 class="sp-aiu-chart-title">{{ title }}</h3>
+  <div class="sp-aiu-chart-controls">{{ _show_switch(links, name) }}</div>
+</div>
+{%- else %}
+<h3 class="sp-aiu-chart-title">{{ title }}</h3>
+{%- endif %}
+{%- endmacro %}
+
+{% macro usage_charts(charts, has_rows=False, bucket_links=[], show_links={}) -%}
+{%- if charts and charts.too_long %}
+<p class="sp-text-muted sp-aiu-charts-empty" data-testid="aiu-charts-too-long">{% trans %}These entries span too many years to chart. Narrow the dates to see the charts.{% endtrans %}</p>
+{%- elif charts %}
+<section class="sp-aiu-charts" aria-labelledby="aiu-charts-title" data-testid="aiu-charts">
+  <h2 id="aiu-charts-title" class="sp-aiu-charts-title">{% trans %}Charts{% endtrans %}</h2>
+  <p class="sp-text-muted-xs sp-aiu-charts-intro" data-testid="aiu-charts-scope">
+    {%- if charts.bucket == "year" %}{% trans first=charts.first, last=charts.last %}Per year, {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- elif charts.bucket == "quarter" %}{% trans first=charts.first, last=charts.last %}Per quarter, {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- elif charts.bucket == "month" %}{% trans first=charts.first, last=charts.last %}Per month, {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- elif charts.bucket == "week" %}{% trans first=charts.first, last=charts.last %}Per week (from Monday), {{ first }} to {{ last }} (UTC days).{% endtrans %}
+    {%- else %}{% trans first=charts.first, last=charts.last %}Per day, {{ first }} to {{ last }} (UTC days).{% endtrans %}{% endif %}
+    {% trans currency=charts.time.currency %}Amounts in {{ currency }}.{% endtrans %}
+    {%- if charts.unconverted %} {% trans %}Amounts without a usable exchange rate are left out of the charts; the totals above list them.{% endtrans %}{% endif %}
+  </p>
+  {%- if charts.unpriced %}
+  <p class="sp-aiu-chart-note" role="note" data-testid="aiu-chart-unpriced">{% trans count=charts.unpriced %}{{ count }} entry has no price, so it adds nothing to the value shown. Periods marked * have such entries.{% pluralize %}{{ count }} entries have no price, so they add nothing to the value shown. Periods marked * have such entries.{% endtrans %}</p>
+  {%- endif %}
+
+  <div class="card sp-aiu-chart-card">
+    <div class="sp-aiu-chart-head">
+      <h3 class="sp-aiu-chart-title" id="aiu-chart-time-title">{% if charts.has_spend %}{% trans %}API-equivalent value and spend over time{% endtrans %}{% else %}{% trans %}API-equivalent value over time{% endtrans %}{% endif %}</h3>
+      <div class="sp-aiu-chart-controls">
+      {%- if bucket_links %}
+      <nav class="sp-aiu-chart-switch" aria-label="{{ _('Time buckets') }}" data-testid="aiu-chart-buckets">
+        {%- for b in bucket_links %}
+        <a class="sp-aiu-chart-switch-option{{ ' active' if b.active }}" href="{{ b.url }}"{% if b.active %} aria-current="true"{% endif %} data-bucket="{{ b.value or 'auto' }}">{{ b.label }}</a>
+        {%- endfor %}
+      </nav>
+      {%- endif %}
+      <fieldset class="sp-aiu-chart-switch" data-testid="aiu-chart-switch">
+        <legend class="sp-visually-hidden">{% trans %}Split the value by{% endtrans %}</legend>
+        {%- for key in charts.time.stacks %}
+        <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-chart-stack" value="{{ key }}"{% if loop.first %} checked{% endif %} data-sp-chart-switch="aiu-chart-time"> {{ stack_label(key) }}</label>
+        {%- endfor %}
+      </fieldset>
+      </div>
+    </div>
+    <div id="aiu-chart-time" class="sp-spend-chart" data-testid="aiu-chart-time" role="img"
+         aria-label="{{ _('API-equivalent value over time; the totals and the table hold the numbers') }}"
+         data-sp-chart-mode="{{ (charts.time.stacks | list | first) or 'tool' }}"
+         data-sp-spend-chart='{{ charts.time | tojson }}'></div>
+    {%- if charts.time.seat %}
+    <p class="sp-text-muted-xs sp-aiu-chart-caption" data-testid="aiu-chart-seat-note">{% trans %}The spend line is pay-per-use charges plus seat cost; the dashed line is the seat cost alone.{% endtrans %}</p>
+    {%- endif %}
+  </div>
+
+  {%- if charts.tokens_fresh or charts.tokens_cache %}
+  <div class="card sp-aiu-chart-card" data-testid="aiu-chart-tokens">
+    <h3 class="sp-aiu-chart-title">{% trans %}Tokens over time{% endtrans %}</h3>
+    {%- if charts.tokens_fresh %}
+    <h4 class="sp-aiu-chart-subtitle">{% trans %}Input and output{% endtrans %}</h4>
+    <div class="sp-spend-chart" data-testid="aiu-chart-tokens-fresh" role="img"
+         aria-label="{{ _('Input, output and reasoning tokens over time') }}"
+         data-sp-spend-chart='{{ charts.tokens_fresh | tojson }}'></div>
+    {%- endif %}
+    {%- if charts.tokens_cache %}
+    <h4 class="sp-aiu-chart-subtitle">{% trans %}Cache{% endtrans %}</h4>
+    <div class="sp-spend-chart" data-testid="aiu-chart-tokens-cache" role="img"
+         aria-label="{{ _('Cache read and cache write tokens over time') }}"
+         data-sp-spend-chart='{{ charts.tokens_cache | tojson }}'></div>
+    {%- endif %}
+  </div>
+  {%- endif %}
+
+  <div class="sp-aiu-chart-grid">
+    {%- if charts.by_user %}
+    <div class="card sp-aiu-chart-card">
+      {{ _breakdown_title(_("By user"), show_links.get("user"), "user") }}
+      <div class="sp-spend-chart" data-testid="aiu-chart-users" role="img"
+           aria-label="{{ _('API-equivalent value by user') }}"
+           data-sp-spend-chart='{{ charts.by_user | tojson }}'
+           data-label-spend="{{ _('Pay-per-use') }}"
+           data-label-api="{{ _('API-equivalent value') }}"></div>
+    </div>
+    {%- endif %}
+    {%- if charts.by_project %}
+    <div class="card sp-aiu-chart-card">
+      {{ _breakdown_title(_("By project"), show_links.get("project"), "project") }}
+      <div class="sp-spend-chart" data-testid="aiu-chart-projects" role="img"
+           aria-label="{{ _('API-equivalent value by project') }}"
+           data-sp-spend-chart='{{ charts.by_project | tojson }}'
+           data-label-spend="{{ _('Pay-per-use') if charts.scope else _('Spend') }}"
+           data-label-api="{{ _('API-equivalent value') }}"></div>
+    </div>
+    {%- endif %}
+    <div class="card sp-aiu-chart-card">
+      {{ _breakdown_title(_("By model"), show_links.get("model"), "model") }}
+      <div class="sp-spend-chart" data-testid="aiu-chart-models" role="img"
+           aria-label="{{ _('API-equivalent value by model') }}"
+           data-sp-spend-chart='{{ charts.by_model | tojson }}'
+           data-label-spend="{{ _('Pay-per-use') if charts.scope else _('Spend') }}"
+           data-label-api="{{ _('API-equivalent value') }}"></div>
+    </div>
+    {%- if charts.by_tool %}
+    <div class="card sp-aiu-chart-card">
+      {{ _breakdown_title(_("By tool"), show_links.get("tool"), "tool") }}
+      <div class="sp-spend-chart" data-testid="aiu-chart-tools" role="img"
+           aria-label="{{ _('API-equivalent value by tool') }}"
+           data-sp-spend-chart='{{ charts.by_tool | tojson }}'
+           data-label-spend="{{ _('Pay-per-use') }}"
+           data-label-api="{{ _('API-equivalent value') }}"></div>
+    </div>
+    {%- endif %}
+  </div>
+  {%- if charts.scope %}
+  <p class="sp-text-muted-xs sp-aiu-chart-caption">{% trans %}The breakdowns show pay-per-use charges; seat cost is not split by group here, the table below holds it.{% endtrans %}</p>
+  {%- endif %}
+
+  {%- if charts.scope and charts.leverage_total %}
+  <div class="card sp-aiu-chart-card" data-testid="spend-leverage-charts">
+    <h3 class="sp-aiu-chart-title">{% trans %}Subscription leverage{% endtrans %}</h3>
+    <p class="sp-text-muted-xs">{% if charts.scope == "project" %}{% trans %}Per person: the seat cost their usage in this project carries, against the API-equivalent value of that subscription usage. Plan details stay with their holders and administrators.{% endtrans %}{% else %}{% trans %}Per plan and per person: the plans' fees counted in this period, against the API-equivalent value of the usage they covered.{% endtrans %}{% endif %}</p>
+    {%- if charts.leverage %}
+    <h4 class="sp-aiu-chart-subtitle">{% trans %}Per plan{% endtrans %}</h4>
+    <div class="sp-table-scroll">
+    <table class="sp-table sp-aiu-leverage-table" data-testid="spend-leverage-plans">
+      <thead><tr>
+        <th scope="col">{% trans %}Plan{% endtrans %}</th>
+        <th scope="col">{% trans %}Holder{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Fee for the period{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>
+      </tr></thead>
+      <tbody>
+      {%- for p in charts.leverage %}
+        <tr data-testid="spend-leverage-plan">
+          <td>{{ p.plan }}</td>
+          <td>{{ p.holder }}</td>
+          <td class="sp-aiu-num">{{ p.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ p.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endfor %}
+      {%- if charts.leverage_others %}
+        <tr class="sp-drill-other" data-testid="spend-leverage-plan-others">
+          <td colspan="2">{% trans count=charts.leverage_others.count %}Others ({{ count }} plan){% pluralize %}Others ({{ count }} plans){% endtrans %}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_others.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_others.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ charts.leverage_others.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endif %}
+      </tbody>
+    </table>
+    </div>
+    {%- endif %}
+    <h4 class="sp-aiu-chart-subtitle">{% trans %}Per person{% endtrans %}</h4>
+    <div class="sp-table-scroll">
+    <table class="sp-table sp-aiu-leverage-table" data-testid="spend-leverage-people">
+      <thead><tr>
+        <th scope="col">{% trans %}Person{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% if charts.scope == "project" %}{% trans %}Seat cost{% endtrans %}{% else %}{% trans %}Fees for the period{% endtrans %}{% endif %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>
+      </tr></thead>
+      <tbody>
+      {%- for p in charts.people %}
+        <tr data-testid="spend-leverage-person">
+          <td>{{ p.name }}</td>
+          <td class="sp-aiu-num">{{ p.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ p.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endfor %}
+      {%- if charts.people_others %}
+        <tr class="sp-drill-other" data-testid="spend-leverage-person-others">
+          <td>{% trans count=charts.people_others.count %}Others ({{ count }} person){% pluralize %}Others ({{ count }} people){% endtrans %}</td>
+          <td class="sp-aiu-num">{{ charts.people_others.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ charts.people_others.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ charts.people_others.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endif %}
+      </tbody>
+      <tfoot>
+        <tr class="sp-spend-total-row" data-testid="spend-leverage-total">
+          <td>{% trans %}Total{% endtrans %}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_total.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ charts.leverage_total.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ charts.leverage_total.leverage or "–" }}</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>
+  </div>
+  {%- elif charts.leverage and not charts.scope %}
+  <div class="card sp-aiu-chart-card" data-testid="aiu-leverage">
+    <h3 class="sp-aiu-chart-title">{% trans %}Subscription leverage{% endtrans %}</h3>
+    <p class="sp-text-muted-xs">{% trans %}The API-equivalent value of the usage each of your plans covered in this period, divided by the plan's fee for the same days.{% endtrans %}</p>
+    <div class="sp-table-scroll">
+    <table class="sp-table sp-aiu-leverage-table">
+      <thead><tr>
+        <th scope="col">{% trans %}Plan{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Fee for the period{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>
+      </tr></thead>
+      <tbody>
+      {%- for p in charts.leverage %}
+        <tr data-testid="aiu-leverage-row">
+          <td>{{ p.plan }}</td>
+          <td class="sp-aiu-num">{{ p.fee or "–" }}</td>
+          <td class="sp-aiu-num">{{ p.api }}</td>
+          <td class="sp-aiu-num"><strong>{{ p.leverage or "–" }}</strong></td>
+        </tr>
+      {%- endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {%- endif %}
+</section>
+{%- elif has_rows %}
+<p class="sp-text-muted sp-aiu-charts-empty" data-testid="aiu-charts-empty">{% trans %}No counted usage matches these filters, so there is nothing to chart.{% endtrans %}</p>
+{%- endif %}
+{%- endmacro %}
+
+{#
+  The entry table. rows: from ai_usage._rows. return_to: where row actions come back to.
+  select_form: the id of a bulk form the row checkboxes belong to (My AI usage), or "".
+#}
+{% macro entry_table(rows, return_to, select_form="", show_user=True, show_project=False, show_issue=True, compact=False) -%}
+<div class="sp-table-scroll">
+<table class="sp-table sp-aiu-table{{ ' sp-aiu-table--compact' if compact else '' }}" data-testid="aiu-table">
+  <thead>
+    <tr>
+      {% if select_form %}<th class="sp-aiu-check"><input type="checkbox" form="{{ select_form }}" data-select-all="entry_ids" aria-label="{{ _('Select all') }}"></th>{% endif %}
+      <th>{% trans %}Date{% endtrans %}</th>
+      {% if show_user %}<th>{% trans %}User{% endtrans %}</th>{% endif %}
+      <th>{% trans %}Tool and model{% endtrans %}</th>
+      <th class="sp-aiu-num">{% trans %}Tokens{% endtrans %}</th>
+      {% if not compact %}<th>{% trans %}Cost type{% endtrans %}</th>{% endif %}
+      <th class="sp-aiu-num">{% trans %}Spend{% endtrans %}</th>
+      <th class="sp-aiu-num">{% trans %}API value{% endtrans %}</th>
+      {% if show_project %}<th>{% trans %}Project{% endtrans %}</th>{% endif %}
+      {% if show_issue %}<th>{% trans %}Issue{% endtrans %}</th>{% endif %}
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr data-entry-id="{{ r.id }}" class="{{ 'sp-aiu-excluded' if r.excluded else '' }}">
+      {% if select_form %}<td class="sp-aiu-check"><input type="checkbox" name="entry_ids" value="{{ r.id }}" form="{{ select_form }}" aria-label="{{ _('Select entry %(id)s') % {'id': r.id} }}"></td>{% endif %}
+      <td class="sp-aiu-date">{{ r.usage_date }}</td>
+      {% if show_user %}
+      <td>
+        {{ r.user_name }}
+        {% if r.on_behalf %}
+        <div class="sp-text-muted-xs" data-testid="aiu-logged-by">
+          {% if r.key_name %}{% trans reporter=r.reporter_name, key=r.key_name %}logged by {{ reporter }} via key {{ key }}{% endtrans %}{% else %}{% trans reporter=r.reporter_name %}logged by {{ reporter }}{% endtrans %}{% endif %}
+        </div>
+        {% endif %}
+      </td>
+      {% endif %}
+      <td class="sp-aiu-toolcell">
+        <strong>{{ r.tool }}</strong> <span class="sp-aiu-model">{{ r.model }}</span>
+        <div class="sp-text-muted-xs">
+          {% if compact %}{{ cost_type_label(r.cost_type) }} · {% endif %}{{ source_label(r.source) }}{% if r.locked %} · <span title="{{ _('Tokens, model and tool are reported and cannot be changed') }}">{% trans %}locked{% endtrans %}</span>{% endif %}
+          {% if r.excluded %} · <span class="sp-aiu-badge" data-testid="aiu-excluded-badge">{% trans %}Excluded{% endtrans %}</span>{% endif %}
+          {% if not show_user and r.on_behalf %} · {% if r.key_name %}{% trans reporter=r.reporter_name, key=r.key_name %}logged by {{ reporter }} via key {{ key }}{% endtrans %}{% else %}{% trans reporter=r.reporter_name %}logged by {{ reporter }}{% endtrans %}{% endif %}{% endif %}
+        </div>
+        {% if r.comments %}<div class="sp-aiu-comment">{{ r.comments }}</div>{% endif %}
+      </td>
+      <td class="sp-aiu-num" title="{{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}{% if r.long_context %}; {{ _('including %(count)s at long-context prices') % {'count': r.long_context} }}{% endif %}">{{ r.total_tokens }}</td>
+      {% if not compact %}<td>{{ cost_type_label(r.cost_type) }}</td>{% endif %}
+      <td class="sp-aiu-num">{{ r.marginal or "–" }}</td>
+      <td class="sp-aiu-num">{{ r.api_equivalent or "–" }}</td>
+      {% if show_project %}<td>{% if r.project_key %}<a href="/projects/{{ r.project_key }}/ai-usage/">{{ r.project_key }}</a>{% else %}<span class="sp-text-muted">{% trans %}Unassigned{% endtrans %}</span>{% endif %}</td>{% endif %}
+      {% if show_issue %}<td>{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+      <td class="sp-aiu-actions">
+        {% if r.editable %}
+        <a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ return_to | urlencode }}" data-testid="aiu-edit">{% trans %}Edit{% endtrans %}</a>
+        <form method="post" action="/ai-usage/{{ r.id }}/{{ 'include' if r.excluded else 'exclude' }}/" class="sp-aiu-inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ return_to }}">
+          {% if r.excluded %}
+          <button type="submit" class="sp-btn-sm" data-testid="aiu-include">{% trans %}Include{% endtrans %}</button>
+          {% else %}
+          <button type="submit" class="sp-btn-sm" data-testid="aiu-exclude" title="{{ _('Leave this entry out of totals and reports') }}">{% trans %}Exclude{% endtrans %}</button>
+          {% endif %}
+        </form>
+        {% endif %}
+        {% if r.deletable %}
+        <form method="post" action="/ai-usage/{{ r.id }}/delete/" class="sp-aiu-inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ return_to }}">
+          <button type="submit" class="sp-btn-sm danger" data-confirm="{{ _('Delete this AI usage entry?') }}" data-testid="aiu-delete">{% trans %}Delete{% endtrans %}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{%- endmacro %}

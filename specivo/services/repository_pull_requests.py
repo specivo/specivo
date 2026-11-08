@@ -112,14 +112,18 @@ async def _upsert(
     inserted = (
         await session.execute(
             pg_insert(PullRequest)
-            .values(integration_id=integration.id, number=event.number, **values)
-            .on_conflict_do_nothing(constraint="uq_pull_requests_integration_number")
+            .values(integration_id=integration.id, provider=integration.provider, number=event.number, **values)
+            .on_conflict_do_nothing(constraint="uq_pull_requests_integration_provider_number")
             .returning(PullRequest.id)
         )
     ).scalar_one_or_none()
     stmt = (
         select(PullRequest)
-        .where(PullRequest.integration_id == integration.id, PullRequest.number == event.number)
+        .where(
+            PullRequest.integration_id == integration.id,
+            PullRequest.provider == integration.provider,
+            PullRequest.number == event.number,
+        )
         .with_for_update()
         .execution_options(populate_existing=True)
     )
@@ -192,7 +196,11 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
     scope = await scope_project_keys(session, integration)
     links = pull_request_links(event, frozenset(scope))
     exists = await session.scalar(
-        select(PullRequest.id).where(PullRequest.integration_id == integration.id, PullRequest.number == event.number)
+        select(PullRequest.id).where(
+            PullRequest.integration_id == integration.id,
+            PullRequest.provider == integration.provider,
+            PullRequest.number == event.number,
+        )
     )
     issues = await _issues(session, links, scope) if links else {}
     if exists is None and not issues and event.state != PR_MERGED:
@@ -209,6 +217,11 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
             await session.execute(select(IssuePullRequestLink).where(IssuePullRequestLink.pull_request_id == pr.id))
         ).scalars()
     }
+    # A pair someone detached is never linked again.
+    from specivo.services.repository_activity import ITEM_PULL_REQUEST, detached_pairs
+
+    for _pr_id, issue_id in await detached_pairs(session, ITEM_PULL_REQUEST, {(pr.id, i) for i in issues}):
+        del issues[issue_id]
     git_user = await get_git_user(session)
     from specivo.services.journal_service import JournalService
 

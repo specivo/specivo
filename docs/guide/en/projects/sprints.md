@@ -29,7 +29,22 @@ work. You **plan** a sprint, **start** it, and **complete** it.
    sprint, and its issues show up on the sprint board.
 3. **Complete.** At the end of the window, **complete** the sprint. Completing it **snapshots the
    team's velocity** — a record of how much work was finished — so you have a baseline for planning
-   the next one.
+   the next one. Issues that aren't done move to the backlog, or to another **planned** or **active**
+   sprint of the same project if you pick one.
+
+### A completed sprint is closed to new issues
+
+Once a sprint is completed, no issue can be added to it: the sprint pickers no longer offer it, and the
+REST API and MCP refuse it. An issue that is already in a completed sprint keeps showing it, and you can
+still take the issue out (clear its sprint, or move it to an open sprint). That doesn't change the
+sprint's velocity, which was recorded when it was completed.
+
+### The lifecycle in issue history
+
+Starting and completing a sprint shows on each affected issue's **Activity** tab, credited to the person
+who did it: "Sprint «name» started" on every issue in the sprint, "Sprint «name» completed" on the issues
+that stayed, and a normal sprint change on the issues that moved out. These lines don't send
+notifications.
 
 ### What counts as done
 

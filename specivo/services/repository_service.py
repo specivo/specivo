@@ -3,14 +3,17 @@
 Each integration gets its own hook URL (``/hooks/{provider}/{public_id}/``)
 and secret. The secret is generated here (32 random bytes, hex), stored as a
 ``secret_box`` token (purpose ``repo-integration-secret``) and returned in
-clear only by the call that set it: create and rotate. Rotation replaces it at
-once; there is no grace period for the old one.
+clear only by the call that set it: create, rotate, and an update that
+changes the provider (the hook URL names the provider, so the forge's webhook
+has to be set up again anyway). Rotation replaces it at once; there is no
+grace period for the old one.
 """
 
 from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -22,6 +25,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core import secret_box
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, ValidationError
+from specivo.hooks.repo_url import (
+    COMPATIBLE_PROVIDERS,
+    KNOWN_HOSTS,
+    is_ssh_address,
+    parse_repo_address,
+    repo_name_in_path,
+)
 from specivo.models.lookups import IssueStatus
 from specivo.models.member import Member, MemberRole
 from specivo.models.repository import (
@@ -31,13 +41,24 @@ from specivo.models.repository import (
     RepositoryCommit,
     RepositoryDelivery,
     RepositoryIntegration,
+    RepositoryRelease,
 )
 from specivo.models.role import Role, RoleBuiltin
 from specivo.models.user import User
+from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.repository import (
+    DEVELOPMENT_KINDS,
     DevelopmentBranchOut,
+    DevelopmentCiRunOut,
     DevelopmentCommitOut,
+    DevelopmentDeploymentOut,
+    DevelopmentEnvironmentOut,
     DevelopmentPullRequestOut,
+    DevelopmentReleaseOut,
+    DevelopmentRepositoryOut,
+    DevelopmentReviewOut,
+    DevelopmentSummaryOut,
+    DevelopmentTimelineItemOut,
     IssueDevelopmentOut,
     RepositoryIntegrationCreate,
     RepositoryIntegrationOut,
@@ -94,6 +115,44 @@ def integration_secret_out(
     integration: RepositoryIntegration, secret: str, git_role_id: int | None = None
 ) -> RepositoryIntegrationSecretOut:
     return RepositoryIntegrationSecretOut(**integration_out(integration, git_role_id).model_dump(), secret=secret)
+
+
+_PROVIDER_LABELS = {"github": "GitHub", "gitlab": "GitLab", "gitea": "Gitea", "forgejo": "Forgejo"}
+
+
+def check_repository_address(provider: str, repo_full_name: str, repo_url: str) -> str:
+    """Check that provider, repository and URL agree; returns the URL to store.
+
+    Read with ``specivo.hooks.repo_url``. On a known host (github.com,
+    gitlab.com, codeberg.org) the provider must be the host's and the
+    repository the one the URL names, and the URL is stored cut back to the
+    repository root. On another host the repository must appear in the URL
+    path; the URL is stored as given, except that an SSH address becomes the
+    web URL. A mismatch is a 422 naming the field at fault.
+    """
+    address = parse_repo_address(repo_url, provider)
+    if address is None:
+        raise ValidationError(
+            "The URL does not point at a repository: use its web address, such as https://example.org/owner/repository.",
+            field="repo_url",
+        )
+    if address.known_host:
+        host_provider = KNOWN_HOSTS[address.host]
+        if provider not in COMPATIBLE_PROVIDERS[host_provider]:
+            raise ValidationError(
+                f"{address.host} repositories use the {_PROVIDER_LABELS[host_provider]} provider.", field="provider"
+            )
+        if address.repo_full_name.lower() != repo_full_name.lower():
+            raise ValidationError(
+                f"The repository does not match the URL, which names {address.repo_full_name}.",
+                field="repo_full_name",
+            )
+        return address.url
+    if not repo_name_in_path(repo_full_name, address.path):
+        raise ValidationError(
+            f"The repository does not match the URL: {repo_full_name} is not in its path.", field="repo_full_name"
+        )
+    return address.url if is_ssh_address(repo_url) else repo_url.strip()
 
 
 class RepositoryAlreadyConnectedError(AppError):
@@ -263,13 +322,14 @@ class RepositoryIntegrationService:
         request: Request | None = None,
     ) -> tuple[RepositoryIntegration, str]:
         """Connect a repository; returns the integration and its secret in clear."""
+        repo_url = check_repository_address(data.provider, data.repo_full_name, data.repo_url)
         await self._validate_settings(session, data.settings)
         raw_secret = generate_secret()
         integration = RepositoryIntegration(
             project_id=project_id,
             provider=data.provider,
             repo_full_name=data.repo_full_name,
-            repo_url=data.repo_url,
+            repo_url=repo_url,
             secret_encrypted=secret_box.encrypt(raw_secret, REPO_INTEGRATION_SECRET_PURPOSE),
             scope=data.scope,
             settings=data.settings.model_dump(),
@@ -311,18 +371,40 @@ class RepositoryIntegrationService:
         *,
         actor: User,
         request: Request | None = None,
-    ) -> RepositoryIntegration:
+    ) -> tuple[RepositoryIntegration, str | None]:
         """Apply a partial update (``RepositoryIntegrationUpdate`` fields that were set).
+
+        Returns the integration and, when the provider changed, its new secret
+        in clear (else None).
 
         The actor becomes the integration's ``created_by``: whoever last
         configured it is the one whose rights bound its subproject scope, so
         editing an administrator's integration never borrows their rights.
+
+        Provider, repository and URL are checked together whenever one of them
+        is sent. A provider change moves the hook URL (it names the provider,
+        so the old one answers 404 at once), rotates the secret and writes a
+        ``repository_provider_changed`` audit row. Commits and pull requests
+        already linked stay; deliveries and pull requests keep the provider
+        they came from.
         """
         integration = await self.get(session, integration_id, project_id)
         integration.created_by_id = actor.id
-        for field in ("repo_full_name", "repo_url", "scope", "is_active"):
+        old_provider, old_repository = integration.provider, integration.repo_full_name
+        if any(data.get(f) is not None for f in ("provider", "repo_full_name", "repo_url")):
+            provider = data.get("provider") or integration.provider
+            data["repo_url"] = check_repository_address(
+                provider,
+                data.get("repo_full_name") or integration.repo_full_name,
+                data.get("repo_url") or integration.repo_url,
+            )
+        for field in ("provider", "repo_full_name", "repo_url", "scope", "is_active"):
             if data.get(field) is not None:
                 setattr(integration, field, data[field])
+        raw_secret: str | None = None
+        if integration.provider != old_provider:
+            raw_secret = generate_secret()
+            integration.secret_encrypted = secret_box.encrypt(raw_secret, REPO_INTEGRATION_SECRET_PURPOSE)
         if data.get("settings") is not None:
             settings = RepositorySettings.model_validate(data["settings"])
             await self._validate_settings(session, settings)
@@ -332,8 +414,46 @@ class RepositoryIntegrationService:
             await self._sync_git_membership(
                 session, project_id, data.get("automation_role_id"), actor=actor, request=request
             )
+        if raw_secret is not None:
+            await self._audit_provider_change(
+                session, integration, old_provider, old_repository, actor=actor, request=request
+            )
+            logger.info(
+                "Repository integration %d moved from %s to %s; secret rotated",
+                integration.id,
+                old_provider,
+                integration.provider,
+            )
         await session.refresh(integration)
-        return integration
+        return integration, raw_secret
+
+    async def _audit_provider_change(
+        self,
+        session: AsyncSession,
+        integration: RepositoryIntegration,
+        old_provider: str,
+        old_repository: str,
+        *,
+        actor: User,
+        request: Request | None,
+    ) -> None:
+        """The audit row of a provider change; a failed audit never fails the change."""
+        from specivo.services.security_audit_service import SecurityAuditService
+
+        try:
+            await SecurityAuditService().log_repository_provider_change(
+                session,
+                user_id=actor.id,
+                project_id=integration.project_id,
+                integration_id=integration.id,
+                old_provider=old_provider,
+                new_provider=integration.provider,
+                old_repository=old_repository,
+                new_repository=integration.repo_full_name,
+                request=request,
+            )
+        except Exception:
+            logger.warning("Audit of the provider change of integration %d failed", integration.id, exc_info=True)
 
     async def rotate_secret(
         self, session: AsyncSession, integration_id: int, project_id: int, *, actor: User
@@ -415,15 +535,34 @@ def branch_url(provider: str, repo_url: str, branch: str) -> str | None:
     return f"{repo_url.rstrip('/')}/{path}/{quote(branch, safe='/')}"
 
 
-async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDevelopmentOut:
-    """Commits, pull requests and branches linked to an issue, in three queries.
+async def development_for_issue(
+    session: AsyncSession,
+    issue_id: int,
+    *,
+    kinds: Sequence[str] | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> IssueDevelopmentOut:
+    """Everything developed for an issue: commits, pull requests, branches, reviews, CI, deployments, releases.
 
     Commits newest first (at most ``DEVELOPMENT_COMMIT_LIMIT``, with the
     total), pull requests open first then newest, and the branches of both
-    except each repository's default branch. The caller has already checked
-    that the user may see the issue.
+    except each repository's default branch. Reviews, CI runs, deployments and
+    releases (newest first; CI runs and deployments at most
+    ``DEVELOPMENT_ACTIVITY_PER_ISSUE``), a ``summary`` with counts and combined
+    statuses, and the ``timeline`` of *kinds* (all when None) paged by
+    *offset* and *limit*. The caller has already checked that the user may
+    see the issue: anyone who may sees all of it, and nobody else any of it.
     """
-    from specivo.core.constants import DEVELOPMENT_COMMIT_LIMIT, DEVELOPMENT_PULL_REQUEST_LIMIT
+    from specivo.core.constants import (
+        DEVELOPMENT_ACTIVITY_PER_ISSUE,
+        DEVELOPMENT_COMMIT_LIMIT,
+        DEVELOPMENT_PULL_REQUEST_LIMIT,
+        DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
+    )
+    from specivo.hooks import development as dev
+    from specivo.models.repository import CiRun, Deployment, PullRequestReview
+    from specivo.services import repository_activity as activity
 
     commits, total = await commits_for_issue(session, issue_id, DEVELOPMENT_COMMIT_LIMIT)
     integration_ids = {c.integration_id for c in commits}
@@ -440,7 +579,57 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
             .limit(DEVELOPMENT_PULL_REQUEST_LIMIT)
         )
     ).all()
+    pr_count = await session.scalar(
+        select(func.count()).select_from(IssuePullRequestLink).where(IssuePullRequestLink.issue_id == issue_id)
+    )
+    review_rows = (
+        await session.execute(
+            activity.reviews_query(issue_id).order_by(
+                PullRequestReview.submitted_at.desc(), PullRequestReview.id.desc()
+            )
+        )
+    ).all()
+    ci_clause = activity.ci_runs_clause(issue_id)
+    ci_rows = list(
+        (
+            await session.execute(
+                select(CiRun)
+                .where(ci_clause)
+                .order_by(CiRun.occurred_at.desc(), CiRun.id.desc())
+                .limit(DEVELOPMENT_ACTIVITY_PER_ISSUE)
+            )
+        ).scalars()
+    )
+    deploy_clause = activity.deployments_clause(issue_id)
+    deploy_rows = list(
+        (
+            await session.execute(
+                select(Deployment)
+                .where(deploy_clause)
+                .order_by(Deployment.occurred_at.desc(), Deployment.id.desc())
+                .limit(DEVELOPMENT_ACTIVITY_PER_ISSUE)
+            )
+        ).scalars()
+    )
+    release_rows = (
+        await session.execute(
+            activity.releases_query(issue_id).order_by(
+                func.coalesce(RepositoryRelease.released_at, RepositoryRelease.occurred_at).desc(),
+                RepositoryRelease.id.desc(),
+            )
+        )
+    ).all()
+    ci_count = await session.scalar(select(func.count()).select_from(CiRun).where(ci_clause))
+    deploy_count = await session.scalar(select(func.count()).select_from(Deployment).where(deploy_clause))
+
     integration_ids |= {pr.integration_id for pr, _closing in pr_rows}
+    integration_ids |= {pr.integration_id for _review, pr in review_rows}
+    integration_ids |= {r.integration_id for r in ci_rows} | {d.integration_id for d in deploy_rows}
+    integration_ids |= {r.integration_id for r, *_rest in release_rows}
+    selected_kinds = [k for k in DEVELOPMENT_KINDS if kinds is None or k in kinds]
+    page_limit = limit if limit is not None else DEVELOPMENT_TIMELINE_DEFAULT_LIMIT
+    timeline_total, timeline_rows = await activity.timeline(session, issue_id, selected_kinds, offset, page_limit)
+    integration_ids |= {row.integration_id for row in timeline_rows}
     integrations = (
         {
             i.id: i
@@ -472,6 +661,7 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
         _branch(integration, pr.source_branch)
         pull_requests.append(
             DevelopmentPullRequestOut(
+                id=pr.id,
                 number=pr.number,
                 title=pr.title,
                 url=pr.url,
@@ -482,7 +672,8 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
                 merged_at=pr.merged_at,
                 closing=closing,
                 repository=integration.repo_full_name,
-                provider=integration.provider,
+                # The forge the request is on, which stays when the integration's provider changes.
+                provider=pr.provider,
             )
         )
     commits_out = []
@@ -491,17 +682,161 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
         _branch(integration, c.branch)
         commits_out.append(
             DevelopmentCommitOut(
+                id=c.id,
                 sha=c.sha,
                 short_sha=c.short_sha,
                 first_line=c.first_line,
                 url=c.url,
                 branch=c.branch,
+                branch_url=branch_url(integration.provider, integration.repo_url, c.branch) if c.branch else None,
                 author_name=c.author_name,
                 committed_at=c.committed_at,
                 repository=integration.repo_full_name,
                 provider=integration.provider,
             )
         )
+    reviews_out = [
+        DevelopmentReviewOut(
+            pull_request_id=pr.id,
+            pull_request_number=pr.number,
+            reviewer_login=review.reviewer_login,
+            state=review.state,
+            submitted_at=review.submitted_at,
+            url=review.url or pr.url,
+            repository=integrations[pr.integration_id].repo_full_name,
+            provider=pr.provider,
+        )
+        for review, pr in review_rows
+    ]
+    ci_out = [
+        DevelopmentCiRunOut(
+            id=r.id,
+            run_type=r.run_type,
+            name=r.name,
+            status=r.status,
+            head_sha=r.head_sha,
+            branch=r.branch,
+            pull_request_number=r.pull_request_number,
+            url=r.url,
+            attempt=r.attempt,
+            started_at=r.started_at,
+            completed_at=r.completed_at,
+            occurred_at=r.occurred_at,
+            repository=integrations[r.integration_id].repo_full_name,
+            provider=r.provider,
+        )
+        for r in ci_rows
+    ]
+
+    def _env_type(d: Deployment) -> str | None:
+        overrides = (integrations[d.integration_id].settings or {}).get("environment_types")
+        return dev.environment_type(d.environment, overrides if isinstance(overrides, dict) else None)
+
+    deployments_out = [
+        DevelopmentDeploymentOut(
+            id=d.id,
+            environment=d.environment,
+            environment_type=_env_type(d),
+            status=d.status,
+            sha=d.sha,
+            ref=d.ref,
+            url=d.url,
+            deployed_at=d.deployed_at,
+            occurred_at=d.occurred_at,
+            repository=integrations[d.integration_id].repo_full_name,
+            provider=d.provider,
+        )
+        for d in deploy_rows
+    ]
+    releases_out = [
+        DevelopmentReleaseOut(
+            id=r.id,
+            tag_name=r.tag_name,
+            name=r.name,
+            is_release=r.is_release,
+            sha=r.sha,
+            url=r.url,
+            released_at=r.released_at,
+            occurred_at=r.occurred_at,
+            source=source,
+            version_id=version_id,
+            version_name=version_name,
+            repository=integrations[r.integration_id].repo_full_name,
+            provider=r.provider,
+        )
+        for r, source, version_id, version_name in release_rows
+    ]
+
+    latest_env: dict[str | None, DevelopmentEnvironmentOut] = {}
+    for d in deployments_out:
+        if d.deployed_at is None:
+            continue
+        current = latest_env.get(d.environment_type)
+        if current is None or d.deployed_at > current.deployed_at:
+            latest_env[d.environment_type] = DevelopmentEnvironmentOut(
+                environment_type=d.environment_type,
+                environment=d.environment,
+                deployed_at=d.deployed_at,
+                url=d.url,
+                repository=d.repository,
+                provider=d.provider,
+            )
+    env_order: dict[str | None, int] = {t: i for i, t in enumerate((*reversed(dev.ENVIRONMENT_TYPES), None))}
+    summary = DevelopmentSummaryOut(
+        counts={
+            "commit": total,
+            "pull_request": int(pr_count or 0),
+            "review": len(reviews_out),
+            "ci": int(ci_count or 0),
+            "deployment": int(deploy_count or 0),
+            "release": len(releases_out),
+        },
+        pull_requests=dev.combined_pull_request_state(pr.state for pr, _closing in pr_rows),
+        reviews=dev.combined_review_state(r.state for r in reviews_out),
+        ci=dev.combined_ci_state(
+            dev.CiLatest(
+                (r.integration_id, r.run_type, r.name),
+                r.status,
+                dev.ci_order_key(r.attempt, r.provider_updated_at or r.occurred_at, r.status),
+            )
+            for r in ci_rows
+        ),
+        deployments=sorted(latest_env.values(), key=lambda e: env_order[e.environment_type]),
+        # The first release the issue made it into comes first.
+        released_in=sorted(releases_out, key=lambda r: (r.released_at or r.occurred_at, r.id)),
+        repositories=[
+            DevelopmentRepositoryOut(name=i.repo_full_name, url=i.repo_url, provider=i.provider)
+            for i in sorted(integrations.values(), key=lambda i: i.repo_full_name.lower())
+        ],
+    )
+    timeline_items = [
+        DevelopmentTimelineItemOut(
+            kind=row.kind,
+            id=row.id,
+            occurred_at=row.occurred_at,
+            title=row.title,
+            state=row.state,
+            url=row.url,
+            repository=integrations[row.integration_id].repo_full_name,
+            provider=row.provider or integrations[row.integration_id].provider,
+            sha=row.sha,
+            branch=row.branch,
+            number=row.number,
+            actor=row.actor,
+        )
+        for row in timeline_rows
+    ]
     return IssueDevelopmentOut(
-        commit_count=total, commits=commits_out, pull_requests=pull_requests, branches=list(branches.values())
+        commit_count=total,
+        commits=commits_out,
+        pull_requests=pull_requests,
+        branches=list(branches.values()),
+        reviews=reviews_out,
+        ci_runs=ci_out,
+        deployments=deployments_out,
+        releases=releases_out,
+        summary=summary,
+        timeline=PaginatedResponse[DevelopmentTimelineItemOut](
+            total_count=timeline_total, offset=offset, limit=page_limit, items=timeline_items
+        ),
     )

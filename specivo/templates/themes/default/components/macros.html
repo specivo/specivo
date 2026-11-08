@@ -114,10 +114,18 @@
 {# --- Avatar ---
    Usage: {{ avatar("John D", size="sm", color="#5B8C5A", avatar_url="/data/avatars/ab/abc.webp") }}
    Sizes: xs, sm, md, lg
+   *name* is usually the login. A built-in system account (a ``$`` login such
+   as ``$git``) shows its bundled icon when it has one, else initials taken
+   from *display_name* (or the login without the ``$``): never a ``$``.
 #}
-{% macro avatar(name, size='sm', color='', avatar_url='') %}
-{% set initials = name[:2] | upper if name else '?' %}
-{% if avatar_url %}
+{% macro avatar(name, size='sm', color='', avatar_url='', display_name='') %}
+{% set system = name is string and name.startswith('$') %}
+{% set icon = system_avatar_icons.get(name) if system else none %}
+{% set label = (display_name or name[1:]) if system else name %}
+{% set initials = label[:2] | upper if label else '?' %}
+{% if icon %}
+<span class="avatar-{{ size }} sp-avatar-icon sp-avatar-icon-{{ icon }}" role="img" aria-label="{{ display_name or name[1:] }}" title="{{ display_name or name[1:] }}" data-avatar-icon="{{ icon }}"></span>
+{% elif avatar_url and not system %}
 <img src="{{ avatar_url }}" class="avatar-{{ size }} avatar-img" alt="{{ initials }}">
 {% else %}
 <span class="avatar-{{ size }}"{% if color %} style="background:{{ color }};color:white"{% endif %}>{{ initials }}</span>
@@ -127,7 +135,9 @@
 {# --- Pagination ---
    Usage: {{ pagination(total=120, offset=20, limit=25, base_url="/issues") }}
 #}
-{% macro pagination(total, offset, limit, base_url) %}
+{% macro pagination(total, offset, limit, base_url, query="") %}
+{# query: an urlencoded query string (no "?") kept on every link, such as active filters. #}
+{% set q = query ~ "&" if query else "" %}
 {% set current_page = (offset // limit) + 1 %}
 {% set total_pages = ((total - 1) // limit) + 1 if total > 0 else 1 %}
 {% if total > 0 %}
@@ -138,25 +148,25 @@
   {% if total_pages > 1 %}
   <div class="sp-pagination-pages">
     {% if current_page > 1 %}
-      <a href="{{ base_url }}?offset={{ (current_page - 2) * limit }}&limit={{ limit }}" class="sp-page-link">&laquo;</a>
+      <a href="{{ base_url }}?{{ q }}offset={{ (current_page - 2) * limit }}&limit={{ limit }}" class="sp-page-link">&laquo;</a>
     {% endif %}
     {% for page in range(1, total_pages + 1) %}
       {% if page == current_page %}
         <span class="sp-page-link active">{{ page }}</span>
       {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
-        <a href="{{ base_url }}?offset={{ (page - 1) * limit }}&limit={{ limit }}" class="sp-page-link">{{ page }}</a>
+        <a href="{{ base_url }}?{{ q }}offset={{ (page - 1) * limit }}&limit={{ limit }}" class="sp-page-link">{{ page }}</a>
       {% elif page == 3 or page == total_pages - 2 %}
         <span class="sp-page-link dots">&hellip;</span>
       {% endif %}
     {% endfor %}
     {% if current_page < total_pages %}
-      <a href="{{ base_url }}?offset={{ current_page * limit }}&limit={{ limit }}" class="sp-page-link">&raquo;</a>
+      <a href="{{ base_url }}?{{ q }}offset={{ current_page * limit }}&limit={{ limit }}" class="sp-page-link">&raquo;</a>
     {% endif %}
   </div>
   {% endif %}
   <div class="sp-pagination-size">
     <label>{% trans %}Show{% endtrans %}</label>
-    <select data-pagination-limit data-base-url="{{ base_url }}" style="accent-color:var(--sp-accent);">
+    <select data-pagination-limit data-base-url="{{ base_url }}{{ "?" ~ query if query else "" }}" style="accent-color:var(--sp-accent);">
       {% for size in [10, 25, 50] %}
       <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>
       {% endfor %}

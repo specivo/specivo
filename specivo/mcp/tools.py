@@ -27,11 +27,12 @@ from specivo.core.exceptions import (
     ValidationError,
 )
 from specivo.core.utils import utcnow
+from specivo.mcp.client_context import record_working_issue
 from specivo.models.issue import Issue
-from specivo.models.journal import ATTACHMENT_DETAIL, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
-from specivo.models.security_audit import SecurityAuditLog
+from specivo.models.tag import Tag
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
@@ -41,7 +42,9 @@ from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.computed_metadata_service import load_project_settings, merge_computed
+from specivo.services.entity_link_service import EntityLinkService
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
 from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.permission_service import Permission, check_permission
@@ -50,7 +53,7 @@ from specivo.services.recurrence import expand_occurrences
 from specivo.services.recurring_pattern_service import RecurringPatternService
 from specivo.services.relation_service import RelationService
 from specivo.services.search_service import SearchService
-from specivo.services.security_audit_service import AuditEvent
+from specivo.services.security_audit_service import AuditEvent, bounded_log, current_request_info
 from specivo.services.sprint_service import SprintService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
@@ -60,6 +63,7 @@ from specivo.services.wiki_service import WikiService
 logger = logging.getLogger(__name__)
 
 _issue_svc = IssueService()
+_link_svc = EntityLinkService()
 _project_svc = ProjectService()
 _wiki_svc = WikiService()
 _search_svc = SearchService()
@@ -80,15 +84,18 @@ async def _log_tool(
     details: dict | None = None,
     project_id: int | None = None,
 ) -> None:
-    """Log an MCP tool call. Core feature — always persisted, no enterprise gate."""
+    """Log an MCP tool call, with where the call came from when the request's audit context reaches it."""
     log_details = {"tool": tool_name, "source": "mcp"}
     if details:
         log_details.update(details)
-    log = SecurityAuditLog(
-        event_type=str(event_type),
-        user_id=user.id,
-        project_id=project_id,
-        details=log_details,
+    log = bounded_log(
+        {
+            "event_type": str(event_type),
+            "user_id": user.id,
+            "project_id": project_id,
+            "details": log_details,
+            **current_request_info(),
+        }
     )
     session.add(log)
     await session.flush()
@@ -158,9 +165,7 @@ def _parse_metadata_filters(raw: list[str] | None) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     for item in raw:
         if not isinstance(item, str) or "=" not in item:
-            raise ValueError(
-                f"metadata filter {item!r} must be a 'key=value' string"
-            )
+            raise ValueError(f"metadata filter {item!r} must be a 'key=value' string")
         key, _, value = item.partition("=")
         key = key.strip()
         if not key:
@@ -189,6 +194,76 @@ async def _resolve_parent_ref(session: AsyncSession, user: User, parent_ref: str
     return parent
 
 
+async def _resolve_list_filters(
+    session: AsyncSession,
+    user: User,
+    project: Project,
+    *,
+    assignee: str | None,
+    tag: str | None,
+    release: str | None,
+) -> dict[str, object]:
+    """The ``list_issues`` filters for the assignee, tag and release arguments, as the issue list reads them.
+
+    Each takes a name or a numeric id; ``assignee`` also ``me`` and ``none``,
+    ``release`` also ``none`` (see :mod:`specivo.services.issue_list_filters`).
+    Only what the issue list's own pickers offer resolves: people issues of
+    the project can be assigned to, the project's tags, and the versions the
+    caller may see from the project (shared ones included). Anything else is
+    a ``ValueError`` naming the argument, with the same message whether it
+    does not exist or the caller may not see it.
+    """
+    from specivo.services.issue_list_filters import NO_VALUE
+
+    filters: dict[str, object] = {}
+
+    value = (assignee or "").strip()
+    if value:
+        lowered = value.casefold()
+        if lowered == NO_VALUE:
+            filters["assigned_to_id"] = NO_VALUE
+        elif lowered == "me":
+            filters["assigned_to_id"] = user.id
+        else:
+            match = User.id == int(value) if value.isdecimal() else func.lower(User.login) == lowered
+            found = await session.scalar(
+                select(User.id).where(match, _project_svc.assignable_users_clause(project)).limit(1)
+            )
+            if found is None:
+                raise ValueError(
+                    f"Unknown assignee '{value}' in {project.key}: use a login or id of someone issues "
+                    "here can be assigned to, 'me' or 'none'."
+                )
+            filters["assigned_to_id"] = found
+
+    value = (tag or "").strip()
+    if value:
+        match = Tag.id == int(value) if value.isdecimal() else func.lower(Tag.name) == value.casefold()
+        found = await session.scalar(select(Tag.id).where(Tag.project_id == project.id, match).limit(1))
+        if found is None:
+            raise ValueError(f"Unknown tag '{value}' in {project.key}.")
+        filters["tag_id"] = found
+
+    value = (release or "").strip()
+    if value:
+        if value.casefold() == NO_VALUE:
+            filters["version_id"] = NO_VALUE
+        else:
+            versions = await _version_svc.visible_versions(session, project, user)
+            wanted = int(value) if value.isdecimal() else None
+            matches = [
+                v for v in versions if (v.id == wanted if wanted is not None else v.name.casefold() == value.casefold())
+            ]
+            if not matches:
+                raise ValueError(
+                    f"Unknown release '{value}' in {project.key}: use a version name or id visible here, or 'none'."
+                )
+            # A name shared by this project's own version and a shared one: the project's own wins.
+            matches.sort(key=lambda v: v.project_id != project.id)
+            filters["version_id"] = matches[0].id
+    return filters
+
+
 async def _list_issues(
     session: AsyncSession,
     user: User,
@@ -200,12 +275,20 @@ async def _list_issues(
     sprint_id: int | None = None,
     metadata_filters: list[str] | None = None,
     parent_ref: str | None = None,
+    assignee: str | None = None,
+    tag: str | None = None,
+    release: str | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     filters: dict = {"status": status}
     if sprint_id is not None:
         filters["sprint_id"] = sprint_id
+    try:
+        named = await _resolve_list_filters(session, user, project, assignee=assignee, tag=tag, release=release)
+    except ValueError as exc:
+        return f"Error: {exc}"
+    filters.update(named)
     parent: Issue | None = None
     if parent_ref:
         try:
@@ -238,6 +321,9 @@ async def _list_issues(
         scope += ", metadata=" + ",".join(f"{k}={v}" for k, v in parsed_metadata)
     if parent is not None:
         scope += f", parent={parent.display_key}"
+    for name, value in (("assignee", assignee), ("tag", tag), ("release", release)):
+        if value is not None and value.strip():
+            scope += f", {name}={value.strip()}"
     lines = [f"Issues for {project.key} ({total} total, {scope}):", ""]
     # One batched query for every issue on this page — never per-issue lookups.
     tags_by_issue = await _tag_svc.tags_for_issues(session, [i.id for i in issues])
@@ -295,6 +381,9 @@ async def _show_issue(
     ]
     if issue.assigned_to:
         lines.append(f"Assigned to: {issue.assigned_to.display_name}")
+    source = await imported_from(session, issue.id)
+    if source is not None:
+        lines.append(f"Imported from: {source.label}")
     lines.append(f"Created: {issue.created_at}")
     lines.append(f"Updated: {issue.updated_at}")
     if issue.start_date:
@@ -303,11 +392,13 @@ async def _show_issue(
         lines.append(f"Due date: {issue.due_date}")
     if issue.estimated_hours:
         lines.append(f"Estimated hours: {issue.estimated_hours}")
+    if issue.original_estimate is not None:
+        lines.append(f"Original estimate hours: {issue.original_estimate}")
+    if issue.remaining_estimate is not None:
+        lines.append(f"Remaining estimate hours: {issue.remaining_estimate}")
     lines.append(f"Done: {issue.done_ratio}%")
     lines.extend(await _hierarchy_lines(session, user, issue))
-    effective_metadata = merge_computed(
-        issue.issue_metadata, await load_project_settings(session, issue.project_id)
-    )
+    effective_metadata = merge_computed(issue.issue_metadata, await load_project_settings(session, issue.project_id))
     if effective_metadata:
         lines.append(f"Metadata: {effective_metadata}")
         lines.extend(await _metadata_field_lines(session, user, issue, effective_metadata))
@@ -319,6 +410,7 @@ async def _show_issue(
     lines.append(f"Comments: {comments_count}")
     lines.extend(await _commit_lines(session, issue.id))
     lines.extend(await _pull_request_lines(session, issue.id))
+    lines.extend(await _link_lines(session, user, ("issue", issue.id)))
 
     if not metadata_only:
         description = issue.description or ""
@@ -379,10 +471,43 @@ async def _commit_lines(session: AsyncSession, issue_id: int) -> list[str]:
 
 
 async def _pull_request_lines(session: AsyncSession, issue_id: int) -> list[str]:
-    """``Pull requests: N`` and each linked request (number, state, title, branch, URL); none when unlinked."""
+    """``Pull requests: N`` and each linked request (number, state, title, branch, URL); none when unlinked.
+
+    Then one ``Development:`` line summing up reviews, CI, deployments and
+    releases, when there are any (details: ``specivo_issue_development``).
+    """
     from specivo.services.repository_service import development_for_issue
 
-    pull_requests = (await development_for_issue(session, issue_id)).pull_requests
+    development = await development_for_issue(session, issue_id, limit=1)
+    pull_requests = development.pull_requests
+    lines = _pull_request_list(pull_requests)
+    summary_line = _development_summary_line(development)
+    if summary_line:
+        lines.append(summary_line)
+    return lines
+
+
+def _development_summary_line(development: Any) -> str | None:
+    """``Development: reviews approved; CI failing (3 runs); deployed to production 2026-...; released in v1.2``."""
+    summary = development.summary
+    if summary is None:
+        return None
+    parts: list[str] = []
+    if summary.reviews:
+        parts.append(f"reviews {summary.reviews.replace('_', ' ')}")
+    if summary.ci:
+        parts.append(f"CI {summary.ci} ({summary.counts.get('ci', 0)} runs)")
+    for env in summary.deployments:
+        where = env.environment_type or env.environment
+        parts.append(f"deployed to {where} {env.deployed_at.isoformat(timespec='minutes')}")
+    if summary.released_in:
+        parts.append("released in " + ", ".join(r.tag_name for r in summary.released_in[:5]))
+    if not parts:
+        return None
+    return "Development: " + "; ".join(parts) + " (specivo_issue_development for details)"
+
+
+def _pull_request_list(pull_requests: list) -> list[str]:
     if not pull_requests:
         return []
     lines = [f"Pull requests: {len(pull_requests)}"]
@@ -396,6 +521,38 @@ async def _pull_request_lines(session: AsyncSession, issue_id: int) -> list[str]
             line += f" {pr.url}"
         lines.append(line)
     return lines
+
+
+async def _issue_development(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+    kinds: list[str] | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> str:
+    """The issue's development activity as JSON, the same document ``GET /api/v1/issues/{ref}/development/`` returns."""
+    import json
+
+    from specivo.core.constants import DEVELOPMENT_TIMELINE_MAX_LIMIT, DEVELOPMENT_TIMELINE_MAX_OFFSET
+    from specivo.schemas.repository import DEVELOPMENT_KINDS
+    from specivo.services.repository_service import development_for_issue
+
+    if kinds is not None:
+        unknown = sorted(set(kinds) - set(DEVELOPMENT_KINDS))
+        if unknown:
+            raise ValidationError(f"Unknown kinds: {', '.join(unknown)}. Use: {', '.join(DEVELOPMENT_KINDS)}")
+    if not 1 <= limit <= DEVELOPMENT_TIMELINE_MAX_LIMIT:
+        raise ValidationError(f"limit must be between 1 and {DEVELOPMENT_TIMELINE_MAX_LIMIT}")
+    if not 0 <= offset <= DEVELOPMENT_TIMELINE_MAX_OFFSET:
+        raise ValidationError(f"offset must be between 0 and {DEVELOPMENT_TIMELINE_MAX_OFFSET}")
+    issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    await _require_permission(session, user, issue.project_id, "view_issues")
+    development = await development_for_issue(session, issue.id, kinds=kinds, offset=offset, limit=limit)
+    await _log_tool(
+        session, user, AuditEvent.ISSUE_READ, "issue_development", {"issue_ref": issue_ref}, project_id=issue.project_id
+    )
+    return json.dumps(development.model_dump(mode="json"), ensure_ascii=False)
 
 
 def _extract_section(text: str, search: str) -> str | None:
@@ -479,6 +636,8 @@ async def _create_issue(
         {"project_key": project_key, "subject": subject, "issue_ref": issue.display_key},
         project_id=project.id,
     )
+    if await _works_on(session, user, issue):
+        await record_working_issue(session, user, issue)
     result = (
         f"Created issue {issue.display_key}: {issue.subject}\nStatus: {issue.status_id}, Priority: {issue.priority_id}"
     )
@@ -544,10 +703,49 @@ async def _update_issue(
         # The service takes 0 for "move to root".
         supplied["parent_id"] = parent.id if parent is not None else 0
     data = IssueUpdate(**supplied, lock_version=issue.lock_version)
+    status_before, assignee_before = issue.status_id, issue.assigned_to_id
     updated = await _issue_svc.update(session, issue, data, user, notes=notes)
     await session.flush()
     await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "update_issue", {"issue_ref": issue_ref})
+    if await _starts_work(session, user, updated, status_before, assignee_before) or await _resumes_work(
+        session, user, updated
+    ):
+        await record_working_issue(session, user, updated)
     return f"Updated issue {updated.display_key}: {updated.subject}\nLock version: {updated.lock_version}"
+
+
+async def _is_active(session: AsyncSession, issue: Issue) -> bool:
+    status = await session.get(IssueStatus, issue.status_id)
+    return status is not None and status.category == "active"
+
+
+async def _works_on(session: AsyncSession, user: User, issue: Issue) -> bool:
+    """Whether *user* creating *issue* means working on it: it is assigned to them or in an ``active`` status."""
+    return issue.assigned_to_id == user.id or await _is_active(session, issue)
+
+
+async def _resumes_work(session: AsyncSession, user: User, issue: Issue) -> bool:
+    """Whether *issue* is, after an update, in an ``active`` status and assigned to *user*.
+
+    Marks an issue the agent resumes even when the update changed nothing
+    (it was already In Progress and theirs).
+    """
+    return issue.assigned_to_id == user.id and await _is_active(session, issue)
+
+
+async def _starts_work(
+    session: AsyncSession, user: User, issue: Issue, status_before: int, assignee_before: int | None
+) -> bool:
+    """Whether an update means *user* has started work on *issue*.
+
+    True when it moved the issue into a status of the ``active`` group, or
+    assigned it to *user*. Setting a value the issue already had is not a change.
+    """
+    if issue.assigned_to_id == user.id and assignee_before != user.id:
+        return True
+    if issue.status_id != status_before:
+        return await _is_active(session, issue)
+    return False
 
 
 async def _move_issue(
@@ -777,6 +975,7 @@ async def _read_wiki(
         f"Version: {content.version}",
         f"Lock version: {page.lock_version}",
     ]
+    lines.extend(await _link_lines(session, user, ("wiki_page", page.id)))
     if not metadata_only:
         text = content.text or ""
         if search and text:
@@ -795,6 +994,99 @@ async def _read_wiki(
             lines.append(text)
     await _log_tool(session, user, AuditEvent.WIKI_READ, "read_wiki", {"project_key": project_key, "slug": slug})
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Link graph
+# ---------------------------------------------------------------------------
+
+
+def _link_item(node: Any) -> str:
+    text = f"{node.ref} {node.title}".strip()
+    if node.status:
+        text += f" [{node.status}]"
+    return text
+
+
+def _capped(label: str, items: list[str]) -> list[str]:
+    """``Label: a; b; ...`` capped at ``ENTITY_LINKS_INLINE_LIMIT`` items, or nothing when empty."""
+    from specivo.core.constants import ENTITY_LINKS_INLINE_LIMIT
+
+    if not items:
+        return []
+    shown = items[:ENTITY_LINKS_INLINE_LIMIT]
+    line = f"{label}: " + "; ".join(shown)
+    if len(items) > len(shown):
+        line += f"; ... and {len(items) - len(shown)} more"
+    return [line]
+
+
+async def _link_lines(session: AsyncSession, user: User, root: tuple[str, int]) -> list[str]:
+    """``Links to:``, ``Linked from:``, ``Related:`` and ``Broken links:`` lines for an issue or wiki page.
+
+    Text links and relations only (parent, children, commits and pull requests
+    have lines of their own), filtered for *user* like ``specivo_get_links``.
+    """
+    from specivo.core.constants import ENTITY_LINKS_MAX_LIMIT
+    from specivo.services.entity_link_service import KIND_RELATION, TEXT_LINK_KINDS
+
+    graph = await _link_svc.get_links(
+        session,
+        user,
+        root,
+        direction="both",
+        kinds=TEXT_LINK_KINDS | {KIND_RELATION},
+        limit=ENTITY_LINKS_MAX_LIMIT,
+    )
+    nodes = {n.ref: n for n in graph.nodes}
+    links_to: list[str] = []
+    linked_from: list[str] = []
+    related: list[str] = []
+    broken: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for edge in graph.edges:
+        if edge.broken:
+            if edge.target not in broken:
+                broken.append(edge.target)
+            continue
+        if edge.kind == KIND_RELATION:
+            node = nodes.get(edge.target)
+            if node is not None:
+                related.append(f"{edge.relation_type} {_link_item(node)}")
+            continue
+        other = edge.target if edge.direction == "out" else edge.source
+        if (edge.direction or "", other) in seen or other not in nodes:
+            continue
+        seen.add((edge.direction or "", other))
+        item = _link_item(nodes[other])
+        if edge.via and edge.direction == "in":
+            item += f" (comment {edge.via})"
+        (links_to if edge.direction == "out" else linked_from).append(item)
+    lines = _capped("Links to", links_to) + _capped("Linked from", linked_from)
+    lines += _capped("Related", related) + _capped("Broken links", broken)
+    return lines
+
+
+async def _get_links(
+    session: AsyncSession,
+    user: User,
+    ref: str,
+    direction: str = "both",
+    depth: int = 1,
+    types: list[str] | None = None,
+    limit: int = 50,
+) -> str:
+    import json
+
+    from specivo.services.entity_link_service import resolve_root
+
+    root = await resolve_root(session, user, ref)
+    graph = await _link_svc.get_links(
+        session, user, root, direction=direction, depth=depth, kinds=types or None, limit=limit
+    )
+    event = AuditEvent.ISSUE_READ if root[0] == "issue" else AuditEvent.WIKI_READ
+    await _log_tool(session, user, event, "get_links", {"ref": ref, "direction": direction})
+    return json.dumps(graph.as_dict(), ensure_ascii=False, indent=1)
 
 
 async def _list_wiki_pages(
@@ -928,6 +1220,8 @@ def _change_line(detail: JournalDetail, names: ActivityLookups) -> str:
     if detail.property == "relation":
         verb = "added" if detail.new_value and not detail.old_value else "removed"
         return f"relation {detail.prop_key} {verb}: {detail.new_value or detail.old_value}"
+    if detail.property == SPRINT_DETAIL:
+        return f"sprint {names.sprint_name(detail)} (id {detail.old_value}) {detail.prop_key}"
     if detail.property == ATTACHMENT_DETAIL:
         removed = detail.old_value is not None and detail.new_value is None
         name = names.attachment_name(detail)
@@ -1682,7 +1976,7 @@ async def _metadata(
                 f"Error: value {offender} arrived as a number with lost precision "
                 "(scientific notation, inf, or nan). Identifier-like inputs "
                 "(commit hashes, PR ids, tokens) must be passed as JSON strings — "
-                "quote the value, e.g. \"4983e31...\" instead of 4983e31..."
+                'quote the value, e.g. "4983e31..." instead of 4983e31...'
             )
 
     # Resolve & permission check
@@ -1700,9 +1994,7 @@ async def _metadata(
         # Overlay project-derived (computed) metadata for issues so the
         # effective value is returned even though it is never stored.
         if scheme == "issue":
-            metadata = merge_computed(
-                metadata, await load_project_settings(session, target.project_id_of(entity))
-            )
+            metadata = merge_computed(metadata, await load_project_settings(session, target.project_id_of(entity)))
         if key not in metadata:
             return "(not set)"
         try:
@@ -1999,6 +2291,7 @@ async def _timer(
         timer, replaced = await _time_entry_svc.start_timer_replacing(
             session, user, issue.project_id, issue.id, comments
         )
+        await record_working_issue(session, user, issue)
         await _log_tool(
             session,
             user,
@@ -2247,9 +2540,7 @@ async def _list_recurring_patterns(session: AsyncSession, user: User, project_ke
                 next_hint = f"  next: {occ[0].isoformat()}"
         except Exception:
             next_hint = ""
-        lines.append(
-            f"  [{p.id}] {p.name} ({rule}, {p.anchor_mode}, {state}){next_hint}"
-        )
+        lines.append(f"  [{p.id}] {p.name} ({rule}, {p.anchor_mode}, {state}){next_hint}")
     if not patterns:
         lines.append("  (none)")
     await _log_tool(
@@ -2446,10 +2737,7 @@ async def _skip_recurrence_occurrence(
         {"project_key": project_key, "pattern_id": pattern_id, "occurrence_at": occurrence.isoformat()},
         project_id=project.id,
     )
-    return (
-        f"Skipped occurrence {occurrence.isoformat()} for recurring pattern "
-        f"'{pattern.name}' (ID: {pattern_id})."
-    )
+    return f"Skipped occurrence {occurrence.isoformat()} for recurring pattern '{pattern.name}' (ID: {pattern_id})."
 
 
 async def _list_recurrence_occurrences(
@@ -2472,9 +2760,7 @@ async def _list_recurrence_occurrences(
 
     # Skip exceptions (EXDATEs) so the preview matches generation reality.
     exdates, _overrides = await _recurring_pattern_svc._load_exceptions(session, pattern.id)
-    occurrences = expand_occurrences(
-        _recurring_pattern_svc.build_spec(pattern), now, window_end, exdates
-    )
+    occurrences = expand_occurrences(_recurring_pattern_svc.build_spec(pattern), now, window_end, exdates)
 
     lines = [
         f"Upcoming occurrences for '{pattern.name}' (ID: {pattern_id}), "
@@ -2597,7 +2883,7 @@ async def _start_sprint(
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(message="Sprint not found in this project")
-    sprint = await _sprint_svc.start_sprint(session, sprint)
+    sprint = await _sprint_svc.start_sprint(session, sprint, user)
     await session.flush()
     await _log_tool(
         session,
@@ -2622,7 +2908,7 @@ async def _complete_sprint(
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(message="Sprint not found in this project")
-    sprint = await _sprint_svc.complete_sprint(session, sprint, move_incomplete_to_sprint_id)
+    sprint = await _sprint_svc.complete_sprint(session, sprint, user, move_to_sprint_id=move_incomplete_to_sprint_id)
     await session.flush()
     vel = (await _sprint_svc.velocity_for(session, [sprint], user))[sprint.id] or {}
     await _log_tool(
@@ -2706,9 +2992,7 @@ async def _list_sprint_issues(
         )
 
     lines = [header, ""]
-    settings_by_project = {
-        pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}
-    }
+    settings_by_project = {pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}}
 
     for i in issues:
         if fields == "minimal":
@@ -2807,9 +3091,7 @@ async def _list_version_issues(
     header = f"{header_prefix} ({total} total, showing {offset}..{offset + len(issues)}):"
 
     lines = [header, ""]
-    settings_by_project = {
-        pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}
-    }
+    settings_by_project = {pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}}
 
     for i in issues:
         if fields == "minimal":
@@ -2887,8 +3169,12 @@ async def _create_tag(
         return f"Error: {exc.message}"
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.TAG_CREATED, "create_tag",
-        {"project_key": project_key, "name": tag.name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.TAG_CREATED,
+        "create_tag",
+        {"project_key": project_key, "name": tag.name},
+        project_id=project.id,
     )
     return f"Created tag '{tag.name}' (ID: {tag.id}) in {project.key}."
 
@@ -2913,8 +3199,12 @@ async def _update_tag(
         return f"Error: {exc.message}"
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.TAG_UPDATED, "update_tag",
-        {"project_key": project_key, "tag_id": tag_id, "name": tag.name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.TAG_UPDATED,
+        "update_tag",
+        {"project_key": project_key, "tag_id": tag_id, "name": tag.name},
+        project_id=project.id,
     )
     return f"Updated tag '{tag.name}' (ID: {tag.id}) in {project.key}."
 
@@ -2929,8 +3219,12 @@ async def _delete_tag(session: AsyncSession, user: User, project_key: str, tag_i
     await _tag_svc.delete(session, tag)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.TAG_DELETED, "delete_tag",
-        {"project_key": project_key, "tag_id": tag_id, "name": name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.TAG_DELETED,
+        "delete_tag",
+        {"project_key": project_key, "tag_id": tag_id, "name": name},
+        project_id=project.id,
     )
     return f"Deleted tag '{name}' from {project.key}."
 
@@ -2980,8 +3274,12 @@ async def _add_tags(
         if created:
             added.append(tag.name)
             await _log_tool(
-                session, user, AuditEvent.TAG_ADDED, tool_name,
-                {"target_ref": target_ref, "name": tag.name}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_ADDED,
+                tool_name,
+                {"target_ref": target_ref, "name": tag.name},
+                project_id=project.id,
             )
     await session.flush()
     return added
@@ -3041,8 +3339,12 @@ async def _tag(
             else await _tag_svc.tags_for_wiki_page(session, entity_id)
         )
         await _log_tool(
-            session, user, AuditEvent.TAGS_LISTED, "tag",
-            {"target_ref": target_ref, "op": op}, project_id=project.id,
+            session,
+            user,
+            AuditEvent.TAGS_LISTED,
+            "tag",
+            {"target_ref": target_ref, "op": op},
+            project_id=project.id,
         )
         if not tags:
             return f"{display}: (no tags)"
@@ -3061,13 +3363,21 @@ async def _tag(
         await session.flush()
         for n in diff["added"]:
             await _log_tool(
-                session, user, AuditEvent.TAG_ADDED, "tag",
-                {"target_ref": target_ref, "name": n}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_ADDED,
+                "tag",
+                {"target_ref": target_ref, "name": n},
+                project_id=project.id,
             )
         for n in diff["removed"]:
             await _log_tool(
-                session, user, AuditEvent.TAG_REMOVED, "tag",
-                {"target_ref": target_ref, "name": n}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_REMOVED,
+                "tag",
+                {"target_ref": target_ref, "name": n},
+                project_id=project.id,
             )
         return (
             f"Set tags on {display}: +{len(diff['added'])} / -{len(diff['removed'])} "
@@ -3095,8 +3405,12 @@ async def _tag(
         if removed:
             changed.append(existing_tag.name)
             await _log_tool(
-                session, user, AuditEvent.TAG_REMOVED, "tag",
-                {"target_ref": target_ref, "name": existing_tag.name}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_REMOVED,
+                "tag",
+                {"target_ref": target_ref, "name": existing_tag.name},
+                project_id=project.id,
             )
     await session.flush()
     return f"Removed tags from {display}: {', '.join(changed) or '(not present)'}"

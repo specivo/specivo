@@ -2,7 +2,7 @@
 
 Tests cover:
 - Agent session auto-created on API key use
-- User-Agent parsed for model name
+- User-Agent parsed for the client name and version
 - List sessions via project endpoint
 """
 
@@ -104,9 +104,9 @@ class TestAgentSessionCreatedOnApiKeyUse:
         assert len(sessions) >= 1
 
 
-class TestSessionModelNameParsed:
-    async def test_session_model_name_parsed(self, client: AsyncClient, db_session: AsyncSession):
-        """User-Agent 'claude-code/1.0 (Claude opus-4)' should parse model_name."""
+class TestSessionClientParsed:
+    async def test_session_client_parsed(self, client: AsyncClient, db_session: AsyncSession):
+        """User-Agent 'claude-code/1.0 (Claude opus-4)' names the client, not a model."""
         user = await _make_service_account(db_session, login="agent_model_user", status="active")
         project = await _make_project(db_session, key="MODL", identifier="model-proj")
 
@@ -130,8 +130,8 @@ class TestSessionModelNameParsed:
         result = await db_session.execute(select(AgentSession).where(AgentSession.api_key_id == _key.id))
         session_obj = result.scalar_one_or_none()
         assert session_obj is not None
-        assert session_obj.model_name is not None
-        assert "opus" in session_obj.model_name.lower()
+        assert session_obj.client_name == "claude-code"
+        assert session_obj.client_version == "1.0"
 
 
 class TestListSessions:
@@ -174,3 +174,5 @@ class TestListSessions:
         assert "api_key_id" in item
         assert "started_at" in item
         assert "last_activity_at" in item
+        assert item["client_name"] == "claude-code"
+        assert item["client_version"] == "1.0"

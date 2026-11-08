@@ -1,0 +1,185 @@
+/* AI usage: the project tab, the issue tab, My AI usage and the entry form. */
+.sp-aiu-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+  margin-bottom: var(--sp-space-lg);
+}
+.sp-aiu-filter { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+.sp-aiu-filter .filter-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-aiu-filter-actions { display: flex; gap: var(--sp-space-sm); }
+/* The person search (filterCombobox) in the column of a filter: its width, not a flex height. */
+.sp-aiu-filter .sp-filter-combo { flex: none; width: 13rem; }
+/* Control heights, padding and the white select fill come from
+   --sp-control-height and the shared form styles (see the UI Form Style Guide
+   wiki page); here only the buttons sit level with the controls, not with the labels. */
+.sp-aiu-filter-actions .sp-btn,
+.sp-aiu-reassign .sp-btn { align-self: auto; }
+
+.sp-aiu-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+  margin-bottom: var(--sp-space-lg);
+}
+.sp-aiu-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-space-sm) var(--sp-space-md);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-border-radius);
+  background: var(--sp-bg-surface);
+}
+.sp-aiu-total-label {
+  font-size: var(--sp-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sp-text-muted);
+}
+.sp-aiu-amount { font-size: var(--sp-font-size-lg, 1.125rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sp-aiu-unconverted { display: block; font-size: var(--sp-font-size-xs); color: var(--sp-warning, #b45309); }
+
+.sp-aiu-table td { vertical-align: top; }
+.sp-aiu-toolcell { min-width: 12rem; }
+.sp-aiu-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-aiu-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-aiu-check { width: 1%; }
+.sp-aiu-model { display: block; font-family: var(--sp-font-mono, monospace); font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }
+.sp-aiu-comment { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); white-space: pre-line; }
+.sp-aiu-excluded td { opacity: 0.6; }
+.sp-aiu-excluded td.sp-aiu-actions { opacity: 1; }
+.sp-aiu-badge {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: var(--sp-font-size-xs);
+  background: var(--sp-warning-subtle, var(--sp-border));
+  color: var(--sp-warning, var(--sp-text-secondary));
+}
+.sp-aiu-actions { white-space: nowrap; text-align: right; }
+.sp-aiu-actions > * { margin-left: 4px; }
+.sp-aiu-inline-form { display: inline; margin: 0; }
+.sp-aiu-table--compact td,
+.sp-aiu-table--compact th { padding-left: var(--sp-space-sm); padding-right: var(--sp-space-sm); }
+.sp-aiu-table--compact .sp-aiu-toolcell { min-width: 9rem; }
+.sp-aiu-table--compact .sp-aiu-actions { white-space: normal; min-width: 7rem; }
+.sp-aiu-table--compact .sp-aiu-actions > * { margin: 0 0 4px 4px; }
+.sp-aiu-empty { padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted); }
+
+.sp-aiu-reassign {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-aiu-reassign-title { flex-basis: 100%; font-weight: 600; }
+.sp-aiu-reassign-hint { flex-basis: 100%; margin: 0; }
+
+.sp-aiu-issue { margin-top: var(--sp-space-md); }
+.sp-aiu-issue-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-md); }
+
+.sp-aiu-form-card { max-width: 52rem; }
+.sp-aiu-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-aiu-field { display: flex; flex-direction: column; gap: var(--sp-space-xs, 4px); min-width: 0; }
+.sp-aiu-field .form-label { margin: 0; }
+.sp-aiu-wide { grid-column: 1 / -1; }
+.sp-aiu-more summary { cursor: pointer; font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-sm); }
+.sp-aiu-cost-row { display: flex; gap: var(--sp-space-sm); }
+.sp-aiu-cost-row input { flex: 1 1 6rem; min-width: 0; }
+.sp-aiu-cost-row select { flex: 1 1 8rem; min-width: 0; }
+.sp-aiu-form-actions { display: flex; justify-content: flex-end; gap: var(--sp-space-md); }
+.sp-aiu-readonly { display: grid; grid-template-columns: max-content 1fr; gap: var(--sp-space-xs, 4px) var(--sp-space-md); margin: 0; }
+.sp-aiu-readonly dt { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-aiu-readonly dd { margin: 0; overflow-wrap: anywhere; }
+.sp-aiu-entry-info { display: flex; flex-direction: column; gap: var(--sp-space-xs, 4px); }
+
+@media (max-width: 640px) {
+  .sp-aiu-filters,
+  .sp-aiu-reassign { flex-direction: column; align-items: stretch; }
+  .sp-aiu-reassign .sp-btn { align-self: flex-start; }
+  .sp-aiu-filter .filter-input,
+  .sp-aiu-filter .filter-select { width: 100%; }
+  .sp-aiu-form { grid-template-columns: 1fr; }
+  .sp-aiu-cost-row { flex-direction: column; }
+}
+
+/* AI spend reports: the project "Spend report" and the admin "AI spend" page. */
+.sp-spend-intro { max-width: 60rem; margin-bottom: var(--sp-space-md); }
+.sp-spend-presets { display: flex; flex-wrap: wrap; gap: var(--sp-space-xs, 4px); margin-bottom: var(--sp-space-md); }
+.sp-spend-preset {
+  padding: 4px 12px;
+  border: 1px solid var(--sp-border);
+  border-radius: 999px;
+  font-size: var(--sp-font-size-sm);
+  color: var(--sp-text-secondary);
+  text-decoration: none;
+  background: var(--sp-bg-surface);
+}
+.sp-spend-preset:hover { border-color: var(--sp-accent); color: var(--sp-text-primary); }
+.sp-spend-preset.active { background: var(--sp-accent-subtle); border-color: var(--sp-accent); color: var(--sp-text-primary); font-weight: 600; }
+/* Note near the totals when some entries have no price (they count as 0). */
+.sp-aiu-unpriced { background: var(--sp-warning-subtle); color: var(--sp-text-primary); border-left: 3px solid var(--sp-warning); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin: calc(-1 * var(--sp-space-sm)) 0 var(--sp-space-lg); overflow-wrap: anywhere; }
+.sp-aiu-unpriced p { margin: 0; }
+.sp-aiu-unpriced p + p { margin-top: var(--sp-space-xs); }
+.sp-spend-notes { margin: calc(-1 * var(--sp-space-sm)) 0 var(--sp-space-lg); }
+.sp-spend-chart-card { padding: var(--sp-space-md); margin-bottom: var(--sp-space-lg); }
+/* The chart module sets the height; ECharts fits the width and redraws on resize. */
+.sp-spend-chart { width: 100%; min-height: 120px; overflow: hidden; }
+.sp-spend-chart:not([data-sp-drawn]) { min-height: 0; }
+.sp-spend-table td { vertical-align: top; }
+.sp-spend-seat-row td { background: var(--sp-bg-input); }
+.sp-spend-seat-label { font-style: italic; color: var(--sp-text-secondary); }
+.sp-spend-total-row td { font-weight: 600; border-top: 2px solid var(--sp-border); }
+.sp-aiu-filter-chip { padding: 2px 8px; border: 1px dashed var(--sp-border); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); }
+.sp-spend-table .sp-aiu-amount { font-size: inherit; font-weight: inherit; }
+/* Spend chart tooltips (built as DOM nodes by modules/spend-chart.js). */
+.sp-chart-tooltip { font-size: var(--sp-font-size-sm); line-height: 1.4; }
+.sp-chart-tooltip-heading { font-weight: 600; margin-bottom: 2px; max-width: 280px; overflow-wrap: anywhere; }
+.sp-chart-tooltip-row { display: flex; align-items: center; gap: 6px; }
+.sp-chart-tooltip-marker { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.sp-chart-tooltip-name { color: var(--sp-text-secondary); }
+.sp-chart-tooltip-value { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.sp-chart-tooltip-note { margin-top: 4px; color: var(--sp-warning); font-weight: 600; max-width: 280px; overflow-wrap: anywhere; }
+
+/* My AI usage charts (pages/ai_usage/_macros.html usage_charts, modules/usage-charts.js). */
+.sp-aiu-charts { margin-bottom: var(--sp-space-lg); }
+.sp-aiu-charts-title { font-size: var(--sp-font-size-lg, 1.125rem); margin: 0 0 var(--sp-space-xs, 4px); }
+.sp-aiu-charts-intro { margin: 0 0 var(--sp-space-sm); }
+.sp-aiu-chart-note { background: var(--sp-warning-subtle); color: var(--sp-text-primary); border-left: 3px solid var(--sp-warning); border-radius: var(--sp-border-radius); padding: var(--sp-space-xs, 4px) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin: 0 0 var(--sp-space-md); }
+.sp-aiu-chart-card { padding: var(--sp-space-md); margin-bottom: var(--sp-space-md); min-width: 0; }
+.sp-aiu-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); }
+.sp-aiu-chart-title { font-size: var(--sp-font-size-base, 1rem); font-weight: 600; margin: 0 0 var(--sp-space-sm); }
+.sp-aiu-chart-head .sp-aiu-chart-title { margin: 0; }
+.sp-aiu-chart-subtitle { font-size: var(--sp-font-size-sm); font-weight: 600; color: var(--sp-text-secondary); margin: var(--sp-space-sm) 0 var(--sp-space-xs, 4px); }
+.sp-aiu-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--sp-space-md); }
+/* The stack switch: radio buttons drawn as a segmented control (like .view-toggle). */
+.sp-aiu-chart-switch { display: inline-flex; gap: 2px; margin: 0; padding: 2px; border: none; background: var(--sp-bg-input); border-radius: var(--sp-border-radius); }
+.sp-aiu-chart-switch-option { position: relative; padding: 4px 10px; border-radius: 4px; cursor: pointer; color: var(--sp-text-secondary); font-size: var(--sp-font-size-sm); white-space: nowrap; }
+.sp-aiu-chart-switch-option input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.sp-aiu-chart-switch-option:has(input:checked),
+.sp-aiu-chart-switch-option.active { background: var(--sp-accent); color: var(--sp-accent-text); }
+a.sp-aiu-chart-switch-option { text-decoration: none; }
+a.sp-aiu-chart-switch-option:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
+.sp-aiu-chart-controls { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); }
+.sp-aiu-chart-switch-option:has(input:focus-visible) { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
+.sp-aiu-charts-empty { margin: 0 0 var(--sp-space-md); }
+.sp-aiu-chart-caption { margin: var(--sp-space-xs, 4px) 0 0; }
+.sp-aiu-chart-grid + .sp-aiu-chart-caption { margin: 0 0 var(--sp-space-md); }
+/* The spend reports: the heading between the charts and the report table. */
+.sp-spend-table-title { margin-top: var(--sp-space-md); }
+@media (max-width: 900px) {
+  .sp-aiu-chart-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .sp-aiu-chart-card { padding: var(--sp-space-sm); }
+  /* Four stack options (the spend reports) wrap instead of overflowing a phone. */
+  .sp-aiu-chart-switch { flex-wrap: wrap; }
+}

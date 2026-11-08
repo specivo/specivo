@@ -6,15 +6,12 @@ provider with SCIM off all get the same 401 SCIM error, byte for byte.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
-from specivo.main import get_plugin_manager
 from specivo.models.scim import ScimResource
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.sso import SsoProvider
@@ -181,13 +178,6 @@ async def test_cookie_session_is_not_accepted(client: AsyncClient, admin_client:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def audit_on() -> Iterator[None]:
-    """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
-    get_plugin_manager().feature_registry.register("security_audit_log", "test")
-    yield
-
-
 async def _audit_rows(db: AsyncSession, prefix: str) -> list[SecurityAuditLog]:
     rows = await db.execute(
         select(SecurityAuditLog).where(SecurityAuditLog.event_type.like(f"{prefix}%")).order_by(SecurityAuditLog.id)
@@ -195,9 +185,7 @@ async def _audit_rows(db: AsyncSession, prefix: str) -> list[SecurityAuditLog]:
     return list(rows.scalars().all())
 
 
-async def test_audit_events(
-    audit_on: None, scim: ScimClient, db_session: AsyncSession, scim_provider: tuple[SsoProvider, str]
-) -> None:
+async def test_audit_events(scim: ScimClient, db_session: AsyncSession, scim_provider: tuple[SsoProvider, str]) -> None:
     provider, token = scim_provider
     created = (await scim.post("/Users", user_body("sca-audit@example.com"))).json()
     await scim.put(f"/Users/{created['id']}", user_body("sca-audit@example.com", displayName="Renamed"))
@@ -227,7 +215,7 @@ async def test_audit_events(
 
 
 async def test_refusal_is_audited(
-    audit_on: None, scim: ScimClient, db_session: AsyncSession, scim_provider: tuple[SsoProvider, str]
+    scim: ScimClient, db_session: AsyncSession, scim_provider: tuple[SsoProvider, str]
 ) -> None:
     provider, _token = scim_provider
     created = (await scim.post("/Users", user_body("sca-refused@example.com"))).json()
@@ -244,7 +232,7 @@ async def test_refusal_is_audited(
 
 
 async def test_adopting_an_unverified_account_is_audited(
-    audit_on: None, scim: ScimClient, db_session: AsyncSession, scim_provider: tuple[SsoProvider, str]
+    scim: ScimClient, db_session: AsyncSession, scim_provider: tuple[SsoProvider, str]
 ) -> None:
     squatter = User(login="scasquat", email="sca-squat@example.com", display_name="Squatter", password_hash="x")
     db_session.add(squatter)

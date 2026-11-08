@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -11,13 +12,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
+from specivo.core.i18n import gettext as _
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
 from specivo.services.activity_lookups import activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
+from specivo.services.issue_list_filters import (
+    ME,
+    NO_VALUE,
+    list_query_string,
+    normalize_assignee_param,
+    normalize_version_param,
+    parse_assignee,
+    parse_id,
+    parse_version,
+    saved_filter_params,
+)
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import imported_from, is_plain_number, visible_issue_keys
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
@@ -37,6 +51,7 @@ from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
     from specivo.models.issue import Issue
+    from specivo.models.project import Project
     from specivo.models.user import User
 
 router = APIRouter(tags=["web-issues"], include_in_schema=False)
@@ -140,6 +155,67 @@ async def _get_lookups(db: AsyncSession) -> dict:
     }
 
 
+def person_chip(person: User, label: str | None = None) -> dict:
+    """Chip data for a person: label plus what the avatar macro needs."""
+    return {
+        "label": label or person.display_name or person.login,
+        "login": person.login,
+        "display_name": person.display_name,
+        "avatar_url": person.avatar_url or "",
+        "avatar_color": str((person.preferences or {}).get("avatar_color") or ""),
+    }
+
+
+async def _filter_chips(db: AsyncSession, project: Project, user: User, params: dict[str, str]) -> dict[str, dict]:
+    """Server-rendered labels for the assignee, tag and release filter chips.
+
+    A value names something only when the reader may see it: an id of a person,
+    tag or version they cannot see gets a generic label, so the chip never
+    tells more than the list does.
+    """
+    from specivo.models.tag import Tag
+    from specivo.models.user import User as UserModel
+    from specivo.services.anonymous_user_service import real_users_clause
+    from specivo.services.permission_service import visible_users_clause
+    from specivo.services.version_service import VersionService
+
+    chips: dict[str, dict] = {}
+
+    assignee = params.get("assigned_to_id", "")
+    if assignee == NO_VALUE:
+        chips["assigned_to_id"] = {"label": _("Unassigned")}
+    elif assignee == ME:
+        chips["assigned_to_id"] = person_chip(user, _("Me"))
+    elif assignee:
+        stmt = select(UserModel).where(UserModel.id == int(assignee), real_users_clause())
+        visible = await visible_users_clause(db, user)
+        if visible is not None:
+            stmt = stmt.where(visible)
+        person = (await db.execute(stmt)).scalar_one_or_none()
+        chips["assigned_to_id"] = person_chip(person) if person else {"label": _("Unknown person")}
+
+    tag_value = params.get("tag_id", "")
+    if tag_value:
+        tag = (
+            await db.execute(select(Tag).where(Tag.id == int(tag_value), Tag.project_id == project.id))
+        ).scalar_one_or_none()
+        chips["tag_id"] = {"label": tag.name, "color": tag.color or ""} if tag else {"label": _("Unknown tag")}
+
+    version_value = params.get("fixed_version_id", "")
+    if version_value == NO_VALUE:
+        chips["fixed_version_id"] = {"label": _("No release")}
+    elif version_value:
+        version = await VersionService().get_visible(db, project, user, int(version_value))
+        chips["fixed_version_id"] = {"label": version.name} if version else {"label": _("Unknown release")}
+
+    base = f"/projects/{project.key}/issues/"
+    for name, chip in chips.items():
+        chip["value"] = params[name]
+        query = list_query_string(params, drop=(name,))
+        chip["clear_url"] = f"{base}?{query}" if query else base
+    return chips
+
+
 @router.get("/projects/{project_key}/issues/", response_class=HTMLResponse)
 async def issues_list(
     project_key: str,
@@ -151,13 +227,14 @@ async def issues_list(
     assigned_to_id: str = Query(""),
     priority_id: str = Query(""),
     tag_id: str = Query(""),
+    fixed_version_id: str = Query(""),
     sort: str = Query("created_at:desc"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     view: str = Query("list"),
     board_per_col: int = Query(10, ge=5, le=50),
 ) -> Response:
-    """Render the issue list page for a project."""
+    """Render the issue list page for a project (list and board views)."""
     from specivo.core.utils import safe_int
 
     if reader is None:
@@ -185,15 +262,37 @@ async def issues_list(
             return refuse_anonymous_web(request)
         anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
 
+    view = view if view in ("list", "board") else "list"
+    # The filters as they are written back into links (chips, pagination,
+    # saved filter tabs): canonical spellings, unparseable values dropped.
+    # "me" stays "me" so a shared link means "the reader", whoever that is.
+    params: dict[str, str] = {
+        "status": status,
+        "tracker_id": str(safe_int(tracker_id) or ""),
+        "assigned_to_id": normalize_assignee_param(assigned_to_id),
+        "priority_id": str(safe_int(priority_id) or ""),
+        "tag_id": str(parse_id(tag_id) or ""),
+        "fixed_version_id": normalize_version_param(fixed_version_id),
+        "sort": sort,
+        "limit": str(limit),
+        "view": view,
+        "board_per_col": str(board_per_col) if view == "board" else "",
+    }
+
     filters: dict = {"status": status}
     if safe_int(tracker_id) is not None:
         filters["tracker_id"] = safe_int(tracker_id)
-    if safe_int(assigned_to_id) is not None:
-        filters["assigned_to_id"] = safe_int(assigned_to_id)
+    # "me" matches nothing for an anonymous visitor, who has no assignee filter.
+    assignee = parse_assignee(assigned_to_id, me_id=user.id)
+    if assignee is not None:
+        filters["assigned_to_id"] = assignee
     if safe_int(priority_id) is not None:
         filters["priority_id"] = safe_int(priority_id)
-    if safe_int(tag_id) is not None:
-        filters["tag_id"] = safe_int(tag_id)
+    if parse_id(tag_id) is not None:
+        filters["tag_id"] = parse_id(tag_id)
+    version = parse_version(fixed_version_id)
+    if version is not None:
+        filters["version_id"] = version
 
     # Board view loads more issues (up to 200) to fill columns
     effective_limit = min(limit, 100) if view != "board" else 200
@@ -212,21 +311,28 @@ async def issues_list(
     lookups = await _get_lookups(db)
 
     if anonymous:
-        # A saved filter belongs to the person who created it; the member list
-        # names people; the tag vocabulary is project configuration. None of
-        # the three is part of what a project opts in to, and each drives a
-        # control an anonymous visitor has no use for.
+        # A saved filter belongs to the person who created it; the assignee
+        # filter names people; the tag vocabulary and the releases are project
+        # configuration. None of them is part of what a project opts in to, and
+        # their suggestions come from endpoints an anonymous visitor cannot call.
         saved_filters: list = []
-        members: list = []
-        project_tags: list = []
+        chips: dict[str, dict] = {}
+        has_tags = False
     else:
-        saved_filters = await _saved_filter_svc.list_for_project(db, user, project.id)
+        current_query = list_query_string(params)
+        saved_filters = []
+        for sf in await _saved_filter_svc.list_for_project(db, user, project.id):
+            sf_query = list_query_string(saved_filter_params(sf.filter_definition))
+            saved_filters.append({"name": sf.name, "query_string": sf_query, "active": sf_query == current_query})
+        chips = await _filter_chips(db, project, user, params)
+        # Suggestions are fetched while typing; the page only needs to know
+        # whether the project has any tags to offer the filter at all.
+        from specivo.models.tag import Tag
 
-        # Get project members for assignee dropdown
-        members = await _project_svc.list_members(db, project)
-
-        # Project tag vocabulary for the tag filter dropdown
-        project_tags = _tags_to_dicts(await _tag_svc.list_for_project(db, project.id))
+        has_tags = (
+            bool((await db.execute(select(Tag.id).where(Tag.project_id == project.id).limit(1))).scalar_one_or_none())
+            or "tag_id" in chips
+        )
 
     # Parse per-column offsets for board view: col_<status_id>_offset=N
     col_offsets: dict[int, int] = {}
@@ -235,7 +341,7 @@ async def issues_list(
         non_col_parts = []
         for k, v in request.query_params.items():
             if not k.startswith("col_"):
-                non_col_parts.append(f"{k}={v}")
+                non_col_parts.append(urlencode({k: v}))
             elif k.endswith("_offset"):
                 try:
                     sid = int(k[4:-7])
@@ -259,12 +365,14 @@ async def issues_list(
             "issues": issues,
             "total": total,
             "saved_filters": saved_filters,
-            "members": members,
-            "project_tags": project_tags,
+            "filter_chips": chips,
+            "has_tags": has_tags,
+            # Pagination keeps the filters (never the offset).
+            "list_query": list_query_string(params, drop=("limit", "view", "board_per_col")),
             "offset": offset,
             "limit": limit,
             "sort": sort,
-            "view": view if view in ("list", "board") else "list",
+            "view": view,
             "col_offsets": col_offsets,
             "board_base_params": board_base_params,
             "board_per_col": board_per_col,
@@ -310,6 +418,12 @@ async def issue_create_form(
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
     can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
     can_set_private = await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, db)
+    # Similar-issue suggestions need add_issues, as the endpoint does.
+    from specivo.services.similar_issue_service import SimilarIssueService
+
+    similar_issues_enabled = await check_permission(
+        user, project.id, Permission.ADD_ISSUES, db
+    ) and await SimilarIssueService().is_enabled(db, project)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -324,12 +438,49 @@ async def issue_create_form(
             "mode": "create",
             "can_manage_relations": can_manage_relations,
             "can_set_private": can_set_private,
+            "similar_issues_enabled": similar_issues_enabled,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,
             **lookups,
         },
     )
+
+
+@short_router.get("/imported/{system}/{ref:path}/", response_class=HTMLResponse)
+async def imported_issue_redirect(
+    system: str,
+    ref: str,
+    request: Request,
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Send a number from the old tracker to the issue it became.
+
+    Among the issues this reader may see: one goes to that issue, several to a
+    search for the number. None answers as ``/issue/{issue_ref}/`` does for a
+    missing issue, whatever the reason, so the URL cannot probe which numbers
+    exist: a 404 when signed in, the one refusal for anybody else. The targets
+    are local paths built from display keys, never from what was typed.
+    """
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+
+    keys = await visible_issue_keys(db, user, system, ref)
+    if len(keys) > 1:
+        query = f"{system.lower()} #{ref}" if is_plain_number(ref) else ref
+        return RedirectResponse(f"/search/?{urlencode({'q': query})}", status_code=302)
+    if not keys:
+        if user.is_anonymous:
+            return refuse_anonymous_web(request)
+        raise HTTPException(status_code=404, detail="Issue not found")
+    # The page's own check, so the redirect never promises a page it would refuse.
+    resolved = await _resolve_issue_project_for_reader(db, keys[0], user)
+    if resolved is None:
+        return refuse_anonymous_web(request)
+    _, issue = resolved
+    return RedirectResponse(f"/issue/{issue.display_key}/", status_code=302)
 
 
 @short_router.get("/issue/{issue_ref}/", response_class=HTMLResponse)
@@ -374,6 +525,12 @@ async def issue_detail(
     # log-time form only with log_time, as the time entries API requires.
     can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
     can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
+    # The AI usage tab is loaded when opened (/partials/issues/{key}/ai-usage/);
+    # it is offered to those who may view or log AI usage in the project.
+    show_ai_usage_tab = not anonymous and (
+        await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
+        or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
+    )
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -500,6 +657,9 @@ async def issue_detail(
     # issue's own attachments that the reader may open (none for anonymous).
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
+    # Anonymous visitors get it too: on an issue they may see, the number is no secret.
+    issue_imported_from = await imported_from(db, issue.id)
+
     # Names for the ids the activity feed's field changes hold.
     lookup_maps = await activity_lookup_maps(
         db,
@@ -522,11 +682,13 @@ async def issue_detail(
 
     # Branch name and development activity. Neither is shown to a visitor
     # without an account: commit authors and forge logins are not theirs to read.
+    from specivo.web.issue_development import can_edit_development, development_context, load_development
+
     branch_name = None
     development = None
+    can_edit_dev = False
     if not anonymous:
         from specivo.services.branch_name import BranchNameSettings, make_branch_name
-        from specivo.services.repository_service import development_for_issue
 
         branch_name = make_branch_name(
             BranchNameSettings.from_project_settings(project.settings),
@@ -534,7 +696,8 @@ async def issue_detail(
             display_key=issue.display_key,
             subject=issue.subject,
         )
-        development = await development_for_issue(db, issue.id)
+        development = await load_development(db, issue)
+        can_edit_dev = await can_edit_development(db, user, project.id)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -553,16 +716,18 @@ async def issue_detail(
             "thread_tree": thread_tree,
             "members": members,
             "lookup_maps": lookup_maps,
+            "imported_from": issue_imported_from,
             "reactions_by_journal": reactions_by_journal,
             **tab_ctx,
             "relation_count": relation_count,
             "branch_name": branch_name,
-            "development": development,
+            **development_context(development, can_edit=can_edit_dev),
             "current_sprint": current_sprint,
             "relations": relations,
             "can_manage_relations": can_manage_relations,
             "can_view_time_entries": can_view_time_entries,
             "can_log_time": can_log_time,
+            "show_ai_usage_tab": show_ai_usage_tab,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             "metadata_value_names": value_names,

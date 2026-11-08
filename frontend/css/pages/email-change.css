@@ -1,0 +1,9 @@
+/* "Email address" on the profile (layered on .sp-connected) and the confirm-email page. */
+
+.sp-email-change-current { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md); }
+.sp-email-change-label { color: var(--sp-text-muted); min-width: 120px; }
+.sp-email-change-value { color: var(--sp-text-primary); overflow-wrap: anywhere; }
+.sp-email-change-pending { padding: var(--sp-space-md); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); margin-bottom: var(--sp-space-lg); font-size: var(--sp-font-size-sm); overflow-wrap: anywhere; }
+.sp-email-change-pending p { margin-bottom: var(--sp-space-sm); }
+.sp-email-change-form { max-width: 420px; }
+.sp-email-change-address { font-weight: 600; color: var(--sp-text-primary); overflow-wrap: anywhere; }

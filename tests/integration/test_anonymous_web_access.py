@@ -310,9 +310,13 @@ async def test_switch_off_leaves_signed_in_visitors_untouched(client: AsyncClien
 
 
 async def test_a_page_outside_the_allowlist_is_never_served(client: AsyncClient, live: World) -> None:
-    """The switch being on changes nothing for a page that did not opt in."""
+    """The switch being on changes nothing for a page that did not opt in.
+
+    The dashboard (``/``) is refused too, but sends the visitor to the project
+    list instead of the login screen while anonymous access is live; that is
+    pinned in ``test_anonymous_home_page.py``.
+    """
     for path in (
-        "/",
         f"/projects/{live.both.key}/roadmap/",
         f"/projects/{live.both.key}/settings/",
         f"/projects/{live.both.key}/sprints/",
@@ -513,6 +517,22 @@ async def test_the_issue_list_carries_no_create_or_filter_by_person_controls(cli
     assert live.public_issue.subject in resp.text
     assert "/issues/new/" not in resp.text
     assert "assigned_to_id" not in resp.text
+    # Nor a tag or release filter: their suggestions come from endpoints an
+    # anonymous visitor cannot call.
+    assert "data-filter-combo" not in resp.text
+    assert "/assignees/search/" not in resp.text
+
+
+async def test_the_issue_list_ignores_me_and_names_no_one_for_an_anonymous_visitor(
+    client: AsyncClient, live: World
+) -> None:
+    resp = await client.get(_pages(live)["issues"] + f"?assigned_to_id={live.member.id}&fixed_version_id=none")
+    assert resp.status_code == 200
+    assert "data-filter-chip" not in resp.text
+    assert MEMBER_LOGIN not in resp.text
+    resp = await client.get(_pages(live)["issues"] + "?assigned_to_id=me")
+    assert resp.status_code == 200
+    assert live.public_issue.subject not in resp.text
 
 
 async def test_the_wiki_page_is_readable_and_carries_no_controls(client: AsyncClient, live: World) -> None:
@@ -702,12 +722,13 @@ async def test_the_search_page_refuses_a_project_filter_it_may_not_read(client: 
 
 
 async def test_the_search_page_stays_inside_the_anonymous_bounds(client: AsyncClient, live: World) -> None:
-    """Semantic modes and long pages are brought back to the API's limits."""
+    """Long pages are brought back to the API's limits; the mode is the visitor's to pick."""
     resp = await client.get(f"/search/?q={TERM}&mode=hybrid&limit=100")
     assert resp.status_code == 200
-    # The mode toggle is a control the visitor cannot spend, so it is gone.
-    assert "mode-toggle-btn" not in resp.text
-    assert "Hybrid" not in resp.text
+    # Hybrid is served (and metered per address), so the mode toggle is offered.
+    assert "mode-toggle-btn" in resp.text
+    # A page of at most 25 results: the pager links never ask for more.
+    assert "limit=100" not in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -937,6 +958,7 @@ def test_the_web_allowlist_is_the_set_that_was_reviewed() -> None:
         "/projects/{key}/",
         "/projects/{project_key}/issues/",
         "/issue/{issue_ref}/",
+        "/imported/{system}/{ref:path}/",
         "/projects/{project_key}/wiki/",
         "/projects/{project_key}/wiki/{slug}/",
         "/search/",

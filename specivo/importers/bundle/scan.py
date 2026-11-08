@@ -322,6 +322,8 @@ class _Scanner:
         self.project_offsets: dict[str, int] = {}
         self.issue_project: dict[str, str] = {}
         self.issue_nodes: dict[str, dict[str, tuple[str | None, int]]] = {}
+        # Lower-cased source number to the issue that first claimed it.
+        self.source_numbers: dict[str, str] = {}
         self.page_project: dict[str, str] = {}
         self.page_nodes: dict[str, dict[str, tuple[str | None, int]]] = {}
         self.journal_keys: dict[str, list[tuple[datetime, int, int]]] = {}
@@ -756,6 +758,7 @@ class _Scanner:
         project_ref = self._scoped(ISSUES, line, offset, record)
         self.issue_project.setdefault(ref, project_ref)
         self.issue_nodes.setdefault(project_ref, {}).setdefault(ref, (record.get("parent_ref"), offset))
+        self._check_source_numbers(line, ref, record)
 
         self._ref(name, line, "tracker_ref", EntityType.TRACKER, record["tracker_ref"])
         self._ref(name, line, "status_ref", EntityType.STATUS, record["status_ref"])
@@ -785,6 +788,18 @@ class _Scanner:
         for value in record.get("custom_values") or []:
             self._check_custom_value(line, value)
         self._text(name, line, "description", record.get("description"))
+
+    def _check_source_numbers(self, line: int, ref: str, record: dict[str, Any]) -> None:
+        """Warn when two issues claim one number: it stays valid, but then names both of them."""
+        for number in dict.fromkeys([record.get("source_key") or ref, *record.get("source_aliases", [])]):
+            first = self.source_numbers.setdefault(str(number).lower(), ref)
+            if first != ref:
+                self.report.warning(
+                    ProblemCode.DUPLICATE_SOURCE_NUMBER,
+                    ISSUES.name,
+                    f"The number {number!r} also names issue {first!r}; searching for it finds both",
+                    line=line,
+                )
 
     def _check_sprint_ref(self, line: int, project_ref: str, sprint_ref: str | None) -> None:
         """An issue's sprint must be a sprint of the bundle, and of the issue's own project."""

@@ -13,16 +13,20 @@ know the shape of what's possible.
 
 | Area | What the agent can do |
 |---|---|
-| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; set or change an issue's [parent](../issues/subtasks.md) and list its subtasks; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history, or the whole change history with the names of the statuses, people and versions a change refers to. |
+| **Issues & comments** | List issues, narrowed like the issue list's filters (status, assignee — a login, `me` or `none` —, tag, release — a version name or `none` —, sprint, parent and metadata values); read, create, and update issues; edit descriptions and core fields; set or change an issue's [parent](../issues/subtasks.md) and list its subtasks; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history, or the whole change history with the names of the statuses, people and versions a change refers to. |
 | **Search** | Search across issues, wiki, and more using Specivo's hybrid (keyword + meaning) search. |
 | **Wiki** | List, read, create, edit, and append to wiki pages, including section-level reads and edits, and history/restore. |
 | **Metadata & schemas** | Read and set [issue metadata](../metadata/values.md) values, and list the available metadata schemas. |
 | **Tags** | List a project's [tags](../projects/tags.md), tag issues and wiki pages (also while creating them), and, with **Manage project**, create, rename, recolor and delete tags. |
 | **Relations** | Link issues with typed [relations](../issues/relations.md) — relates, blocks, duplicates, and so on — and remove them. |
+| **Links** | Follow the links between issues, wiki pages and comments: `specivo_show_issue` and `specivo_read_wiki` list what an item links to and what links to it (backlinks), and `specivo_get_links` returns the neighbourhood as JSON, two hops deep at most, filtered by kind. Agents only see links between items the key may open. |
+| **Development** | `specivo_issue_development(issue_ref, kinds=[...], limit, offset)` returns an issue's [development activity](../integrations/repositories.md#reading-development-activity-through-the-api-and-mcp) as JSON, the same document as the REST API: commits, pull requests, reviews, CI runs, deployments with their environment type, and releases, with a summary and a paged timeline. `specivo_show_issue` sums it up on one `Development:` line. Agents see it only for issues the key may open. |
 | **Versions** | List and manage versions (milestones/releases) and see which issues belong to each. |
 | **Sprints** | List sprints, see sprint issues, and manage the plan/start/complete lifecycle. |
 | **Recurring tasks** | Create, list, update, and delete [recurring task patterns](../projects/recurring-tasks.md); skip a single scheduled occurrence; preview upcoming occurrences. The template subject and description support date macros (`{{month}}`, `{{weekday}}`, …) that expand per occurrence in the pattern's timezone. |
 | **Time** | Log time against an issue or project with an activity, or run your own timer: start it on an issue, check it, stop it to log the time, or discard it. |
+| **AI usage** | `specivo_log_ai_usage` logs the tokens an AI tool used on an issue or project, and `specivo_ai_usage` lists, reads, corrects, excludes and includes [AI usage entries](reporting-ai-usage.md#read-correct-and-exclude-entries). Each of the agent's own entries names the agent session it came from, and `session_id` lists one session's entries in every project, so an agent can check where its usage went. `specivo_ai_usage_report` totals spend like the [AI spend reports](../projects/ai-spend-reports.md); with `issue_ref` it covers one issue, and `include_sub_issues=true` adds the issues below it. Agents cannot see their own token counters, so the numbers must come from a hook, the [reporter](reporting-ai-usage.md) or the tool's own `/cost` output, never from an estimate. Without an issue or project, an entry goes to the issue the agent session works on (see [Agent sessions](#agent-sessions)), or stays unassigned. |
+| **AI subscriptions** | `specivo_ai_subscriptions` lists, adds, corrects, ends and deletes the [AI subscriptions](../install/ai-subscriptions.md#with-your-ai-agent) of the person whose key the agent uses, for example from their invoices, several plan periods in one call. It warns about overlaps and gaps between periods of one plan, and refuses a project-limited key and a service account. |
 | **Orientation** | `specivo_whoami` (which account the key is), `specivo_list_lookups` (tracker/status/priority IDs), and `specivo_setup_guide` (config help). |
 
 !!! tip "Start with orientation tools"
@@ -33,7 +37,7 @@ know the shape of what's possible.
 ## Read vs write
 
 Roughly half the tools **read** (list, show, search, read wiki) and half **write** (create issues,
-add comments, update status, log time, edit wiki). The split matters because of permissions:
+add comments, update status, log time or AI usage, edit wiki). The split matters because of permissions:
 
 - **Reads** return whatever the key's account is allowed to see.
 - **Writes** are checked against that account's project role *every time*. If the account can't make
@@ -44,10 +48,31 @@ an agent: give it read-only roles where it should only look, write roles only wh
 
 ## Every write is audited
 
-Each write an agent makes is recorded in the **security audit log**, tagged `source=mcp`, alongside
-the account that made it and when. Project managers can review this log to see exactly what an agent
-changed. Issue edits also show up in the normal issue history and comment journal, the same as a
-person's edits — nothing an agent does is hidden.
+Each MCP tool call an agent makes, read or write, is recorded in the
+[security audit log](../install/audit-log.md), tagged `source=mcp`, with the account that made it,
+when, and the client address it came from. Administrators review it under **Admin → Audit log** to
+see exactly what an agent did. Issue edits also show up in the normal issue history and comment
+journal, the same as a person's edits — nothing an agent does is hidden.
+
+The log covers MCP. An agent that calls the REST API with its key is treated like a person: its
+issue and wiki edits are in their history, not in the audit log.
+
+## Agent sessions
+
+Specivo also groups each key's calls into **agent sessions**: calls less than 30 minutes apart
+(`AGENT_SESSION_TIMEOUT`, in seconds) belong to the same session. A session records:
+
+- **the client** that made the calls, by the name and version it announces when it connects (for
+  example `claude-code` and `2.1.0`), or else the first product in its `User-Agent` header;
+- **the issue the agent is working on**: over MCP, the issue it last created in an *in progress*
+  status (any status in the active group) or assigned to its own account, moved into such a
+  status, assigned to its own account, updated while it is in progress and assigned to its own
+  account (so an agent resuming its issue marks it again, even when nothing changes), or started a
+  timer on. The latest one wins. Only an issue the key's account can see is ever recorded.
+
+The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
+an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about
+the prompts or the conversation is stored.
 
 ## File uploads go through the REST API
 

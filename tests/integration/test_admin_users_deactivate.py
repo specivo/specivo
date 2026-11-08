@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -21,7 +20,6 @@ from httpx import AsyncClient, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.main import get_plugin_manager
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.sso import SsoProvider
@@ -256,13 +254,6 @@ class TestAdminPage:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def audit_on() -> Iterator[None]:
-    """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
-    get_plugin_manager().feature_registry.register("security_audit_log", "test")
-    yield
-
-
 async def _audit_rows(db: AsyncSession, event: AuditEvent) -> list[SecurityAuditLog]:
     stmt = select(SecurityAuditLog).where(SecurityAuditLog.event_type == event.value).order_by(SecurityAuditLog.id)
     return list((await db.execute(stmt)).scalars().all())
@@ -270,7 +261,7 @@ async def _audit_rows(db: AsyncSession, event: AuditEvent) -> list[SecurityAudit
 
 class TestAudit:
     async def test_admin_deactivation_is_audited_with_the_admin_as_actor(
-        self, admin_client: AsyncClient, db_session: AsyncSession, audit_on: None
+        self, admin_client: AsyncClient, db_session: AsyncSession
     ) -> None:
         target = await _create(db_session, login="deact_audit")
         await ApiKeyService().create_key(db_session, user_id=target.id, name="cli")
@@ -293,7 +284,6 @@ class TestAccessLossThroughTheCallback:
         sso_provider: SsoProvider,
         sso_login: SsoLoginDriver,
         mock_idp: MockIdP,
-        audit_on: None,
     ) -> None:
         sso_provider.required_groups = ["deact-staff"]
         sso_provider.deactivate_on_access_loss = True

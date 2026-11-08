@@ -301,7 +301,7 @@ async def test_rest_single_entry_requires_view_time_entries_even_for_own(
 
 async def test_billing_report_endpoint_requires_view_time_entries(db_session: AsyncSession, world: dict) -> None:
     """The billing report handler (its router is not mounted by core) refuses without view_time_entries."""
-    from specivo.api.v1.agent_costs import get_billing_report
+    from specivo.api.v1.billing_rates import get_billing_report
     from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 
     span = {"date_from": date(2026, 1, 1), "date_to": date(2026, 12, 31)}
@@ -332,7 +332,7 @@ async def test_issue_and_version_sums_and_billing_hide_everything_without_view(
         report = await BillingRateService().billable_report(
             db_session, project, user, date(2026, 1, 1), date(2026, 12, 31)
         )
-        assert report["entries"] == []
+        assert (report.entries, report.unrated) == ((), ())
     viewer = world["users"]["viewer"]
     assert len(await _svc.list_for_issue(db_session, issue.id, project, viewer)) == 5
     assert await _svc.sum_hours_for_issues(db_session, [issue.id], project, viewer) == Decimal("5.00")

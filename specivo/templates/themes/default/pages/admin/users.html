@@ -58,7 +58,7 @@
         <template x-for="u in users" :key="u.id">
           <tr :class="u.status === 'locked' ? 'sp-row-muted' : ''">
             <td style="display: flex; align-items: center; gap: var(--sp-space-sm);">
-              <span class="avatar-sm" :style="'background:' + (u.status === 'locked' ? 'var(--sp-text-muted)' : u.avatar_color)" x-text="initials(u.display_name)"></span>
+              <span class="avatar-sm" :class="avatarIconClass(u.login)" :style="'background:' + (u.status === 'locked' ? 'var(--sp-text-muted)' : u.avatar_color)" x-text="avatarIconClass(u.login) ? '' : initials(u.display_name)"></span>
               <span>
                 <a :href="'/admin/users/' + u.id + '/'" :style="'font-weight:' + (u.status === 'locked' ? '400' : '500') + (u.status === 'locked' ? ';text-decoration:line-through' : '') + ';color:var(--sp-text-primary)'" x-text="u.display_name"></a><br>
                 <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="u.email"></span>
@@ -102,69 +102,7 @@
     </table>
   </div>
 
-  <!-- Create user modal -->
-  <div x-show="showCreate" x-cloak style="position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;">
-    <div class="sp-scrim" @click="showCreate = false"></div>
-    <div class="sp-modal" style="max-width: 520px;">
-      <div class="sp-modal-header">
-        <h2>{% trans %}New User{% endtrans %}</h2>
-        <button class="sp-modal-close" @click="showCreate = false">&times;</button>
-      </div>
-      <div class="sp-modal-body">
-        <div class="form-group" style="margin-bottom: var(--sp-space-md);">
-          <label class="form-label">{% trans %}Display Name{% endtrans %}</label>
-          <input class="form-input" type="text" x-model="newUser.display_name" placeholder="{{ _('John Doe') }}">
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-md); margin-bottom: var(--sp-space-md);">
-          <div class="form-group">
-            <label class="form-label">{% trans %}Login{% endtrans %}</label>
-            <input class="form-input" type="text" x-model="newUser.login" placeholder="{{ _('johndoe') }}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">{% trans %}Email{% endtrans %}</label>
-            <input class="form-input" type="email" x-model="newUser.email" placeholder="john@example.com">
-          </div>
-        </div>
-        <div style="margin-bottom: var(--sp-space-md);">
-          <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer; font-size: var(--sp-font-size-sm);">
-            <input type="checkbox" x-model="newUser.is_service_account" style="accent-color: var(--sp-accent);"> {% trans %}Service Account{% endtrans %}
-          </label>
-          <span x-show="newUser.is_service_account" style="display:block;font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs)">{% trans %}Service accounts authenticate via API keys only and cannot log in via UI.{% endtrans %}</span>
-        </div>
-        <div class="form-group" style="margin-bottom: var(--sp-space-md);" x-show="!newUser.is_service_account">
-          <label class="form-label">{% trans %}Password{% endtrans %}</label>
-          <div style="display:flex;gap:var(--sp-space-sm)">
-            <input class="form-input" :type="newUser.password && newUser.password.length > 0 ? 'text' : 'password'" x-model="newUser.password" placeholder="{% trans %}Min 10 characters{% endtrans %}" autocomplete="new-password" style="flex:1">
-            <button type="button" class="sp-btn sp-btn-ghost" @click="newUser.password = generatePassword()" title="{% trans %}Generate password{% endtrans %}" style="white-space:nowrap">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-              {% trans %}Generate{% endtrans %}
-            </button>
-          </div>
-        </div>
-        <div style="margin-bottom: var(--sp-space-md);" x-show="!newUser.is_service_account">
-          <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer; font-size: var(--sp-font-size-sm);">
-            <input type="checkbox" x-model="newUser.must_change_password" style="accent-color: var(--sp-accent);"> {% trans %}Require a password change at first sign-in{% endtrans %}
-          </label>
-          <span style="display:block;font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs)">{% trans %}You know this password. Leave this on so the account replaces it with one only its owner knows.{% endtrans %}</span>
-        </div>
-        <div class="form-group" style="margin-bottom: var(--sp-space-md);">
-          <label class="form-label">{% trans %}Role{% endtrans %}</label>
-          <select class="form-input" x-model="newUser.is_admin" style="max-width: 200px;">
-            <option value="false">{% trans %}Member{% endtrans %}</option>
-            <option value="true">{% trans %}Admin{% endtrans %}</option>
-          </select>
-        </div>
-        <div x-show="createError" style="color: var(--sp-danger); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-sm); white-space: pre-line;" x-text="createError"></div>
-      </div>
-      <div class="sp-modal-footer">
-        <button class="sp-btn" @click="showCreate = false">{% trans %}Cancel{% endtrans %}</button>
-        <button class="sp-btn sp-btn-primary" @click="createUser()" :disabled="creating">
-          <span x-show="!creating">{% trans %}Create{% endtrans %}</span>
-          <span x-show="creating">{% trans %}Creating...{% endtrans %}</span>
-        </button>
-      </div>
-    </div>
-  </div>
+  {% include "pages/admin/_user_create_modal.html" %}
 
   <!-- Reset password modal -->
   <div x-show="showReset" x-cloak style="position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;">

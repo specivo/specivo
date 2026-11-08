@@ -1,22 +1,49 @@
-<p align="center">
-  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og-cover.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
-</p>
-
 # Specivo
 
 **English** | [简体中文](README.zh-CN.md)
 
-Your team's knowledge, finally findable.
+<p align="center">
+  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og/cover-en-v2.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
+</p>
 
-Self-hosted project tracker with wiki and semantic search. Open source. No per-seat pricing. Built for teams that also use AI agents.
+**See where your AI budget actually goes.** Specivo is a self-hosted project tracker, wiki and
+knowledge base that also shows what your team's AI agents cost: per person, per feature, down to
+each agent session.
+
+Open source. No per-seat pricing. Built for teams that work with AI agents.
+
+## AI usage and spend tracking
+
+<p align="center">
+  <a href="https://specivo.io/ai-usage/"><img src="docs/assets/readme/ai-spend-ledger.png" alt="AI spend flowing from each person into the features they worked on, with the company total (demo data)" width="640"></a>
+</p>
+
+Your team uses Claude Code, Codex, Cursor and other AI tools every day, on personal plans, company
+seats and API keys. The invoice says how much. Specivo shows who spent it, and on which feature.
+
+- **Collected automatically.** The open-source [`ai-usage`](https://github.com/specivo/ai-usage-reporter)
+  reporter reads the local logs of Claude Code, Codex, Gemini CLI and OpenCode and sends only usage
+  numbers: never prompts, code or file contents.
+- **Every session tied to its issue.** Usage is attributed to the issue the agent worked on, from
+  its own Specivo calls, commits, branch names or the repository. Long sessions are split per issue.
+- **Drill down.** From the company total to a project, a person, a feature and the sessions behind
+  it, with charts by person, tool, model and project.
+- **All kinds of cost.** Personal plans, team seats and pay-per-use API keys in one view, in any
+  currency, priced from a bundled list of 300+ models.
+- **On every issue.** Open an issue to see what it cost in AI, its sub-issues included:
+
+<p align="center">
+  <img src="docs/assets/readme/ai-usage-issue-tab.png" alt="The AI usage tab of an issue: spend, API-equivalent value, tokens and people, spend by person, by tool and by model, and value per week (demo data)" width="720">
+</p>
+
+More on [specivo.io/ai-usage](https://specivo.io/ai-usage/) and in the user guide:
+[Reporting AI usage](https://specivo.io/docs/specivo/ai-agents/reporting-ai-usage/) · [AI usage of a project, an issue and you](https://specivo.io/docs/specivo/projects/ai-usage/) · [AI spend reports](https://specivo.io/docs/specivo/projects/ai-spend-reports/).
 
 ## The problem
 
-Teams lose knowledge constantly. Decisions get made in chat and vanish. Architecture docs scatter across five tools. AI coding agents make it worse — they ship code in a black box. What was done, why, and how it connects to other work becomes impossible to track after the session ends.
+Teams lose knowledge constantly. Decisions get made in chat and vanish. Architecture docs scatter across five tools. AI coding agents make it worse — they ship code in a black box. What was done, why, and how it connects to other work becomes impossible to track after the session ends. And every person now works through their own mix of agents, plans and API keys, so nobody can see how each of them actually works with AI or what it costs.
 
-Specivo fixes this by letting agents work inside the tracker, not outside it. Users plan sprints with help from agents, assign issues to people or agents, and review what was done in a familiar issue tracker UI. Agents create issues, update wiki pages, log time, and manage versions through MCP tools — one config line, no glue code. Every action is tracked, searchable, and connected. Assign tasks to different models, track outcomes, and see which agents deliver quality and which produce slop that humans had to fix.
-
-You wrote "login flow" in January and "auth sequence" in March — keyword search cannot connect the two. Specivo's hybrid search (full-text + semantic) finds things by meaning, not just exact words.
+Specivo fixes this by letting agents work inside the tracker, not outside it. Users plan sprints with help from agents, assign issues to people or agents, and review what was done in a familiar issue tracker UI. Agents create issues, update wiki pages, log time, and manage versions through MCP tools — one config line, no glue code. Every action is tracked, searchable, and connected. For each person, project and feature, Specivo shows which tools and models were used, how much AI money and how much time went into it, and which agent sessions did the work; each release shows the time logged on it. Assign tasks to different models, track outcomes, and see which agents deliver quality and which produce slop that humans had to fix.
 
 ## Quick start
 
@@ -37,15 +64,26 @@ Open http://localhost:9933 and sign in.
 
 For production, copy `.env.example` to `.env` and set a real `SECRET_KEY`.
 
+To track AI usage, install the reporter on each developer machine
+([ai-usage-reporter](https://github.com/specivo/ai-usage-reporter)), point it at your Specivo with
+a personal API key, and install its hooks:
+
+```bash
+ai-usage init
+ai-usage hooks install --tool all
+```
+
 Step-by-step self-hosting guide: [Self-host Specivo with Docker](https://specivo.io/self-host-specivo-docker/).
 
 ## What's in it
+
+**AI usage and spend** — what each person, project and feature costs in AI, from Claude Code, Codex, Gemini CLI and OpenCode, with subscriptions, team seats and API keys, a drill-down from company to session, charts, CSV, REST API and MCP access. See [above](#ai-usage-and-spend-tracking).
 
 **Issues** — hierarchy up to 16 levels (nested set), workflow engine, time tracking, versions, relations (9 types), watchers, bulk operations, custom metadata schemas.
 
 **Wiki** — Markdown, full version history, page hierarchy, one-click revert. Every edit tracked. Cross-linked with issues.
 
-**Hybrid search** — full-text via PostgreSQL tsvector, semantic via pgvector embeddings, fused with Reciprocal Rank Fusion. Searches issues, wiki, comments, and attachments. Attachment descriptions are searchable: find that architecture diagram by what it shows, not its filename.
+**Hybrid search** — finds things by meaning, not just exact words: the "login flow" you wrote in January and the "auth sequence" you wrote in March turn up together, which keyword search alone cannot do. Full-text via PostgreSQL tsvector, semantic via pgvector embeddings, fused with Reciprocal Rank Fusion. Searches issues, wiki, comments, and attachments. Attachment descriptions are searchable: find that architecture diagram by what it shows, not its filename.
 
 **MCP server** — Model Context Protocol tools. Works with Claude Code, Codex, or anything that speaks MCP. Issues, wiki pages, comments, and attachment descriptions become searchable context that agents can pull and update — automatically or on user confirmation. One config line to connect. Ready-made agent instructions for Claude Code, Codex, and Cursor live in [**specivo-agent-skills**](https://github.com/specivo/specivo-agent-skills).
 

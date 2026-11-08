@@ -1,3 +1,6 @@
+import { avatarIconClass, avatarInitials } from '../lib/avatar';
+import { userCreateForm } from '../lib/user-create-form';
+
 export function adminUsers(initial) {
         var i18n = Object.assign({
             passwordRequired: 'Password: required for regular users.',
@@ -21,13 +24,18 @@ export function adminUsers(initial) {
         }, initial.i18n || {});
         var statusLabels = initial.statusLabels || {};
 
-        return {
+        var component = {
             i18n: i18n,
             users: initial.users || [],
             roles: initial.roles || [],
 
             initials(name) {
-                return name.split(' ').map(function (w) { return w[0]; }).join('').substring(0, 2).toUpperCase();
+                return avatarInitials(name);
+            },
+
+            /* A bundled icon for a built-in system account (the Git account), else no extra class. */
+            avatarIconClass(login) {
+                return avatarIconClass(login);
             },
 
             capitalize(s) {
@@ -39,58 +47,10 @@ export function adminUsers(initial) {
                 return statusLabels[s] || this.capitalize(s || '');
             },
 
-            generatePassword: function () {
-                var chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*';
-                var arr = new Uint8Array(16);
-                crypto.getRandomValues(arr);
-                return Array.from(arr, function (b) { return chars[b % chars.length]; }).join('');
-            },
-
-            // Create user
-            showCreate: false,
-            creating: false,
-            createError: '',
-            // must_change_password defaults on: an administrator typing
-            // somebody else's password knows it, so it must not stay theirs.
-            newUser: { login: '', email: '', display_name: '', password: '', is_admin: false, is_service_account: false, must_change_password: true },
-
-            async createUser() {
-                this.creating = true;
-                this.createError = '';
-                var payload = Object.assign({}, this.newUser);
-                // Service accounts don't need a password
-                if (payload.is_service_account && !payload.password) {
-                    delete payload.password;
-                }
-                // A service account has no password to change and the server
-                // refuses the combination outright, so never send it.
-                if (payload.is_service_account) {
-                    payload.must_change_password = false;
-                }
-                if (!payload.password && !payload.is_service_account) {
-                    this.createError = i18n.passwordRequired;
-                    this.creating = false;
-                    return;
-                }
-                var res = await spFetch('/api/v1/admin/users/', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                });
-                if (res.ok) {
-                    window.location.reload();
-                } else {
-                    var err = await res.json().catch(function () { return {}; });
-                    if (err.errors && err.errors.length > 0) {
-                        this.createError = err.errors.map(function (e) {
-                            var field = e.field ? e.field + ': ' : '';
-                            return field + e.message;
-                        }).join('\n');
-                    } else {
-                        this.createError = err.detail || i18n.createFailed;
-                    }
-                }
-                this.creating = false;
+            // The create-user modal comes from userCreateForm (merged below);
+            // here a new account just reloads the list.
+            userCreated() {
+                window.location.reload();
             },
 
             // Reset password
@@ -170,4 +130,5 @@ export function adminUsers(initial) {
                 return spFormatDate(d);
             }
         };
+        return Object.assign(component, userCreateForm(i18n));
     }

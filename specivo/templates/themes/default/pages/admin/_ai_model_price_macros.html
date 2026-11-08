@@ -1,0 +1,38 @@
+{% macro error_text(code) -%}
+{% if code == "ai_model_price_invalid" %}{% trans %}Check the price: input and output are required, prices are non-negative numbers with at most 6 decimal places per 1M tokens, and long context prices need a threshold.{% endtrans %}
+{% elif code == "ai_model_price_overlap" %}{% trans %}The period overlaps another active price of this model from the same source. Deactivate or end that price first, or choose another period.{% endtrans %}
+{% elif code == "ai_model_price_in_use" %}{% trans %}Usage entries are priced with this price at or after that instant, so it cannot be ended there or deleted. Deactivate it, or choose a later instant.{% endtrans %}
+{% elif code == "ai_model_price_not_deletable" %}{% trans %}Bundled prices cannot be deleted. Deactivate the price instead.{% endtrans %}
+{% elif code == "ai_model_price_immutable" %}{% trans %}Prices are never edited in place. Enter a new price instead.{% endtrans %}
+{% elif code == "currency_inactive" %}{% trans %}That currency is disabled. Enable it on the Currencies page first.{% endtrans %}
+{% elif code == "currency_unknown" %}{% trans %}Unknown currency code.{% endtrans %}
+{% elif code == "instant_invalid" %}{% trans %}Enter a valid date and time.{% endtrans %}
+{% elif code == "threshold_invalid" %}{% trans %}The long context threshold must be a whole number of tokens.{% endtrans %}
+{% elif code == "seed_invalid" %}{% trans %}The bundled price file could not be read.{% endtrans %}
+{% elif code == "not_found" %}{% trans %}That price no longer exists.{% endtrans %}
+{% elif code == "queue_unavailable" %}{% trans %}The recompute could not be started because the task queue is unavailable. Try again later.{% endtrans %}
+{% elif code == "ai_usage_invalid" %}{% trans %}Check the range to recompute: its end must be after its start.{% endtrans %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro source_label(source) -%}
+{% if source == "admin" %}<span class="sp-badge-info">{% trans %}Admin{% endtrans %}</span>{% else %}<span class="sp-mp-badge">{% trans %}Bundled{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro price_cells(p) -%}
+<td class="sp-mp-num">{{ p.prices.input }}</td>
+<td class="sp-mp-num">{{ p.prices.output }}</td>
+<td class="sp-mp-num">{{ p.prices.cache_write_5m or '–' }}</td>
+<td class="sp-mp-num">{{ p.prices.cache_write_1h or '–' }}</td>
+<td class="sp-mp-num">{{ p.prices.cache_read or '–' }}</td>
+<td><code>{{ p.currency }}</code></td>
+{%- endmacro %}
+
+{% macro price_head() -%}
+<th class="sp-mp-num">{% trans %}Input{% endtrans %}</th>
+<th class="sp-mp-num">{% trans %}Output{% endtrans %}</th>
+<th class="sp-mp-num" title="{{ _('Cache write, 5 minutes') }}">{% trans %}Cache write 5m{% endtrans %}</th>
+<th class="sp-mp-num" title="{{ _('Cache write, 1 hour') }}">{% trans %}Cache write 1h{% endtrans %}</th>
+<th class="sp-mp-num">{% trans %}Cache read{% endtrans %}</th>
+<th>{% trans %}Currency{% endtrans %}</th>
+{%- endmacro %}

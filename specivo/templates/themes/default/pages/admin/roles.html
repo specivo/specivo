@@ -23,6 +23,7 @@
         <th>{% trans %}Role{% endtrans %}</th>
         <th>{% trans %}Users visibility{% endtrans %}</th>
         <th>{% trans %}Time entries visibility{% endtrans %}</th>
+        <th>{% trans %}AI usage visibility{% endtrans %}</th>
         <th></th>
       </tr>
     </thead>
@@ -43,6 +44,12 @@
           <select form="role-form-{{ r.id }}" id="time_entries_visibility_{{ r.id }}" name="time_entries_visibility" class="form-input" aria-label="{{ _('Time entries visibility') }}">
             <option value="all" {{ 'selected' if r.time_entries_visibility == 'all' else '' }}>{% trans %}All time entries{% endtrans %}</option>
             <option value="own" {{ 'selected' if r.time_entries_visibility == 'own' else '' }}>{% trans %}Own time entries{% endtrans %}</option>
+          </select>
+        </td>
+        <td>
+          <select form="role-form-{{ r.id }}" id="ai_usage_visibility_{{ r.id }}" name="ai_usage_visibility" class="form-input" aria-label="{{ _('AI usage visibility') }}">
+            <option value="all" {{ 'selected' if r.ai_usage_visibility == 'all' else '' }}>{% trans %}All AI usage{% endtrans %}</option>
+            <option value="own" {{ 'selected' if r.ai_usage_visibility == 'own' else '' }}>{% trans %}Own AI usage{% endtrans %}</option>
           </select>
         </td>
         <td>

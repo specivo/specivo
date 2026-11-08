@@ -11,6 +11,13 @@
       "pattern": "^[^\\s{}|]+$",
       "description": "A record's identifier in the source system, unique per entity type. No whitespace, braces or '|'."
     },
+    "sourceNumber": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^\\s{}|\\u0000]+$",
+      "description": "A number people know a record by in the source system, e.g. 123 or PROJ-7. No whitespace, braces or '|'."
+    },
     "optionalRef": {
       "anyOf": [
         {

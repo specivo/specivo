@@ -1,0 +1,76 @@
+/* Admin AI model prices: the price list, a model's history and the price form. */
+.sp-mp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  gap: var(--sp-space-md);
+  align-items: start;
+}
+.sp-mp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-sm);
+}
+.sp-mp-filters .form-input { width: auto; max-width: 100%; }
+.sp-mp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sp-mp-period { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-mp-inactive td { color: var(--sp-text-secondary); }
+.sp-mp-badge {
+  display: inline-flex;
+  margin-left: var(--sp-space-xs, 4px);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: var(--sp-font-size-xs);
+  font-weight: 500;
+  background: var(--sp-bg-subtle, var(--sp-border));
+  color: var(--sp-text-secondary);
+}
+.sp-mp-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-mp-field { display: flex; flex-direction: column; gap: var(--sp-space-xs, 4px); }
+.sp-mp-field .form-label { margin: 0; }
+.sp-mp-wide,
+.sp-mp-prices,
+.sp-mp-more,
+.sp-mp-actions { grid-column: 1 / -1; }
+.sp-mp-prices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--sp-space-sm);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.sp-mp-prices legend { padding: 0; margin-bottom: var(--sp-space-xs, 4px); }
+.sp-mp-prices label { display: flex; flex-direction: column; gap: 2px; font-size: var(--sp-font-size-sm); }
+.sp-mp-prices .form-input { font-variant-numeric: tabular-nums; }
+.sp-mp-more summary { cursor: pointer; font-weight: 500; margin-bottom: var(--sp-space-sm); }
+.sp-mp-more > .sp-mp-field { margin-bottom: var(--sp-space-sm); }
+.sp-mp-check { display: flex; gap: var(--sp-space-sm); align-items: center; margin-bottom: var(--sp-space-sm); }
+.sp-mp-row-actions summary { list-style: none; cursor: pointer; }
+.sp-mp-row-actions[open] { min-width: 18rem; }
+.sp-mp-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm);
+  margin-top: var(--sp-space-sm);
+}
+.sp-mp-inline form { margin: 0; }
+.sp-mp-inline label { display: flex; flex-direction: column; gap: 2px; font-size: var(--sp-font-size-sm); }
+.sp-mp-dl { margin: var(--sp-space-sm) 0 0; font-size: var(--sp-font-size-sm); }
+.sp-mp-dl dt { font-weight: 500; }
+.sp-mp-dl dd { margin: 0 0 var(--sp-space-xs, 4px); }
+.sp-mp-attribution { margin-top: var(--sp-space-md); }
+
+@media (max-width: 800px) {
+  .sp-mp-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .sp-mp-form { grid-template-columns: 1fr; }
+  .sp-mp-filters { flex-direction: column; align-items: stretch; }
+  .sp-mp-filters .form-input { width: 100%; }
+}

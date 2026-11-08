@@ -63,6 +63,7 @@ _DEFAULT_ROLES: list[dict] = [
         # Wildcard grants every permission now and in the future
         "permissions": ["*"],
         "issues_visibility": "all",
+        "ai_usage_visibility": "all",
         "settings": {},
     },
     {
@@ -81,8 +82,11 @@ _DEFAULT_ROLES: list[dict] = [
             "view_wiki",
             "log_time",
             "view_time_entries",
+            "view_ai_usage",
+            "log_ai_usage",
         ],
         "issues_visibility": "default",
+        "ai_usage_visibility": "own",
         "settings": {},
     },
     {
@@ -95,8 +99,10 @@ _DEFAULT_ROLES: list[dict] = [
             "add_issue_notes",
             "view_issues",
             "view_wiki",
+            "view_ai_usage",
         ],
         "issues_visibility": "default",
+        "ai_usage_visibility": "own",
         "settings": {},
     },
     {
@@ -115,8 +121,11 @@ _DEFAULT_ROLES: list[dict] = [
             "view_wiki",
             "log_time",
             "view_time_entries",
+            "view_ai_usage",
+            "log_ai_usage",
         ],
         "issues_visibility": "default",
+        "ai_usage_visibility": "own",
         "settings": {},
     },
 ]
@@ -428,11 +437,13 @@ async def seed_settings(session: AsyncSession) -> None:
     import json
 
     from specivo.core.constants import DEFAULT_AVATAR_PALETTE
+    from specivo.core.currency_data import DEFAULT_REPORTING_CURRENCY
     from specivo.models.setting import Setting
 
     defaults = {
         "brand_name": "Specivo",
         "avatar_color_palette": json.dumps(DEFAULT_AVATAR_PALETTE),
+        "reporting_currency": DEFAULT_REPORTING_CURRENCY,
     }
     for key, value in defaults.items():
         result = await session.execute(select(Setting).where(Setting.key == key))

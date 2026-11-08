@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import pagination %}
+
+{% block title %}{% trans %}Exchange rates{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% macro error_text(code) -%}
+{% if code == "currency_inactive" %}{% trans %}That currency is disabled. Enable it on the Currencies page first.{% endtrans %}
+{% elif code == "currency_unknown" %}{% trans %}Unknown currency code.{% endtrans %}
+{% elif code == "exchange_rate_invalid" %}{% trans %}Enter the rate as a positive decimal number with at most 12 decimal places, such as 36.5123.{% endtrans %}
+{% elif code == "exchange_rate_same_currency" %}{% trans %}The two currencies of a rate must differ.{% endtrans %}
+{% elif code == "exchange_rate_exists" %}{% trans %}A manual rate for that day and pair already exists. Edit it instead.{% endtrans %}
+{% elif code == "exchange_rate_not_editable" %}{% trans %}Only manual rates can be edited. To override an imported or fetched rate, add a manual rate for the same day.{% endtrans %}
+{% elif code == "exchange_rate_max_age_invalid" %}{% trans %}The maximum age must be a whole number of days from 0 to 366.{% endtrans %}
+{% elif code == "exchange_rate_fetch_url_invalid" %}{% trans %}Enter an http:// or https:// address for the rate feed.{% endtrans %}
+{% elif code == "date_invalid" %}{% trans %}Enter a valid date.{% endtrans %}
+{% elif code == "not_found" %}{% trans %}That rate no longer exists.{% endtrans %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro source_label(source) -%}
+{% if source == "manual" %}{% trans %}Manual{% endtrans %}{% elif source == "csv" %}{% trans %}CSV import{% endtrans %}{% else %}ECB{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Exchange rates{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}Exchange rates{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}Reports convert amounts into the reporting currency with these daily rates. A rate reads "1 base = rate quote". Enter rates by hand, import a CSV file, or let Specivo fetch the European Central Bank reference rates every day.{% endtrans %} <a href="/admin/currencies/">{% trans %}Currencies{% endtrans %}</a></p>
+
+{% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="rates-notice">{% trans %}Rate added.{% endtrans %}</div>
+{% elif notice == "updated" %}<div class="flash flash-success" role="status" data-testid="rates-notice">{% trans %}Rate saved.{% endtrans %}</div>
+{% elif notice == "deleted" %}<div class="flash flash-success" role="status" data-testid="rates-notice">{% trans %}Rate deleted.{% endtrans %}</div>
+{% elif notice == "settings_saved" %}<div class="flash flash-success" role="status" data-testid="rates-notice">{% trans %}Settings saved.{% endtrans %}</div>
+{% elif notice == "fetched" %}<div class="flash flash-success" role="status" data-testid="rates-notice">{% trans %}Rates fetched.{% endtrans %}</div>
+{% elif notice == "fetch_failed" %}<div class="flash flash-error" role="alert" data-testid="rates-notice">{% trans %}The rates could not be fetched. The reason is shown under Automatic fetch.{% endtrans %}</div>
+{% endif %}
+{% if error %}<div class="flash flash-error" role="alert" data-testid="rates-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="sp-xr-grid">
+  <div class="card sp-card-pad" id="add-rate" data-testid="add-rate-card">
+    <h3 class="sp-card-h3">{% trans %}Add a rate{% endtrans %}</h3>
+    <p class="sp-text-muted sp-mb-md">{% trans %}A rate entered here wins over an imported or fetched rate of the same day.{% endtrans %}</p>
+    <form method="post" action="/admin/exchange-rates/" class="sp-xr-form">
+      <label class="form-label" for="xr-date">{% trans %}Date{% endtrans %}</label>
+      <input id="xr-date" type="date" name="rate_date" class="form-input" value="{{ today }}" required>
+      <span class="sp-xr-equation">
+        <span>1</span>
+        <select name="base" class="form-input sp-xr-select" aria-label="{{ _('Base currency') }}" required>
+          {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == 'USD' else '' }}>{{ c.code }}</option>{% endfor %}
+        </select>
+        <span>=</span>
+        <input type="text" name="rate" class="form-input sp-xr-rate" inputmode="decimal" placeholder="36.5123" aria-label="{{ _('Rate') }}" required>
+        <select name="quote" class="form-input sp-xr-select" aria-label="{{ _('Quote currency') }}" required>
+          {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == 'EUR' else '' }}>{{ c.code }}</option>{% endfor %}
+        </select>
+      </span>
+      <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Add{% endtrans %}</button>
+    </form>
+  </div>
+
+  <div class="card sp-card-pad" id="convert" data-testid="convert-card">
+    <h3 class="sp-card-h3">{% trans %}Try a conversion{% endtrans %}</h3>
+    {% set pf = preview.form if preview else {} %}
+    <form method="get" action="/admin/exchange-rates/#convert" class="sp-xr-form">
+      <input type="text" name="amount" class="form-input sp-xr-rate" inputmode="decimal" value="{{ pf.amount or '100' }}" aria-label="{{ _('Amount') }}">
+      <select name="from" class="form-input sp-xr-select" aria-label="{{ _('From currency') }}">
+        {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == (pf['from'] or 'USD') else '' }}>{{ c.code }}</option>{% endfor %}
+      </select>
+      <span>&rarr;</span>
+      <select name="to" class="form-input sp-xr-select" aria-label="{{ _('To currency') }}">
+        {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == (pf.to or 'EUR') else '' }}>{{ c.code }}</option>{% endfor %}
+      </select>
+      <input type="date" name="on" class="form-input" value="{{ pf.on or today }}" aria-label="{{ _('Date of the amount') }}">
+      <select name="policy" class="form-input sp-xr-select" aria-label="{{ _('Rate policy') }}">
+        <option value="entry_date" {{ 'selected' if pf.policy != 'latest' else '' }}>{% trans %}Rate of that date{% endtrans %}</option>
+        <option value="latest" {{ 'selected' if pf.policy == 'latest' else '' }}>{% trans %}Latest rate{% endtrans %}</option>
+      </select>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Convert{% endtrans %}</button>
+    </form>
+    {% if preview %}
+    <div class="sp-xr-preview" data-testid="convert-result">
+      {% if preview.error %}
+        <p class="sp-xr-danger">{{ preview.error }}</p>
+      {% elif preview.result.ok %}
+        {% set r = preview.result %}
+        <p class="sp-xr-preview-amount">{{ r.original.format(locale) }} = <strong>{{ r.money.format(locale) }}</strong></p>
+        {% if r.rate.method == 'identity' %}
+          <p class="sp-text-muted-xs">{% trans %}Same currency: no rate needed.{% endtrans %}</p>
+        {% else %}
+          <p class="sp-text-muted-xs">
+            {% trans from_code=r.rate.from_currency, rate=preview.rate_text, to_code=r.rate.to_currency, day=r.rate.rate_date.isoformat() %}Rate used: 1 {{ from_code }} = {{ rate }} {{ to_code }}, from {{ day }}.{% endtrans %}
+            {% if r.rate.method == 'inverse' %}{% trans %}Derived from the inverse rate.{% endtrans %}
+            {% elif r.rate.method == 'pivot' %}{% trans pivot=r.rate.legs[0].quote %}Through {{ pivot }}.{% endtrans %}{% endif %}
+          </p>
+        {% endif %}
+      {% else %}
+        {% set r = preview.result %}
+        <p class="sp-xr-danger">{% trans amount=r.original.format(locale) %}{{ amount }} could not be converted.{% endtrans %}
+        {% if r.reason == 'stale' %}{% trans day=r.newest_rate_date.isoformat(), days=settings.max_age_days %}The newest rate is from {{ day }}, older than the maximum age of {{ days }} days.{% endtrans %}
+        {% else %}{% trans %}There is no rate for this pair on or before that date.{% endtrans %}{% endif %}</p>
+        <p class="sp-text-muted-xs">{% trans %}Reports list such amounts separately as unconverted; they are never counted as zero.{% endtrans %}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card sp-card-pad sp-mb-md" id="rates" data-testid="rates-card">
+  <h3 class="sp-card-h3">{% trans %}Rates{% endtrans %}</h3>
+  <form method="get" action="/admin/exchange-rates/" class="sp-xr-form sp-mb-md">
+    <select name="currency" class="form-input sp-xr-select" aria-label="{{ _('Currency') }}">
+      <option value="">{% trans %}All currencies{% endtrans %}</option>
+      {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == filters.currency else '' }}>{{ c.code }}</option>{% endfor %}
+    </select>
+    <select name="source" class="form-input sp-xr-select" aria-label="{{ _('Source') }}">
+      <option value="">{% trans %}All sources{% endtrans %}</option>
+      {% for s in sources %}<option value="{{ s }}" {{ 'selected' if s == filters.source else '' }}>{{ source_label(s) }}</option>{% endfor %}
+    </select>
+    <input type="date" name="date_from" class="form-input" value="{{ filters.date_from }}" aria-label="{{ _('From') }}">
+    <input type="date" name="date_to" class="form-input" value="{{ filters.date_to }}" aria-label="{{ _('To') }}">
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
+  </form>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="rates-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Date{% endtrans %}</th>
+          <th>{% trans %}Rate{% endtrans %}</th>
+          <th>{% trans %}Source{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rates %}
+        <tr data-rate-id="{{ r.id }}">
+          <td>{{ r.rate_date.isoformat() }}</td>
+          <td><code>1 {{ r.base }} = {{ r.rate }} {{ r.quote }}</code></td>
+          <td>{{ source_label(r.source) }}</td>
+          <td class="sp-xr-actions">
+            {% if r.source == 'manual' %}<a class="sp-btn-sm" href="/admin/exchange-rates/{{ r.id }}/edit/">{% trans %}Edit{% endtrans %}</a>{% endif %}
+            <form method="post" action="/admin/exchange-rates/{{ r.id }}/delete/">
+              <button type="submit" class="sp-btn-sm" aria-label="{{ _('Delete') }} {{ r.rate_date.isoformat() }} {{ r.base }}/{{ r.quote }}">{% trans %}Delete{% endtrans %}</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="sp-text-muted">{% trans %}No rates yet. Add one above, import a CSV file, or switch on the automatic fetch.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(total, offset, limit, "/admin/exchange-rates/", page_query) }}
+</div>
+
+<div class="card sp-card-pad sp-mb-md" id="import" data-testid="import-card">
+  <h3 class="sp-card-h3">{% trans %}Import a CSV file{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans size=csv_max_mb %}One rate per line: <code>date,base,quote,rate</code>, for example <code>2026-11-05,USD,THB,32.45</code>. The header line is optional; dates are YYYY-MM-DD and rates use a dot. A file with any bad line imports nothing. Up to {{ size }} MB.{% endtrans %}</p>
+  <form method="post" action="/admin/exchange-rates/import/" enctype="multipart/form-data" class="sp-xr-import">
+    <input type="file" name="file" accept=".csv,text/csv,text/plain" class="form-input" aria-label="{{ _('CSV file') }}">
+    <textarea name="csv_text" rows="5" class="form-input sp-xr-textarea" placeholder="date,base,quote,rate" aria-label="{{ _('Or paste CSV lines') }}">{{ import_text }}</textarea>
+    <div class="sp-xr-form">
+      <button type="submit" name="action" value="preview" class="sp-btn sp-btn-ghost">{% trans %}Preview{% endtrans %}</button>
+      <button type="submit" name="action" value="import" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Import{% endtrans %}</button>
+    </div>
+  </form>
+  {% if import_result %}
+  {% set ir = import_result %}
+  <div class="sp-xr-import-result" data-testid="import-result">
+    {% if ir.errors %}
+      <div class="flash flash-error" role="alert">{% trans count=ir.errors|length %}{{ count }} line has a problem. Nothing was imported.{% pluralize %}{{ count }} lines have problems. Nothing was imported.{% endtrans %}</div>
+      <ul class="sp-xr-errors" data-testid="import-errors">
+        {% for e in ir.errors %}<li>{% if e.line %}{% trans line=e.line %}Line {{ line }}{% endtrans %}: {% endif %}{{ e.message }}</li>{% endfor %}
+      </ul>
+    {% elif ir.applied %}
+      <div class="flash flash-success" role="status">{% trans created=ir.created, updated=ir.updated, unchanged=ir.unchanged %}Imported: {{ created }} new, {{ updated }} changed, {{ unchanged }} unchanged.{% endtrans %}</div>
+    {% else %}
+      <div class="flash flash-info" role="status">{% trans created=ir.created, updated=ir.updated, unchanged=ir.unchanged %}Preview: {{ created }} new, {{ updated }} changed, {{ unchanged }} unchanged. Nothing has been written yet.{% endtrans %}</div>
+    {% endif %}
+    {% if ir.preview %}
+    <div class="sp-table-scroll">
+      <table class="issue-table">
+        <thead><tr><th>{% trans %}Line{% endtrans %}</th><th>{% trans %}Date{% endtrans %}</th><th>{% trans %}Rate{% endtrans %}</th><th></th></tr></thead>
+        <tbody>
+          {% for row in ir.preview %}
+          <tr>
+            <td>{{ row.line }}</td>
+            <td>{{ row.rate_date.isoformat() }}</td>
+            <td><code>1 {{ row.base }} = {{ row.rate }} {{ row.quote }}</code></td>
+            <td>{% if row.action == 'create' %}{% trans %}New{% endtrans %}{% elif row.action == 'update' %}{% trans %}Changes the imported rate{% endtrans %}{% else %}{% trans %}Unchanged{% endtrans %}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card sp-card-pad" id="rate-settings" data-testid="rate-settings-card">
+  <h3 class="sp-card-h3">{% trans %}Conversion settings{% endtrans %}</h3>
+  <form method="post" action="/admin/exchange-rates/settings/" class="sp-xr-settings">
+    <label class="form-label" for="xr-pivot">{% trans %}Pivot currency{% endtrans %}</label>
+    <div>
+      <select id="xr-pivot" name="pivot" class="form-input sp-xr-select">
+        {% for c in currencies %}<option value="{{ c.code }}" {{ 'selected' if c.code == settings.pivot else '' }}>{{ c.code }} · {{ c.name }}</option>{% endfor %}
+        {% if settings.pivot not in currencies|map(attribute='code') %}<option value="{{ settings.pivot }}" selected>{{ settings.pivot }}</option>{% endif %}
+      </select>
+      <p class="sp-text-muted-xs">{% trans %}When no rate links two currencies directly, they are converted through this one. Keep EUR when you use the ECB rates.{% endtrans %}</p>
+    </div>
+    <label class="form-label" for="xr-max-age">{% trans %}Maximum age of a rate (days){% endtrans %}</label>
+    <div>
+      <input id="xr-max-age" type="number" min="0" max="366" name="max_age_days" class="form-input sp-xr-number" value="{{ settings.max_age_days }}">
+      <p class="sp-text-muted-xs">{% trans %}An amount is converted with the newest rate on or before its date, if that rate is at most this old. Otherwise it is shown as unconverted.{% endtrans %}</p>
+    </div>
+    <span class="form-label">{% trans %}Automatic fetch{% endtrans %}</span>
+    <div>
+      <label class="sp-xr-check"><input type="checkbox" name="fetch_enabled" value="1" {{ 'checked' if settings.fetch_enabled else '' }}> {% trans %}Fetch the rates once a day{% endtrans %}</label>
+      <p class="sp-text-muted-xs">{% trans %}Off by default. Needs outbound internet access from the worker, directly or through the proxy set in HTTPS_PROXY. Leave it off on an air-gapped install.{% endtrans %}</p>
+    </div>
+    <label class="form-label" for="xr-url">{% trans %}Feed address{% endtrans %}</label>
+    <div>
+      <input id="xr-url" type="url" name="fetch_url" class="form-input" value="{{ '' if settings.fetch_url_is_default else settings.fetch_url }}" placeholder="{{ default_feed_url }}">
+      <p class="sp-text-muted-xs">{% trans %}Empty uses the ECB daily reference rates. A self-hosted Frankfurter instance works too.{% endtrans %}</p>
+    </div>
+    <span></span>
+    <div><button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Save{% endtrans %}</button></div>
+  </form>
+
+  <div class="sp-xr-fetch" data-testid="fetch-status">
+    {% set lf = settings.last_fetch %}
+    {% if lf %}
+      {% if lf.ok %}
+        <p>{% trans at=lf.at, stored=lf.stored, day=lf.rate_date or '–' %}Last fetch {{ at }}: {{ stored }} rates stored, newest from {{ day }}.{% endtrans %}</p>
+      {% else %}
+        <p class="sp-xr-danger">{% trans at=lf.at, reason=lf.error %}Last fetch {{ at }} failed: {{ reason }}{% endtrans %}</p>
+      {% endif %}
+    {% else %}
+      <p class="sp-text-muted">{% trans %}No fetch has run yet.{% endtrans %}</p>
+    {% endif %}
+    <form method="post" action="/admin/exchange-rates/fetch/">
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Fetch now{% endtrans %}</button>
+    </form>
+  </div>
+  <p class="sp-text-muted-xs sp-xr-attribution" data-testid="ecb-attribution">{% trans %}Source of fetched rates: European Central Bank, euro foreign exchange reference rates. The ECB publishes them for information purposes only; they are not meant for transactions.{% endtrans %}</p>
+</div>
+{% endblock %}

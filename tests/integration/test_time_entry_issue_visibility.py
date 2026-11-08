@@ -25,7 +25,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.models.agent_cost import BillingRate
+from specivo.core.money import Money
+from specivo.models.billing_rate import BillingRate
 from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import EnabledModule, Project
@@ -146,7 +147,7 @@ async def world(db_session: AsyncSession) -> dict:
             user_id=users["author"].id,
             project_id=project.id,
             hourly_rate=Decimal("10.00"),
-            currency="USD",
+            currency_code="USD",
             effective_from=date(2026, 1, 1),
         )
     )
@@ -192,9 +193,10 @@ async def test_service_list_sums_and_billing(db_session: AsyncSession, world: di
 
     report = await BillingRateService().billable_report(db_session, project, user, *SPAN)
     all_hours = PUBLIC_HOURS + PROJECT_HOURS + (PRIVATE_HOURS if sees else 0)
-    assert report["total_hours"] == all_hours
-    assert report["total_amount"] == all_hours * Decimal("10.00")
-    assert (world["entries"]["private"].id in {e["time_entry_id"] for e in report["entries"]}) == sees
+    assert report.rated_hours == all_hours
+    assert [(s.currency, s.amount) for s in report.subtotals] == [("USD", Money(all_hours * Decimal("10.00"), "USD"))]
+    assert report.total.total == Money(all_hours * Decimal("10.00"), "USD")
+    assert (world["entries"]["private"].id in {e.time_entry_id for e in report.entries}) == sees
 
 
 @pytest.mark.parametrize("login", list(SEES_HIDDEN))
@@ -283,7 +285,7 @@ async def test_api_key_limited_to_another_project_sees_nothing(
     await db_session.flush()
     await _member(db_session, other, world["users"]["author"], world["role"])
     key, raw = await ApiKeyService().create_key(session=db_session, user_id=world["users"]["author"].id, name="tiv")
-    # Stored directly: what create_key keeps when the api_key_scopes feature is on.
+    # Stored directly, by project key: a limit stored before creation resolved it to ids still holds.
     key.scopes = {"projects": [other.key]}
     await db_session.commit()
     headers = {"Authorization": f"Bearer {raw}"}

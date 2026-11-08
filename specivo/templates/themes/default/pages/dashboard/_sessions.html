@@ -1,0 +1,47 @@
+{# Agents working now: the active agent sessions the reader may see.
+   Context: agent_sessions, agent_sessions_total, session_timeout_minutes, user #}
+{% set tz = user.timezone if user is defined else 'UTC' %}
+<section class="card sp-dash-card" id="sp-dash-agents" aria-labelledby="sp-dash-agents-title" data-testid="dash-agents">
+  <div class="sp-dash-card-head">
+    <div class="sp-dash-card-title">
+      <h2 id="sp-dash-agents-title">{% trans %}Agents working now{% endtrans %}</h2>
+      {% if agent_sessions_total %}
+      <span class="sp-dash-live" data-testid="dash-agents-count">{% trans count=agent_sessions_total %}{{ count }} active{% pluralize %}{{ count }} active{% endtrans %}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if agent_sessions %}
+  <ul class="sp-dash-sessions">
+    {% for s in agent_sessions %}
+    <li class="sp-dash-session" data-testid="dash-session">
+      <div class="sp-dash-session-who">
+        <span class="sp-dash-strong">{{ s.account }}</span>
+        {% if s.is_service_account %}<span class="sp-dash-tag">{% trans %}Service account{% endtrans %}</span>{% endif %}
+        <div class="sp-dash-mono-muted">{% if s.client_name %}{{ s.client_name }}{% if s.client_version %} {{ s.client_version }}{% endif %}{% else %}{% trans %}Unknown client{% endtrans %}{% endif %}</div>
+      </div>
+      <div class="sp-dash-session-issue">
+        {% if s.issue_key %}
+        <div class="sp-dash-session-subject"><a class="sp-dash-key" href="/issue/{{ s.issue_key }}/">{{ s.issue_key }}</a> {{ s.issue_subject }}</div>
+        <div class="sp-dash-session-state">
+          <span class="badge-status {{ s.status_name | lower | replace(' ', '-') }}">{{ s.status_name }}</span>
+          {% if s.timer_elapsed %}<span class="sp-dash-timer" title="{{ _('Running timer') }}">{% trans elapsed=s.timer_elapsed %}Timer {{ elapsed }}{% endtrans %}</span>{% endif %}
+        </div>
+        {% else %}
+        <span class="sp-dash-muted">{% trans %}No issue yet{% endtrans %}</span>
+        {% endif %}
+      </div>
+      <div class="sp-dash-session-time">
+        <span>{% trans when=s.started_at | timeago(tz, 'relative') %}Started {{ when }}{% endtrans %}</span>
+        <span class="sp-dash-text-success">{% trans when=s.last_activity_at | timeago(tz, 'relative') %}Last active {{ when }}{% endtrans %}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if agent_sessions_total > agent_sessions | length %}
+  <p class="sp-dash-more">{% trans count=agent_sessions_total - agent_sessions | length %}and {{ count }} more session{% pluralize %}and {{ count }} more sessions{% endtrans %}</p>
+  {% endif %}
+  {% else %}
+  <p class="sp-dash-empty" data-testid="dash-agents-empty">{% trans %}No agents active right now.{% endtrans %}</p>
+  {% endif %}
+  <p class="sp-dash-card-foot">{% trans count=session_timeout_minutes %}A session closes after {{ count }} minute without activity.{% pluralize %}A session closes after {{ count }} minutes without activity.{% endtrans %}</p>
+</section>

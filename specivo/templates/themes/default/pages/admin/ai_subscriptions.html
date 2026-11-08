@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import pagination %}
+{% from "pages/auth/_ai_subscription_macros.html" import error_text, period_label, status_badge, covers with context %}
+
+{% block title %}{% trans %}AI subscriptions{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}AI subscriptions{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}AI subscriptions{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}The flat-rate AI plans people pay for. Usage from the tools a plan covers counts as covered by it, and spend reports spread the fee over that usage. Your changes to other people's subscriptions are recorded in the audit log.{% endtrans %} <a href="/admin/ai-tools/">{% trans %}AI tools{% endtrans %} &rarr;</a></p>
+
+{% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription added.{% endtrans %}</div>
+{% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription saved.{% endtrans %}</div>
+{% elif notice == "deleted" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription deleted.{% endtrans %}</div>
+{% elif notice == "self_service_on" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}People can now manage their own subscriptions.{% endtrans %}</div>
+{% elif notice == "self_service_off" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Only administrators can now change subscriptions.{% endtrans %}</div>
+{% endif %}
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="subscription-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="subscriptions-card">
+  <form method="get" action="/admin/ai-subscriptions/" class="sp-sub-filters sp-mb-md">
+    <select name="user_id" class="form-input" aria-label="{{ _('Person') }}">
+      <option value="">{% trans %}Everyone{% endtrans %}</option>
+      {% for p in people %}<option value="{{ p.id }}" {{ 'selected' if filters.user_id == p.id|string else '' }}>{{ p.name }} ({{ p.login }})</option>{% endfor %}
+    </select>
+    <select name="current" class="form-input" aria-label="{{ _('Period') }}">
+      <option value="0" {{ 'selected' if filters.current == '0' else '' }}>{% trans %}All{% endtrans %}</option>
+      <option value="1" {{ 'selected' if filters.current == '1' else '' }}>{% trans %}Running today{% endtrans %}</option>
+    </select>
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
+  </form>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="subscriptions-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Person{% endtrans %}</th>
+          <th>{% trans %}Plan{% endtrans %}</th>
+          <th>{% trans %}Covers{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Fee{% endtrans %}</th>
+          <th>{% trans %}Days{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in subscriptions %}
+        <tr data-subscription-id="{{ s.id }}">
+          <td><a href="/admin/ai-subscriptions/?user_id={{ s.user_id }}">{{ s.owner_name }}</a> <span class="sp-text-muted-xs">{{ s.owner_login }}</span></td>
+          <td><strong>{{ s.plan_name }}</strong> <span class="sp-text-muted-xs">{{ s.provider }}</span></td>
+          <td>{{ covers(s) }}</td>
+          <td class="sp-sub-num">{{ s.fee }} <span class="sp-text-muted-xs">{{ period_label(s.billing_period) }}</span></td>
+          <td class="sp-sub-dates">{{ s.starts_on }} &rarr; {{ s.ends_on or _('open') }}</td>
+          <td>{{ status_badge(s.status) }}</td>
+          <td><a class="sp-btn-sm" href="/admin/ai-subscriptions/{{ s.id }}/">{% trans %}Edit{% endtrans %}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="sp-text-muted">{% trans %}No subscriptions match.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(total, offset, limit, "/admin/ai-subscriptions/", page_query) }}
+</div>
+
+<div class="sp-sub-grid">
+  <div class="card sp-card-pad" id="new-subscription" data-testid="new-subscription-card">
+    <h3 class="sp-card-h3">{% trans %}Add a subscription{% endtrans %}</h3>
+    <form method="get" action="/admin/ai-subscriptions/" class="sp-sub-preset sp-mb-md" data-testid="preset-form">
+      {% if filters.user_id %}<input type="hidden" name="user_id" value="{{ filters.user_id }}">{% endif %}
+      <label class="form-label" for="sub-preset">{% trans %}Start from a plan{% endtrans %}</label>
+      <select id="sub-preset" name="preset" class="form-input">
+        {% for p in presets %}<option value="{{ p.key }}" {{ 'selected' if p.key == form.plan_key else '' }}>{{ p.name }} · {{ p.hint }}</option>{% endfor %}
+        <option value="custom" {{ 'selected' if form.plan_key == 'custom' else '' }}>{% trans %}Custom{% endtrans %}</option>
+      </select>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Fill in{% endtrans %}</button>
+    </form>
+    <p class="sp-text-muted-xs sp-mb-md">{% trans %}Plan prices are suggestions from the providers' published list prices and may be out of date. Enter what is actually paid, in the currency it is paid in.{% endtrans %}</p>
+    {% set submit_label = _("Add subscription") %}
+    {% include "pages/auth/_ai_subscription_form.html" %}
+  </div>
+
+  <div class="card sp-card-pad" id="self-service" data-testid="self-service-card">
+    <h3 class="sp-card-h3">{% trans %}Who can change subscriptions{% endtrans %}</h3>
+    <form method="post" action="/admin/ai-subscriptions/settings/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="sp-sub-check"><input type="checkbox" name="self_service" value="1" {{ 'checked' if self_service else '' }}> {% trans %}People can add and change their own subscriptions{% endtrans %}</label>
+      <p class="sp-text-muted-xs sp-mb-md">{% trans %}When this is off, only administrators change subscriptions. People still see their own.{% endtrans %}</p>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save{% endtrans %}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -12,7 +12,7 @@ fixture now lives with the Redmine migration tool), and recorded the `sso_idp` m
 
 ## Context
 
-Specivo needs a fast, reliable backend test suite that covers API endpoints, service logic, and web page rendering without requiring a browser. The project has a plugin-based architecture (core / pro / enterprise) where tests must run in core-only mode and extend cleanly when plugins are installed.
+Specivo needs a fast, reliable backend test suite that covers API endpoints, service logic, and web page rendering without requiring a browser. The project has a plugin mechanism (password hashers, routers, services, templates); the suite runs with no plugin installed, and a plugin's own tests extend it by importing the shared fixtures.
 
 Key constraints:
 - Async codebase (FastAPI, SQLAlchemy 2.0 async, asyncpg)
@@ -58,7 +58,7 @@ Tests use `httpx.AsyncClient` with `ASGITransport` — no real HTTP server neede
 
 All fixtures are defined in `specivo/testing/conftest_base.py` and re-exported in each repo's `tests/conftest.py`.
 
-### Test markers and edition gating
+### Test markers
 
 ```python
 markers = [
@@ -67,8 +67,6 @@ markers = [
     "service",      # Service layer, requires database
     "slow",         # Over 5 seconds
     "serial",       # Cannot run under xdist (shared state)
-    "pro",          # Requires specivo-pro plugin
-    "enterprise",   # Requires specivo-enterprise plugin
     "e2e",          # Browser tests, excluded from backend runs
     "sso_idp",      # Single sign-on tests against the on-demand identity provider
 ]
@@ -76,7 +74,7 @@ markers = [
 
 `--strict-markers` is on, so an undeclared marker is a collection error rather than a silent no-op.
 
-`pytest_collection_modifyitems` in `tests/conftest.py` skips what is not available: `@pytest.mark.pro` and `@pytest.mark.enterprise` when the plugin is not in `INSTALLED_PLUGINS`, and `@pytest.mark.sso_idp` when the disposable identity provider does not answer at its issuer URL. The provider is only probed when such a test was collected, so collection stays cheap when it is down.
+`pytest_collection_modifyitems` in `tests/conftest.py` skips `@pytest.mark.sso_idp` tests when the disposable identity provider does not answer at its issuer URL. The provider is only probed when such a test was collected, so collection stays cheap when it is down.
 
 ### Test data
 

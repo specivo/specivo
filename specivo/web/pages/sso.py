@@ -11,8 +11,16 @@ middleware, 5 per minute per user) starts the same flow with
 ``intent=link``. Its callback connects the identity to the signed-in user,
 starts no session, and returns to ``/my/profile/?sso_linked=<slug>``.
 
+``POST /auth/oidc/{slug}/reauth/`` (signed in, CSRF-protected, 5 per
+minute per user) starts the flow with ``intent=reauth``: a person without a
+password signs in again at a provider they are connected to before
+changing their email address. Its callback checks that the same identity
+came back, starts no session, records the fresh sign-in for this browser
+session (:func:`specivo.services.email_change_service.mark_recent_reauth`)
+and returns to ``/my/profile/?email_reauth=1``.
+
 A refused login redirects to ``/login/?sso_error=<code>``, a refused link
-to ``/my/profile/?sso_error=<code>``; both pages turn the code into a
+or reauth to ``/my/profile/?sso_error=<code>``; both pages turn the code into a
 translated message (:func:`sso_error_message`) and never show anything the
 IdP sent. Unknown or disabled providers are 404. The protocol work lives in
 :class:`specivo.services.sso.login.SsoLoginService`.
@@ -52,7 +60,7 @@ from specivo.services.security_audit_service import SecurityAuditService
 from specivo.services.sso.errors import SsoError, SsoTokenInvalidError
 from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_path
 from specivo.services.sso.log import logger
-from specivo.services.sso.login import LINK_RETURN_PATH, SsoLinkResult, SsoLoginService
+from specivo.services.sso.login import LINK_RETURN_PATH, SsoLinkResult, SsoLoginService, SsoReauthResult
 from specivo.services.sso.logout import backchannel_logout, release_logout_jti
 from specivo.web.deps import get_current_user_optional, require_user, safe_next_path
 
@@ -72,6 +80,9 @@ _BACKCHANNEL_RATE_LIMIT = ("sso_backchannel_logout", 60, 60)
 BACKCHANNEL_MAX_BODY_BYTES = 16 * 1024
 _FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
 _LINK_RATE_LIMIT = ("sso_link_start", 5, 60)
+_REAUTH_RATE_LIMIT = ("sso_reauth_start", 5, 60)
+#: Intents that start from and return to the profile.
+_PROFILE_INTENTS = frozenset({"link", "reauth"})
 
 # Callback parameters that must appear at most once (a repeated one is refused).
 _SINGLE_VALUED = ("state", "code", "error", "iss")
@@ -116,6 +127,9 @@ def sso_error_message(code: str | None) -> str | None:
             "Your identity provider sent too many groups to read. Ask your administrator to send only the "
             "groups assigned to the application, or app roles."
         ),
+        "sso_reauth_mismatch": _(
+            "Sign in again with the identity provider account connected to your profile, not another one."
+        ),
         "sso_last_sign_in_method": _(
             "This is your only way to sign in. Set a password or connect another account before disconnecting it."
         ),
@@ -148,9 +162,9 @@ def _clear_tx_cookie(response: RedirectResponse, settings: Settings) -> None:
 
 
 def _refuse(code: str, settings: Settings, *, intent: str = "login", status_code: int = 302) -> RedirectResponse:
-    """Redirect a refusal to the login page, or to the profile for a link."""
+    """Redirect a refusal to the login page, or to the profile for a link or a reauth."""
     query = urlencode({"sso_error": _PUBLIC_CODES.get(code, code)})
-    page = LINK_RETURN_PATH if intent == "link" else "/login/"
+    page = LINK_RETURN_PATH if intent in _PROFILE_INTENTS else "/login/"
     response = RedirectResponse(f"{_prefix(settings)}{page}?{query}", status_code=status_code)
     _clear_tx_cookie(response, settings)
     return response
@@ -197,7 +211,7 @@ async def sso_login_start(
     settings = get_settings()
     provider = await _provider_or_404(db, slug)
     try:
-        authorization = await _service.start(provider, next_path=next_url)
+        authorization = await _service.start(db, provider, next_path=next_url)
     except SsoError as exc:
         logger.warning("sso.login.start_failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
         return _refuse(exc.code, settings)
@@ -246,6 +260,64 @@ async def sso_link_start(
     return response
 
 
+async def _reauth_user(
+    request: Request,
+    response: Response,
+    user: Annotated[User, Depends(require_user)],
+) -> User:
+    """The signed-in user, after the per-user reauth rate limit."""
+    request.state.rate_limit_user_id = user.id
+    await enforce_rate_limit(request, response, *_REAUTH_RATE_LIMIT)
+    return user
+
+
+@router.post("/{slug}/reauth/", response_model=None)
+async def sso_reauth_start(
+    slug: str,
+    db: DbSession,
+    user: Annotated[User, Depends(_reauth_user)],
+) -> RedirectResponse:
+    """Sign the signed-in user in again at this provider, to change their email: 303 to the IdP."""
+    settings = get_settings()
+    provider = await _provider_or_404(db, slug)
+    try:
+        authorization = await _service.start_reauth(db, provider, user_id=user.id)
+    except SsoError as exc:
+        logger.warning(
+            "sso.reauth.start_failed provider=%s user_id=%s code=%s reason=%s",
+            provider.slug,
+            user.id,
+            exc.code,
+            exc.reason,
+        )
+        return _refuse(exc.code, settings, intent="reauth", status_code=303)
+
+    response = RedirectResponse(authorization.url, status_code=303)
+    _set_tx_cookie(response, authorization.binding_token, settings)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+async def _finish_reauth(
+    request: Request, db: AsyncSession, result: SsoReauthResult, settings: Settings
+) -> RedirectResponse:
+    """Record the fresh sign-in for this browser session and return to the profile."""
+    from specivo.core.security import request_session_id
+    from specivo.services.email_change_service import mark_recent_reauth
+
+    session_id = await request_session_id(request, db, result.user_id)
+    if session_id is None:
+        logger.warning("sso.reauth.failed provider=%s reason=no_session", result.provider_slug)
+        return _refuse("sso_state_invalid", settings, intent="reauth")
+    if not await mark_recent_reauth(result.user_id, session_id):
+        return _refuse("sso_unavailable", settings, intent="reauth")
+    target = f"{_prefix(settings)}{LINK_RETURN_PATH}?{urlencode({'email_reauth': '1'})}"
+    response = RedirectResponse(target, status_code=302)
+    _clear_tx_cookie(response, settings)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.get("/{slug}/callback/", response_model=None)
 async def sso_callback(
     slug: str,
@@ -280,11 +352,16 @@ async def sso_callback(
             current_user_id=current_user_id,
         )
     except SsoError as exc:
-        if exc.intent == "link":
-            logger.warning("sso.link.failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
-            return _refuse(exc.code, settings, intent="link")
+        if exc.intent in _PROFILE_INTENTS:
+            logger.warning(
+                "sso.%s.failed provider=%s code=%s reason=%s", exc.intent, provider.slug, exc.code, exc.reason
+            )
+            return _refuse(exc.code, settings, intent=exc.intent)
         await _audit_failure(db, request, provider, exc)
         return _refuse(exc.code, settings)
+
+    if isinstance(result, SsoReauthResult):
+        return await _finish_reauth(request, db, result, settings)
 
     if isinstance(result, SsoLinkResult):
         await db.commit()

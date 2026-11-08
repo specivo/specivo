@@ -191,6 +191,10 @@ async def project_detail(
         members = await _svc.list_members(db, project, limit=10)
         modules = await _svc.get_modules(db, project)
     can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
+    show_ai_usage = not anonymous and (
+        await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
+        or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
+    )
 
     # Fetch subprojects, narrowed to the ones this visitor could open anyway,
     # as the project list does: a project the visitor reaches may hold private
@@ -220,6 +224,7 @@ async def project_detail(
             "people_count": people_count,
             "modules": modules,
             "can_view_time_entries": can_view_time_entries,
+            "show_ai_usage": show_ai_usage,
             "subprojects": subprojects,
             "status_label": _STATUS_LABELS.get(project.status, "unknown"),
         },
@@ -499,6 +504,31 @@ async def project_settings(
 
     anonymous_access_enabled = user.is_admin and await is_anonymous_access_enabled(db)
 
+    from specivo.models.setting import Setting
+    from specivo.services.similar_issues import (
+        SIMILAR_ISSUES_SETTING_KEY,
+        instance_setting_enabled,
+        project_setting_enabled,
+    )
+
+    similar_issues_instance = instance_setting_enabled(
+        await db.scalar(select(Setting.value).where(Setting.key == SIMILAR_ISSUES_SETTING_KEY))
+    )
+
+    # Reporting currency override: enabled currencies, plus the project's
+    # current one if it was disabled since, with names in the reader's language.
+    from specivo.core.i18n import get_locale
+    from specivo.core.money import currency_display_name
+    from specivo.services.currency_service import CurrencyService
+
+    _currency_svc = CurrencyService()
+    _locale = get_locale()
+    currency_choices = [
+        {"code": c.code, "name": currency_display_name(c.code, _locale, fallback=c.name)}
+        for c in await _currency_svc.list_currencies(db, active_only=True, include=project.reporting_currency_code)
+    ]
+    instance_reporting_currency = await _currency_svc.get_instance_reporting_currency(db)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -535,6 +565,10 @@ async def project_settings(
             "can_manage_tags": can_manage_tags,
             "computed_metadata": computed_values(project.settings),
             "anonymous_access_enabled": anonymous_access_enabled,
+            "similar_issues": project_setting_enabled(project.settings),
+            "similar_issues_instance": similar_issues_instance,
+            "currency_choices": currency_choices,
+            "instance_reporting_currency": instance_reporting_currency,
             "webhooks_data": webhooks_data,
             "webhook_events": webhook_events,
             "automation_roles": automation_roles,

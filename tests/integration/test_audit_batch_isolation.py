@@ -10,24 +10,15 @@ them, and another test's teardown cannot delete them before the assertions.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from specivo.main import get_plugin_manager
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.services.security_audit_service import AuditEvent
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def audit_on() -> Iterator[None]:
-    get_plugin_manager().feature_registry.register("security_audit_log", "test")
-    yield
 
 
 async def _count(session_or_conn: AsyncSession, slug: str) -> int:
@@ -43,7 +34,7 @@ async def _count(session_or_conn: AsyncSession, slug: str) -> int:
 
 
 async def test_buffered_audit_rows_stay_in_the_test_transaction(
-    admin_client: AsyncClient, db_session: AsyncSession, db_engine: AsyncEngine, audit_on: None
+    admin_client: AsyncClient, db_session: AsyncSession, db_engine: AsyncEngine
 ) -> None:
     slug = "batch-isolation"
     created = await admin_client.post(

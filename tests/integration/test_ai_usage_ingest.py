@@ -1,0 +1,1260 @@
+"""AI usage ingest v1 over HTTP: upsert semantics, attribution, authorization, limits and the published examples.
+
+The world: a private project ``INGX`` with issues 3, 7, 12 and a private 20,
+a second private project ``INGY`` (issue 1) where the bot may read but not
+log, and a repository ``acme/app`` connected to ``INGX`` with one commit
+linked to ``INGX-3``.
+
+- ``bot``: a service account logging for itself and for others in ``INGX``,
+  a reader in ``INGY``;
+- ``bot2``: another reporter like ``bot``;
+- ``teammate``: logs own usage in ``INGX``;
+- ``reader``: an ``INGX`` member without AI usage permissions;
+- ``outsider``: active, member of nothing.
+
+Time is frozen at 2026-11-06 12:00 UTC, the day the examples were written for.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import pytest
+import pytest_asyncio
+from httpx import AsyncClient, Response
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from specivo.core.ai_usage import MAX_TOKENS_PER_CLASS
+from specivo.models.agent_session import AgentSession
+from specivo.models.ai_usage_entry import AiUsageEntry
+from specivo.models.issue import Issue
+from specivo.models.member import Member, MemberRole
+from specivo.models.project import Project
+from specivo.models.repository import IssueCommitLink, RepositoryCommit
+from specivo.models.role import Role
+from specivo.models.security_audit import SecurityAuditLog
+from specivo.models.user import User
+from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput
+from specivo.services.ai_usage_service import AiUsageService
+from specivo.services.api_key_service import ApiKeyService
+from specivo.services.permission_service import clear_role_cache
+from specivo.services.security_audit_service import AuditEvent
+from tests.factories.issue import IssueFactory
+from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
+from tests.factories.project import ProjectFactory
+from tests.factories.user import AdminUserFactory, ServiceAccountFactory, UserFactory
+from tests.fixtures.forge_hooks import make_integration
+
+pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
+
+URL = "/api/v1/ai-usage/ingest"
+NOW = datetime(2026, 11, 6, 12, 0, tzinfo=UTC)
+DAY = "2026-11-05"
+COMMIT_SHA = "32fe3796ff2245cb43d05a41280745a53a12bd54"
+EXAMPLES = Path(__file__).resolve().parents[2] / "docs" / "contracts" / "ai-usage" / "v1" / "examples"
+
+
+@dataclass
+class World:
+    p: Project
+    q: Project
+    issues: dict[int, Issue]
+    q_issue: Issue
+    users: dict[str, User]
+    keys: dict[str, str]
+    key_ids: dict[str, int]
+
+    def auth(self, name: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.keys[name]}"}
+
+
+@pytest.fixture(autouse=True)
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("specivo.services.ai_usage_ingest_service.utcnow", lambda: NOW)
+    monkeypatch.setattr("specivo.services.ai_usage_service.utcnow", lambda: NOW)
+
+
+async def _role(db: AsyncSession, name: str, permissions: list[str]) -> Role:
+    role = Role(name=name, permissions=permissions, builtin=0, issues_visibility="default", ai_usage_visibility="own")
+    db.add(role)
+    await db.flush()
+    return role
+
+
+async def _member(db: AsyncSession, project: Project, user: User, role: Role) -> None:
+    member = Member(project_id=project.id, user_id=user.id)
+    db.add(member)
+    await db.flush()
+    db.add(MemberRole(member_id=member.id, role_id=role.id))
+    await db.flush()
+
+
+@pytest_asyncio.fixture
+async def w(db_session: AsyncSession) -> World:
+    db = db_session
+    status = StatusFactory.build(name="Ingx Open")
+    db.add(status)
+    await db.flush()
+    tracker = TrackerFactory.build(name="Ingx Task", default_status_id=status.id)
+    priority = PriorityFactory.build(name="Ingx Normal")
+    p = ProjectFactory.build(key="INGX", identifier="ingx", is_public=False)
+    q = ProjectFactory.build(key="INGY", identifier="ingy", is_public=False)
+    db.add_all([tracker, priority, p, q])
+    await db.flush()
+
+    users: dict[str, User] = {
+        "bot": ServiceAccountFactory.build(login="ingx-bot", status="active"),
+        "bot2": ServiceAccountFactory.build(login="ingx-bot2", status="active"),
+        "teammate": UserFactory.build(login="ingx-teammate", status="active"),
+        "reader": UserFactory.build(login="ingx-reader", status="active"),
+        "outsider": UserFactory.build(login="ingx-outsider", status="active"),
+    }
+    db.add_all(users.values())
+    await db.flush()
+
+    runner = await _role(db, "Ingx Runner", ["view_issues", "view_ai_usage", "log_ai_usage", "log_ai_usage_for_others"])
+    logger_role = await _role(db, "Ingx Logger", ["view_issues", "view_ai_usage", "log_ai_usage"])
+    viewer = await _role(db, "Ingx Viewer", ["view_issues"])
+    for name in ("bot", "bot2"):
+        await _member(db, p, users[name], runner)
+        await _member(db, q, users[name], viewer)
+    await _member(db, p, users["teammate"], logger_role)
+    await _member(db, p, users["reader"], viewer)
+
+    def issue(project: Project, number: int, **kw: Any) -> Issue:
+        built: Issue = IssueFactory.build(
+            project_id=project.id,
+            project_key=project.key,
+            tracker_id=tracker.id,
+            status_id=status.id,
+            priority_id=priority.id,
+            author_id=users["teammate"].id,
+            sequence_number=number,
+            subject=f"Work item {number}",
+            **kw,
+        )
+        return built
+
+    issues = {n: issue(p, n) for n in (3, 7, 12)}
+    issues[20] = issue(p, 20, is_private=True)
+    q_issue = issue(q, 1)
+    db.add_all([*issues.values(), q_issue])
+    await db.flush()
+
+    integration = await make_integration(db, p, repo="acme/app")
+    commit = RepositoryCommit(integration_id=integration.id, sha=COMMIT_SHA, message="Add login form")
+    db.add(commit)
+    await db.flush()
+    db.add(IssueCommitLink(commit_id=commit.id, issue_id=issues[3].id, source="message", keyword="refs"))
+
+    keys: dict[str, str] = {}
+    key_ids: dict[str, int] = {}
+    service = ApiKeyService()
+    for name in users:
+        key, raw = await service.create_key(db, user_id=users[name].id, name=f"{name}-key", check_scope_access=False)
+        keys[name], key_ids[name] = raw, key.id
+    limited, raw = await service.create_key(
+        db, user_id=users["bot"].id, name="bot-limited", scopes={"projects": [p.key]}, check_scope_access=False
+    )
+    keys["bot_limited"], key_ids["bot_limited"] = raw, limited.id
+    mcp, _raw = await service.create_key(db, user_id=users["bot"].id, name="bot-mcp", check_scope_access=False)
+    key_ids["bot_mcp"] = mcp.id
+    mcp2, _raw = await service.create_key(db, user_id=users["teammate"].id, name="tm-mcp", check_scope_access=False)
+    key_ids["teammate_mcp"] = mcp2.id
+    await db.commit()
+    clear_role_cache(db)
+    return World(p=p, q=q, issues=issues, q_issue=q_issue, users=users, keys=keys, key_ids=key_ids)
+
+
+def record(key: str, **kw: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "idempotency_key": key,
+        "tool": "claude-code",
+        "model": "claude-sonnet-4-5",
+        "usage_date": DAY,
+        "tokens": {"input": 1000, "output": 200},
+    }
+    values.update(kw)
+    return values
+
+
+def batch(*records: dict[str, Any], **kw: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "schema": "specivo.ai-usage.v1",
+        "client": {"name": "ingest-tests", "version": "1.2.3"},
+        "records": list(records),
+    }
+    body.update(kw)
+    return body
+
+
+async def post(client: AsyncClient, w: World, who: str, *records: dict[str, Any]) -> list[dict[str, Any]]:
+    resp = await client.post(URL, json=batch(*records), headers=w.auth(who))
+    assert resp.status_code == 200, resp.text
+    results: list[dict[str, Any]] = resp.json()["results"]
+    return results
+
+
+async def entry(db: AsyncSession, entry_id: int) -> AiUsageEntry:
+    stmt = select(AiUsageEntry).where(AiUsageEntry.id == entry_id).execution_options(populate_existing=True)
+    return (await db.execute(stmt)).scalar_one()
+
+
+def codes(result: dict[str, Any]) -> list[str]:
+    return [warning["code"] for warning in result["warnings"]]
+
+
+# ---------------------------------------------------------------------------
+# GET
+# ---------------------------------------------------------------------------
+
+
+async def test_info_lists_versions_limits_tools_and_currencies(client: AsyncClient, w: World) -> None:
+    resp = await client.get(URL, headers=w.auth("bot"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["versions"] == ["specivo.ai-usage.v1"]
+    assert body["max_records"] == 500
+    assert body["max_bytes"] == 1048576
+    assert body["max_age_days"] == 400
+    assert "claude-code" in body["tools"]
+    assert {"USD", "THB"} <= set(body["currencies"])
+    assert body["issue_ref_sources"] == ["explicit", "env", "agent_log"]
+    assert datetime.fromisoformat(body["server_time"]).tzinfo is not None
+
+    assert (await client.get(URL + "/", headers=w.auth("bot"))).status_code == 200
+    assert (await client.get(URL)).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Upsert semantics
+# ---------------------------------------------------------------------------
+
+
+async def test_create_unchanged_update_replaces_totals(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    [created] = await post(client, w, "bot", record("k-basic"))
+    assert created["status"] == "created"
+    assert created["revision"] == 1
+    assert created["error"] is None
+    assert created["attribution"] == {"method": "none", "project_key": None, "issue_ref": None}
+
+    [same] = await post(client, w, "bot", record("k-basic"))
+    assert same["status"] == "unchanged"
+    assert same["entry_id"] == created["entry_id"]
+    assert same["revision"] == 1
+
+    [updated] = await post(client, w, "bot", record("k-basic", tokens={"input": 1500, "output": 300}))
+    assert updated["status"] == "updated"
+    assert updated["revision"] == 2
+
+    stored = await entry(db_session, created["entry_id"])
+    assert (stored.input, stored.output) == (1500, 300)  # replaced, not added
+    assert stored.source == "reporter"
+    assert stored.user_id == stored.reporter_user_id == w.users["bot"].id
+    assert stored.reporter_api_key_id == w.key_ids["bot"]
+    assert (stored.client_name, stored.client_version) == ("ingest-tests", "1.2.3")
+
+
+async def test_both_token_buckets_are_stored_apart_and_priced_once(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """Base tokens at the base rates, long-context tokens at the long rates, each token once."""
+    admin = AdminUserFactory.build(login="ingx_price_admin", status="active")
+    db_session.add(admin)
+    await db_session.flush()
+    await AiModelPriceService().create(
+        db_session,
+        PriceInput(
+            provider="testlab",
+            model="lab-long-1",
+            currency="USD",
+            effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+            prices={"input": "1.25", "output": "10", "long_input": "2.5", "long_output": "15"},
+            long_context_threshold=200_000,
+        ),
+        actor=admin,
+    )
+    await db_session.commit()
+    rec = record(
+        "k-long",
+        provider="testlab",
+        model="lab-long-1",
+        cost_type="api",
+        tokens={"input": 1_000_000, "output": 100_000},  # 1.25 + 1.00
+        long_context_tokens={"input": 1_000_000, "output": 100_000},  # 2.50 + 1.50
+    )
+    [created] = await post(client, w, "bot", rec)
+    assert created["status"] == "created", created
+    stored = await entry(db_session, created["entry_id"])
+    assert (stored.input, stored.output) == (1_000_000, 100_000)
+    assert stored.long_context is not None and stored.long_context["input"] == 1_000_000
+    assert stored.api_equivalent is not None
+    assert stored.api_equivalent.amount == Decimal("6.25") and stored.api_equivalent.currency == "USD"
+
+
+async def test_a_bucket_that_lost_all_its_usage_is_set_to_zero(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """A reporter that re-splits a session sends a key without usage again with all-zero tokens."""
+    admin = AdminUserFactory.build(login="ingx_zero_admin", status="active")
+    db_session.add(admin)
+    await db_session.flush()
+    await AiModelPriceService().create(
+        db_session,
+        PriceInput(
+            provider="testlab",
+            model="lab-zero-1",
+            currency="USD",
+            effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+            prices={"input": "1.25", "output": "10", "long_input": "2.5", "long_output": "15"},
+            long_context_threshold=200_000,
+        ),
+        actor=admin,
+    )
+    await db_session.commit()
+    base = {"provider": "testlab", "model": "lab-zero-1", "cost_type": "api"}
+    [created] = await post(
+        client,
+        w,
+        "bot",
+        record("k-zero", **base, tokens={"input": 1_000_000}, long_context_tokens={"input": 1_000_000}),
+    )
+    assert created["status"] == "created", created
+
+    for tokens in ({}, {"input": 0, "output": 0}):
+        [zeroed] = await post(client, w, "bot", record("k-zero", **base, tokens=tokens))
+        assert zeroed["error"] is None, zeroed
+        stored = await entry(db_session, created["entry_id"])
+        assert set(stored.tokens().values()) == {0}
+        assert stored.long_context is None
+        assert stored.api_equivalent is not None and stored.api_equivalent.amount == Decimal("0")
+    assert zeroed["status"] == "unchanged"  # the second all-zero form is the same content
+
+    # A new key may be all zero too.
+    [fresh] = await post(client, w, "bot", record("k-zero-new", tokens={}))
+    assert fresh["status"] == "created", fresh
+
+
+async def test_bound_per_class_applies_to_the_sum_of_both_buckets(client: AsyncClient, w: World) -> None:
+    half = MAX_TOKENS_PER_CLASS // 2 + 1
+    [rejected] = await post(
+        client, w, "bot", record("k-long-max", tokens={"input": half}, long_context_tokens={"input": half})
+    )
+    assert rejected["status"] == "rejected"
+    assert rejected["error"]["code"] == "invalid_record"
+    assert rejected["error"]["field"] == "long_context_tokens"
+    [ok] = await post(
+        client, w, "bot", record("k-long-max", tokens={"input": half}, long_context_tokens={"input": half - 2})
+    )
+    assert ok["status"] == "created"
+
+
+async def test_path_with_trailing_slash_works_too(client: AsyncClient, w: World) -> None:
+    resp = await client.post(URL + "/", json=batch(record("k-slash")), headers=w.auth("bot"))
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["status"] == "created"
+
+
+async def test_summary_counts_each_status(client: AsyncClient, w: World) -> None:
+    await post(client, w, "bot", record("k-sum-1"))
+    resp = await client.post(
+        URL,
+        json=batch(record("k-sum-1"), record("k-sum-2"), record("k-sum-3", tokens={"input": -1})),
+        headers=w.auth("bot"),
+    )
+    assert resp.json()["summary"] == {"received": 3, "created": 1, "updated": 0, "unchanged": 1, "rejected": 1}
+
+
+async def test_key_of_another_reporter_is_key_conflict(client: AsyncClient, w: World) -> None:
+    [first] = await post(
+        client, w, "bot", record("k-shared", on_behalf_of="ingx-teammate", attribution={"project_key": "INGX"})
+    )
+    assert first["status"] == "created"
+    [second] = await post(
+        client, w, "bot2", record("k-shared", on_behalf_of="ingx-teammate", attribution={"project_key": "INGX"})
+    )
+    assert second["status"] == "rejected"
+    assert second["error"]["code"] == "key_conflict"
+    assert second["entry_id"] is None
+
+    # The same key for another target user is another bucket.
+    [own] = await post(client, w, "bot2", record("k-shared"))
+    assert own["status"] == "created"
+
+
+async def test_duplicate_key_in_one_batch_is_rejected(client: AsyncClient, w: World) -> None:
+    results = await post(client, w, "bot", record("k-dup"), record("k-dup", tokens={"input": 5}))
+    assert results[0]["status"] == "created"
+    assert results[1]["error"]["code"] == "duplicate_key"
+
+
+async def test_excluded_entry_stays_excluded(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    [created] = await post(client, w, "bot", record("k-excl"))
+    stored = await entry(db_session, created["entry_id"])
+    await AiUsageService().set_excluded(db_session, w.users["bot"], stored, True)
+    await db_session.commit()
+
+    [updated] = await post(client, w, "bot", record("k-excl", tokens={"input": 9999}))
+    assert updated["status"] == "updated"
+    stored = await entry(db_session, created["entry_id"])
+    assert stored.excluded_at is not None
+    assert stored.input == 9999
+
+
+async def test_invalid_record_does_not_block_the_others(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-ok-1"),
+        record("k-bad", started_at="2026-11-06T01:00:00Z"),
+        record("k-ok-2"),
+    )
+    assert [r["status"] for r in results] == ["created", "rejected", "created"]
+    assert results[1]["error"] == {
+        "code": "invalid_record",
+        "message": "started_at must fall on usage_date (a UTC day)",
+        "field": "started_at",
+    }
+
+
+async def test_time_rules(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        # 23:30 on the 4th in Bangkok is 16:30 UTC on the 4th: another UTC day.
+        record("k-t1", started_at="2026-11-04T23:30:00+07:00"),
+        # 06:30 on the 5th in Bangkok is 23:30 UTC on the 4th.
+        record("k-t2", started_at="2026-11-05T06:30:00+07:00"),
+        record("k-t3", started_at="2026-11-05T07:30:00+07:00", ended_at="2026-11-06T00:00:00Z"),
+        record("k-t4", ended_at="2026-11-06T00:00:01Z"),
+        record("k-t5", usage_date="2026-11-07"),
+        record("k-t6", usage_date="2025-10-01"),
+        record("k-t7", usage_date="2025-10-03"),
+    )
+    assert [r["status"] for r in results] == [
+        "rejected",
+        "rejected",
+        "created",
+        "rejected",
+        "rejected",
+        "rejected",
+        "created",
+    ]
+
+
+async def test_priced_at_is_started_at_in_utc(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    [with_start] = await post(client, w, "bot", record("k-p1", started_at="2026-11-05T09:10:00+07:00"))
+    [without] = await post(client, w, "bot", record("k-p2"))
+    assert (await entry(db_session, with_start["entry_id"])).priced_at == datetime(2026, 11, 5, 2, 10, tzinfo=UTC)
+    assert (await entry(db_session, without["entry_id"])).priced_at == datetime(2026, 11, 5, tzinfo=UTC)
+
+
+async def test_unknown_record_fields_are_ignored_with_a_warning(client: AsyncClient, w: World) -> None:
+    [result] = await post(
+        client, w, "bot", record("k-unk", future_field=1, tokens={"input": 1, "audio": 5}, attribution={"x": 1})
+    )
+    assert result["status"] == "created"
+    assert codes(result) == ["unknown_fields"]
+    assert result["warnings"][0]["message"].endswith("attribution.x, future_field, tokens.audio")
+
+
+# ---------------------------------------------------------------------------
+# Attribution
+# ---------------------------------------------------------------------------
+
+
+async def test_explicit_issue_wins_over_every_hint(client: AsyncClient, w: World) -> None:
+    [result] = await post(
+        client,
+        w,
+        "bot",
+        record(
+            "k-a-explicit",
+            attribution={
+                "issue_ref": "ingx-12",
+                "git_branch": "feat/ingx-7-search",
+                "commits": [COMMIT_SHA],
+                "repo": "github.com/acme/app",
+            },
+        ),
+    )
+    assert result["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+
+async def test_env_issue_is_recorded_as_env(client: AsyncClient, w: World) -> None:
+    [result] = await post(
+        client, w, "bot", record("k-a-env", attribution={"issue_ref": "INGX-7", "issue_ref_source": "env"})
+    )
+    assert result["attribution"]["method"] == "env"
+    assert result["attribution"]["issue_ref"] == "INGX-7"
+
+
+async def _session(
+    db: AsyncSession, w: World, key: str, user: str, issue: Issue, start: datetime, end: datetime
+) -> None:
+    db.add(
+        AgentSession(
+            api_key_id=w.key_ids[key],
+            user_id=w.users[user].id,
+            issue_id=issue.id,
+            started_at=start,
+            last_activity_at=end,
+        )
+    )
+    await db.commit()
+
+
+async def test_mcp_session_issue_overlapping_the_window(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _session(
+        db_session,
+        w,
+        "bot_mcp",
+        "bot",
+        w.issues[7],
+        datetime(2026, 11, 5, 1, 0, tzinfo=UTC),
+        datetime(2026, 11, 5, 2, 0, tzinfo=UTC),
+    )
+    results = await post(
+        client,
+        w,
+        "bot",
+        record(
+            "k-a-mcp",
+            started_at="2026-11-05T01:30:00Z",
+            ended_at="2026-11-05T03:00:00Z",
+            attribution={"git_branch": "feat/ingx-12-other", "commits": [COMMIT_SHA]},
+        ),
+        # No overlap: the commit decides.
+        record(
+            "k-a-mcp-miss",
+            started_at="2026-11-05T05:00:00Z",
+            ended_at="2026-11-05T06:00:00Z",
+            attribution={"commits": [COMMIT_SHA]},
+        ),
+        # No window at all: the session step is skipped.
+        record("k-a-mcp-none"),
+    )
+    assert results[0]["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
+    assert results[1]["attribution"]["method"] == "commit"
+    assert results[2]["attribution"]["method"] == "none"
+
+
+async def test_on_behalf_session_prefers_the_reporter_then_the_target(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    start, end = datetime(2026, 11, 5, 1, 0, tzinfo=UTC), datetime(2026, 11, 5, 2, 0, tzinfo=UTC)
+    await _session(db_session, w, "teammate_mcp", "teammate", w.issues[12], start, end)
+    window = {"started_at": "2026-11-05T01:10:00Z", "ended_at": "2026-11-05T01:20:00Z"}
+
+    [target_only] = await post(client, w, "bot", record("k-a-ob1", on_behalf_of="ingx-teammate", **window))
+    assert target_only["attribution"]["issue_ref"] == "INGX-12"
+    assert target_only["attribution"]["method"] == "mcp_session"
+
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], start, end)
+    [both] = await post(client, w, "bot", record("k-a-ob2", on_behalf_of="ingx-teammate", **window))
+    assert both["attribution"]["issue_ref"] == "INGX-7"
+
+
+async def test_commit_then_branch_then_project_then_repo(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-a-c", attribution={"commits": [COMMIT_SHA.upper()], "git_branch": "feat/ingx-7-x"}),
+        record("k-a-b", attribution={"git_branch": "INGX-7/search", "project_key": "INGX"}),
+        record("k-a-p", attribution={"project_key": "ingx", "repo": "github.com/other/repo"}),
+        record("k-a-r", attribution={"repo": "https://github.com/acme/app.git"}),
+        record("k-a-n", attribution={"repo": "github.com/nobody/nothing", "git_branch": "main"}),
+    )
+    assert [(r["attribution"]["method"], r["attribution"]["issue_ref"]) for r in results] == [
+        ("commit", "INGX-3"),
+        ("branch", "INGX-7"),
+        ("explicit", None),
+        ("repo", None),
+        ("none", None),
+    ]
+    assert all(r["attribution"]["project_key"] == "INGX" for r in results[:4])
+
+
+async def test_explicit_targets_that_cannot_be_used_are_rejected(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-r1", attribution={"issue_ref": "INGY-1"}),  # visible, but no log permission there
+        record("k-r2", attribution={"project_key": "INGY"}),
+        record("k-r3", attribution={"issue_ref": "INGX-999"}),
+        record("k-r4", attribution={"project_key": "NOPE"}),
+        record("k-r5", attribution={"issue_ref": "INGX-20"}),  # private: not visible to the bot
+        record("k-r6", attribution={"issue_ref": "INGX-7", "project_key": "INGY"}),
+    )
+    assert [r["status"] for r in results] == ["rejected"] * 6
+    assert [r["error"]["code"] for r in results] == [
+        "forbidden",
+        "forbidden",
+        "not_found",
+        "not_found",
+        "not_found",
+        "attribution_invalid",
+    ]
+    assert results[2]["error"]["field"] == "attribution.issue_ref"
+    assert results[3]["error"]["field"] == "attribution.project_key"
+
+
+async def test_inferred_targets_that_cannot_be_used_are_dropped(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        # INGY-1 is in a project the bot reaches but cannot log to: dropped, then the repository is tried.
+        record("k-d1", attribution={"git_branch": "feat/ingy-1-x", "repo": "github.com/acme/app"}),
+        # Branch only, and dropped: unassigned.
+        record("k-d2", attribution={"git_branch": "feat/ingy-1-x"}),
+        # An inferred issue outside the named project is dropped; the project stays.
+        record("k-d3", attribution={"git_branch": "feat/ingy-1-x", "project_key": "INGX"}),
+    )
+    assert results[0]["status"] == "created"
+    assert results[0]["attribution"] == {"method": "repo", "project_key": "INGX", "issue_ref": None}
+    assert codes(results[0]) == ["attribution_dropped"]
+    assert "INGY-1" in results[0]["warnings"][0]["message"]
+
+    assert results[1]["status"] == "created"
+    assert results[1]["attribution"]["method"] == "none"
+    assert codes(results[1]) == ["attribution_dropped"]
+
+    assert results[2]["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": None}
+    assert codes(results[2]) == ["attribution_dropped"]
+    assert "not in project INGX" in results[2]["warnings"][0]["message"]
+
+
+async def test_dropped_issue_the_reporter_cannot_see_is_not_named(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    commit = (await db_session.execute(select(RepositoryCommit))).scalars().first()
+    assert commit is not None
+    other = RepositoryCommit(integration_id=commit.integration_id, sha="ab" * 20, message="private work")
+    db_session.add(other)
+    await db_session.flush()
+    db_session.add(IssueCommitLink(commit_id=other.id, issue_id=w.issues[20].id, source="message"))
+    await db_session.commit()
+
+    [result] = await post(client, w, "bot", record("k-hidden", attribution={"commits": ["ab" * 20]}))
+    assert result["status"] == "created"
+    assert result["attribution"]["method"] == "none"
+    assert codes(result) == ["attribution_dropped"]
+    assert "INGX-20" not in result["warnings"][0]["message"]
+
+
+async def test_replay_keeps_the_stored_attribution(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    [first] = await post(client, w, "bot", record("k-keep", attribution={"issue_ref": "INGX-3"}))
+    assert first["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": "INGX-3"}
+
+    # No attribution: kept, nothing changed.
+    [bare] = await post(client, w, "bot", record("k-keep"))
+    assert bare["status"] == "unchanged"
+    assert bare["attribution"]["issue_ref"] == "INGX-3"
+
+    # A different inferred issue: not applied, warned.
+    [inferred] = await post(client, w, "bot", record("k-keep", attribution={"git_branch": "feat/ingx-7-x"}))
+    assert inferred["status"] == "updated"  # the branch is stored as context
+    assert inferred["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": "INGX-3"}
+    assert codes(inferred) == ["attribution_dropped"]
+
+    # The agent's log never replaces an explicit issue.
+    [agent] = await post(
+        client, w, "bot", record("k-keep", attribution={"issue_ref": "INGX-12", "issue_ref_source": "agent_log"})
+    )
+    assert agent["status"] == "updated"  # the branch is no longer sent
+    assert agent["attribution"]["issue_ref"] == "INGX-3"
+    assert codes(agent) == ["attribution_dropped"]
+
+    # A different explicit target: refused.
+    [other_project] = await post(client, w, "bot", record("k-keep", attribution={"project_key": "INGY"}))
+    assert other_project["error"]["code"] == "attribution_conflict"
+    [other_issue] = await post(client, w, "bot", record("k-keep", attribution={"issue_ref": "INGX-12"}))
+    assert other_issue["error"]["code"] == "attribution_conflict"
+
+    # The same explicit target again: fine.
+    [same] = await post(
+        client, w, "bot", record("k-keep", attribution={"project_key": "INGX", "git_branch": "feat/ingx-7-x"})
+    )
+    assert same["status"] == "updated"  # the branch is sent again
+    assert same["error"] is None
+    assert codes(same) == ["attribution_dropped"]
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.issue_id, stored.attribution_method) == (w.issues[3].id, "explicit")
+
+
+async def _third_project(db: AsyncSession, w: World) -> Issue:
+    """A project ``INGZ`` where the bot may log too, with issue 1."""
+    z = ProjectFactory.build(key="INGZ", identifier="ingz", is_public=False)
+    db.add(z)
+    await db.flush()
+    role = await _role(db, "Ingz Runner", ["view_issues", "view_ai_usage", "log_ai_usage"])
+    await _member(db, z, w.users["bot"], role)
+    template = w.issues[3]
+    issue: Issue = IssueFactory.build(
+        project_id=z.id,
+        project_key=z.key,
+        tracker_id=template.tracker_id,
+        status_id=template.status_id,
+        priority_id=template.priority_id,
+        author_id=w.users["teammate"].id,
+        sequence_number=1,
+        subject="Work item in INGZ",
+    )
+    db.add(issue)
+    await db.commit()
+    clear_role_cache(db)
+    return issue
+
+
+WINDOW = {"started_at": "2026-11-05T01:10:00Z", "ended_at": "2026-11-05T01:20:00Z"}
+SESSION = (datetime(2026, 11, 5, 1, 0, tzinfo=UTC), datetime(2026, 11, 5, 2, 0, tzinfo=UTC))
+
+
+async def test_project_only_entry_is_refined_by_an_mcp_session_issue_of_its_project(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    # Push 1: the agent is still researching, only the repository is known.
+    [first] = await post(client, w, "bot", record("k-ref-mcp", attribution={"repo": "github.com/acme/app"}, **WINDOW))
+    assert first["attribution"] == {"method": "repo", "project_key": "INGX", "issue_ref": None}
+
+    # The agent then marks INGX-7 over MCP; push 2 of the same bucket gets it.
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    [second] = await post(client, w, "bot", record("k-ref-mcp", attribution={"repo": "github.com/acme/app"}, **WINDOW))
+    assert second["status"] == "updated"
+    assert second["warnings"] == []
+    assert second["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.project_id, stored.issue_id, stored.attribution_method) == (w.p.id, w.issues[7].id, "mcp_session")
+    assert stored.revision == 2
+
+    # From now on it has an issue and keeps it (without the window, the branch is what is found).
+    [third] = await post(client, w, "bot", record("k-ref-mcp", attribution={"git_branch": "feat/ingx-12-x"}))
+    assert third["attribution"]["issue_ref"] == "INGX-7"
+    assert codes(third) == ["attribution_dropped"]
+
+
+async def test_project_only_entry_from_project_key_is_refined_by_branch_and_explicit_issue(
+    client: AsyncClient, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-ref-br", attribution={"project_key": "INGX"}))
+    assert first["attribution"]["method"] == "explicit"
+    [branch] = await post(
+        client, w, "bot", record("k-ref-br", attribution={"project_key": "INGX", "git_branch": "feat/ingx-12-x"})
+    )
+    assert branch["status"] == "updated"
+    assert branch["attribution"] == {"method": "branch", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+    # SPECIVO_ISSUE set on a later push of a project-only bucket refines it as well.
+    [project_only] = await post(client, w, "bot", record("k-ref-env", attribution={"project_key": "INGX"}))
+    assert project_only["attribution"]["issue_ref"] is None
+    [env] = await post(
+        client, w, "bot", record("k-ref-env", attribution={"issue_ref": "INGX-3", "issue_ref_source": "env"})
+    )
+    assert env["status"] == "updated"
+    assert env["error"] is None
+    assert env["attribution"] == {"method": "env", "project_key": "INGX", "issue_ref": "INGX-3"}
+
+
+async def test_project_only_entry_refuses_or_drops_issues_of_other_projects(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    z_issue = await _third_project(db_session, w)
+    [first] = await post(client, w, "bot", record("k-ref-x", attribution={"project_key": "INGX"}, **WINDOW))
+    assert first["attribution"]["project_key"] == "INGX"
+
+    # An inferred issue in another project the bot may log to: dropped, the project stays.
+    await _session(db_session, w, "bot_mcp", "bot", z_issue, *SESSION)
+    [inferred] = await post(client, w, "bot", record("k-ref-x", **WINDOW))
+    assert inferred["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": None}
+    assert codes(inferred) == ["attribution_dropped"]
+    assert "not in project INGX" in inferred["warnings"][0]["message"]
+
+    # ... and a usable candidate of the stored project found later still refines it.
+    [branch] = await post(client, w, "bot", record("k-ref-x", attribution={"git_branch": "feat/ingx-7-x"}, **WINDOW))
+    assert codes(branch) == ["attribution_dropped"]
+    assert branch["attribution"] == {"method": "branch", "project_key": "INGX", "issue_ref": "INGX-7"}
+
+    # An explicit issue elsewhere is a conflict.
+    [second] = await post(client, w, "bot", record("k-ref-x2", attribution={"project_key": "INGX"}))
+    [explicit] = await post(client, w, "bot", record("k-ref-x2", attribution={"issue_ref": "INGZ-1"}))
+    assert explicit["status"] == "rejected"
+    assert explicit["error"]["code"] == "attribution_conflict"
+    stored = await entry(db_session, second["entry_id"])
+    assert (stored.project_id, stored.issue_id) == (w.p.id, None)
+
+
+async def test_refining_needs_permission_on_the_issue(client: AsyncClient, w: World) -> None:
+    # INGX-20 is private: the bot cannot see it, so it cannot refine with it either.
+    [first] = await post(client, w, "bot", record("k-ref-priv", attribution={"project_key": "INGX"}))
+    assert first["attribution"]["issue_ref"] is None
+    [explicit] = await post(client, w, "bot", record("k-ref-priv", attribution={"issue_ref": "INGX-20"}))
+    assert explicit["error"]["code"] == "not_found"
+
+
+async def test_entry_moved_by_a_person_is_never_changed_by_a_replay(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-moved", attribution={"repo": "github.com/acme/app"}, **WINDOW))
+    stored = await entry(db_session, first["entry_id"])
+    await AiUsageService().update(db_session, w.users["bot"], stored, {"issue_id": w.issues[12].id})
+    await db_session.commit()
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.issue_id, stored.attribution_method) == (w.issues[12].id, "manual")
+
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    results = [
+        (await post(client, w, "bot", record("k-moved", attribution=hints, **WINDOW)))[0]
+        for hints in (
+            {},
+            {"git_branch": "feat/ingx-3-x"},
+            {"issue_ref": "INGX-3", "issue_ref_source": "agent_log"},
+            {"issue_ref": "INGX-3"},
+            {"project_key": "INGX"},
+        )
+    ]
+    assert [r["status"] for r in results] == ["updated", "updated", "updated", "unchanged", "unchanged"]
+    assert all(r["attribution"] == {"method": "manual", "project_key": "INGX", "issue_ref": "INGX-12"} for r in results)
+    # The session issue (INGX-7) and every other hint differ: each one is reported, none applied.
+    assert [codes(r) for r in results] == [["attribution_dropped"]] * 4 + [[]]
+    assert "was moved in Specivo" in results[3]["warnings"][0]["message"]
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.issue_id, stored.attribution_method) == (w.issues[12].id, "manual")
+
+
+async def test_entry_unassigned_by_a_person_stays_unassigned(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-unassigned", attribution={"issue_ref": "INGX-3"}))
+    stored = await entry(db_session, first["entry_id"])
+    await AiUsageService().update(db_session, w.users["bot"], stored, {"project_id": None})
+    await db_session.commit()
+    [replay] = await post(client, w, "bot", record("k-unassigned", attribution={"git_branch": "feat/ingx-7-x"}))
+    assert replay["attribution"] == {"method": "manual", "project_key": None, "issue_ref": None}
+    stored = await entry(db_session, first["entry_id"])
+    assert (stored.project_id, stored.issue_id) == (None, None)
+
+
+async def test_a_person_saving_the_same_attribution_does_not_mark_it_manual(
+    db_session: AsyncSession, client: AsyncClient, w: World
+) -> None:
+    [first] = await post(client, w, "bot", record("k-same", attribution={"project_key": "INGX"}))
+    stored = await entry(db_session, first["entry_id"])
+    await AiUsageService().update(db_session, w.users["bot"], stored, {"project_id": w.p.id, "comments": "Notes"})
+    await db_session.commit()
+    stored = await entry(db_session, first["entry_id"])
+    assert stored.attribution_method == "explicit"
+
+
+# ---------------------------------------------------------------------------
+# The agent's log (issue_ref_source = agent_log)
+# ---------------------------------------------------------------------------
+
+
+async def test_agent_log_issue_wins_over_inferred_hints(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    [result] = await post(
+        client,
+        w,
+        "bot",
+        record(
+            "k-al",
+            attribution={
+                "issue_ref": "ingx-12",
+                "issue_ref_source": "agent_log",
+                "commits": [COMMIT_SHA],
+                "git_branch": "feat/ingx-3-x",
+                "repo": "github.com/acme/app",
+            },
+            **WINDOW,
+        ),
+    )
+    assert result["status"] == "created"
+    assert result["warnings"] == []
+    assert result["attribution"] == {"method": "agent_log", "project_key": "INGX", "issue_ref": "INGX-12"}
+    stored = await entry(db_session, result["entry_id"])
+    assert stored.attribution_method == "agent_log"
+
+
+async def test_unusable_agent_log_issue_is_dropped_and_the_next_step_tried(client: AsyncClient, w: World) -> None:
+    def agent(ref: str, **extra: Any) -> dict[str, Any]:
+        return {"issue_ref": ref, "issue_ref_source": "agent_log", "commits": [COMMIT_SHA], **extra}
+
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-al-missing", attribution=agent("INGX-999")),
+        record("k-al-hidden", attribution=agent("INGX-20")),  # private: the bot cannot see it
+        record("k-al-nolog", attribution=agent("INGY-1")),  # visible, no log permission
+        record("k-al-outside", attribution=agent("INGY-1", project_key="INGX")),
+        record("k-al-alone", attribution={"issue_ref": "INGX-999", "issue_ref_source": "agent_log"}),
+    )
+    assert [r["status"] for r in results] == ["created"] * 5
+    assert [(r["attribution"]["method"], r["attribution"]["issue_ref"]) for r in results] == [
+        ("commit", "INGX-3"),
+        ("commit", "INGX-3"),
+        ("commit", "INGX-3"),
+        ("commit", "INGX-3"),
+        ("none", None),
+    ]
+    assert all(codes(r) == ["attribution_dropped"] for r in results)
+    # Not found and not visible read the same, and the hidden issue is only named as the sender sent it.
+    assert "it was not found" in results[0]["warnings"][0]["message"]
+    assert "it was not found" in results[1]["warnings"][0]["message"]
+    assert "cannot be logged" in results[2]["warnings"][0]["message"]
+    assert "not in project INGX" in results[3]["warnings"][0]["message"]
+    assert results[0]["warnings"][0]["field"] == "attribution.issue_ref"
+
+
+async def test_agent_log_replaces_an_inferred_issue(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    await _session(db_session, w, "bot_mcp", "bot", w.issues[7], *SESSION)
+    [first] = await post(client, w, "bot", record("k-al-rep", **WINDOW))
+    assert first["attribution"]["method"] == "mcp_session"
+    [second] = await post(
+        client,
+        w,
+        "bot",
+        record("k-al-rep", attribution={"issue_ref": "INGX-12", "issue_ref_source": "agent_log"}, **WINDOW),
+    )
+    assert second["status"] == "updated"
+    assert second["attribution"] == {"method": "agent_log", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+    # A later agent_log issue replaces an earlier one (the reporter learnt of a mark later).
+    [third] = await post(
+        client,
+        w,
+        "bot",
+        record("k-al-rep", attribution={"issue_ref": "INGX-3", "issue_ref_source": "agent_log"}, **WINDOW),
+    )
+    assert third["attribution"] == {"method": "agent_log", "project_key": "INGX", "issue_ref": "INGX-3"}
+    assert third["warnings"] == []
+
+    # But never an explicit one: dropped, not a conflict.
+    [explicit] = await post(client, w, "bot", record("k-al-rep2", attribution={"issue_ref": "INGX-7"}))
+    [kept] = await post(
+        client, w, "bot", record("k-al-rep2", attribution={"issue_ref": "INGX-3", "issue_ref_source": "agent_log"})
+    )
+    assert kept["status"] == "unchanged"
+    assert kept["error"] is None
+    assert kept["attribution"]["issue_ref"] == "INGX-7"
+    assert codes(kept) == ["attribution_dropped"]
+    assert explicit["entry_id"] == kept["entry_id"]
+
+
+async def test_agent_log_replaces_an_inferred_project_but_not_an_explicit_one(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _third_project(db_session, w)
+    agent = {"issue_ref": "INGZ-1", "issue_ref_source": "agent_log"}
+
+    [repo] = await post(client, w, "bot", record("k-al-repo", attribution={"repo": "github.com/acme/app"}))
+    assert repo["attribution"]["method"] == "repo"
+    [moved] = await post(client, w, "bot", record("k-al-repo", attribution={**agent, "repo": "github.com/acme/app"}))
+    assert moved["status"] == "updated"
+    assert moved["warnings"] == []
+    assert moved["attribution"] == {"method": "agent_log", "project_key": "INGZ", "issue_ref": "INGZ-1"}
+    stored = await entry(db_session, repo["entry_id"])
+    assert stored.project_id is not None and stored.project_id != w.p.id
+
+    [explicit] = await post(client, w, "bot", record("k-al-pk", attribution={"project_key": "INGX"}))
+    for hints in (agent, {**agent, "project_key": "INGX"}):
+        [kept] = await post(client, w, "bot", record("k-al-pk", attribution=hints))
+        assert kept["status"] == "unchanged"
+        assert kept["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": None}
+        assert codes(kept) == ["attribution_dropped"]
+        assert "not in project INGX" in kept["warnings"][0]["message"]
+    stored = await entry(db_session, explicit["entry_id"])
+    assert (stored.project_id, stored.issue_id) == (w.p.id, None)
+
+
+async def test_replay_attributes_an_unassigned_entry(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    [first] = await post(client, w, "bot", record("k-late"))
+    assert first["attribution"]["method"] == "none"
+    [second] = await post(client, w, "bot", record("k-late", attribution={"issue_ref": "INGX-3"}))
+    assert second["status"] == "updated"
+    assert second["attribution"] == {"method": "explicit", "project_key": "INGX", "issue_ref": "INGX-3"}
+    stored = await entry(db_session, first["entry_id"])
+    assert stored.issue_id == w.issues[3].id
+
+
+# ---------------------------------------------------------------------------
+# On behalf of another user
+# ---------------------------------------------------------------------------
+
+
+async def test_on_behalf_allowed_and_audited(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    refused, result = await post(
+        client,
+        w,
+        "bot",
+        # Rolled back in its savepoint; the target user it loaded is used again by the next record.
+        record("k-ob-refused", on_behalf_of="ingx-teammate", attribution={"issue_ref": "INGY-1"}),
+        record("k-ob", on_behalf_of="INGX-TEAMMATE", attribution={"issue_ref": "INGX-3"}),
+    )
+    assert refused["error"]["code"] == "forbidden"
+    assert result["status"] == "created"
+    stored = await entry(db_session, result["entry_id"])
+    assert stored.user_id == w.users["teammate"].id
+    assert stored.reporter_user_id == w.users["bot"].id
+    events = (
+        (
+            await db_session.execute(
+                select(SecurityAuditLog).where(
+                    SecurityAuditLog.event_type == AuditEvent.AI_USAGE_LOGGED_FOR_OTHER.value
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert any(
+        event.resource_id == str(result["entry_id"]) or event.details.get("entry_id") == result["entry_id"]
+        for event in events
+    )
+
+
+async def test_on_behalf_refused(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-obr1", on_behalf_of="ingx-outsider", attribution={"project_key": "INGX"}),
+        record("k-obr2", on_behalf_of="ingx-teammate"),  # unassigned for someone else: administrators only
+        record("k-obr3", on_behalf_of="no-such-login"),  # no project: told apart for administrators only
+        record("k-obr6", on_behalf_of="no-such-login", attribution={"project_key": "INGX"}),
+    )
+    assert [r["error"]["code"] for r in results] == ["target_not_member", "forbidden", "forbidden", "target_unknown"]
+
+    [teammate] = await post(
+        client, w, "teammate", record("k-obr4", on_behalf_of="ingx-reader", attribution={"project_key": "INGX"})
+    )
+    assert teammate["error"]["code"] == "forbidden"
+
+    [reader] = await post(client, w, "reader", record("k-obr5", attribution={"project_key": "INGX"}))
+    assert reader["error"]["code"] == "forbidden"
+
+
+def _answer(result: dict[str, Any]) -> str:
+    """A record's result as sent, without its index and key, for byte-for-byte comparison."""
+    return json.dumps({k: v for k, v in result.items() if k not in ("index", "idempotency_key")}, sort_keys=True)
+
+
+#: Explicit hints that cannot be used, each its own reason to reject a record.
+BOGUS_HINTS: list[dict[str, Any]] = [
+    {"project_key": "NOPE"},  # no such project
+    {"issue_ref": "INGX-999"},  # no such issue
+    {"issue_ref": "INGX-20"},  # private: the senders cannot see it
+    {"issue_ref": "INGX-7", "project_key": "INGY"},  # the issue is not in the project
+]
+
+REFUSED = {"code": "forbidden", "message": "You cannot log AI usage for this user here", "field": "on_behalf_of"}
+
+
+async def _assert_one_answer(client: AsyncClient, w: World, who: str, logins: list[str], hints: list[Any]) -> None:
+    for n, attribution in enumerate(hints):
+        extra = {"attribution": attribution} if attribution else {}
+        results = await post(
+            client,
+            w,
+            who,
+            *[record(f"k-enum-{n}-{i}", on_behalf_of=login, **extra) for i, login in enumerate(logins)],
+        )
+        answers = {_answer(r) for r in results}
+        assert len(answers) == 1, (who, attribution, results)
+        assert results[0]["status"] == "rejected"
+        assert results[0]["error"] == REFUSED
+        assert results[0]["warnings"] == []
+
+
+async def test_on_behalf_without_rights_hides_which_logins_exist(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """A sender who may not log for others gets one answer for existing and unknown logins alike."""
+    inactive = UserFactory.build(login="ingx-gone", status="deactivated")
+    db_session.add(inactive)
+    await db_session.commit()
+    logins = ["ingx-reader", "ingx-outsider", "ingx-gone", "ingx-bot", "no-such-login"]
+    hints: list[Any] = [{"project_key": "INGX"}, {"issue_ref": "INGX-3"}, {"git_branch": "feat/ingx-3-x"}, None]
+    await _assert_one_answer(client, w, "teammate", logins, [*hints, *BOGUS_HINTS])
+
+    # Content errors come first, the same for both.
+    bad = {"usage_date": "2020-01-01"}
+    known, unknown = await post(
+        client,
+        w,
+        "teammate",
+        record("k-enum-bad1", on_behalf_of="ingx-reader", **bad),
+        record("k-enum-bad2", on_behalf_of="no-such-login", **bad),
+    )
+    assert _answer(known) == _answer(unknown)
+    assert known["error"]["code"] == "invalid_record"
+
+
+async def test_on_behalf_outside_the_senders_projects_hides_which_logins_exist(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """The bot may log for others in INGX only: elsewhere, unassigned or with unusable hints, targets look alike."""
+    inactive = UserFactory.build(login="ingx-gone2", status="deactivated")
+    db_session.add(inactive)
+    await db_session.commit()
+    logins = ["ingx-bot2", "ingx-teammate", "ingx-outsider", "ingx-gone2", "no-such-login"]
+    hints: list[Any] = [{"project_key": "INGY"}, {"issue_ref": "INGY-1"}, None]
+    await _assert_one_answer(client, w, "bot", logins, [*hints, *BOGUS_HINTS])
+
+    # In INGX the bot may: the codes differ there.
+    results = await post(
+        client,
+        w,
+        "bot",
+        *[
+            record(f"k-enum3-{i}", on_behalf_of=login, attribution={"project_key": "INGX"})
+            for i, login in enumerate(["ingx-outsider", "ingx-gone2", "no-such-login"])
+        ],
+    )
+    assert [r["error"]["code"] for r in results] == ["target_not_member", "target_invalid", "target_unknown"]
+
+
+async def test_project_limited_key(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot_limited",
+        record("k-l1", attribution={"project_key": "INGX"}),
+        record("k-l2", attribution={"issue_ref": "INGY-1"}),
+        record("k-l3", attribution={"git_branch": "feat/ingy-1-x"}),
+        record("k-l4"),
+    )
+    assert [r["status"] for r in results] == ["created", "rejected", "created", "created"]
+    assert results[1]["error"]["code"] == "not_found"
+    # Outside the key's limit INGY is not even a known key: no hint, no warning.
+    assert results[2]["attribution"]["method"] == "none"
+    assert results[2]["warnings"] == []
+
+
+# ---------------------------------------------------------------------------
+# Envelope and limits
+# ---------------------------------------------------------------------------
+
+
+async def test_envelope_errors(client: AsyncClient, w: World) -> None:
+    async def send(content: bytes | str) -> Response:
+        return await client.post(URL, content=content, headers={**w.auth("bot"), "Content-Type": "application/json"})
+
+    resp = await send("{not json")
+    assert resp.status_code == 400
+    assert resp.json()["errors"][0]["code"] == "invalid_json"
+
+    resp = await send("[]")
+    assert resp.json()["errors"][0]["code"] == "invalid_batch"
+
+    resp = await send(json.dumps(batch(record("k-e"), schema="specivo.ai-usage.v2")))
+    assert resp.status_code == 400
+    error = resp.json()["errors"][0]
+    assert error["code"] == "unsupported_schema"
+    assert error["details"] == {"supported": ["specivo.ai-usage.v1"]}
+
+    resp = await send(json.dumps(batch(record("k-e"), client={"version": "1"})))
+    assert resp.status_code == 400
+    assert resp.json()["errors"][0]["code"] == "invalid_batch"
+
+    resp = await send(json.dumps({"schema": "specivo.ai-usage.v1", "client": {"name": "x"}, "records": "nope"}))
+    assert resp.status_code == 400
+
+    resp = await send(json.dumps(batch(record("k-e"), extra_top_level=True)))
+    assert resp.status_code == 200
+    assert resp.json()["warnings"][0]["code"] == "unknown_fields"
+
+
+async def test_batch_limits(client: AsyncClient, w: World) -> None:
+    too_many = batch(*(record(f"k-many-{i}") for i in range(501)))
+    resp = await client.post(URL, json=too_many, headers=w.auth("bot"))
+    assert resp.status_code == 413
+    assert resp.json()["errors"][0]["code"] == "batch_too_large"
+
+    padded = json.dumps(batch(record("k-big"))) + " " * (1024 * 1024)
+    resp = await client.post(URL, content=padded, headers={**w.auth("bot"), "Content-Type": "application/json"})
+    assert resp.status_code == 413
+
+    exactly = batch(*(record(f"k-max-{i}") for i in range(500)))
+    resp = await client.post(URL, json=exactly, headers=w.auth("bot"))
+    assert resp.status_code == 200
+    assert resp.json()["summary"]["created"] == 500
+
+
+async def test_requires_authentication(client: AsyncClient) -> None:
+    resp = await client.post(URL, json=batch(record("k-anon")))
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# The published examples
+# ---------------------------------------------------------------------------
+
+
+def _example(path: Path) -> str:
+    """The example with this module's project key and logins (the examples say ACME and teammate)."""
+    text = path.read_text()
+    return text.replace("ACME", "INGX").replace("acme-", "ingx-").replace('"teammate"', '"ingx-teammate"')
+
+
+async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w: World) -> None:
+    expected = json.loads((EXAMPLES / "expected.json").read_text())["valid"]
+    assert sorted(expected) == sorted(p.name for p in (EXAMPLES / "valid").glob("*.json"))
+    for name, outcomes in expected.items():
+        content = _example(EXAMPLES / "valid" / name)
+        resp = await client.post(URL, content=content, headers={**w.auth("bot"), "Content-Type": "application/json"})
+        assert resp.status_code == 200, (name, resp.text)
+        results = resp.json()["results"]
+        got = [
+            {
+                "status": r["status"],
+                "method": r["attribution"]["method"] if r["attribution"] else None,
+                "issue_ref": r["attribution"]["issue_ref"] if r["attribution"] else None,
+                "project_key": r["attribution"]["project_key"] if r["attribution"] else None,
+            }
+            for r in results
+        ]
+        want = [
+            {
+                **o,
+                "issue_ref": o["issue_ref"] and o["issue_ref"].replace("ACME", "INGX"),
+                "project_key": o["project_key"] and o["project_key"].replace("ACME", "INGX"),
+            }
+            for o in outcomes
+        ]
+        assert got == want, (name, results)
+
+        replay = await client.post(URL, content=content, headers={**w.auth("bot"), "Content-Type": "application/json"})
+        assert [r["status"] for r in replay.json()["results"]] == ["unchanged"] * len(outcomes), name
+
+
+async def test_invalid_examples_get_the_documented_answers(client: AsyncClient, w: World) -> None:
+    expected = json.loads((EXAMPLES / "expected.json").read_text())["invalid"]
+    assert sorted(expected) == sorted(p.name for p in (EXAMPLES / "invalid").glob("*.json"))
+    for name, outcome in expected.items():
+        content = _example(EXAMPLES / "invalid" / name)
+        resp = await client.post(URL, content=content, headers={**w.auth("bot"), "Content-Type": "application/json"})
+        assert resp.status_code == outcome["http_status"], (name, resp.text)
+        if outcome["http_status"] != 200:
+            assert resp.json()["errors"][0]["code"] == outcome["code"], name
+            continue
+        results = resp.json()["results"]
+        assert [r["status"] for r in results] == ["rejected"] * len(outcome["records"]), name
+        assert [(r["error"]["code"], r["error"]["field"]) for r in results] == [
+            (o["code"], o["field"]) for o in outcome["records"]
+        ], name

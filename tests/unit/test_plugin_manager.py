@@ -2,7 +2,7 @@
 
 RED phase — these tests define the expected behavior of:
 - ``PluginManager.load_plugins()`` discovery from a config list of dotted paths.
-- Tier-based sort order (core < pro < enterprise).
+- Plugins keep the configured order.
 - Graceful handling of import errors.
 - Plugin API version compatibility checking.
 - Module-level ``get_plugin_manager()`` singleton accessor.
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-def _fake_plugin_module(name: str, tier: str, version: str = "0.9.0"):
+def _fake_plugin_module(name: str, version: str = "0.9.0"):
     """Create a fake module with a ``Plugin`` class satisfying PluginConfig."""
     from specivo.core.plugin import BasePluginConfig
 
@@ -32,10 +32,6 @@ def _fake_plugin_module(name: str, tier: str, version: str = "0.9.0"):
         @property
         def name(self) -> str:
             return name
-
-        @property
-        def tier(self) -> str:
-            return tier
 
         @property
         def version(self) -> str:
@@ -61,7 +57,7 @@ class TestPluginManagerDiscovery:
         """load_plugins() imports a dotted path and instantiates the class."""
         from specivo.core.plugin_manager import PluginManager
 
-        FakePlugin = _fake_plugin_module("test.fake", "core")
+        FakePlugin = _fake_plugin_module("test.fake")
 
         # Patch importlib.import_module to return our fake module
         import types
@@ -76,42 +72,55 @@ class TestPluginManagerDiscovery:
         assert len(pm.plugins) == 1
         assert pm.plugins[0].name == "test.fake"
 
-    def test_discover_sorts_by_tier(self):
-        """Plugins are sorted: core (0) < pro (1) < enterprise (2)."""
-        from specivo.core.plugin_manager import PluginManager
-
-        ProPlugin = _fake_plugin_module("pro.feat", "pro")
-        CorePlugin = _fake_plugin_module("core.base", "core")
-        EntPlugin = _fake_plugin_module("ent.sso", "enterprise")
-
+    def test_discover_keeps_configured_order(self):
+        """Plugins load in the order INSTALLED_PLUGINS lists them."""
         import types
 
-        # Three separate modules
-        mod_pro = types.ModuleType("mod_pro")
-        mod_pro.ProPlugin = ProPlugin  # type: ignore[attr-defined]
-        mod_core = types.ModuleType("mod_core")
-        mod_core.CorePlugin = CorePlugin  # type: ignore[attr-defined]
-        mod_ent = types.ModuleType("mod_ent")
-        mod_ent.EntPlugin = EntPlugin  # type: ignore[attr-defined]
+        from specivo.core.plugin_manager import PluginManager
 
-        module_map = {
-            "mod_pro": mod_pro,
-            "mod_core": mod_core,
-            "mod_ent": mod_ent,
-        }
+        names = ["zeta.last-alphabetically", "alpha.first-alphabetically", "mid.middle"]
+        module_map = {}
+        for i, name in enumerate(names):
+            mod = types.ModuleType(f"mod_{i}")
+            mod.Plugin = _fake_plugin_module(name)  # type: ignore[attr-defined]
+            module_map[f"mod_{i}"] = mod
 
         pm = PluginManager()
         with patch("importlib.import_module", side_effect=lambda p: module_map[p]):
-            pm.load_plugins(
-                [
-                    "mod_pro.ProPlugin",
-                    "mod_core.CorePlugin",
-                    "mod_ent.EntPlugin",
-                ]
-            )
+            pm.load_plugins([f"mod_{i}.Plugin" for i in range(len(names))])
 
-        tiers = [p.tier for p in pm.plugins]
-        assert tiers == ["core", "pro", "enterprise"]
+        assert [p.name for p in pm.plugins] == names
+
+    def test_plugin_that_still_defines_get_features_and_tier_loads(self):
+        """An older plugin class with the retired ``tier`` and ``get_features`` still loads."""
+        import types
+
+        from specivo.core.plugin import BasePluginConfig, PluginConfig
+        from specivo.core.plugin_manager import PluginManager
+
+        calls: list[str] = []
+
+        class OldStylePlugin(BasePluginConfig):
+            name, tier, version = "old.style", "core", "1.0"
+
+            def get_features(self) -> list[str]:
+                calls.append("features")
+                return ["anything"]
+
+            def get_services(self, registry) -> None:
+                calls.append("services")
+
+        mod = types.ModuleType("mod_old")
+        mod.OldStylePlugin = OldStylePlugin  # type: ignore[attr-defined]
+
+        pm = PluginManager()
+        with patch("importlib.import_module", return_value=mod):
+            pm.load_plugins(["mod_old.OldStylePlugin"])
+        pm.register_services()
+
+        assert isinstance(pm.plugins[0], PluginConfig)
+        assert [p.name for p in pm.plugins] == ["old.style"]
+        assert calls == ["services"]
 
     def test_discover_logs_warning_on_import_error(self, caplog):
         """When a plugin module cannot be imported, an appropriate error is raised."""
@@ -129,7 +138,7 @@ class TestPluginManagerDiscovery:
 
 class TestPluginManagerLoadAll:
     def test_load_all_calls_all_plugin_hooks(self):
-        """register_services/features/routers call each plugin's hooks."""
+        """register_services() calls each plugin's hook."""
         from specivo.core.plugin import BasePluginConfig
         from specivo.core.plugin_manager import PluginManager
 
@@ -140,16 +149,8 @@ class TestPluginManagerLoadAll:
             def name(self) -> str:
                 return "test.tracking"
 
-            @property
-            def tier(self) -> str:
-                return "core"
-
             def get_services(self, registry) -> None:
                 calls.append("services")
-
-            def get_features(self) -> list[str]:
-                calls.append("features")
-                return ["test_feature"]
 
         import types
 
@@ -161,10 +162,8 @@ class TestPluginManagerLoadAll:
             pm.load_plugins(["mod_tracking.TrackingPlugin"])
 
         pm.register_services()
-        pm.register_features()
 
-        assert "services" in calls
-        assert "features" in calls
+        assert calls == ["services"]
 
 
 # ---------------------------------------------------------------------------

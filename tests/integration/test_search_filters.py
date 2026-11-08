@@ -395,13 +395,13 @@ async def test_metadata_containment(
     project: Project,
     lookups: dict,
 ):
-    """JSONB @> containment: {"env":"prod"} matches {"env":"prod","tier":"1"}."""
+    """JSONB @> containment: {"env":"prod"} matches {"env":"prod","zone":"1"}."""
     await _create_issue(
         authed_client,
         project.key,
         lookups["tracker_bug"].id,
         "Filtertest kappa multifield",
-        metadata={"env": "prod", "tier": "1"},
+        metadata={"env": "prod", "zone": "1"},
     )
 
     data = await _search(

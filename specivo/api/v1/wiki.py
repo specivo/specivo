@@ -28,14 +28,14 @@ from specivo.schemas.wiki import (
     WikiVersionsResponse,
     page_with_content,
 )
+from specivo.services.entity_link_service import EntityLinkService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
-from specivo.services.wiki_link_service import WikiLinkService
 from specivo.services.wiki_service import WikiService
 
 router = APIRouter(tags=["wiki"])
 _service = WikiService()
-_link_service = WikiLinkService()
+_link_service = EntityLinkService()
 _project_service = ProjectService()
 
 
@@ -171,7 +171,7 @@ async def get_wiki_graph(
     wiki = await _service.get_wiki(db, project.id)
     if wiki is None:
         return WikiGraphResponse(nodes=[], edges=[])
-    graph = await _link_service.get_link_graph(db, wiki.id)
+    graph = await _link_service.get_wiki_graph(db, wiki.id)
 
     return WikiGraphResponse(
         nodes=[WikiGraphNode(**n) for n in graph["nodes"]],

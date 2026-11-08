@@ -1,3 +1,4 @@
+{% from "components/macros.html" import avatar %}
 <header class="header">
   <button class="hamburger" aria-label="{{ _('Menu') }}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -111,7 +112,14 @@
           {% if notifications is defined and notifications %}
             {% for n in notifications[:5] %}
             <div class="notif-item{% if not n.read %} unread{% endif %}">
-              <div class="avatar-sm" style="width:28px;height:28px;font-size:10px;{% if n.actor_avatar_url is defined and n.actor_avatar_url %}background-image:url('{{ n.actor_avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif n.actor_avatar_color is defined and n.actor_avatar_color %}background:{{ n.actor_avatar_color }};{% endif %}">{{ n.actor_initials if n.actor_initials is defined else '?' }}</div>
+              {% set actor = notification_actors.get(n.actor_id) if notification_actors is defined else none %}
+              <div class="notif-avatar">
+                {% if actor %}
+                {{ avatar(actor.login, 'sm', color=actor.preferences.avatar_color|default(''), avatar_url=actor.avatar_url|default(''), display_name=actor.display_name|default('')) }}
+                {% else %}
+                {{ avatar('', 'sm') }}
+                {% endif %}
+              </div>
               <div class="notif-body">
                 <div class="notif-text">{{ n.title }}</div>
                 <div class="notif-meta">{{ n.time_ago }}</div>
@@ -163,6 +171,16 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           {% trans %}API Keys{% endtrans %}
         </a>
+        {% if not user.is_service_account %}
+        <a class="user-dropdown-item" href="/my/ai-subscriptions/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          {% trans %}AI subscriptions{% endtrans %}
+        </a>
+        <a class="user-dropdown-item" href="/my/ai-usage/" data-testid="user-menu-ai-usage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+          {% trans %}My AI usage{% endtrans %}
+        </a>
+        {% endif %}
         <div class="user-dropdown-divider"></div>
         <form class="sp-signout-form" method="post" action="/logout/">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

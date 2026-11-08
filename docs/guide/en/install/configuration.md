@@ -52,12 +52,15 @@ docker compose up -d
 | `DATABASE_URL` | `postgresql+asyncpg://specivo:specivo@db:5432/specivo`. Point it at an external database to use your own. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |
-| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails and [single sign-on](single-sign-on/index.md) addresses are built from it. |
+| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails, repository webhook URLs and [single sign-on](single-sign-on/index.md) addresses are built from it. See [Public address (`APP_URL`)](#public-address-app_url). |
 | `SECRET_KEY` | Signs sessions and tokens. **Must** be a strong, unique value in production. Keep in `.env.local`. |
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
 | `CAPTCHA_ENABLED` | Captcha on the registration form. |
+| `SEARCH_ENGINE_INDEXING` | Let search engines index the pages anyone can read without an account. Default `false`. The **Administration → Settings → Anonymous access** checkbox overrides it. See [Search engines](#search-engines). |
+| `ROBOTS_TXT` | A fixed `robots.txt`, replacing the one Specivo serves. Unset by default. The admin setting `robots_txt` overrides it. See [Search engines](#search-engines). |
 | `CORS_ORIGINS` | Allowed browser origins, e.g. `["https://specivo.example.com"]`. |
+| `AUDIT_LOG_RETENTION_MONTHS` | Whole months of the [security audit log](audit-log.md) kept before the current month; older months are dropped daily. Default `12`. `0` keeps everything. |
 | `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
 | `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |
@@ -98,6 +101,19 @@ ships 0.8). Once you
 point the URLs elsewhere, you can remove the `db` and `redis` services from `docker-compose.yml` —
 they are declared as optional dependencies, so the app starts without them.
 
+It also needs the **pg_trgm** extension, which the similar issue suggestions use, and
+**btree_gist**, which keeps the periods of an [AI model price](ai-model-prices.md) from
+overlapping. Both ship with PostgreSQL itself. The database migrations create them, as they do
+pgvector, and stop if they cannot:
+
+- Both are trusted extensions (PostgreSQL 13 and later), so a database role with `CREATE` on the
+  database can install them; no superuser is needed.
+- AWS RDS lists both among its supported extensions.
+- On Google Cloud SQL, the role needs `cloudsqlsuperuser`.
+- On Azure Database for PostgreSQL flexible server, an extension must first be added to the
+  `azure.extensions` server parameter; check that list for `pg_trgm` and `btree_gist` before you
+  migrate.
+
 ## The data directory
 
 Everything that must survive a container restart lives under `SPECIVO_DATA_DIR` (default
@@ -131,6 +147,16 @@ happened ("Assigned to you by …", "… commented"). Every mail carries a `Mess
 also carries `X-Specivo-Issue`, `X-Specivo-Project` and `X-Specivo-Event` (`assignment`,
 `updated`, `comment` or `mention`), and a `List-Id` per project, for filtering rules.
 
+Each person's mail is written in their own language, the one under **Preferences**, or the
+instance's default language if theirs is not available, and its time is shown in their timezone.
+It ends with a link to the issue, or to the comment, built from [`APP_URL`](#public-address-app_url).
+If `APP_URL` is empty, the link is left out. If it still points at `localhost`, so does the link,
+and Specivo logs a warning at start-up.
+
+Mail goes only to people who can open the issue, so the subject of a private issue never reaches
+anyone else. Someone mentioned with `@username` gets a mail saying so; if they also watch the issue
+or are assigned to it, that is the only mail they get about the comment.
+
 `Message-ID`s end in the domain of `SMTP_FROM`. To use another one, for example when the from
 address is on a shared mail provider's domain, set it:
 
@@ -143,10 +169,145 @@ The value must be a plain host name (letters, digits, hyphens and dots); Specivo
 with anything else. If it is not set and the domain of `SMTP_FROM` is not a plain host name, the
 host of `APP_URL` is used.
 
+## Public address (APP_URL)
+
+Specivo builds every address that leaves the instance from `APP_URL`: the links in emails, the
+webhook URL of a [repository integration](../integrations/repositories.md), the redirect and
+back-channel logout URIs of a [single sign-on](single-sign-on/index.md) provider and its
+[SCIM](single-sign-on/scim.md) base URL. It never takes them from the address the browser used,
+which a client can forge. Set it to the scheme, host and port (if not the default) that people and
+other systems use to reach Specivo, without the `STEALTH_PREFIX`, and restart:
+
+```bash
+# .env
+APP_URL=https://specivo.example.com
+```
+
+The default, `http://localhost:8030`, only works on the machine Specivo runs on. While `APP_URL`
+is empty or names this machine (`localhost` or a `*.localhost` name, `127.0.0.1` or another
+loopback address, `::1`, `0.0.0.0`):
+
+- the pages that show these URLs for copying (project **Settings → Repositories**, and the
+  **Connection** and **Provisioning (SCIM)** sections of a single sign-on provider) show a
+  warning with the current value;
+- with `DEBUG=false`, the web app and the background worker each log one warning when they start.
+
+When `APP_URL` is a real address but you opened the page under another host name, the same pages
+say so: the URLs you copy carry the `APP_URL` host, which may not be the one that reaches this
+instance.
+
+## Search engines
+
+Search engines index nothing by default. Every response carries
+`X-Robots-Tag: noindex, nofollow, noarchive`, `/robots.txt` is `Disallow: /`, and
+`/sitemap.xml` answers 404.
+
+Indexing is opt-in, and it only ever covers pages a visitor without an account can already read.
+A page becomes indexable when all of these hold:
+
+1. **Search engine indexing is on**: the checkbox **Let search engines index public pages** in
+   **Administration → Settings → Anonymous access**, or `SEARCH_ENGINE_INDEXING=true`. The
+   checkbox wins over the variable.
+2. **Anonymous access is on** (the switch in the same card).
+3. **The project is public, active and opted in** to anonymous access for issues, wiki or both.
+4. **The page is served without an account**: the project list, the project page, its issue list,
+   issue pages and wiki pages.
+
+What stays `noindex` whatever the setting: private projects, projects not opted in, archived
+projects, private issues and comments, anything a signed-in visitor sees, sign-in and password
+pages, error pages and redirects, administration, the JSON API and MCP. Search result pages, and
+any public page opened with a query string (filters, sorting, paging), are sent with
+`noindex, follow`: crawlers may follow their links but do not index them. Indexable pages keep
+`noarchive` and `Cache-Control: no-store`, and carry a `<link rel="canonical">` built from
+[`APP_URL`](#public-address-app_url); issue and wiki pages also get a short
+`<meta name="description">` from their text.
+
+While indexing applies and at least one project is readable:
+
+- **`/robots.txt`** allows `/projects/`, the readable projects' pages (`/projects/KEY/`) and
+  issues (`/issue/KEY-`), disallows everything else and names the sitemap.
+- **`/sitemap.xml`** is a sitemap index. It points at `/sitemaps/projects.xml` (the project list,
+  project pages and issue lists) and at per-project sitemaps of issues and wiki pages, at most 5,000
+  URLs each (`/sitemaps/KEY/issues-N.xml`, `/sitemaps/KEY/wiki-N.xml`). They list only the issues and
+  wiki pages a visitor without an account can open, with their last change. Links are built from
+  `APP_URL`, so set it to the public address first.
+
+Changes apply on the next request: turning anonymous access or indexing off, or opting a project
+out, removes it from `robots.txt` and the sitemap and restores `noindex` at once. Search engines
+drop pages they already indexed on their own schedule.
+
+An instance with a `STEALTH_PREFIX` is never indexed: `robots.txt` and the sitemap are served at
+the root and would reveal the prefix.
+
+**Keeping one public project out of search engines.** Indexing is instance-wide. To exclude a
+project while leaving it readable without an account, write your own `robots.txt` in the admin
+setting `robots_txt` (or `ROBOTS_TXT`), which replaces the generated one, for example:
+
+```text
+User-agent: *
+Allow: /projects/$
+Allow: /projects/ACME/
+Allow: /issue/ACME-
+Disallow: /
+
+Sitemap: https://specivo.example.com/sitemap.xml
+```
+
+The sitemap still lists every readable project; leave the `Sitemap:` line out if that matters.
+
+**Repository activity.** Issue pages of a public project can show repository activity: commit
+messages, branch names and pull request titles. Once the project is indexable, search engines can
+pick that text up too. Decide before making a project public and turning indexing on.
+
+## Search rate limits
+
+Every search runs the query through the database, and a hybrid or semantic search also runs the
+[embedding model](#semantic-search-model) on the server's CPU. So searches are limited per client
+address, on the search page and on the REST search endpoint (`GET /api/v1/search/`), in every mode,
+for people with and without an account. People without an account get the same search as everyone
+else, hybrid by default, but only over what they may read without signing in.
+
+| Variable | Purpose / default |
+|---|---|
+| `SEARCH_RATE_LIMIT_ANONYMOUS_PER_MINUTE` | Searches per minute one client address may run without signing in. Default `10`. |
+| `SEARCH_RATE_LIMIT_PER_MINUTE` | Searches per minute one client address may run while signed in. Default `60`. It is higher because a whole office behind one address shares it. |
+| `SEARCH_QUERY_EMBEDDING_CACHE_SECONDS` | Seconds a query's embedding is kept in Redis, so a repeated query, or the next page of results, does not run the model again. Default `300`; `0` turns the cache off. |
+
+The two budgets are separate, and the search page and the REST endpoint share them: moving from one
+to the other does not start a new count. An IPv6 client is counted by its /64, like the other
+per-address limits. Opening the search page without searching does not count.
+
+Over a limit, the search page shows a short page saying that searching is paused and when the
+visitor can try again, with status `429` and a `Retry-After` header (in seconds). The REST API
+answers `429` with its usual JSON error, code `rate_limit_exceeded`, and the same header. Every
+other rate-limited web page answers the same way, with general wording.
+
+Behind a reverse proxy, set [`TRUSTED_PROXIES`](#client-addresses-behind-a-proxy), or every visitor
+shares the proxy's budget. If Redis is unavailable, searches are not limited, as with every other
+rate limit, and `RATE_LIMIT_ENABLED=false` turns all rate limits off.
+
+## AI report rate limits
+
+AI usage charts and spend reports group a person's or a project's whole AI usage and convert its
+amounts, so each person has a budget per minute for them. It is shared by My AI usage (its charts),
+the project and instance AI spend report pages, the report API (`GET /api/v1/projects/{key}/ai-usage/report/`
+and `GET /api/v1/ai-usage/report/`, JSON and CSV) and the MCP report tool.
+
+| Variable | Purpose / default |
+|---|---|
+| `AI_REPORT_RATE_LIMIT_PER_MINUTE` | Charts and reports per minute one person may load. Default `30`. |
+| `AI_REPORT_RATE_LIMIT_ADMIN_PER_MINUTE` | The same for administrators, who also read the instance report. Default `120`. |
+| `AI_USAGE_CHART_CACHE_SECONDS` | Seconds the My AI usage chart data is kept in Redis for the same person and filters. A new, edited or deleted entry shows at once; exchange rates, prices and plans changed meanwhile show within this time. Default `60`; `0` turns the cache off. |
+
+Over the limit, a page shows the rate-limit page and the API answers `429` with code
+`rate_limit_exceeded`, both with `Retry-After`. Whatever is asked for, a chart has at most 120
+points (days, weeks, months, quarters or years, by the range of the entries shown), and a spend
+report grouped by day or week over a long range is grouped by week or month instead.
+
 ## Client addresses behind a proxy
 
 Specivo uses the client's IP address for the per-address rate limits (sign-in, single sign-on,
-anonymous reads), for the address shown on each session, for API key IP allowlists and for the
+anonymous reads, [search](#search-rate-limits)), for the address shown on each session, for API key IP allowlists and for the
 security audit log. Behind a reverse proxy, the connection comes from the proxy. Each proxy appends
 the address it received the request from to the `X-Forwarded-For` header, so the client's address
 is in that header. Two settings decide what Specivo believes:
@@ -216,6 +377,41 @@ address.
 TRUSTED_PROXIES=["192.0.2.10/32"]
 ```
 
+## MCP sessions
+
+An AI agent connected over MCP (Streamable HTTP, at `/mcp/`) holds a session that it names in the
+`Mcp-Session-Id` header of every request. Specivo keeps each session in Redis, so it survives the
+agent's computer going to sleep, a dropped network connection and a restart of Specivo: when the
+agent comes back with its session id, the session works as before.
+
+| Variable | Purpose |
+|---|---|
+| `MCP_SESSION_TTL_SECONDS` | How long a session may go unused before it expires. Every request starts the period again, so a session in use never expires. Default `604800` (7 days). After it, the agent's next request is answered with HTTP 404, and an MCP client then opens a new session by itself. |
+| `MCP_SESSION_IDLE_TIMEOUT_SECONDS` | How long an unused session is kept in memory. Only frees memory: the next request rebuilds the session from Redis. Default `3600` (1 hour). |
+
+Sessions survive a restart of Redis only when Redis saves its data to disk. The bundled Redis does
+(append-only file); Specivo logs a warning at startup when an external Redis does not. Without it,
+agents connected when Redis restarts start new sessions.
+
+The legacy SSE transport (`/mcp/sse/`) keeps no sessions: an agent whose event stream drops
+reconnects and carries on, but a request it sends while the stream is down fails once. Configure
+agents for Streamable HTTP (`"type": "http"`, URL ending in `/mcp/`) where they support it.
+
+### Proxies in front of Specivo
+
+MCP responses are streamed. The bundled nginx is already set up for this. If another proxy (Caddy,
+Traefik, a load balancer, Cloudflare) stands in front of Specivo, make sure that for `/mcp/` it:
+
+- **does not buffer responses.** nginx: `proxy_buffering off;`. Specivo also sends
+  `X-Accel-Buffering: no`, which nginx-based proxies obey.
+- **allows long-lived responses.** An agent keeps a stream open for as long as it is connected,
+  and Specivo sends a keep-alive on it every 15 seconds. A read timeout of at least a minute is
+  enough; the bundled nginx uses `proxy_read_timeout 24h;`.
+- **uses HTTP/1.1 or later to Specivo** with keep-alive. nginx: `proxy_http_version 1.1;` and
+  `proxy_set_header Connection "";`.
+
+A proxy that cuts a stream does not end the session: the agent reconnects and carries on.
+
 ## Repository integrations and webhooks
 
 [Repository integrations](../integrations/repositories.md) receive webhooks from GitHub, GitLab,
@@ -230,6 +426,7 @@ as *Accepted* and outgoing ones as *Pending*, and both are picked up once they r
 | `GIT_HOOK_MAX_BODY_BYTES` | Largest webhook body a repository integration accepts; larger ones are answered 413. Default `5242880` (5 MB), at least `1024`. |
 | `GIT_HOOK_RATE_LIMIT_PER_MINUTE` | Webhook requests per minute one repository integration may receive before Specivo answers 429. Default `120`. |
 | `GIT_HOOK_UNKNOWN_RATE_LIMIT_PER_MINUTE` | Requests per minute one client address may send to hook URLs that match no integration, or with a bad signature. Default `30`. |
+| `AI_USAGE_INGEST_RATE_LIMIT_PER_MINUTE` | Batches per minute one account may send to the [AI usage ingest API](../ai-agents/reporting-ai-usage.md) before Specivo answers 429. Default `60`. |
 | `WEBHOOK_TIMEOUT` | Seconds an outgoing webhook may take for each step of a request (connecting, sending, reading the answer). Default `30`; a whole attempt is always cut off after 60 seconds. |
 
 ## Single sign-on: getting back in
@@ -281,6 +478,16 @@ them keep their passwords. A bundle can carry the old password hashes (see
 | `PASSWORD_HASHERS` | Extra hasher classes by dotted path, e.g. `["acme_hashers.AcmeTrackerMd5"]`. |
 | `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers. |
 
+## Exchange rate feed
+
+| Variable | Meaning |
+|---|---|
+| `EXCHANGE_RATE_FEED_ALLOW_PRIVATE_NETWORKS` | Let the optional daily exchange rate fetch reach loopback and private addresses, for a self-hosted Frankfurter on your internal network. Default `false`: only public addresses. Link-local and cloud metadata addresses are refused either way. See [Exchange rates](exchange-rates.md#fetch-the-ecb-rates-automatically-optional). |
+| `EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY` | Behind a proxy, let the fetch use a feed host that does not resolve on this server (names resolve only through the proxy). Its address then cannot be checked here, so **your proxy must enforce egress rules** to private and link-local ranges. Default `false`: such a host is refused. |
+
+The fetch itself is switched on by an administrator on **Admin → Exchange rates**; it honours
+`HTTPS_PROXY` and `NO_PROXY`.
+
 ## Semantic search model
 
 Hybrid and semantic search match by meaning, which needs an embedding model. Specivo runs one on
@@ -311,6 +518,7 @@ no bring-your-own-key (BYOK) option and no way to switch to another model (see
 | `SEARCH_EXCLUDE_BOT_COMMENTS` | Skip comments made through an API key or by a service account. Default `true`. |
 | `SEARCH_HNSW_EF_SEARCH` | Size of pgvector's candidate list for each vector index scan (`hnsw.ef_search`, 10 to 1000). Higher finds the true nearest matches more reliably and is a little slower. Default `100`. |
 | `SEARCH_SEMANTIC_OVERFETCH` | Nearest chunks read from the vector index per wanted result, before results the reader may not see are removed (1 to 50). Default `4`. See [Vector index](semantic-search.md#vector-index). |
+| `SEARCH_SEMANTIC_MIN_SIMILARITY` | Minimum cosine similarity (-1 to 1) a chunk needs to count as a semantic match; in hybrid search it applies to matches found by meaning alone. Unset by default, which uses the model's own minimum (`0.82` for `multilingual-e5-small`); `-1` turns it off. See [Minimum similarity](semantic-search.md#minimum-similarity). |
 
 See [Semantic search and embeddings](semantic-search.md) for what it is used for, how existing
 content is indexed, how to check it works, and troubleshooting. For an offline host, see

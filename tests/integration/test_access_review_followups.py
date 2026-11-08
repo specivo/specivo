@@ -32,21 +32,20 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.agent_costs import (
+from specivo.api.v1.billing_rates import (
     create_billing_rate,
     delete_billing_rate,
-    get_cost_summary,
     list_billing_rates,
     update_billing_rate,
 )
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
-from specivo.models.agent_cost import AgentTokenLog
+from specivo.core.money import Money
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueStatus
 from specivo.models.user import User
 from specivo.models.wiki import WikiPage
-from specivo.schemas.agent_cost import BillingRateCreate, BillingRateUpdate
-from specivo.services.agent_cost_service import AgentCostService
+from specivo.schemas.billing_rate import BillingRateCreate, BillingRateUpdate
+from specivo.schemas.money import MoneyIn
 from specivo.services.anonymous_user_service import get_anonymous_user
 from specivo.services.api_key_scope import ProjectScope, bound_scope
 from specivo.services.billing_rate_service import BillingRateService
@@ -56,7 +55,6 @@ from specivo.services.version_service import VersionService
 from tests.factories.recurring_pattern import RecurringPatternFactory
 from tests.integration.test_issue_visibility_listings import (
     World,
-    _agent_session,
     _bearer,
     _cookie,
     build_world,
@@ -84,7 +82,7 @@ async def _anonymous(db: AsyncSession, w: World) -> User:
 # ---------------------------------------------------------------------------
 # Billing rates
 # ---------------------------------------------------------------------------
-# The router is mounted by an edition plugin, not by core, so the route
+# The router is not mounted by core (a plugin may mount it), so the route
 # functions are called directly.
 
 
@@ -92,7 +90,9 @@ async def _rate(db: AsyncSession, w: World) -> int:
     rate = await BillingRateService().create_rate(
         db,
         w.p.id,
-        BillingRateCreate(user_id=None, hourly_rate=Decimal("80"), currency="USD", effective_from=date(2026, 1, 1)),
+        BillingRateCreate(
+            user_id=None, hourly_rate=MoneyIn(amount="80", currency="USD"), effective_from=date(2026, 1, 1)
+        ),
     )
     await db.commit()
     return rate.id
@@ -100,19 +100,26 @@ async def _rate(db: AsyncSession, w: World) -> int:
 
 async def _assert_rates_refused(db: AsyncSession, w: World, user: User, error: type[Exception]) -> None:
     rate_id = await _rate(db, w)
-    new = BillingRateCreate(user_id=None, hourly_rate=Decimal("1"), currency="USD", effective_from=date(2026, 2, 1))
+    new = BillingRateCreate(
+        user_id=None, hourly_rate=MoneyIn(amount="1", currency="USD"), effective_from=date(2026, 2, 1)
+    )
     with pytest.raises(error):
         await create_billing_rate(w.p.key, new, request=None, current_user=user, db=db)
     with pytest.raises(error):
         await update_billing_rate(
-            w.p.key, rate_id, BillingRateUpdate(hourly_rate=Decimal("1")), request=None, current_user=user, db=db
+            w.p.key,
+            rate_id,
+            BillingRateUpdate(hourly_rate=MoneyIn(amount="1", currency="USD")),
+            request=None,
+            current_user=user,
+            db=db,
         )
     with pytest.raises(error):
         await delete_billing_rate(w.p.key, rate_id, request=None, current_user=user, db=db)
     with pytest.raises(error):
         await list_billing_rates(w.p.key, request=None, current_user=user, db=db)
     rates = await BillingRateService().list_rates(db, w.p.id)
-    assert [(r.id, r.hourly_rate) for r in rates] == [(rate_id, Decimal("80.00"))]
+    assert [(r.id, r.rate) for r in rates] == [(rate_id, Money("80", "USD"))]
 
 
 @pytest.mark.parametrize("reader", ["reporter", "outsider"])
@@ -138,66 +145,24 @@ async def test_billing_rates_are_not_found_for_a_key_limited_to_another_project(
 async def test_a_project_manager_manages_billing_rates(db_session: AsyncSession, world: World) -> None:
     w = world
     m = w.manager
-    new = BillingRateCreate(user_id=None, hourly_rate=Decimal("90"), currency="USD", effective_from=date(2026, 3, 1))
+    new = BillingRateCreate(
+        user_id=None, hourly_rate=MoneyIn(amount="90", currency="USD"), effective_from=date(2026, 3, 1)
+    )
     created = await create_billing_rate(w.p.key, new, request=None, current_user=m, db=db_session)
     updated = await update_billing_rate(
-        w.p.key, created.id, BillingRateUpdate(hourly_rate=Decimal("95")), request=None, current_user=m, db=db_session
+        w.p.key,
+        created.id,
+        BillingRateUpdate(hourly_rate=MoneyIn(amount="95", currency="USD")),
+        request=None,
+        current_user=m,
+        db=db_session,
     )
-    assert updated.hourly_rate == Decimal("95")
+    assert updated.hourly_rate.currency == "USD"
+    assert Decimal(updated.hourly_rate.amount) == Decimal("95")
     listed = await list_billing_rates(w.p.key, request=None, current_user=m, db=db_session)
     assert [r.id for r in listed] == [created.id]
     await delete_billing_rate(w.p.key, created.id, request=None, current_user=m, db=db_session)
     assert await BillingRateService().list_rates(db_session, w.p.id) == []
-
-
-# ---------------------------------------------------------------------------
-# Agent cost summary
-# ---------------------------------------------------------------------------
-
-
-async def _costs(db: AsyncSession, w: World) -> None:
-    for issue, tokens in ((w.pub, 100), (w.priv, 7000)):
-        session = await _agent_session(db, w.agent, issue)
-        db.add(
-            AgentTokenLog(
-                session_id=session.id,
-                model_name="claude-test",
-                input_tokens=tokens,
-                output_tokens=1,
-                cost=Decimal(tokens) / 100,
-            )
-        )
-    await db.commit()
-
-
-async def _summary(db: AsyncSession, w: World, user: User) -> list[tuple[int, Decimal]]:
-    items = await get_cost_summary(w.p.key, date_from=None, date_to=None, current_user=user, db=db)
-    return [(i.total_input_tokens, i.total_cost) for i in items]
-
-
-@pytest.mark.parametrize("reader", ["reporter", "outsider"])
-async def test_cost_summary_leaves_out_hidden_issues(db_session: AsyncSession, world: World, reader: str) -> None:
-    await _costs(db_session, world)
-    assert await _summary(db_session, world, getattr(world, reader)) == [(100, Decimal("1"))]
-
-
-async def test_cost_summary_counts_everything_for_a_member_who_sees_all(db_session: AsyncSession, world: World) -> None:
-    await _costs(db_session, world)
-    assert await _summary(db_session, world, world.manager) == [(7100, Decimal("71"))]
-
-
-async def test_cost_summary_follows_the_anonymous_rules_and_the_key_limit(
-    db_session: AsyncSession, world: World
-) -> None:
-    w = world
-    await _costs(db_session, w)
-    anonymous = await _anonymous(db_session, w)
-    assert await _summary(db_session, w, anonymous) == [(100, Decimal("1"))]
-
-    with bound_scope(ProjectScope(frozenset({w.s.id}))):
-        with pytest.raises(NotFoundError):
-            await _summary(db_session, w, w.manager)
-        assert await AgentCostService().get_cost_summary(db_session, w.p, w.manager) == []
 
 
 # ---------------------------------------------------------------------------

@@ -85,7 +85,7 @@ async def _keys(db: AsyncSession, user_id: int) -> list[bool]:
 
 async def _add_keys(db: AsyncSession, user_id: int) -> None:
     await ApiKeyService().create_key(db, user_id, "ci")
-    await ApiKeyService().create_key(db, user_id, "agent", scopes=["mcp"])  # type: ignore[arg-type]
+    await ApiKeyService().create_key(db, user_id, "agent")
 
 
 # ---------------------------------------------------------------------------

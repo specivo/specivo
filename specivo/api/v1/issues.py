@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from specivo.core.constants import (
+    DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
+    DEVELOPMENT_TIMELINE_MAX_LIMIT,
+    DEVELOPMENT_TIMELINE_MAX_OFFSET,
+)
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
-from specivo.core.rate_limit import rate_limit
+from specivo.core.exceptions import (
+    AnonymousAccessDeniedError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
+from specivo.core.rate_limit import enforce_rate_limit, rate_limit
 from specivo.core.security import get_current_user, get_reader
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
@@ -26,17 +36,20 @@ from specivo.schemas.issue import (
     IssueUpdateOut,
     IssueWithChildren,
     MetadataFieldOut,
+    SimilarIssueOut,
     issue_out,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
-from specivo.schemas.repository import IssueDevelopmentOut
+from specivo.schemas.repository import DevelopmentKind, IssueDevelopmentOut, MoveDevelopmentItemIn
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
+from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
 from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
@@ -46,6 +59,7 @@ from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.repository_service import development_for_issue
 from specivo.services.saved_filter_service import SavedFilterService
+from specivo.services.similar_issue_service import SimilarIssueService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
 
@@ -61,6 +75,10 @@ _workflow_service = WorkflowService()
 _notification_service = NotificationService()
 _mention_service = MentionService()
 _reaction_svc = ReactionService()
+_similar_service = SimilarIssueService()
+
+# Per user: the new issue form asks at most once a second while someone types.
+_SIMILAR_ISSUES_RATE_LIMIT = ("similar_issues", 60, 60)
 
 
 # ---------------------------------------------------------------------------
@@ -143,10 +161,17 @@ async def list_issues(
         ),
     ),
     tracker_id: int | None = Query(default=None),
-    assigned_to_id: str | None = Query(default=None),
+    assigned_to_id: str | None = Query(
+        default=None, description="A user id, 'me' (the caller) or 'none' (unassigned issues)."
+    ),
     priority_id: int | None = Query(default=None),
     category_id: int | None = Query(default=None),
-    version_id: int | None = Query(default=None),
+    version_id: str | None = Query(
+        default=None, description="Target version id, or 'none' for issues without one. Same as fixed_version_id."
+    ),
+    fixed_version_id: str | None = Query(
+        default=None, description="Target version id, or 'none' for issues without one."
+    ),
     tag_id: int | None = Query(default=None),
     author_id: int | None = Query(default=None),
     subject_contains: str | None = Query(default=None),
@@ -186,6 +211,13 @@ async def list_issues(
             tracker_id = fd["tracker_id"]
         if assigned_to_id is None and "assigned_to_id" in fd:
             assigned_to_id = str(fd["assigned_to_id"])
+        if version_id is None and fixed_version_id is None:
+            for name in ("fixed_version_id", "version_id"):
+                if fd.get(name) is not None:
+                    fixed_version_id = str(fd[name])
+                    break
+        if tag_id is None and "tag_id" in fd:
+            tag_id = parse_id(fd["tag_id"])
         if priority_id is None and "priority_id" in fd:
             priority_id = fd["priority_id"]
         if category_id is None and "category_id" in fd:
@@ -205,16 +237,14 @@ async def list_issues(
         if sort == "created_at:desc" and "sort" in fd:
             sort = fd["sort"]
 
-    # Resolve "me" shorthand for assigned_to_id
-    resolved_assigned_to: int | None = None
-    if assigned_to_id is not None:
-        if assigned_to_id == "me":
-            resolved_assigned_to = current_user.id
-        else:
-            try:
-                resolved_assigned_to = int(assigned_to_id)
-            except ValueError:
-                resolved_assigned_to = None
+    # "me" stands for the caller (which matches nothing for an anonymous
+    # visitor); "none" selects unassigned issues. Anything unparseable is ignored.
+    resolved_assigned_to = parse_assignee(assigned_to_id, me_id=current_user.id)
+
+    raw_version = fixed_version_id if fixed_version_id is not None else version_id
+    resolved_version = parse_version(raw_version)
+    if raw_version is not None and raw_version.strip() and resolved_version is None:
+        raise ValidationError("version_id must be a version id or 'none'", field="fixed_version_id")
 
     filters: dict = {
         "status": status_filter,
@@ -222,7 +252,7 @@ async def list_issues(
         "assigned_to_id": resolved_assigned_to,
         "priority_id": priority_id,
         "category_id": category_id,
-        "version_id": version_id,
+        "version_id": resolved_version,
         "tag_id": tag_id,
         "author_id": author_id,
         "subject_contains": subject_contains,
@@ -251,6 +281,48 @@ async def list_issues(
         limit=limit,
         items=[_issue_out(i, project_computed) for i in issues],
     )
+
+
+@router.get("/projects/{project_key}/issues/similar/", response_model=list[SimilarIssueOut])
+async def similar_issues(
+    project_key: str,
+    request: Request,
+    response: Response,
+    q: str = Query(..., min_length=1, max_length=255, description="The title being typed."),
+    limit: int = Query(5, ge=1, le=10),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> list[SimilarIssueOut]:
+    """Issues of the project whose subject resembles *q*, most similar first.
+
+    For the new issue form, to spot a duplicate before filing it, so it needs
+    ``add_issues``. Only issues the caller may see are returned. An empty list
+    when the feature is off for the instance or the project, when nothing is
+    similar enough, or when the search ran out of time.
+    """
+    # Bucketed per user: the plain ``rate_limit()`` dependency runs before
+    # authentication and would count every user behind one address together.
+    request.state.rate_limit_user_id = current_user.id
+    await enforce_rate_limit(request, response, *_SIMILAR_ISSUES_RATE_LIMIT)
+
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
+    if not await check_permission(current_user, project.id, Permission.ADD_ISSUES, db, request=request):
+        raise PermissionDeniedError("You do not have permission to create issues in this project")
+    if not await _similar_service.is_enabled(db, project):
+        return []
+
+    found = await _similar_service.find(db, project, current_user, q, limit)
+    return [
+        SimilarIssueOut(
+            key=item.key,
+            subject=item.subject,
+            status=IdName(id=item.status_id, name=item.status_name),
+            is_closed=item.is_closed,
+            score=round(item.score, 3),
+        )
+        for item in found
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +496,7 @@ async def get_issue(
     return IssueWithChildren(
         **out.model_dump(),
         metadata_fields=await _metadata_fields(db, current_user, issue, out.metadata),
+        imported_from=await imported_from(db, issue.id),
         children=children,
         journals=journals_out,
         watchers=watchers_out,
@@ -548,10 +621,23 @@ async def delete_issue(
 @router.get("/issues/{issue_ref}/development/", response_model=IssueDevelopmentOut, tags=["repositories"])
 async def get_issue_development(
     issue_ref: str,
+    kinds: list[DevelopmentKind] | None = Query(
+        default=None,
+        description="Timeline kinds to include (repeat the parameter); all when omitted.",
+    ),
+    offset: int = Query(default=0, ge=0, le=DEVELOPMENT_TIMELINE_MAX_OFFSET),
+    limit: int = Query(default=DEVELOPMENT_TIMELINE_DEFAULT_LIMIT, ge=1, le=DEVELOPMENT_TIMELINE_MAX_LIMIT),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> IssueDevelopmentOut:
-    """The issue's development activity: linked commits (newest first), pull/merge requests and branches.
+    """The issue's development activity.
+
+    Linked commits (newest first), pull/merge requests and branches as before;
+    reviews, CI runs, deployments (with their environment type) and releases;
+    a ``summary`` with counts and combined statuses; and ``timeline``: all of
+    it in one list, newest first, filtered by ``kinds`` (``commit``,
+    ``pull_request``, ``review``, ``ci``, ``deployment``, ``release``) and
+    paged by ``offset`` and ``limit`` like other lists (``total_count``).
 
     Needs ``view_issues`` and an issue the caller may see; anything else is
     404. Commit author emails are never returned.
@@ -559,7 +645,119 @@ async def get_issue_development(
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, Permission.VIEW_ISSUES, db):
         raise NotFoundError(f"Issue {issue_ref} not found")
-    return await development_for_issue(db, issue.id)
+    return await development_for_issue(db, issue.id, kinds=kinds, offset=offset, limit=limit)
+
+
+async def _editable_issue(db: AsyncSession, issue_ref: str, user: User) -> Issue:
+    """The issue, if *user* may see it (else 404) and edit it (else 403)."""
+    issue = await _service.get_by_display_key(db, issue_ref, user=user)
+    if not await check_permission(user, issue.project_id, Permission.VIEW_ISSUES, db):
+        raise NotFoundError(f"Issue {issue_ref} not found")
+    if not await check_permission(user, issue.project_id, Permission.EDIT_ISSUES, db):
+        raise PermissionDeniedError("You do not have permission to edit this issue")
+    return issue
+
+
+async def _detach(
+    db: AsyncSession,
+    request: Request,
+    issue_ref: str,
+    item_type: str,
+    item_id: int,
+    user: User,
+    target_ref: str | None = None,
+) -> None:
+    from specivo.services.repository_activity import detach_item
+
+    issue = await _editable_issue(db, issue_ref, user)
+    target = await _editable_issue(db, target_ref, user) if target_ref else None
+    await detach_item(db, issue, item_type, item_id, actor=user, target=target, request=request)
+
+
+@router.delete(
+    "/issues/{issue_ref}/development/commits/{commit_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def detach_issue_commit(
+    issue_ref: str,
+    commit_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Detach a linked commit (``id`` in the development output) from the issue.
+
+    Needs ``edit_issues`` on the issue. The detachment is kept: a later
+    delivery of the same push never links the commit to this issue again.
+    Its SHA leaves the issue's ``commits`` metadata. Audited
+    (``development_link_detached``).
+    """
+    await _detach(db, request, issue_ref, "commit", commit_id, current_user)
+
+
+@router.delete(
+    "/issues/{issue_ref}/development/pull-requests/{pull_request_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def detach_issue_pull_request(
+    issue_ref: str,
+    pull_request_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Detach a linked pull/merge request (``id`` in the development output) from the issue.
+
+    Needs ``edit_issues`` on the issue; kept like a detached commit. Audited
+    (``development_link_detached``).
+    """
+    await _detach(db, request, issue_ref, "pull_request", pull_request_id, current_user)
+
+
+@router.post(
+    "/issues/{issue_ref}/development/commits/{commit_id}/move/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def move_issue_commit(
+    issue_ref: str,
+    commit_id: int,
+    data: MoveDevelopmentItemIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Move a linked commit to another issue.
+
+    Needs ``edit_issues`` on both issues; the target must be in a project the
+    repository may link to (its scope), else 422. The commit is detached from
+    this issue for good and linked to the target. Audited
+    (``development_link_moved``).
+    """
+    await _detach(db, request, issue_ref, "commit", commit_id, current_user, data.target_issue_ref)
+
+
+@router.post(
+    "/issues/{issue_ref}/development/pull-requests/{pull_request_id}/move/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def move_issue_pull_request(
+    issue_ref: str,
+    pull_request_id: int,
+    data: MoveDevelopmentItemIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Move a linked pull/merge request to another issue; like moving a commit.
+
+    A moved request never counts as closing, so merge automation does not
+    act on the target.
+    """
+    await _detach(db, request, issue_ref, "pull_request", pull_request_id, current_user, data.target_issue_ref)
 
 
 @router.get(
@@ -699,20 +897,21 @@ async def add_comment(
     )
     journal = result.scalar_one()
 
-    # Notify watchers about the new comment
+    # Record the @mentions, then notify the mentioned people, the assignee and
+    # the watchers in one pass, so nobody hears about this comment twice.
+    mentions = await _mention_service.process_mentions(
+        session=db,
+        journal=journal,
+        text=data.notes,
+        actor=current_user,
+        notify=False,
+    )
     await _notification_service.notify_comment(
         session=db,
         issue=issue,
         journal=journal,
         actor=current_user,
-    )
-
-    # Process @mentions in the comment text
-    await _mention_service.process_mentions(
-        session=db,
-        journal=journal,
-        text=data.notes,
-        actor=current_user,
+        mentioned_user_ids=[mention.user_id for mention in mentions],
     )
 
     await db.commit()  # commit before response to avoid reload race condition

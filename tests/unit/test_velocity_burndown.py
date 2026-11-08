@@ -185,13 +185,14 @@ async def lookups(
 async def test_velocity_summary_empty_sprint(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     """Complete a sprint with zero issues. Snapshot should have 0/0."""
     sprint = await _create_sprint(db_session, project, "Empty Sprint")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
-    await _svc.complete_sprint(db_session, sprint)
+    await _svc.complete_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(sprint)
 
@@ -218,7 +219,7 @@ async def test_velocity_across_sprints(
 
     # Sprint 1: 2 done out of 3
     s1 = await _create_sprint(db_session, project, "Velocity S1")
-    await _svc.start_sprint(db_session, s1)
+    await _svc.start_sprint(db_session, s1, actor)
     await db_session.commit()
     for i in range(2):
         await _create_issue_for_sprint(
@@ -229,24 +230,24 @@ async def test_velocity_across_sprints(
         db_session, project, actor, s1, "S1 Open",
         tracker=tracker, status=status_open, priority=priority,
     )
-    await _svc.complete_sprint(db_session, s1)
+    await _svc.complete_sprint(db_session, s1, actor)
     await db_session.commit()
 
     # Sprint 2: 4 done out of 4
     s2 = await _create_sprint(db_session, project, "Velocity S2")
-    await _svc.start_sprint(db_session, s2)
+    await _svc.start_sprint(db_session, s2, actor)
     await db_session.commit()
     for i in range(4):
         await _create_issue_for_sprint(
             db_session, project, actor, s2, f"S2 Done {i}",
             tracker=tracker, status=status_done, priority=priority,
         )
-    await _svc.complete_sprint(db_session, s2)
+    await _svc.complete_sprint(db_session, s2, actor)
     await db_session.commit()
 
     # Sprint 3: 3 done out of 5
     s3 = await _create_sprint(db_session, project, "Velocity S3")
-    await _svc.start_sprint(db_session, s3)
+    await _svc.start_sprint(db_session, s3, actor)
     await db_session.commit()
     for i in range(3):
         await _create_issue_for_sprint(
@@ -258,7 +259,7 @@ async def test_velocity_across_sprints(
             db_session, project, actor, s3, f"S3 Open {i}",
             tracker=tracker, status=status_open, priority=priority,
         )
-    await _svc.complete_sprint(db_session, s3)
+    await _svc.complete_sprint(db_session, s3, actor)
     await db_session.commit()
 
     # Call average_velocity — new method that should exist on SprintService
@@ -289,7 +290,7 @@ async def test_burndown_data_active_sprint(
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 14),
     )
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     # Issue 1: 8h estimated, done
@@ -347,7 +348,7 @@ async def test_burndown_data_no_estimates(
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 14),
     )
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     await _create_issue_for_sprint(

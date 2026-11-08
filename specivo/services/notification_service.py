@@ -3,21 +3,29 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Collection, Iterable
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from specivo.core.app_url import public_url
+from specivo.core.i18n import LazyString, format_datetime_for, get_locale, recipient_locale
 from specivo.core.notification_templates import (
     ASSIGNMENT_EMAIL_LEAD,
     ASSIGNMENT_IN_APP_TITLE,
     COMMENT_EMAIL_LEAD,
     COMMENT_IN_APP_TITLE,
+    EMAIL_VIEW_COMMENT,
+    EMAIL_VIEW_ISSUE,
     ISSUE_UPDATED_EMAIL_LEAD,
     ISSUE_UPDATED_IN_APP_TITLE,
+    MENTION_EMAIL_LEAD,
+    MENTION_IN_APP_TITLE,
 )
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
@@ -47,7 +55,8 @@ def _inbox_clause(user_id: int) -> ColumnElement[bool]:
 _EMAIL_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "_shared"
 _email_env = Environment(
     loader=FileSystemLoader(str(_EMAIL_TEMPLATES_DIR)),
-    autoescape=True,
+    # HTML bodies are escaped, plain-text (.txt) bodies are not.
+    autoescape=select_autoescape(default_for_string=True),
 )
 
 
@@ -55,6 +64,19 @@ def _render_email(template_name: str, **context: object) -> str:
     """Render an email body from a Jinja2 template in ``_shared/email/``."""
     template = _email_env.get_template(f"email/{template_name}")
     return template.render(**context)
+
+
+def issue_url(issue_key: str, journal_id: int | None = None) -> str | None:
+    """The public link to an issue, or to one of its comments, built from ``APP_URL``.
+
+    ``None`` when ``APP_URL`` has no host (see ``specivo.core.app_url.public_url``).
+    """
+    anchor = f"#journal-{int(journal_id)}" if journal_id is not None else ""
+    return public_url(f"/issue/{quote(issue_key, safe='')}/{anchor}")
+
+
+# The channel keys a notification went to, by recipient user id.
+Delivered = dict[int, set[str]]
 
 
 class NotificationService:
@@ -66,10 +88,15 @@ class NotificationService:
     - **Visibility**: only users who can see the issue when the notification
       is built receive it (``IssueService.users_who_can_view``).
     - **Dedup**: if a user qualifies via multiple channels (e.g. watcher AND
-      assignee), they receive only one dispatch.
+      assignee), they receive only one dispatch. Someone mentioned in a
+      comment gets the mention instead of the comment notification, on every
+      channel the mention used.
     - **Preferences**: ``NotificationPreference.channels`` JSONB can disable
       notifications per event type, optionally scoped to a project.
       No record = default enabled.
+    - **Per recipient**: the payload is rendered for each recipient in their
+      own language (their preference, else the instance default) and with
+      times in their timezone, never in the actor's request locale.
     """
 
     def __init__(self) -> None:
@@ -92,14 +119,16 @@ class NotificationService:
         if new_assignee_id is None:
             return
 
-        payload = self._build_assignment_payload(issue=issue, actor=actor)
+        occurred_at = utcnow()
         for assignee in await self._recipients(session, issue, [new_assignee_id], actor):
-            await self._dispatch_to_channels(
+            await self._notify(
                 session,
                 user=assignee,
-                project_id=issue.project_id,
+                issue=issue,
                 event_type="assignment",
-                payload=payload,
+                build=lambda user: self._build_assignment_payload(
+                    issue=issue, actor=actor, recipient=user, occurred_at=occurred_at
+                ),
             )
 
     async def notify_watchers(
@@ -116,15 +145,16 @@ class NotificationService:
         skip = exclude_user_ids or set()
         candidates = [watcher.id for watcher in watchers if watcher.id not in skip]
 
-        payload = self._build_watcher_payload(issue=issue, event_type=event_type, actor=actor)
-
+        occurred_at = utcnow()
         for watcher_user in await self._recipients(session, issue, candidates, actor):
-            await self._dispatch_to_channels(
+            await self._notify(
                 session,
                 user=watcher_user,
-                project_id=issue.project_id,
+                issue=issue,
                 event_type=event_type,
-                payload=payload,
+                build=lambda user: self._build_watcher_payload(
+                    issue=issue, event_type=event_type, actor=actor, recipient=user, occurred_at=occurred_at
+                ),
             )
 
     async def notify_comment(
@@ -133,21 +163,88 @@ class NotificationService:
         issue: Issue,
         journal: Journal,
         actor: User,
+        *,
+        mentioned_user_ids: Iterable[int] = (),
     ) -> None:
-        """Notify the assignee, then the watchers, about a new comment; each user once."""
-        payload = self._build_comment_payload(issue=issue, journal=journal, actor=actor)
+        """Notify about a new comment: the people it mentions, then the assignee and the watchers.
+
+        Each user hears about the comment once per channel. Someone who is
+        mentioned and also watches (or is assigned) gets the mention; a channel
+        their mention preferences turned off still carries the comment
+        notification when their comment preferences allow it.
+        """
+        occurred_at = utcnow()
+        delivered = await self.notify_mentions(
+            session, issue, journal, mentioned_user_ids, actor, occurred_at=occurred_at
+        )
 
         candidates = [issue.assigned_to_id] if issue.assigned_to_id else []
         candidates += [watcher.id for watcher in await self._watcher_service.list_watchers(session, issue)]
 
         for user in await self._recipients(session, issue, candidates, actor):
-            await self._dispatch_to_channels(
+            await self._notify(
                 session,
                 user=user,
-                project_id=issue.project_id,
+                issue=issue,
                 event_type="comment",
-                payload=payload,
+                build=lambda recipient: self._build_comment_payload(
+                    issue=issue, journal=journal, actor=actor, recipient=recipient, occurred_at=occurred_at
+                ),
+                skip_channels=delivered.get(user.id, set()),
             )
+
+    async def notify_mentions(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        journal: Journal,
+        user_ids: Iterable[int],
+        actor: User,
+        *,
+        occurred_at: datetime | None = None,
+    ) -> Delivered:
+        """Tell the users in *user_ids* that *actor* mentioned them in *journal*.
+
+        Only those who can see the issue now hear about it, never the actor,
+        and each one's ``mention`` preferences decide the channels. Returns the
+        channels used per user, so the comment notification can skip them.
+        """
+        when = occurred_at or utcnow()
+        delivered: Delivered = {}
+        for user in await self._recipients(session, issue, user_ids, actor):
+            delivered[user.id] = await self._notify(
+                session,
+                user=user,
+                issue=issue,
+                event_type="mention",
+                build=lambda recipient: self._build_mention_payload(
+                    issue=issue, journal=journal, actor=actor, recipient=recipient, occurred_at=when
+                ),
+            )
+        return delivered
+
+    async def _notify(
+        self,
+        session: AsyncSession,
+        *,
+        user: User,
+        issue: Issue,
+        event_type: str,
+        build: Callable[[User], NotificationPayload],
+        skip_channels: Collection[str] = (),
+    ) -> set[str]:
+        """Build the payload in *user*'s language, then dispatch it; returns the channels used."""
+        with recipient_locale(user.language):
+            payload = build(user)
+        delivered: set[str] = await self._dispatch_to_channels(
+            session,
+            user=user,
+            project_id=issue.project_id,
+            event_type=event_type,
+            payload=payload,
+            skip_channels=skip_channels,
+        )
+        return delivered
 
     async def _recipients(
         self, session: AsyncSession, issue: Issue, user_ids: Iterable[int], actor: User
@@ -290,12 +387,18 @@ class NotificationService:
         project_id: int,
         event_type: str,
         payload: NotificationPayload,
-    ) -> None:
-        """Dispatch a notification to all enabled and configured channels for a user."""
+        skip_channels: Collection[str] = (),
+    ) -> set[str]:
+        """Dispatch a notification to all enabled and configured channels for a user.
+
+        Channels in *skip_channels* (``"in_app"`` included) are left out.
+        Returns the keys of the channels the notification went to.
+        """
+        delivered: set[str] = set()
         prefs = await self._get_prefs(session, user.id, project_id, event_type)
 
         # In-app (not a channel — direct DB write)
-        if self._is_channel_enabled(prefs, "in_app"):
+        if "in_app" not in skip_channels and self._is_channel_enabled(prefs, "in_app"):
             await self.create_notification(
                 session,
                 user_id=user.id,
@@ -307,10 +410,11 @@ class NotificationService:
                 title=payload.title,
                 body=payload.body_plain,
             )
+            delivered.add("in_app")
 
         # External channels
         for key, channel in get_all_channels().items():
-            if not self._is_channel_enabled(prefs, key):
+            if key in skip_channels or not self._is_channel_enabled(prefs, key):
                 continue
 
             # Email config is special-cased from User.email
@@ -325,41 +429,131 @@ class NotificationService:
                 channel.dispatch(payload, user_config)
             except Exception:
                 logger.exception("Failed to dispatch %s notification to user %s", key, user.id)
+            else:
+                delivered.add(key)
+        return delivered
 
     # ------------------------------------------------------------------
     # Payload builders
+    #
+    # Called inside ``recipient_locale``: the lazy templates translate into
+    # the active locale, which is then the recipient's.
     # ------------------------------------------------------------------
 
-    def _build_assignment_payload(self, *, issue: Issue, actor: User) -> NotificationPayload:
-        ctx = {
-            "issue_key": issue.display_key,
-            "issue_subject": issue.subject,
-            "actor_name": actor.display_name,
-        }
-        event_text = str(ASSIGNMENT_EMAIL_LEAD.format(**ctx))
-        return NotificationPayload(
+    def _build_assignment_payload(
+        self,
+        *,
+        issue: Issue,
+        actor: User,
+        recipient: User | None = None,
+        occurred_at: datetime | None = None,
+    ) -> NotificationPayload:
+        return self._build_issue_payload(
             event_type="assignment",
-            entity_type="issue",
-            entity_id=issue.id,
-            project_id=issue.project_id,
-            project_key=issue.display_key.split("-")[0],
-            actor_name=actor.display_name,
-            actor_id=actor.id,
-            title=str(ASSIGNMENT_IN_APP_TITLE.format(**ctx)),
-            body_plain=f"Issue {issue.display_key} has been assigned to you by {actor.display_name}.",
-            body_html=_render_email("assignment.html", lead=event_text, **ctx),
-            issue_key=issue.display_key,
-            issue_subject=issue.subject,
-            event_text=event_text,
+            issue=issue,
+            actor=actor,
+            recipient=recipient,
+            occurred_at=occurred_at,
+            lead=ASSIGNMENT_EMAIL_LEAD,
+            title=ASSIGNMENT_IN_APP_TITLE,
         )
 
-    def _build_watcher_payload(self, *, issue: Issue, event_type: str, actor: User) -> NotificationPayload:
+    def _build_watcher_payload(
+        self,
+        *,
+        issue: Issue,
+        event_type: str,
+        actor: User,
+        recipient: User | None = None,
+        occurred_at: datetime | None = None,
+    ) -> NotificationPayload:
+        return self._build_issue_payload(
+            event_type=event_type,
+            issue=issue,
+            actor=actor,
+            recipient=recipient,
+            occurred_at=occurred_at,
+            lead=ISSUE_UPDATED_EMAIL_LEAD,
+            title=ISSUE_UPDATED_IN_APP_TITLE,
+        )
+
+    def _build_comment_payload(
+        self,
+        *,
+        issue: Issue,
+        journal: Journal,
+        actor: User,
+        recipient: User | None = None,
+        occurred_at: datetime | None = None,
+    ) -> NotificationPayload:
+        return self._build_issue_payload(
+            event_type="comment",
+            issue=issue,
+            actor=actor,
+            recipient=recipient,
+            occurred_at=occurred_at,
+            lead=COMMENT_EMAIL_LEAD,
+            title=COMMENT_IN_APP_TITLE,
+            journal=journal,
+        )
+
+    def _build_mention_payload(
+        self,
+        *,
+        issue: Issue,
+        journal: Journal,
+        actor: User,
+        recipient: User | None = None,
+        occurred_at: datetime | None = None,
+    ) -> NotificationPayload:
+        return self._build_issue_payload(
+            event_type="mention",
+            issue=issue,
+            actor=actor,
+            recipient=recipient,
+            occurred_at=occurred_at,
+            lead=MENTION_EMAIL_LEAD,
+            title=MENTION_IN_APP_TITLE,
+            journal=journal,
+        )
+
+    def _build_issue_payload(
+        self,
+        *,
+        event_type: str,
+        issue: Issue,
+        actor: User,
+        recipient: User | None,
+        occurred_at: datetime | None,
+        lead: LazyString,
+        title: LazyString,
+        journal: Journal | None = None,
+    ) -> NotificationPayload:
+        """One recipient's notification about *issue*: in-app title and body, and the mail.
+
+        Everything user-supplied (subject, comment, names) goes into the HTML
+        through the autoescaping template; the plain-text part is rendered from
+        its own template. The mail links to the issue, or to the comment when
+        there is one.
+        """
         ctx = {
             "issue_key": issue.display_key,
             "issue_subject": issue.subject,
             "actor_name": actor.display_name,
         }
-        event_text = str(ISSUE_UPDATED_EMAIL_LEAD.format(**ctx))
+        event_text = str(lead.format(**ctx))
+        comment_text = journal.notes if journal is not None else None
+        url = issue_url(issue.display_key, journal.id if journal is not None else None)
+        mail = {
+            **ctx,
+            "lead": event_text,
+            "occurred_at": format_datetime_for(
+                occurred_at or utcnow(), getattr(recipient, "timezone", None), get_locale()
+            ),
+            "comment_text": comment_text,
+            "url": url,
+            "link_label": str(EMAIL_VIEW_COMMENT if journal is not None else EMAIL_VIEW_ISSUE),
+        }
         return NotificationPayload(
             event_type=event_type,
             entity_type="issue",
@@ -368,36 +562,15 @@ class NotificationService:
             project_key=issue.display_key.split("-")[0],
             actor_name=actor.display_name,
             actor_id=actor.id,
-            title=str(ISSUE_UPDATED_IN_APP_TITLE.format(**ctx)),
-            body_plain=f"Issue {issue.display_key} was updated by {actor.display_name}.",
-            body_html=_render_email("issue_updated.html", lead=event_text, **ctx),
+            title=str(title.format(**ctx)),
+            # The in-app body under the title: the comment, else the issue subject.
+            body_plain=(comment_text or "") if journal is not None else issue.subject,
+            body_html=_render_email("issue_event.html", **mail),
+            body_text=_render_email("issue_event.txt", **mail),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
-            event_text=event_text,
-        )
-
-    def _build_comment_payload(self, *, issue: Issue, journal: Journal, actor: User) -> NotificationPayload:
-        ctx = {
-            "issue_key": issue.display_key,
-            "issue_subject": issue.subject,
-            "actor_name": actor.display_name,
-            "comment_text": journal.notes,
-        }
-        event_text = str(COMMENT_EMAIL_LEAD.format(**ctx))
-        return NotificationPayload(
-            event_type="comment",
-            entity_type="issue",
-            entity_id=issue.id,
-            project_id=issue.project_id,
-            project_key=issue.display_key.split("-")[0],
-            actor_name=actor.display_name,
-            actor_id=actor.id,
-            title=str(COMMENT_IN_APP_TITLE.format(**ctx)),
-            body_plain=journal.notes or "",
-            body_html=_render_email("comment.html", lead=event_text, **ctx),
-            issue_key=issue.display_key,
-            issue_subject=issue.subject,
-            comment_text=journal.notes,
+            comment_text=comment_text,
+            entity_url=url,
             event_text=event_text,
         )
 

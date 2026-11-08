@@ -27,6 +27,30 @@ Creating an issue takes seconds. The only things Specivo insists on are a **subj
 That's it. The issue gets the next number in the project (for example `ACME-57`) and opens on its own
 page.
 
+## Similar issues
+
+While you type the subject of a new issue, Specivo looks for issues in the same project whose
+subject is close to it and lists up to five of them under the subject box, the closest first. It
+asks once you stop typing for a second and the subject has at least 10 characters (4 in Chinese,
+Japanese, Thai and the other scripts written without spaces). Each row shows the issue's key, its
+subject and its status, closed issues included; the link opens the issue in a new tab, so your
+draft stays as it is. Only issues you are allowed to see are listed.
+
+If the issue you are about to file already exists, click **Mark as duplicate** on its row (shown
+when you may manage issue relations). It is added to the relations below the form as
+"Duplicates" and is created together with the issue; **Remove** takes it off again. You can still
+create the issue either way: the list is only a hint.
+
+The suggestions compare the words and the spelling of subjects, so they work without any AI or
+embedding model installed. They do not read descriptions. An administrator can turn them off for
+the whole instance under **Administration → Settings → Defaults**, and a project manager for one
+project in the project's settings.
+
+For titles in a script written without spaces (Chinese, Japanese, Thai, Lao, Myanmar, Khmer), the
+newest 2000 issues of the project are compared, so an older duplicate is not found. These
+suggestions also need a database whose character type (`lc_ctype`) is not `C`; on such a database
+they list nothing. The bundled database is set up correctly.
+
 ## Required vs optional
 
 | Required | Optional |

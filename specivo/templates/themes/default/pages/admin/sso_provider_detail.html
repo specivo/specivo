@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/app_url_warning.html" import app_url_warning %}
 
 {% set page_name = provider.display_name if provider else _("New provider") %}
 {% block title %}{{ page_name }} - {% trans %}Single sign-on{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
@@ -129,6 +130,7 @@
   <div class="card sp-sso-section">
     <h2>{% trans %}Connection{% endtrans %}</h2>
     <p class="sp-sso-section-intro">{% trans %}Register Specivo at the identity provider with exactly these URLs (no wildcards), then copy its issuer and client ID here.{% endtrans %}</p>
+    {{ app_url_warning(request) }}
 
     <label class="form-label">{% trans %}Redirect URI{% endtrans %}</label>
     <div class="sp-sso-copy">
@@ -366,7 +368,7 @@
         <option value="revoke_all_sessions">{% trans %}End every session of that person from this provider{% endtrans %}</option>
         <option value="deprovision">{% trans %}End all of their sessions and switch off their API keys{% endtrans %}</option>
       </select>
-      <div class="form-hint">{% trans %}The provider sends the same message when someone signs out as when they are disabled. Switching off API keys applies only to accounts without a password, and never deactivates the account: a later sign-in works, but the keys stay off.{% endtrans %}</div>
+      <div class="form-hint">{% trans %}The provider sends the same message when someone signs out as when they are disabled. Switching off API keys applies only to accounts without a password that are not administrators, and never deactivates the account: a later sign-in works, but the keys stay off.{% endtrans %}</div>
     </div>
   </div>
 
@@ -376,6 +378,7 @@
     <h2>{% trans %}Provisioning (SCIM){% endtrans %}</h2>
     <p class="sp-sso-section-intro">{% trans %}The provider creates, updates and deactivates Specivo accounts and groups through SCIM, so people exist before their first sign-in and lose access as soon as they are disabled at the provider.{% endtrans %}</p>
 
+    {{ app_url_warning(request) }}
     <label class="form-label">{% trans %}SCIM base URL{% endtrans %}</label>
     <div class="sp-sso-copy sp-mb-md">
       <code x-text="scim.base_url">{{ scim.base_url }}</code>

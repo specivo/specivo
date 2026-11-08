@@ -1,4 +1,4 @@
-"""Admin users API — list, create, reset password, lock/unlock, deactivate/reactivate."""
+"""Admin users API — list, create, change email, reset password, lock/unlock, deactivate/reactivate."""
 
 from __future__ import annotations
 
@@ -19,8 +19,10 @@ from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
 from specivo.schemas.sso import UserIdentityOut
 from specivo.schemas.user import UserCreate, UserDeactivatedOut, UserOut, UserReactivatedOut
 from specivo.services.anonymous_user_service import real_users_clause, refuse_system_user
+from specivo.services.api_key_scope import project_keys_by_api_key
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
+from specivo.services.email_change_service import EmailChangeService
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.session_service import SessionService
 from specivo.services.sso.identity_service import IdentityService
@@ -231,6 +233,41 @@ async def reset_password(
     return {"detail": "Password reset successfully"}
 
 
+class AdminEmailChange(BaseModel):
+    """Body of ``PATCH /admin/users/{id}/email/``."""
+
+    email: str = Field(max_length=320)
+
+
+@router.patch(
+    "/admin/users/{user_id}/email/",
+    response_model=UserOut,
+    summary="Change a user's email address directly (admin only, signed-in session)",
+    responses={
+        400: {"description": "The address is the current one"},
+        409: {"description": "Another account uses the address"},
+        422: {"description": "Not a valid email address"},
+    },
+)
+async def change_user_email(
+    user_id: int,
+    body: AdminEmailChange,
+    admin: Annotated[User, Depends(require_admin_session_api)],
+    db: AsyncSession = DB_SESSION,
+) -> UserOut:
+    """Set the address and mark it verified, without a confirmation link.
+
+    Session-only: the address receives password reset links, so setting it
+    hands out a way to sign in. The change is audited (``email_changed``,
+    ``by: admin``) and both the old and the new address get a notice.
+    """
+    target = await _get_user_or_404(db, user_id)
+    await EmailChangeService().admin_set_email(db, target, body.email, admin=admin)
+    await db.commit()
+    await db.refresh(target)
+    return UserOut.model_validate(target)
+
+
 # ---------------------------------------------------------------------------
 # Lock / unlock
 # ---------------------------------------------------------------------------
@@ -422,7 +459,8 @@ async def list_user_api_keys(
     """Return all API keys for the specified user."""
     target = await _get_user_or_404(db, user_id)
     keys = await _api_key_svc.list_keys(session=db, user_id=target.id)
-    return [ApiKeyOut.model_validate(k) for k in keys]
+    project_keys = await project_keys_by_api_key(db, keys)
+    return [ApiKeyOut.model_validate(k).model_copy(update={"project_keys": project_keys[k.id]}) for k in keys]
 
 
 @router.post(
@@ -439,7 +477,12 @@ async def create_user_api_key(
     admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = DB_SESSION,
 ) -> ApiKeyCreated:
-    """Create an API key for the specified user. The raw key is returned ONCE."""
+    """Create an API key for the specified user. The raw key is returned ONCE.
+
+    ``scopes`` optionally limits the key to some projects (``{"projects": [...]}``, by key
+    or id). Each must exist; the user need not be a member yet, and the key never reaches
+    more than the user's own roles allow.
+    """
     target = await _get_user_or_404(db, user_id)
     key, raw_key = await _api_key_svc.create_key(
         session=db,
@@ -448,6 +491,7 @@ async def create_user_api_key(
         scopes=body.scopes,
         expires_at=body.expires_at,
         ip_allowlist=body.ip_allowlist,
+        check_scope_access=False,
     )
 
     try:
@@ -472,6 +516,7 @@ async def create_user_api_key(
         key_prefix=key.key_prefix,
         raw_key=raw_key,
         scopes=key.scopes,
+        project_keys=(await project_keys_by_api_key(db, [key]))[key.id],
         expires_at=key.expires_at,
         created_at=key.created_at,
     )

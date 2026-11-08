@@ -1,0 +1,219 @@
+{#
+  An issue's AI usage: what the feature cost (ai_issue_usage.py). Loaded by htmx into the issue
+  page's tab (#issue-ai-usage-tab), and the body of the page /issue/{key}/ai-usage/.
+
+  Every link of the tab has an href (the page, works without JavaScript) and an hx-get (this
+  partial), swapped into #issue-ai-usage-tab; data-aiu-focus names the heading that takes the
+  focus after the swap (frontend/js/modules/issue-ai-usage.js). The chart bundle loads only when
+  there is a chart (data-sp-chart-src).
+
+  Context: issue, project, state (TabState), summary (None without usage), sessions, excluded,
+  can_log, log_url, list_url, excluded_url, report_url, sub_links, guide_url.
+#}
+{% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note with context %}
+
+{% macro tab_link(link, cls="", focus="", label="", current=False, testid="") -%}
+<a class="{{ cls }}" href="{{ link.href }}" hx-get="{{ link.hx }}" hx-push-url="false"
+   {%- if focus %} data-aiu-focus="{{ focus }}"{% endif %}
+   {%- if label %} aria-label="{{ label }}"{% endif %}
+   {%- if current %} aria-current="true"{% endif %}
+   {%- if testid %} data-testid="{{ testid }}"{% endif %}>{{ caller() }}</a>
+{%- endmacro %}
+
+{% macro bar_list(title, data, testid) -%}
+<section class="card sp-aiu-issue-card" aria-labelledby="aiu-issue-{{ testid }}-title" data-testid="aiu-issue-{{ testid }}">
+  <h3 id="aiu-issue-{{ testid }}-title" class="sp-aiu-issue-card-title">{{ title }}</h3>
+  <ul class="sp-drill-bars">
+    {%- for b in data.bars %}
+    <li class="sp-drill-bars-item" data-testid="aiu-issue-bar">
+      <span class="sp-drill-bars-label" title="{{ b.label }}">{{ b.label }}</span>
+      <span class="sp-drill-bars-track" aria-hidden="true"><span class="sp-drill-bars-fill sp-slot-{{ b.slot }}" style="width:{{ b.width }}%"></span></span>
+      <span class="sp-drill-bars-amount">{{ b.amount }}</span>
+    </li>
+    {%- endfor %}
+    {%- if data.other %}
+    <li class="sp-drill-bars-item sp-aiu-issue-other" data-testid="aiu-issue-bar-other">
+      <span class="sp-drill-bars-label">{% trans count=data.other.groups %}Other ({{ count }} group){% pluralize %}Other ({{ count }} groups){% endtrans %}</span>
+      <span class="sp-drill-bars-track" aria-hidden="true"></span>
+      <span class="sp-drill-bars-amount">{{ data.other.amount }}</span>
+    </li>
+    {%- endif %}
+  </ul>
+</section>
+{%- endmacro %}
+
+<div class="sp-drill sp-aiu-issue" id="aiu-issue" data-testid="aiu-issue-tab"
+     hx-target="#issue-ai-usage-tab" hx-swap="innerHTML show:none"
+     {%- if summary and summary.chart %} data-sp-chart-src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}"{% endif %}>
+  <div class="sp-aiu-issue-head">
+    <h2 class="sp-aiu-issue-title" id="aiu-issue-title" tabindex="-1">{% trans %}What this issue cost in AI{% endtrans %}</h2>
+    <div class="sp-aiu-issue-actions">
+      {% if can_log %}<a class="sp-btn sp-btn-sm sp-btn-primary" href="{{ log_url }}" data-testid="aiu-issue-log">{% trans %}Log AI usage{% endtrans %}</a>{% endif %}
+      <a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ list_url }}" data-testid="aiu-issue-list">{% trans %}Open in project AI usage{% endtrans %}</a>
+      {% if report_url %}<a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ report_url }}" data-testid="aiu-issue-report">{% trans %}Spend report{% endtrans %}</a>{% endif %}
+    </div>
+  </div>
+
+  {% if state.has_children %}
+  <nav class="sp-drill-tabs sp-aiu-issue-scope" aria-label="{{ _('Usage to count') }}" data-testid="aiu-issue-scope">
+    {% call tab_link(sub_links.on, cls="sp-drill-tab" ~ (" active" if state.sub else ""), focus="aiu-issue-title", current=state.sub, testid="aiu-issue-sub-on") %}{% trans %}With sub-issues{% endtrans %}{% endcall %}
+    {% call tab_link(sub_links.off, cls="sp-drill-tab" ~ ("" if state.sub else " active"), focus="aiu-issue-title", current=not state.sub, testid="aiu-issue-sub-off") %}{% trans %}This issue only{% endtrans %}{% endcall %}
+  </nav>
+  {% endif %}
+
+  {% if summary %}
+  <div class="sp-drill-kpis sp-aiu-issue-kpis" data-testid="aiu-issue-kpis">
+    <div class="sp-drill-kpi sp-drill-kpi--spend">
+      <span class="sp-drill-kpi-label">{% trans %}Spend{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="aiu-issue-spend">{% if summary.spend %}{{ money_total(summary.spend) }}{% else %}–{% endif %}</span>
+      <span class="sp-text-muted-xs">{% if summary.seat_shown %}{% trans %}Pay-per-use plus seat cost{% endtrans %}{% else %}{% trans %}Pay-per-use charges{% endtrans %}{% endif %}</span>
+    </div>
+    <div class="sp-drill-kpi">
+      <span class="sp-drill-kpi-label">{% trans %}API-equivalent value{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="aiu-issue-api">{% if summary.api %}{{ money_total(summary.api) }}{% else %}–{% endif %}</span>
+      <span class="sp-text-muted-xs">{% trans %}The same tokens at pay-per-use prices{% endtrans %}</span>
+    </div>
+    <div class="sp-drill-kpi">
+      <span class="sp-drill-kpi-label">{% trans %}Tokens{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="aiu-issue-tokens" title="{{ summary.tokens }}">{{ summary.tokens_short }}</span>
+      <span class="sp-text-muted-xs">{% trans count=summary.entries %}{{ count }} entry{% pluralize %}{{ count }} entries{% endtrans %}{% if summary.unpriced %} · {% trans count=summary.unpriced %}{{ count }} not priced{% pluralize %}{{ count }} not priced{% endtrans %}{% endif %}</span>
+    </div>
+    <div class="sp-drill-kpi">
+      <span class="sp-drill-kpi-label">{% trans %}People{% endtrans %}</span>
+      <span class="sp-drill-kpi-value" data-testid="aiu-issue-people-count">{{ summary.people_count }}</span>
+      <span class="sp-text-muted-xs" data-testid="aiu-issue-days">{% if summary.first == summary.last %}{{ summary.first_text }}{% else %}{% trans first=summary.first_text, last=summary.last_text %}{{ first }} to {{ last }}{% endtrans %}{% endif %}</span>
+    </div>
+  </div>
+  <p class="sp-text-muted-xs sp-aiu-issue-notes" data-testid="aiu-issue-notes">
+    {% trans count=summary.days, currency=summary.currency %}Usage on {{ count }} day (UTC), amounts in {{ currency }}.{% pluralize %}Usage on {{ count }} days (UTC), amounts in {{ currency }}.{% endtrans %}
+    {% if state.sub %}{% trans %}Includes the usage logged on its sub-issues.{% endtrans %}{% endif %}
+    {% if summary.clipped %}<span data-testid="aiu-issue-clipped">{% trans %}Only the last three years of usage are counted.{% endtrans %}</span>{% endif %}
+    {% if summary.seat_hidden %}<span data-testid="aiu-issue-seat-hidden">{% trans %}Seat cost is left out: subscription fees are shown only to administrators and to people who can see every entry of this project in the period.{% endtrans %}</span>{% endif %}
+    {% if excluded %}<a href="{{ excluded_url }}" data-testid="aiu-issue-excluded">{% trans count=excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}</a>{% endif %}
+  </p>
+  {{ unpriced_note(summary.unpriced, summary.entries, summary.unpriced_models) }}
+
+  <div class="sp-aiu-issue-grid">
+    <section class="card sp-people sp-aiu-issue-people" aria-labelledby="aiu-issue-people-title" data-testid="aiu-issue-people">
+      <div class="sp-people-head">
+        <h3 id="aiu-issue-people-title" class="sp-aiu-issue-card-title">{% if summary.measure == "spend" %}{% trans %}Spend by person{% endtrans %}{% else %}{% trans %}API-equivalent value by person{% endtrans %}{% endif %}</h3>
+      </div>
+      <ol class="sp-people-list">
+        {% for c in summary.people %}
+        <li class="sp-person sp-aiu-issue-person" data-testid="aiu-issue-person">
+          <span class="sp-person-avatar sp-slot-{{ c.slot }}" aria-hidden="true">{{ c.initials }}</span>
+          <div class="sp-person-main">
+            <div class="sp-person-head"><strong class="sp-person-name">{{ c.name }}</strong><span class="sp-person-spend">{% if summary.measure == "spend" %}{{ c.spend }}{% else %}{{ c.api }}{% endif %}</span></div>
+            <span class="sp-person-bar" aria-hidden="true"><span class="sp-slot-{{ c.slot }}" style="width:{{ c.width }}%"></span></span>
+            <div class="sp-person-meta">
+              {% for t in c.tools %}<span class="sp-person-chip">{{ t }}</span>{% endfor %}
+              <span class="sp-person-plan">{% trans count=c.entries %}{{ count }} entry{% pluralize %}{{ count }} entries{% endtrans %}{% if summary.measure == "spend" %} · {% trans value=c.api %}{{ value }} API value{% endtrans %}{% endif %}</span>
+            </div>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+      {% if summary.people_more %}<p class="sp-text-muted-xs" data-testid="aiu-issue-people-more">{% trans count=summary.people_more %}{{ count }} more person not shown.{% pluralize %}{{ count }} more people not shown.{% endtrans %}</p>{% endif %}
+    </section>
+    <div class="sp-aiu-issue-side">
+      {{ bar_list(_("Spend by tool") if summary.measure == "spend" else _("API-equivalent value by tool"), summary.tools, "tools") }}
+      {{ bar_list(_("Spend by model") if summary.measure == "spend" else _("API-equivalent value by model"), summary.models, "models") }}
+    </div>
+  </div>
+
+  {% if summary.chart %}
+  <section class="card sp-aiu-chart-card sp-aiu-issue-chart" aria-labelledby="aiu-issue-chart-title" data-testid="aiu-issue-chart">
+    <div class="sp-aiu-chart-head">
+      <h3 class="sp-aiu-issue-card-title" id="aiu-issue-chart-title">{% if summary.chart.time.spend %}{% trans %}API-equivalent value and spend over time{% endtrans %}{% else %}{% trans %}API-equivalent value over time{% endtrans %}{% endif %}</h3>
+      <fieldset class="sp-aiu-chart-switch" data-testid="aiu-issue-chart-switch">
+        <legend class="sp-visually-hidden">{% trans %}Split the value by{% endtrans %}</legend>
+        {%- for key in summary.chart.time.stacks %}
+        <label class="sp-aiu-chart-switch-option"><input type="radio" name="aiu-issue-chart-stack" value="{{ key }}"{% if loop.first %} checked{% endif %} data-sp-chart-switch="aiu-issue-chart-time"> {% if key == "user" %}{% trans %}By user{% endtrans %}{% elif key == "tool" %}{% trans %}By tool{% endtrans %}{% else %}{% trans %}By model{% endtrans %}{% endif %}</label>
+        {%- endfor %}
+      </fieldset>
+    </div>
+    <div id="aiu-issue-chart-time" class="sp-spend-chart sp-aiu-issue-chart-box" role="img"
+         aria-label="{{ _('API-equivalent value over time; the totals and the table hold the numbers') }}"
+         data-sp-chart-mode="{{ (summary.chart.time.stacks | list | first) or 'tool' }}"
+         data-sp-spend-chart='{{ summary.chart.time | tojson }}'></div>
+    <p class="sp-text-muted-xs sp-aiu-chart-caption">
+      {%- if summary.chart.bucket == "month" %}{% trans %}Per month (UTC).{% endtrans %}{% elif summary.chart.bucket == "week" %}{% trans %}Per week, from Monday (UTC).{% endtrans %}{% elif summary.chart.bucket in ("quarter", "year") %}{% trans %}Per quarter or year (UTC).{% endtrans %}{% else %}{% trans %}Per day (UTC).{% endtrans %}{% endif %}
+      {%- if summary.chart.time.seat %} {% trans %}The spend line is pay-per-use charges plus seat cost; the dashed line is the seat cost alone.{% endtrans %}{% endif %}
+      {%- if summary.chart.unpriced %} {% trans %}Periods marked * have entries without a price.{% endtrans %}{% endif %}
+    </p>
+  </section>
+  {% endif %}
+
+  <section class="sp-aiu-issue-sessions" id="aiu-issue-sessions" aria-labelledby="aiu-issue-sessions-title" data-testid="aiu-issue-sessions">
+    <div class="sp-aiu-issue-sessions-head">
+      <h3 class="sp-aiu-issue-card-title" id="aiu-issue-sessions-title" tabindex="-1">{% trans %}Sessions{% endtrans %}</h3>
+      <span class="sp-text-muted-xs" data-testid="aiu-issue-range">{% trans first=sessions.first, last=sessions.last, total=sessions.total %}%(first)s–%(last)s of %(total)s{% endtrans %}</span>
+    </div>
+    {% if sessions.rows %}
+    <div class="sp-table-scroll">
+    <table class="sp-table sp-drill-table sp-drill-sessions sp-aiu-s-table" data-testid="aiu-issue-sessions-table">
+      <caption class="sp-visually-hidden">{% trans %}The entries of this issue, newest first{% endtrans %}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{% trans %}Date{% endtrans %}</th>
+          <th scope="col">{% trans %}Person{% endtrans %}</th>
+          <th scope="col">{% trans %}Tool{% endtrans %} / {% trans %}Model{% endtrans %}</th>
+          <th scope="col" class="sp-aiu-num">{% trans %}Tokens{% endtrans %}</th>
+          <th scope="col">{% trans %}Cost type{% endtrans %}</th>
+          <th scope="col" class="sp-aiu-num">{% trans %}Spend{% endtrans %}</th>
+          {% if sessions.show_issue %}<th scope="col">{% trans %}Issue{% endtrans %}</th>{% endif %}
+          <th scope="col">{% trans %}Branch{% endtrans %}</th>
+          <th scope="col"><span class="sp-visually-hidden">{% trans %}Actions{% endtrans %}</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in sessions.rows %}
+        <tr data-entry-id="{{ r.id }}" data-testid="aiu-issue-session">
+          <td class="sp-aiu-date sp-aiu-s-date" data-label="{{ _('Date') }}">{{ r.usage_date }}</td>
+          <td class="sp-aiu-s-person" data-label="{{ _('Person') }}"><span class="sp-drill-name"><span class="sp-swatch sp-slot-{{ r.slot }}" aria-hidden="true"></span>{{ r.user_name }}</span></td>
+          <td class="sp-aiu-s-tool" data-label="{{ _('Tool') }}">{{ r.tool }}<span class="sp-aiu-s-model sp-aiu-model" title="{{ r.model }}">{{ r.model }}</span></td>
+          <td class="sp-aiu-num sp-aiu-s-tokens" data-label="{{ _('Tokens') }}" title="{{ r.total_tokens }}: {{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}">{{ r.tokens_short }}</td>
+          <td class="sp-aiu-s-type" data-label="{{ _('Cost type') }}"><span class="sp-drill-tag sp-drill-tag--{{ r.cost_type }}">{{ cost_type_label(r.cost_type) }}</span></td>
+          <td class="sp-aiu-num sp-aiu-s-spend" data-label="{{ _('Spend') }}"><strong>{{ r.spend }}</strong></td>
+          {% if sessions.show_issue %}<td class="sp-aiu-s-issue" data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+          <td class="sp-aiu-s-branch" data-label="{{ _('Branch') }}">{% if r.branch %}<code class="sp-drill-branch" title="{{ r.branch }}">{{ r.branch }}</code>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
+          <td class="sp-aiu-actions sp-aiu-s-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" aria-label="{{ _('Edit') }} {{ r.usage_date }} {{ r.user_name }}" data-testid="aiu-issue-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+    <div class="sp-pagination sp-aiu-issue-pages" data-testid="aiu-issue-pages">
+      {% if sessions.pages %}
+      <nav class="sp-pagination-pages" aria-label="{{ _('Pages of sessions') }}">
+        {% if sessions.prev %}{% call tab_link(sessions.prev, cls="sp-page-link", focus="aiu-issue-sessions-title", label=_("Previous page"), testid="aiu-issue-prev") %}&laquo;{% endcall %}{% endif %}
+        {% for p in sessions.pages %}
+          {% if p.gap %}<span class="sp-page-link dots" aria-hidden="true">&hellip;</span>
+          {% elif p.current %}<span class="sp-page-link active" aria-current="page">{{ p.number }}</span>
+          {% else %}{% call tab_link(p, cls="sp-page-link", focus="aiu-issue-sessions-title", label=_("Page %(num)d") % {"num": p.number}, testid="aiu-issue-page") %}{{ p.number }}{% endcall %}{% endif %}
+        {% endfor %}
+        {% if sessions.next %}{% call tab_link(sessions.next, cls="sp-page-link", focus="aiu-issue-sessions-title", label=_("Next page"), testid="aiu-issue-next") %}&raquo;{% endcall %}{% endif %}
+      </nav>
+      {% endif %}
+      {% if sessions.total > sessions.sizes[0].size %}
+      <nav class="sp-pagination-size sp-aiu-issue-sizes" aria-label="{{ _('Sessions per page') }}">
+        <span aria-hidden="true">{% trans %}Show{% endtrans %}</span>
+        {% for s in sessions.sizes %}
+          {% if s.current %}<span class="sp-page-link active" aria-current="true">{{ s.size }}</span>
+          {% else %}{% call tab_link(s, cls="sp-page-link", focus="aiu-issue-sessions-title", label=_("%(num)d per page") % {"num": s.size}, testid="aiu-issue-size") %}{{ s.size }}{% endcall %}{% endif %}
+        {% endfor %}
+      </nav>
+      {% endif %}
+    </div>
+    <p class="sp-text-muted-xs sp-drill-hint">{% trans %}Each entry is one tool's usage of one model on one day, as reported. Spend includes the entry's share of its subscription where you may see seat cost.{% endtrans %}</p>
+  </section>
+
+  {% else %}
+  <div class="card sp-aiu-issue-empty" data-testid="aiu-empty">
+    <p class="sp-aiu-issue-empty-title">{% if state.sub %}{% trans %}No AI usage logged on this issue or its sub-issues yet.{% endtrans %}{% else %}{% trans %}No AI usage logged on this issue yet.{% endtrans %}{% endif %}</p>
+    <p class="sp-text-muted-xs">{% trans %}Usage counts for an issue when its reporter names the issue (for example with the SPECIVO_ISSUE environment variable), when the agent marks the issue it works on through Specivo's MCP server, when the session's commits are linked to it, or when the branch name holds its key. You can also log usage by hand or move entries here from My AI usage.{% endtrans %}</p>
+    <p class="sp-text-muted-xs"><a href="{{ guide_url }}" target="_blank" rel="noopener" data-testid="aiu-issue-guide">{% trans %}How usage is attributed to an issue{% endtrans %}</a>{% if excluded %} · <a href="{{ excluded_url }}" data-testid="aiu-issue-excluded">{% trans count=excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}</a>{% endif %}</p>
+  </div>
+  {% endif %}
+</div>

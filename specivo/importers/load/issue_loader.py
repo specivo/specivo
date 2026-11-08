@@ -54,6 +54,8 @@ from specivo.models.sprint import Sprint
 from specivo.models.watcher import Watcher
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import record_source_refs
+from specivo.services.metadata_schema_service import MetadataSchemaService, invalid_keys
 from specivo.services.tag_service import TagService
 
 logger = logging.getLogger(__name__)
@@ -63,12 +65,15 @@ CONVERTER_STATE_KEY = "converter"
 CONVERSION_CONTEXT_STATE_KEY = "conversion_context"
 # The issues this run created, by source ref: a child is created under one of these at once.
 CREATED_ISSUES_STATE_KEY = "issues_created"
+# Schema definitions per (project id, tracker id), read once per run.
+SCHEMAS_STATE_KEY = "issue_metadata_schemas"
 # Unresolved history refs named in the warning about them.
 _MAX_EXAMPLES = 10
 # What a custom field change whose values name a record is stored as.
 _CF_REFERENCE_PROPERTIES = {EntityType.USER: CF_USER, EntityType.VERSION: CF_VERSION}
 
 _issue_service = IssueService()
+_metadata_schema_service = MetadataSchemaService()
 _tag_service = TagService()
 
 
@@ -113,7 +118,11 @@ async def load_issues(ctx: PhaseContext) -> None:
         parents: set[str] = set()
         async for ir in ctx.adapter.extract_issues(project_ref):
             updated_at[ir.source_ref] = ir.updated_at
-            if await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.source_ref):
+            existing_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.source_ref)
+            if existing_id:
+                # The issue stays as it is, but running a bundle again refreshes
+                # how its number is named and adds numbers merged into it.
+                await _record_source_refs(ctx, existing_id, ir)
                 ctx.summary.record_skipped(EntityType.ISSUE)
                 continue
             issue = await _create_issue(ctx, project, ir)
@@ -156,6 +165,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         parent_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.parent_ref)
 
     metadata = await _metadata(ctx, ir)
+    await _report_schema_mismatches(ctx, project, tracker_id, ir, metadata)
 
     try:
         issue = await _issue_service.create(
@@ -184,14 +194,17 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
             # is kept as it was, whatever the tracker's default says.
             check_privacy_permission=False,
             limit_text_length=False,
+            # Values are history: one that breaks its schema today (or a field
+            # the source made required later) is kept, and reported above.
+            validate_metadata=False,
         )
     except AppError as exc:
         ctx.warn("Issue could not be created; skipped", issue=ir.source_ref, reason=str(exc))
         return None
 
     if ir.remaining_estimate is not None:
-        # Not part of IssueCreate: nothing in Specivo edits it, so it is kept
-        # as the source left it. Flushed before the timestamps are restored.
+        # Written on the row rather than through IssueCreate, so it is kept
+        # exactly as the source left it. Flushed before the timestamps are restored.
         issue.remaining_estimate = ir.remaining_estimate
         await ctx.session.flush()
     await _set_sprint(ctx, issue, ir)
@@ -216,10 +229,25 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         )
 
     await ctx.id_map.put(ctx.session, EntityType.ISSUE, ir.source_ref, "issues", issue.id)
+    await _record_source_refs(ctx, issue.id, ir)
     created.add(ir.source_ref)
     ctx.summary.record_created(EntityType.ISSUE)
     ctx.tick()
     return issue
+
+
+async def _record_source_refs(ctx: PhaseContext, issue_id: int, ir: IRIssue) -> None:
+    """Keep the number people know this issue by, for as long as the issue exists."""
+    await record_source_refs(
+        ctx.session,
+        issue_id,
+        source_system=ctx.id_map.source_system,
+        # Optional for an adapter: BaseSourceAdapter and the bundle define it.
+        source_label=getattr(ctx.adapter, "source_label", None) or ctx.id_map.source_system.capitalize(),
+        source_ref=ir.source_ref,
+        source_key=ir.source_key,
+        aliases=ir.source_aliases,
+    )
 
 
 async def _set_sprint(ctx: PhaseContext, issue: Issue, ir: IRIssue) -> None:
@@ -281,6 +309,30 @@ async def _metadata(ctx: PhaseContext, ir: IRIssue) -> dict[str, Any]:
         elif found:
             metadata[value.key] = found[0]
     return metadata
+
+
+async def _report_schema_mismatches(
+    ctx: PhaseContext, project: Project, tracker_id: int, ir: IRIssue, metadata: dict[str, Any]
+) -> None:
+    """Warn about each custom field whose value does not match the project's schemas.
+
+    Nothing is refused: the value is kept as the source has it, and the report
+    names the issue and the field so they can be fixed afterwards. The schemas
+    the import wrote still apply to new issues and later edits.
+    """
+    cache: dict[tuple[int, int], list[dict]] = ctx.state.setdefault(SCHEMAS_STATE_KEY, {})
+    definitions = cache.get((project.id, tracker_id))
+    if definitions is None:
+        schemas = await _metadata_schema_service.schemas_for(ctx.session, project.id, tracker_id, "issue")
+        definitions = cache[(project.id, tracker_id)] = [schema.schema_definition for schema in schemas]
+    bad: set[str] = set()
+    for definition in definitions:
+        bad |= invalid_keys(metadata, definition)
+    for key in sorted(bad):
+        if key:
+            ctx.warn("Custom field value does not match its schema; kept", issue=ir.source_ref, field=key)
+        else:
+            ctx.warn("Custom field value does not match its schema; kept", issue=ir.source_ref)
 
 
 async def _resolve_author(ctx: PhaseContext, author_ref: str | None):

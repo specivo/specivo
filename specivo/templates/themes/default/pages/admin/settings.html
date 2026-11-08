@@ -55,6 +55,14 @@
       <div class="form-hint">{% trans %}Full-text search analyzer language for the whole instance. Projects can override this. Changing it does not update already-indexed content until you reindex.{% endtrans %}</div>
       {% include "pages/_fts_reindex.html" %}
     </div>
+    <div class="form-group">
+      <input type="hidden" name="similar_issues_enabled" value="false">
+      <label class="checkbox-row" for="similar_issues_enabled">
+        <input type="checkbox" name="similar_issues_enabled" id="similar_issues_enabled" value="true"{{ ' checked' if similar_issues_enabled }} class="sp-checkbox-accent-pointer">
+        {% trans %}Suggest similar issues on the new issue form{% endtrans %}
+      </label>
+      <div class="form-hint">{% trans %}While someone types a subject, up to five issues of the same project with a similar subject are listed, to help avoid duplicates. Projects can turn it off for themselves.{% endtrans %}</div>
+    </div>
     <button type="submit" class="sp-btn sp-btn-primary" style="margin-top: var(--sp-space-md);">{% trans %}Save{% endtrans %}</button>
   </form>
 </div>
@@ -83,6 +91,17 @@
     <input type="hidden" name="enabled" value="1">
     <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Turn on{% endtrans %}</button>
     {% endif %}
+  </form>
+  <form method="post" action="/admin/settings/search-engines/" style="margin-top: var(--sp-space-lg);" data-testid="search-engine-indexing-form">
+    <div class="form-group">
+      <input type="hidden" name="search_engine_indexing" value="false">
+      <label class="checkbox-row" for="search_engine_indexing">
+        <input type="checkbox" name="search_engine_indexing" id="search_engine_indexing" value="true"{{ ' checked' if search_engine_indexing }} class="sp-checkbox-accent-pointer">
+        {% trans %}Let search engines index public pages{% endtrans %}
+      </label>
+      <div class="form-hint">{% trans %}Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting.{% endtrans %}</div>
+    </div>
+    <button type="submit" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Save{% endtrans %}</button>
   </form>
 </div>
 

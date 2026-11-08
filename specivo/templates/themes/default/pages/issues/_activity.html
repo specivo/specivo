@@ -10,7 +10,8 @@
     <div style="flex-shrink:0;">
       {{ avatar(j.user.login if j.user else '?', 'sm',
          color=j.user.preferences.avatar_color|default('') if j.user else '',
-         avatar_url=j.user.avatar_url|default('') if j.user else '') }}
+         avatar_url=j.user.avatar_url|default('') if j.user else '',
+         display_name=j.user.display_name|default('') if j.user else '') }}
     </div>
     {% endif %}
     <div style="flex:1;min-width:0;width:100%;">
@@ -31,12 +32,23 @@
          ActivityLookups.hides). Without the lookups, every relation and
          parent change is left out. #}
       {% set names = lookup_maps if lookup_maps is defined and lookup_maps is not none else none %}
+      {# A sprint started or completed is named only through the lookups
+         (ActivityLookups.sprint_name), which hide it when the reader may not
+         open the sprint's project; without them it is left out. #}
       {% for d in j.details if not (names.hides(d, anonymous=anonymous) if names is not none
-           else (d.prop_key == 'parent_id' or d.property == 'relation' or (anonymous and d.property == 'attachment'))) %}
+           else (d.prop_key == 'parent_id' or d.property in ('relation', 'sprint') or (anonymous and d.property == 'attachment'))) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}
         {% if anonymous %}«{{ d.new_value }}»{% else %}«<a href="/projects/{{ issue.project_key }}/recurring-patterns/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>»{% endif %}
+        {% elif d.property == 'sprint' %}
+        {% set sprint_name = names.sprint_name(d) %}
+        {% set sprint_key = names.sprint_project_key(d) %}
+        {# Like the recurring line, a visitor without an account gets the name without a link. #}
+        {% set sprint_label %}{% if anonymous or not sprint_key %}«{{ sprint_name }}»{% else %}«<a href="/projects/{{ sprint_key }}/sprints/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ sprint_name }}</a>»{% endif %}{% endset %}
+        <span class="sp-journal-sprint" data-sprint-event="{{ d.prop_key }}">
+        {% if d.prop_key == 'completed' %}{% trans sprint=sprint_label %}Sprint %(sprint)s completed{% endtrans %}{% else %}{% trans sprint=sprint_label %}Sprint %(sprint)s started{% endtrans %}{% endif %}
+        </span>
         {% elif d.property == 'relation' %}
         {% if d.new_value and not d.old_value %}
         {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>

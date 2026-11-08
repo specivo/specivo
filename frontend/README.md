@@ -14,14 +14,15 @@ serves at runtime. The runtime never needs Node — only this build step does.
 
 ```
 frontend/
-  build.js              esbuild driver (3 entries -> 3 bundles)
+  build.js              esbuild driver (4 entries -> 4 bundles)
   css/specivo.css       CSS entry: @import list in cascade order
   css/*.css             partials by layer (tokens, base, components, features)
   css/pages/*.css       page-specific partials
   js/alpine-init.js     registers every Alpine.data component + store
   js/app.js             wires the vanilla (non-Alpine) modules on DOMContentLoaded
+  js/spend-chart.js     AI spend report and My AI usage charts (ECharts); its own bundle, loaded by those pages only
   js/stores.js          Alpine store factories (notifications, sidebar)
-  js/lib/*.js           shared helpers (csrf, anchored-menu)
+  js/lib/*.js           shared helpers (csrf, anchored-menu, echarts: the tree-shaken chart library)
   js/components/*.js     one Alpine factory per file
   js/features/*/        complex features (markdown editor)
   js/modules/*.js        vanilla initX() modules

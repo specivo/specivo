@@ -114,6 +114,12 @@ class BundleSourceAdapter(BaseSourceAdapter):
         return self._id_map_system
 
     @property
+    def source_label(self) -> str:
+        """The name the manifest gives the source for readers, or the default."""
+        label: str | None = self.index.manifest["source"].get("label")
+        return (label or "").strip() or super().source_label
+
+    @property
     def links_path(self) -> Path:
         """The links file: ``--links-file``, or one named after the scope next to the bundle.
 

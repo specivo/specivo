@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import Any
 
@@ -28,10 +28,11 @@ from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.services.api_key_scope import project_in_scope, scope_clause
 from specivo.services.computed_metadata_service import load_project_settings, strip_computed
+from specivo.services.issue_list_filters import NO_VALUE
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
-from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
+from specivo.services.nested_set_service import NestedSetService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.webhook_events import emit_issue_created, emit_issue_deleted, emit_issue_updated
 
@@ -192,8 +193,14 @@ class IssueService:
                 status_code=422,
             )
 
-    async def _validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
-        """Validate that sprint_id belongs to the same project and is active or planned."""
+    async def validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
+        """Validate that issues of *project_id* may be put in sprint *sprint_id*.
+
+        The sprint must exist, belong to the project and be active or planned:
+        a completed sprint's membership never grows. Raises a 422 ``AppError``
+        otherwise. Used by issue create and update, and by
+        ``SprintService.complete_sprint`` for the sprint it moves issues to.
+        """
         from specivo.models.sprint import Sprint
 
         result = await session.execute(select(Sprint).where(Sprint.id == sprint_id))
@@ -514,6 +521,7 @@ class IssueService:
         original_occurrence_at: datetime | None = None,
         check_privacy_permission: bool = True,
         limit_text_length: bool = True,
+        validate_metadata: bool = True,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
 
@@ -535,6 +543,11 @@ class IssueService:
 
         ``limit_text_length=False`` lets the import pipeline keep a description
         longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
+
+        ``validate_metadata=False`` stores metadata without checking it against
+        the project's schemas. The import pipeline keeps history that way (and
+        reports values that do not match); recurring generation uses it because
+        the pattern's template was validated when the pattern was saved.
         """
         if limit_text_length:
             check_markdown_length(data.description, "description")
@@ -563,7 +576,7 @@ class IssueService:
 
         # Validate sprint_id if provided
         if data.sprint_id is not None:
-            await self._validate_sprint(session, data.sprint_id, project.id)
+            await self.validate_sprint(session, data.sprint_id, project.id)
 
         # Strip project-derived (computed) metadata so it is never stored on the
         # issue — it is overlaid on read instead. This makes the field
@@ -571,7 +584,8 @@ class IssueService:
         stored_metadata = strip_computed(data.metadata, project.settings)
 
         # Validate metadata against schemas (if any exist for this project/tracker)
-        await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, stored_metadata)
+        if validate_metadata:
+            await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, stored_metadata)
 
         # Atomic sequence increment — guarantees no duplicate sequence_numbers
         # for this project under concurrent inserts.
@@ -611,6 +625,8 @@ class IssueService:
             start_date=data.start_date,
             due_date=data.due_date,
             estimated_hours=data.estimated_hours,
+            original_estimate=data.original_estimate,
+            remaining_estimate=data.remaining_estimate,
             done_ratio=data.done_ratio,
             is_private=is_private,
             # Recurrence provenance — set only by the recurring-pattern generator.
@@ -674,13 +690,7 @@ class IssueService:
         if issue is not None:
             await self._nested_set.validate_parent(session, issue, parent)
             return
-        new_depth = len(await self._nested_set.get_ancestors(session, parent)) + 1
-        if new_depth >= MAX_DEPTH:
-            raise ValidationError(
-                message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
-                field="parent_id",
-                details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
-            )
+        await self._nested_set.check_depth(session, parent)
 
     async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
@@ -1002,8 +1012,9 @@ class IssueService:
         # Workflow validation — before applying changes
         if data.status_id is not None and data.status_id != issue.status_id:
             await self.workflow_service.validate_transition(session, issue, data.status_id, user)
-            # Validate field rules for the target status
-            await self.workflow_service.validate_field_rules(session, issue, data, user, data.status_id)
+        # Field rules apply on every update, for the status the issue ends up in.
+        target_status_id = data.status_id if data.status_id is not None else issue.status_id
+        await self.workflow_service.validate_field_rules(session, issue, data, user, target_status_id)
 
         # Snapshot current values BEFORE applying changes
         old_attrs: dict = {attr: getattr(issue, attr) for attr, _ in _JOURNALIZED_ATTRS}
@@ -1034,24 +1045,37 @@ class IssueService:
             issue.due_date = data.due_date
         if data.estimated_hours is not None:
             issue.estimated_hours = data.estimated_hours
+        if data.original_estimate is not None:
+            issue.original_estimate = data.original_estimate
+        if data.remaining_estimate is not None:
+            issue.remaining_estimate = data.remaining_estimate
         if data.done_ratio is not None:
             issue.done_ratio = data.done_ratio
         if data.is_private is not None:
             issue.is_private = data.is_private
-        if "sprint_id" in data.model_fields_set:
+        # Re-sending the sprint the issue is already in is not a change, so it
+        # passes even when that sprint is completed.
+        if "sprint_id" in data.model_fields_set and data.sprint_id != issue.sprint_id:
             if data.sprint_id is not None:
-                await self._validate_sprint(session, data.sprint_id, issue.project_id)
+                await self.validate_sprint(session, data.sprint_id, issue.project_id)
             issue.sprint_id = data.sprint_id
         if data.metadata is not None:
             # Strip project-derived (computed) metadata — it is never stored and
             # cannot be set/overridden by a client (see create()).
             project_settings = await load_project_settings(session, issue.project_id)
             stored_metadata = strip_computed(data.metadata, project_settings)
-            # Validate against schemas using the effective tracker_id
-            # (may have been changed in this same update)
+            # Validate the keys this update changes against the schemas of the
+            # effective tracker (it may change in this same update). Keys left
+            # as they were are not judged, so an old invalid value elsewhere
+            # does not block the write, and a tracker change alone re-validates
+            # nothing.
             effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
             await self._metadata_schema_service.validate_metadata(
-                session, issue.project_id, effective_tracker_id, stored_metadata
+                session,
+                issue.project_id,
+                effective_tracker_id,
+                stored_metadata,
+                previous=issue.issue_metadata or {},
             )
             issue.issue_metadata = stored_metadata
 
@@ -1365,7 +1389,11 @@ class IssueService:
         # ------------------------------------------------------------------
         if filters.get("tracker_id") is not None:
             stmt = stmt.where(Issue.tracker_id == filters["tracker_id"])
-        if filters.get("assigned_to_id") is not None:
+        # ``"none"`` (NO_VALUE) selects the issues without an assignee / target
+        # version; see specivo.services.issue_list_filters.
+        if filters.get("assigned_to_id") == NO_VALUE:
+            stmt = stmt.where(Issue.assigned_to_id.is_(None))
+        elif filters.get("assigned_to_id") is not None:
             stmt = stmt.where(Issue.assigned_to_id == filters["assigned_to_id"])
         if filters.get("priority_id") is not None:
             stmt = stmt.where(Issue.priority_id == filters["priority_id"])
@@ -1373,7 +1401,9 @@ class IssueService:
             stmt = stmt.where(Issue.category_id == filters["category_id"])
         if filters.get("author_id") is not None:
             stmt = stmt.where(Issue.author_id == filters["author_id"])
-        if filters.get("version_id") is not None:
+        if filters.get("version_id") == NO_VALUE:
+            stmt = stmt.where(Issue.fixed_version_id.is_(None))
+        elif filters.get("version_id") is not None:
             stmt = stmt.where(Issue.fixed_version_id == filters["version_id"])
         if filters.get("sprint_id") is not None:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
@@ -1498,14 +1528,24 @@ class IssueService:
         query: str,
         user: User,
         limit: int = 10,
+        *,
+        project_keys: Collection[str] | None = None,
+        offset: int = 0,
     ) -> list[dict]:
         """Search issues by key or subject for autocomplete.
 
         Returns only issues *user* may see, filtered by ``visible_issues_clause``
         so autocomplete never exposes more than issue listing does.
+
+        *project_keys* narrows the search to those projects (an empty
+        collection matches nothing); with it an empty *query* lists the most
+        recently updated issues, so a picker can show suggestions before the
+        user types. *offset* pages through the matches.
         """
         q = query.strip()
-        if not q:
+        if project_keys is not None and not project_keys:
+            return []
+        if not q and project_keys is None:
             return []
 
         # Escape LIKE wildcards in user input
@@ -1523,15 +1563,19 @@ class IssueService:
                 IssueStatus.name.label("status_name"),
             )
             .join(IssueStatus, Issue.status_id == IssueStatus.id)
-            .where(
+            .order_by(Issue.updated_at.desc(), Issue.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        if q:
+            stmt = stmt.where(
                 or_(
                     display_key_expr.ilike(f"%{escaped}%", escape="\\"),
                     Issue.subject.ilike(f"%{escaped}%", escape="\\"),
                 )
             )
-            .order_by(Issue.updated_at.desc())
-            .limit(limit)
-        )
+        if project_keys is not None:
+            stmt = stmt.where(Issue.project_key.in_(sorted(project_keys)))
 
         visibility = await self.visible_issues_clause(session, user)
         if visibility is not None:

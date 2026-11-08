@@ -30,18 +30,40 @@
 .filter-tab.active { background: var(--sp-accent); color: var(--sp-accent-text); box-shadow: var(--sp-shadow-sm); }
 
 .filter-bar { display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-lg); flex-wrap: wrap; }
-.filter-select { padding: 6px 28px 6px 10px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-input); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); outline: none; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A8A8A' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+/* Filter bar controls share --sp-control-height with .sp-btn, so a row of
+   selects, inputs and an Apply button lines up. A select's arrow comes from
+   the base select rule in forms.css. White like every other field: the grey
+   fill read as disabled. */
+.filter-select { min-height: var(--sp-control-height); padding: 4px 10px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background-color: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); line-height: 1.5; color: var(--sp-text-primary); outline: none; cursor: pointer; }
 .filter-select:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
-.filter-search { padding: 6px 10px 6px 30px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-input); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); width: 200px; outline: none; }
+
+/* Searchable filter fields (filterCombobox): assignee, tag, release. A field
+   without a value is a text input with a suggestion list; a chosen value is a
+   chip with a clear link. */
+.sp-filter-combo { position: relative; flex: 0 1 11rem; min-width: 8rem; }
+/* A text field, but it opens a list: keep the select arrow as the cue. */
+.sp-filter-combo-input { width: 100%; cursor: text; padding-right: var(--sp-select-padding-right); background-image: var(--sp-select-arrow); background-repeat: no-repeat; background-position: right var(--sp-select-arrow-inset) center; }
+.sp-filter-combo-input::placeholder { color: var(--sp-text-muted); }
+.sp-filter-combo-menu { list-style: none; margin: 0; padding: 0; min-width: min(14rem, calc(100vw - 32px)); }
+.sp-filter-combo-menu .sp-ac-row { align-items: center; }
+.sp-filter-combo-special .sp-ac-name { font-style: italic; }
+.sp-filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: var(--sp-control-height); max-width: 16rem; min-width: 0; padding: 4px 4px 4px 8px; border: 1px solid var(--sp-border-focus); border-radius: var(--sp-border-radius); background: var(--sp-bg-input); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); }
+.sp-filter-chip .sp-tag-ac-color { margin-right: 0; }
+.sp-filter-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sp-filter-chip-clear { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; color: var(--sp-text-muted); }
+.sp-filter-chip-clear:hover, .sp-filter-chip-clear:focus-visible { background: var(--sp-bg-muted, rgba(0, 0, 0, 0.05)); color: var(--sp-text-primary); }
+.sp-filter-chip-clear svg { width: 12px; height: 12px; }
+.sp-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.filter-search { min-height: var(--sp-control-height); padding: 4px 10px 4px 30px; line-height: 1.5; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); width: 200px; outline: none; }
 .filter-search:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
-.filter-input { padding: 6px 10px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); outline: none; width: 130px; }
+.filter-input { min-height: var(--sp-control-height); padding: 4px 10px; line-height: 1.5; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); outline: none; width: 130px; }
 .filter-input:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
 .filter-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); font-weight: 500; }
 
 /* ============================================================
    VIEW TOGGLE
    ============================================================ */
-.view-toggle { display: flex; gap: 2px; background: var(--sp-bg-input); border-radius: var(--sp-border-radius); padding: 2px; margin-left: auto; }
+.view-toggle { display: flex; min-height: var(--sp-control-height); gap: 2px; background: var(--sp-bg-input); border-radius: var(--sp-border-radius); padding: 2px; margin-left: auto; }
 .view-toggle-btn { padding: 5px 10px; border: none; background: transparent; border-radius: 4px; cursor: pointer; color: var(--sp-text-muted); transition: all 0.15s; display: flex; align-items: center; gap: 4px; font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); }
 .view-toggle-btn.active { background: var(--sp-accent); color: var(--sp-accent-text); }
 .view-toggle-btn svg { width: 14px; height: 14px; }
@@ -66,3 +88,8 @@
 .bulk-toolbar { display: flex; align-items: center; gap: var(--sp-space-md); padding: var(--sp-space-sm) var(--sp-space-lg); background: rgba(196, 154, 60, 0.08); border-bottom: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm); }
 .bulk-toolbar .selected-count { font-weight: 600; color: var(--sp-accent); }
 
+
+/* Numeric columns: the header follows the right-aligned cells. The table
+   header rules above (.sp-table th and friends) set text-align: left with a
+   higher specificity than the page-level number classes, so restate it here. */
+table th.sp-aiu-num, table th.sp-sub-num, table th.sp-mp-num { text-align: right; }

@@ -26,10 +26,8 @@
   </div>
 
   <div class="search-controls">
-    {# Mode toggle. Semantic and hybrid both run an embedding model, which is
-       cost a visitor without an account must not be able to spend, so they get
-       keyword search and no switch to offer them anything else. #}
-    {% if not anonymous %}
+    {# Mode toggle, offered to everyone. Hybrid runs the embedding model; what
+       bounds that cost is the per-IP search budget, not the mode. #}
     <div class="mode-toggle">
       {% set mode_labels = {'hybrid': _('Hybrid'), 'keyword': _('Keyword')} %}
       {% for m in ['hybrid', 'keyword'] %}
@@ -37,7 +35,6 @@
               @click="$refs.modeInput.value = '{{ m }}'; submitting = true; $el.closest('form').submit()">{{ mode_labels[m] }}</button>
       {% endfor %}
     </div>
-    {% endif %}
 
     {# Scope tabs with icons and backend counts #}
     <div class="scope-tabs">

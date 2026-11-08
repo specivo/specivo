@@ -21,8 +21,22 @@ Copyright 2014 - 2022 Knut Sveidqvist
 Diagrams from text, used for mermaid code blocks in wiki pages, issues and comments.
 https://github.com/mermaid-js/mermaid
 
-## Observable Plot — ISC License
-Copyright 2020-2024 Observable, Inc.
+## Apache ECharts 6.1.0 — Apache License 2.0
+Copyright 2017-2026 The Apache Software Foundation
+This product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+Charts of the AI spend reports, bundled (tree-shaken) into specivo/static/dist/js/spend-chart.min.js.
+Parts of ECharts are derived from d3.js, Copyright 2010-2016 Mike Bostock (BSD 3-Clause License).
+https://github.com/apache/echarts
+
+## ZRender 6.1.0 — BSD 3-Clause License
+Copyright (c) 2017, Baidu Inc.
+The rendering engine of Apache ECharts, bundled with it.
+https://github.com/ecomfe/zrender
+
+## tslib 2.3.0 — BSD Zero Clause License
+Copyright (c) Microsoft Corporation
+TypeScript runtime helpers used by Apache ECharts, bundled with it.
+https://github.com/microsoft/tslib
 
 ## DM Sans — SIL Open Font License 1.1
 Copyright 2014-2024 Indian Type Foundry
@@ -37,5 +51,11 @@ Copyright 2020 The JetBrains Mono Project Authors
 Copyright 2023 Microsoft Corporation (intfloat)
 Embedding model for semantic search. 118M parameters, 384 dimensions, 100 languages.
 https://huggingface.co/intfloat/multilingual-e5-small
+
+## LiteLLM model price list — MIT License
+Copyright (c) 2023 Berri AI
+The bundled AI model prices (specivo/data/ai_model_prices.json) are derived from LiteLLM's
+model_prices_and_context_window.json.
+https://github.com/BerriAI/litellm
 
 Full license texts are available in specivo/static/vendor/LICENSES/

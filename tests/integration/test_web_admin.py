@@ -1,7 +1,8 @@
 """Web admin page integration tests.
 
-Verifies admin dashboard, workflows, settings, agent groups,
-and kill switch pages render correctly with proper auth checks.
+Verifies admin dashboard, workflows and settings pages render correctly with
+proper auth checks, and that the unreleased agent groups and kill switch pages
+are gone.
 """
 
 from __future__ import annotations
@@ -67,24 +68,40 @@ async def test_admin_settings_page(admin_client: AsyncClient):
 
 
 @pytest.mark.integration
-async def test_admin_agent_groups_page(admin_client: AsyncClient):
-    """GET /admin/agent-groups with admin returns 200."""
-    token = admin_client.state.token
-    resp = await admin_client.get(
-        "/admin/agent-groups/",
-        cookies={"access_token": token},
-    )
-    assert resp.status_code == 200
-    assert "Agent" in resp.text
+async def test_kill_switch_page_is_gone(admin_client: AsyncClient):
+    """GET /admin/kill-switch/ answers 404, like any unknown admin page."""
+    resp = await admin_client.get("/admin/kill-switch/", cookies={"access_token": admin_client.state.token})
+    assert resp.status_code == 404
 
 
 @pytest.mark.integration
-async def test_admin_kill_switch_page(admin_client: AsyncClient):
-    """GET /admin/kill-switch with admin returns 200."""
-    token = admin_client.state.token
-    resp = await admin_client.get(
-        "/admin/kill-switch/",
-        cookies={"access_token": token},
-    )
+async def test_agent_groups_page_is_gone(admin_client: AsyncClient):
+    """GET /admin/agent-groups/ answers 404, like any unknown admin page."""
+    resp = await admin_client.get("/admin/agent-groups/", cookies={"access_token": admin_client.state.token})
+    assert resp.status_code == 404
+
+
+@pytest.mark.integration
+async def test_admin_dashboard_has_no_unreleased_sections(admin_client: AsyncClient):
+    """The dashboard shows no agent sessions, kill switch or agent group cards."""
+    resp = await admin_client.get("/admin/", cookies={"access_token": admin_client.state.token})
     assert resp.status_code == 200
-    assert "Kill" in resp.text
+    for gone in (
+        "Agent Sessions",
+        "Kill Events",
+        "Kill Switch",
+        "Agent Groups",
+        "/admin/kill-switch/",
+        "/admin/agent-groups/",
+    ):
+        assert gone not in resp.text
+    assert "Total Users" in resp.text and "Active Projects" in resp.text
+
+
+@pytest.mark.integration
+async def test_sidebar_has_no_security_section(admin_client: AsyncClient):
+    """The sidebar has no placeholder agent policy or credential links."""
+    resp = await admin_client.get("/", cookies={"access_token": admin_client.state.token})
+    assert resp.status_code == 200
+    assert "Agent Policies" not in resp.text
+    assert 'sidebar-section-label">Security<' not in resp.text

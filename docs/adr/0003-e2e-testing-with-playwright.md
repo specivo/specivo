@@ -76,11 +76,11 @@ tests/e2e/pages/
 Shared fixtures live in `specivo/testing/e2e_base.py` (mirrors `conftest_base.py`). Plugin repos import them:
 
 ```python
-# specivo-pro/tests/e2e/conftest.py
+# <plugin repo>/tests/e2e/conftest.py
 from specivo.testing.e2e_base import *  # noqa: F401, F403
 ```
 
-Pro/enterprise tests use existing markers: `pytestmark = [pytest.mark.e2e, pytest.mark.pro]`
+A plugin's E2E tests use the same marker: `pytestmark = pytest.mark.e2e`
 
 ### CI integration
 
@@ -116,8 +116,8 @@ Traces saved as artifacts on failure for debugging via Playwright Trace Viewer.
 **Positive:**
 - Catches JS-only bugs (Alpine.js binding, HTMX swaps, cookie auth)
 - Same pytest ecosystem — markers, fixtures, CI pipelines
-- The suite has grown to ~266 collected tests, including the responsive and visual-regression
-  layers added by ADR-0005; it runs serially (`-n 0`) against one uvicorn instance
+- The suite has grown to ~266 collected tests, including the responsive layer added by
+  ADR-0005; it runs serially (`-n 0`) against one uvicorn instance
 - Plugin repos extend naturally via shared fixtures
 - `make test-e2e-headed` for visual debugging
 

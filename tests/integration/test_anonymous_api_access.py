@@ -464,14 +464,14 @@ async def test_expired_bearer_token_is_refused(client: AsyncClient, live: World)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("query", ["mode=semantic", "mode=hybrid", "limit=26", "offset=501"])
+@pytest.mark.parametrize("query", ["limit=26", "offset=501"])
 async def test_search_restrictions_are_enforced(client: AsyncClient, live: World, query: str) -> None:
     resp = await client.get(f"/api/v1/search/?q={TERM}&{query}")
     assert resp.status_code == 401
     assert resp.json() == DENIED
 
 
-@pytest.mark.parametrize("query", ["", "mode=keyword", "limit=25", "offset=500"])
+@pytest.mark.parametrize("query", ["", "mode=keyword", "mode=semantic", "mode=hybrid", "limit=25", "offset=500"])
 async def test_search_within_the_anonymous_bounds_still_works(client: AsyncClient, live: World, query: str) -> None:
     resp = await client.get(f"/api/v1/search/?q={TERM}&{query}")
     assert resp.status_code == 200

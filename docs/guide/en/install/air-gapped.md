@@ -113,3 +113,16 @@ is unavailable.
     Once the images are loaded and the optional model is in place, Specivo needs no outbound
     internet. The only time you go online again is to fetch a newer image for an
     [upgrade](upgrading.md) — repeat the pull/save/transfer/load cycle with the new tag.
+
+## Exchange rates offline
+
+Money reports convert amounts with daily exchange rates. The optional daily fetch of the ECB rates
+is off by default, so an offline host makes no request for them. Enter rates by hand or import a
+`date,base,quote,rate` CSV file carried across with your other transfers; see
+[Exchange rates](exchange-rates.md#air-gapped-installs).
+
+## AI model prices offline
+
+The AI model prices that value AI usage ship inside the image, as of the release date, and are
+loaded without any download. Enter newer or missing prices by hand; see
+[AI model prices](ai-model-prices.md).

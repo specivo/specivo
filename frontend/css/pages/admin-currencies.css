@@ -1,0 +1,16 @@
+/* Admin currencies page: the reporting currency form and the filter row. */
+.sp-currency-reporting-form,
+.sp-currency-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-sm);
+}
+.sp-currency-reporting-form .form-label { margin: 0; }
+.sp-currency-select { width: auto; min-width: 12rem; max-width: 100%; }
+
+@media (max-width: 640px) {
+  .sp-currency-reporting-form,
+  .sp-currency-filter { flex-direction: column; align-items: stretch; }
+  .sp-currency-select { width: 100%; }
+}

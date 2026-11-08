@@ -21,11 +21,30 @@ stopping at the first failure:
 6. resolve the account (:func:`specivo.services.sso.provisioning.resolve_user`);
 7. start a new Specivo session (:meth:`AuthService.create_sso_session`).
 
+**No transaction is open while the IdP answers.** Each IdP call (discovery,
+the token endpoint, JWKS, userinfo, the refresh-token probe of
+:mod:`specivo.services.sso.session_check`) may take up to
+``SSO_HTTP_TIMEOUT_SECONDS``. The read transaction (the provider row, the
+signed-in user of a link) is ended before the first one, so a slow IdP never
+holds a pooled connection, and nothing is written until all of them have
+answered. That is also why a login's refresh-token probe runs before step 6:
+an account that is then refused only cost one more call to the IdP.
+
 A **link** transaction (``intent="link"``, started by a signed-in user from
 their profile with :meth:`SsoLoginService.start_link`) asks the IdP to
 authenticate the person again (``prompt=login``, ``max_age=0``) and must be finished by
 the browser still signed in as that user; step 6 then links the identity and
 step 7 is skipped: the user's existing sessions stay, no new one starts.
+
+A **reauth** transaction (``intent="reauth"``, :meth:`SsoLoginService.start_reauth`)
+is how a signed-in person without a password proves it is them before
+changing their email address: the IdP authenticates them again
+(``prompt=login``, ``max_age=0``), the browser must still be signed in as
+the user who started it, and the identity that comes back must be that
+user's at this provider (:func:`specivo.services.sso.provisioning.confirm_reauth`,
+``sso_reauth_mismatch`` otherwise). Nothing is linked, mapped or updated and
+no session starts; the route records the fresh sign-in for the email change
+(:func:`specivo.services.email_change_service.mark_recent_reauth`).
 
 No session row exists unless every step passed. The IdP's access token is
 used for userinfo only and never stored. Its refresh token is kept, sealed,
@@ -52,18 +71,19 @@ from specivo.services.sso.errors import (
     SsoError,
     SsoIdpRefusedError,
     SsoProviderAlreadyLinkedError,
+    SsoReauthMismatchError,
     SsoStateInvalidError,
     SsoTokenInvalidError,
     TokenRejection,
 )
-from specivo.services.sso.flow import AuthorizationRequest, LoginTransaction, begin, complete
+from specivo.services.sso.flow import FRESH_SIGN_IN_INTENTS, AuthorizationRequest, LoginTransaction, begin, complete
 from specivo.services.sso.id_token import verify_id_token
 from specivo.services.sso.log import logger, sanitize_idp_text
-from specivo.services.sso.provisioning import resolve_user, subject_hash
-from specivo.services.sso.session_check import seal_sign_in_refresh_token
+from specivo.services.sso.provisioning import confirm_reauth, resolve_user, subject_hash
+from specivo.services.sso.session_check import probe_sign_in_refresh_token, record_sign_in_probe
 from specivo.services.sso.tokens import exchange_code, fetch_userinfo
 
-__all__ = ["LINK_RETURN_PATH", "SsoLinkResult", "SsoLoginResult", "SsoLoginService"]
+__all__ = ["LINK_RETURN_PATH", "SsoLinkResult", "SsoLoginResult", "SsoLoginService", "SsoReauthResult"]
 
 #: Where a link flow starts from and returns to.
 LINK_RETURN_PATH = "/my/profile/"
@@ -94,6 +114,25 @@ class SsoLinkResult:
     provider_slug: str
 
 
+@dataclass(frozen=True)
+class SsoReauthResult:
+    """A finished reauth: the signed-in user authenticated again at the IdP; no new session."""
+
+    user_id: int
+    identity_id: int
+    provider_slug: str
+
+
+async def _end_read_transaction(db: AsyncSession) -> None:
+    """End the read transaction before the IdP is asked, so no pooled connection waits on it.
+
+    Nothing has been written at this point (only the provider row and the
+    signed-in user were read; the session keeps them, ``expire_on_commit`` is
+    off), so committing only returns the connection to the pool.
+    """
+    await db.commit()
+
+
 class SsoLoginService:
     """Stateless; the provider, Redis and the DB session carry all state."""
 
@@ -112,8 +151,9 @@ class SsoLoginService:
         )
         return list(rows.scalars().all())
 
-    async def start(self, provider: SsoProvider, *, next_path: str | None) -> AuthorizationRequest:
+    async def start(self, db: AsyncSession, provider: SsoProvider, *, next_path: str | None) -> AuthorizationRequest:
         """Begin a login transaction at ``provider``; ``next_path`` is sanitised by the flow."""
+        await _end_read_transaction(db)
         metadata = await get_provider_metadata(provider)
         return await begin(provider, metadata, intent="login", next_path=next_path)
 
@@ -128,8 +168,24 @@ class SsoLoginService:
         )
         if existing is not None:
             raise SsoProviderAlreadyLinkedError("provider_already_linked")
+        await _end_read_transaction(db)
         metadata = await get_provider_metadata(provider)
         return await begin(provider, metadata, intent="link", next_path=LINK_RETURN_PATH, user_id=user_id)
+
+    async def start_reauth(self, db: AsyncSession, provider: SsoProvider, *, user_id: int) -> AuthorizationRequest:
+        """Begin a reauth transaction for the signed-in ``user_id`` at a provider they are connected to.
+
+        Refused up front with ``sso_reauth_mismatch`` when the user has no
+        identity at ``provider``.
+        """
+        existing = await db.scalar(
+            select(UserIdentity.id).where(UserIdentity.user_id == user_id, UserIdentity.provider_id == provider.id)
+        )
+        if existing is None:
+            raise SsoReauthMismatchError("no_identity_at_provider")
+        await _end_read_transaction(db)
+        metadata = await get_provider_metadata(provider)
+        return await begin(provider, metadata, intent="reauth", next_path=LINK_RETURN_PATH, user_id=user_id)
 
     async def finish(
         self,
@@ -141,12 +197,12 @@ class SsoLoginService:
         device_info: str | None = None,
         ip: str | None = None,
         current_user_id: Callable[[], Awaitable[int | None]] | None = None,
-    ) -> SsoLoginResult | SsoLinkResult:
+    ) -> SsoLoginResult | SsoLinkResult | SsoReauthResult:
         """Run the callback for ``provider`` with the query ``params``; raises an ``SsoError`` on refusal.
 
         ``current_user_id`` returns the user this browser is signed in as; it
-        is called only for a link transaction, which that user must have
-        started.
+        is called only for a link or reauth transaction, which that user must
+        have started.
         """
         tx = await complete(state=params.get("state"), binding_token=binding_token)
         try:
@@ -167,7 +223,7 @@ class SsoLoginService:
         device_info: str | None,
         ip: str | None,
         current_user_id: Callable[[], Awaitable[int | None]] | None,
-    ) -> SsoLoginResult | SsoLinkResult:
+    ) -> SsoLoginResult | SsoLinkResult | SsoReauthResult:
         if tx.provider_id != provider.id or tx.issuer != provider.issuer:
             logger.warning(
                 "sso.callback.rejected provider=%s reason=provider_mismatch started_at=%s",
@@ -176,12 +232,14 @@ class SsoLoginService:
             )
             raise SsoStateInvalidError("provider_mismatch")
 
-        if tx.intent == "link":
+        if tx.intent in FRESH_SIGN_IN_INTENTS:
             signed_in = await current_user_id() if current_user_id is not None else None
             if tx.user_id is None or signed_in != tx.user_id:
-                logger.warning("sso.callback.rejected provider=%s reason=link_user_mismatch", provider.slug)
-                raise SsoStateInvalidError("link_user_mismatch")
+                logger.warning("sso.callback.rejected provider=%s reason=%s_user_mismatch", provider.slug, tx.intent)
+                raise SsoStateInvalidError(f"{tx.intent}_user_mismatch")
 
+        # From here to resolving the account only the IdP is asked.
+        await _end_read_transaction(db)
         metadata = await get_provider_metadata(provider)
 
         iss = params.get("iss")
@@ -226,6 +284,17 @@ class SsoLoginService:
         if (provider.claim_config or {}).get("use_userinfo") is True and metadata.userinfo_endpoint:
             userinfo = await fetch_userinfo(metadata, tokens.access_token, expected_sub=id_token.subject)
             claims.update({k: v for k, v in userinfo.items() if k not in _TOKEN_CLAIMS})
+        probe = await probe_sign_in_refresh_token(provider, metadata, tokens) if tx.intent == "login" else None
+
+        if tx.intent == "reauth":
+            identity = await confirm_reauth(db, provider=provider, id_token=id_token, user_id=tx.user_id)
+            logger.info(
+                "sso.reauth.success provider=%s user_id=%s sub=%s",
+                provider.slug,
+                identity.user_id,
+                subject_hash(id_token.subject),
+            )
+            return SsoReauthResult(user_id=identity.user_id, identity_id=identity.id, provider_slug=provider.slug)
 
         account = await resolve_user(
             db,
@@ -241,7 +310,8 @@ class SsoLoginService:
                 identity_id=account.identity.id,
                 provider_slug=provider.slug,
             )
-        idp_refresh = await seal_sign_in_refresh_token(db, provider, metadata, tokens)
+        assert probe is not None  # a login: link and reauth returned above
+        await record_sign_in_probe(db, provider, probe)
         session = await AuthService().create_sso_session(
             db,
             user=account.user,
@@ -251,8 +321,8 @@ class SsoLoginService:
             idp_sid=id_token.sid,
             device_info=device_info,
             ip=ip,
-            idp_refresh_token_encrypted=idp_refresh.encrypted,
-            idp_checked_at=idp_refresh.checked_at,
+            idp_refresh_token_encrypted=probe.encrypted,
+            idp_checked_at=probe.checked_at,
         )
         sub_hash = subject_hash(id_token.subject)
         logger.info("sso.login.success provider=%s user_id=%s sub=%s", provider.slug, account.user.id, sub_hash)

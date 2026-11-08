@@ -16,8 +16,18 @@ the Celery task ``process_repository_delivery``, which calls
    with ``matched_user_id`` set only from a *verified* email.
 4. Insert the (commit, issue) links with ``ON CONFLICT DO NOTHING``. Only the
    newly inserted ones get a journal, written by ``$git``, and the commit SHA
-   appended to the issue's ``commits`` metadata (no duplicates).
+   appended to the issue's ``commits`` metadata (no duplicates). When the
+   branch name references the issue (whether or not the message does too) and
+   it is not the default branch, the branch goes to ``branches`` as well.
+   A ``Fixes`` link runs its command the first time its commit is seen on
+   the default branch, new link or not, claimed through
+   ``issue_commit_links.fix_ran_at`` so it runs once per (commit, issue).
 5. Mark the delivery ``processed``, ``ignored`` or ``failed`` with a reason.
+
+Other events go by their kind (``ForgeProvider.event_kind``): pull/merge
+requests to ``repository_pull_requests``; reviews, CI, deployments, tags and
+releases to ``repository_activity``. A pushed tag is a tag, not commits.
+A (commit, issue) pair someone detached is never linked again.
 
 The delivery detail never names an issue or a project outside the scope:
 references to them are not references at all (see ``specivo.hooks.refs``).
@@ -31,7 +41,7 @@ import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 from urllib.parse import quote
 
 from sqlalchemy import delete, func, or_, select, tuple_, update
@@ -48,7 +58,7 @@ from specivo.core.constants import (
 )
 from specivo.core.utils import utcnow
 from specivo.hooks.providers import CommitData, PushEvent, get_provider
-from specivo.hooks.refs import Keyword, Ref, extract_branch_refs, extract_refs
+from specivo.hooks.refs import Keyword, Ref, extract_branch_refs, extract_ignored, extract_refs
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.repository import (
@@ -65,6 +75,9 @@ from specivo.models.repository import (
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import real_users_clause
 
+if TYPE_CHECKING:
+    from specivo.services.repository_commands import FixState
+
 logger = logging.getLogger(__name__)
 
 #: Login of the service account that writes commit journals.
@@ -72,6 +85,21 @@ GIT_LOGIN = "$git"
 #: The issue metadata keys commit SHAs and branch names are appended to.
 COMMITS_METADATA_KEY = "commits"
 BRANCHES_METADATA_KEY = "branches"
+
+
+class CommitRef(NamedTuple):
+    """One commit's reference to one issue.
+
+    *source* is where the link comes from: ``"message"`` wins over
+    ``"branch"``, and only message references carry a keyword and commands.
+    *branch_named* says whether the branch name references the issue too,
+    which is what puts the branch in the issue's ``branches`` metadata.
+    """
+
+    ref: Ref
+    source: str
+    branch_named: bool
+
 
 _EVENT_MAX_LENGTH = 50
 _DETAIL_MAX_LENGTH = 1000
@@ -146,6 +174,7 @@ async def record_delivery(
         .values(
             integration_id=integration.id,
             delivery_id=delivery_id,
+            provider=integration.provider,
             event=event[:_EVENT_MAX_LENGTH],
             status=status,
             detail=_truncate(detail, _DETAIL_MAX_LENGTH),
@@ -243,14 +272,16 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
     delivery_pk, forge_delivery_id, integration_id = delivery.id, delivery.delivery_id, integration.id
     if not integration.is_active:
         result = ProcessResult(DELIVERY_IGNORED, "The integration is disabled.")
+    elif delivery.provider != integration.provider:
+        # Queued before the provider changed: the payload is the old forge's
+        # and names the old repository, so it is not read as the new one's.
+        result = ProcessResult(
+            DELIVERY_IGNORED,
+            f"Received from {delivery.provider}; the integration now uses {integration.provider}.",
+        )
     else:
         try:
-            if delivery.event == "pull_request":
-                from specivo.services.repository_pull_requests import process_pull_request
-
-                result = await process_pull_request(session, integration, delivery.payload or {})
-            else:
-                result = await _process_push(session, integration, delivery.payload or {})
+            result = await _dispatch(session, integration, delivery.event, delivery.payload or {})
         except Exception as exc:  # noqa: BLE001 - recorded on the delivery, never lost
             logger.exception(
                 "Repository delivery %d failed",
@@ -284,6 +315,38 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
         },
     )
     return result
+
+
+async def _dispatch(
+    session: AsyncSession, integration: RepositoryIntegration, event: str, payload: dict[str, Any]
+) -> ProcessResult:
+    """Process a delivery by the kind its provider gives the event."""
+    from specivo.hooks import development as dev
+    from specivo.services import repository_activity as activity
+
+    kind = get_provider(integration.provider).event_kind(event)
+    if kind == dev.KIND_PULL_REQUEST:
+        from specivo.services.repository_pull_requests import process_pull_request
+
+        result: ProcessResult = await process_pull_request(session, integration, payload)
+        # GitLab carries approvals on merge request events.
+        reviews = get_provider(integration.provider).parse_reviews(event, payload)
+        if reviews:
+            changed, _reason = await activity.apply_reviews(session, integration, reviews)
+            if changed:
+                result.detail += f" {changed} review(s) recorded."
+        return result
+    if kind == dev.KIND_REVIEW:
+        return await activity.process_review(session, integration, event, payload)
+    if kind == dev.KIND_CI:
+        return await activity.process_ci(session, integration, event, payload)
+    if kind == dev.KIND_DEPLOYMENT:
+        return await activity.process_deployment(session, integration, event, payload)
+    if kind == dev.KIND_RELEASE:
+        return await activity.process_release(session, integration, event, payload)
+    if kind == dev.KIND_PUSH:
+        return await _process_push(session, integration, payload)
+    return ProcessResult(DELIVERY_IGNORED, f"Event {event} is not used by Specivo.")
 
 
 async def scope_project_keys(session: AsyncSession, integration: RepositoryIntegration) -> dict[str, int]:
@@ -379,14 +442,21 @@ async def resolve_references(
     return resolved
 
 
-def _commit_refs(
-    commit: CommitData, branch_refs: Sequence[Ref], known_keys: frozenset[str]
-) -> dict[str, tuple[Ref, str]]:
-    """display key → (ref, source); a reference in the message wins over the branch name."""
-    refs: dict[str, tuple[Ref, str]] = {r.display_key: (r, "branch") for r in branch_refs}
+def _commit_refs(commit: CommitData, branch_refs: Sequence[Ref], known_keys: frozenset[str]) -> dict[str, CommitRef]:
+    """display key → reference; a reference in the message wins over the branch name.
+
+    The message decides what the link means (its keyword and commands), but a
+    key the branch name also carries stays ``branch_named``. ``Ignore KEY-1``
+    in the message drops KEY-1 altogether, branch name included.
+    """
     # Parse only what is stored: the message is capped before the parser sees it.
-    for ref in extract_refs(commit.message[:REPOSITORY_COMMIT_MESSAGE_MAX_CHARS], known_keys):
-        refs[ref.display_key] = (ref, "message")
+    message = commit.message[:REPOSITORY_COMMIT_MESSAGE_MAX_CHARS]
+    ignored = extract_ignored(message, known_keys)
+    refs: dict[str, CommitRef] = {
+        r.display_key: CommitRef(r, "branch", True) for r in branch_refs if r.display_key not in ignored
+    }
+    for ref in extract_refs(message, known_keys):
+        refs[ref.display_key] = CommitRef(ref, "message", ref.display_key in refs)
     return dict(list(refs.items())[:REPOSITORY_MAX_REFS_PER_COMMIT])
 
 
@@ -411,6 +481,10 @@ async def _process_push(
     push = get_provider(integration.provider).parse_push(payload)
     if push.default_branch and push.default_branch != integration.default_branch:
         integration.default_branch = push.default_branch[:255]
+    if push.tag is not None:
+        from specivo.services.repository_activity import process_tag_push
+
+        return await process_tag_push(session, integration, push)
     if push.branch is None:
         return ProcessResult(DELIVERY_IGNORED, f"Not a branch push ({push.ref or 'no ref'}).")
     if not push.commits:
@@ -447,7 +521,7 @@ async def _link_batch(
     session: AsyncSession,
     integration: RepositoryIntegration,
     push: PushEvent,
-    batch: Sequence[tuple[CommitData, dict[str, tuple[Ref, str]]]],
+    batch: Sequence[tuple[CommitData, dict[str, CommitRef]]],
     scope: dict[str, int],
 ) -> tuple[list[tuple[int, int]], list[tuple[str, str, str]]]:
     """Store one batch of referencing commits and their links; journal the new links and run their commands.
@@ -455,7 +529,7 @@ async def _link_batch(
     Returns the new (commit id, issue id) links and the command outcomes.
     """
     # Resolve references to issues in scope. A reference to a missing issue is dropped silently.
-    pairs = {(ref.key, ref.number) for _c, refs in batch for ref, _s in refs.values()}
+    pairs = {(cr.ref.key, cr.ref.number) for _c, refs in batch for cr in refs.values()}
     issue_ids = await resolve_references(session, pairs, scope)
     if not issue_ids:
         return [], []
@@ -497,12 +571,19 @@ async def _link_batch(
     commits = {row.sha: row for row in commit_rows}
 
     # Two references to one issue (its old and its current key) make one link.
-    refs_by_link: dict[tuple[int, int], tuple[Ref, str]] = {}
+    refs_by_link: dict[tuple[int, int], CommitRef] = {}
     for c, refs in batch:
-        for display_key, (ref, source) in refs.items():
+        for display_key, commit_ref in refs.items():
             if display_key in issue_ids:
                 link = (commits[c.sha].id, issue_ids[display_key])
-                refs_by_link[link] = _stronger(refs_by_link.get(link), (ref, source))
+                refs_by_link[link] = _stronger(refs_by_link.get(link), commit_ref)
+    # A pair someone detached is never linked again, whoever redelivers the push.
+    from specivo.services.repository_activity import ITEM_COMMIT, detached_pairs
+
+    for pair in await detached_pairs(session, ITEM_COMMIT, refs_by_link):
+        del refs_by_link[pair]
+    if not refs_by_link:
+        return [], []
     inserted = await session.execute(
         pg_insert(IssueCommitLink)
         .values(
@@ -510,55 +591,134 @@ async def _link_batch(
                 {
                     "commit_id": commit_id,
                     "issue_id": issue_id,
-                    "source": source,
-                    "keyword": ref.keyword if source == "message" else None,
+                    "source": cr.source,
+                    "keyword": cr.ref.keyword if cr.source == "message" else None,
                 }
-                for (commit_id, issue_id), (ref, source) in refs_by_link.items()
+                for (commit_id, issue_id), cr in refs_by_link.items()
             ]
         )
         .on_conflict_do_nothing()
         .returning(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
     )
     new_links = [(commit_id, issue_id) for commit_id, issue_id in inserted.all()]
-    if not new_links:
-        return [], []
     by_id = {row.id: row for row in commit_rows}
-    outcomes = await _record_new_links(
-        session, integration, [(by_id[c], i, *refs_by_link[(c, i)]) for c, i in new_links]
-    )
+    # A fixing link runs its command the first time its commit is seen on the
+    # default branch: in this push, or because it was first pushed there.
+    on_default = push.branch is not None and push.branch == integration.default_branch
+    fix_ready = {
+        link
+        for link, cr in refs_by_link.items()
+        if cr.source == "message"
+        and cr.ref.keyword == "fixes"
+        and (on_default or by_id[link[0]].branch == integration.default_branch)
+    }
+    claimed = await _claim_fixes(session, fix_ready)
+    if not new_links and not claimed:
+        return [], []
+    new = set(new_links)
+    links = [
+        _LinkWork(by_id[c], i, refs_by_link[(c, i)], new=True, fix=_fix_state((c, i), claimed, fix_ready))
+        for c, i in new_links
+    ]
+    links += [_LinkWork(by_id[c], i, refs_by_link[(c, i)], new=False, fix="run") for c, i in sorted(claimed - new)]
+    outcomes = await _record_links(session, integration, links)
     return new_links, outcomes
 
 
-def _stronger(current: tuple[Ref, str] | None, other: tuple[Ref, str]) -> tuple[Ref, str]:
-    """Merge two references to the same issue: the message wins over the branch name, and commands add up."""
+class _LinkWork(NamedTuple):
+    """A (commit, issue) link to act on in this push.
+
+    *new* links get their journal, metadata and time command; *fix* says what
+    the ``Fixes`` command does: ``run``, ``wait`` (the commit is not on the
+    default branch yet) or ``skip`` (it ran before).
+    """
+
+    commit: RepositoryCommit
+    issue_id: int
+    commit_ref: CommitRef
+    new: bool
+    fix: FixState
+
+
+def _fix_state(link: tuple[int, int], claimed: set[tuple[int, int]], fix_ready: set[tuple[int, int]]) -> FixState:
+    if link in claimed:
+        return "run"
+    # On the default branch but not claimed: another delivery ran it already.
+    return "skip" if link in fix_ready else "wait"
+
+
+async def _claim_fixes(session: AsyncSession, links: Iterable[tuple[int, int]]) -> set[tuple[int, int]]:
+    """Mark the fixing links whose command has not run yet; returns the ones this call marked.
+
+    The rows are locked in key order and re-checked after any wait, so of two
+    deliveries carrying the same commit to the default branch (a redelivery,
+    a replay after a force-push, a merge and a fast-forward) only one runs
+    the command.
+    """
+    wanted = sorted(set(links))
+    if not wanted:
+        return set()
+    pair = tuple_(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
+    rows = await session.execute(
+        select(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
+        .where(
+            pair.in_(wanted),
+            IssueCommitLink.fix_ran_at.is_(None),
+            IssueCommitLink.source == "message",
+            IssueCommitLink.keyword == "fixes",
+        )
+        .order_by(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
+        .with_for_update()
+    )
+    claimed = {(commit_id, issue_id) for commit_id, issue_id in rows.all()}
+    if claimed:
+        await session.execute(
+            update(IssueCommitLink)
+            .where(pair.in_(sorted(claimed)))
+            .values(fix_ran_at=utcnow())
+            .execution_options(synchronize_session=False)
+        )
+    return claimed
+
+
+def _stronger(current: CommitRef | None, other: CommitRef) -> CommitRef:
+    """Merge two references to the same issue (its old and current key).
+
+    The message wins over the branch name, commands add up, and the link
+    stays ``branch_named`` if either reference was.
+    """
     if current is None:
         return other
-    (ref, source), (other_ref, other_source) = current, other
-    if source != other_source:
-        return current if source == "message" else other
+    branch_named = current.branch_named or other.branch_named
+    if current.source != other.source:
+        winner = current if current.source == "message" else other
+        return winner._replace(branch_named=branch_named)
+    ref, other_ref = current.ref, other.ref
     keyword: Keyword = "fixes" if "fixes" in (ref.keyword, other_ref.keyword) else "refs"
     hours = ref.hours if ref.hours is not None else other_ref.hours
-    return Ref(ref.key, ref.number, keyword, hours), source
+    return CommitRef(Ref(ref.key, ref.number, keyword, hours), current.source, branch_named)
 
 
-async def _record_new_links(
+async def _record_links(
     session: AsyncSession,
     integration: RepositoryIntegration,
-    links: Sequence[tuple[RepositoryCommit, int, Ref, str]],
+    links: Sequence[_LinkWork],
 ) -> list[tuple[str, str, str]]:
-    """Journal, metadata and commands for new (commit, issue) links.
+    """Journal, metadata and commands for the links a push acts on.
 
-    One ``$git`` journal per link; the SHA (and the branch, for a link from
-    the branch name) appended to the issue's metadata; then the commit
-    commands of message references (see ``repository_commands``). Returns
-    (issue key, command, outcome) for each command the links carried.
+    For each new link: one ``$git`` journal; the SHA appended to the issue's
+    metadata, and the branch too when its name references the issue (even if
+    the message also does) and it is not the default branch. Then the commit
+    commands of message references (see ``repository_commands``): time on new
+    links only, ``Fixes`` as each link's *fix* says. Returns (issue key,
+    command, outcome) for each command the links carried.
     """
     from specivo.services.journal_service import JournalService
     from specivo.services.repository_commands import run_commit_commands
 
     git_user = await get_git_user(session)
     journals = JournalService()
-    issue_ids = sorted({issue_id for _commit, issue_id, _ref, _source in links})
+    issue_ids = sorted({work.issue_id for work in links})
     # Lock the issues in id order, so two pushes touching the same issues cannot deadlock.
     issues = {
         issue.id: issue
@@ -570,13 +730,14 @@ async def _record_new_links(
     }
     shas_by_issue: dict[int, list[str]] = {}
     branches_by_issue: dict[int, list[str]] = {}
-    for commit, issue_id, _ref, source in links:
+    for commit, issue_id, commit_ref, new, _fix in links:
         issue = issues.get(issue_id)
-        if issue is None:  # pragma: no cover - deleted between the link insert and now
+        # A link seen before has its journal and metadata; a missing issue was deleted meanwhile.
+        if issue is None or not new:
             continue
         await journals.add_comment(session, issue, git_user, commit_journal_note(commit))
         shas_by_issue.setdefault(issue_id, []).append(commit.sha)
-        if source == "branch" and commit.branch:
+        if commit_ref.branch_named and commit.branch and commit.branch != integration.default_branch:
             branches_by_issue.setdefault(issue_id, []).append(commit.branch)
     for issue_id, shas in shas_by_issue.items():
         additions = {COMMITS_METADATA_KEY: shas}
@@ -586,12 +747,19 @@ async def _record_new_links(
     await session.flush()
 
     outcomes: list[tuple[str, str, str]] = []
-    for commit, issue_id, ref, source in links:
+    for commit, issue_id, commit_ref, new, fix in links:
         issue = issues.get(issue_id)
-        if issue is None or source != "message":
+        if issue is None or commit_ref.source != "message":
             continue
         for command, outcome in await run_commit_commands(
-            session, integration, commit, issue, ref, commit_label=commit_label(commit)
+            session,
+            integration,
+            commit,
+            issue,
+            commit_ref.ref,
+            commit_label=commit_label(commit),
+            fix=fix,
+            log_time=new,
         ):
             outcomes.append((issue.display_key, command, outcome))
     if outcomes:

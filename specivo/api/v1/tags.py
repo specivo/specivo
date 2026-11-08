@@ -128,12 +128,16 @@ async def search_tags(
     project_key: str,
     q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, description="Matches to skip, to page through them."),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
-    """Autocomplete tags. Requires project access only."""
+    """Autocomplete the project's tags, by name. Requires project access only.
+
+    Paged with ``offset`` and ``limit``; a page shorter than ``limit`` is the last.
+    """
     project = await _get_project(project_key, current_user, db)
-    tags = await _tag_service.search_for_project(db, project.id, q, limit=limit)
+    tags = await _tag_service.search_for_project(db, project.id, q, limit=limit, offset=offset)
     return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
 
@@ -436,7 +440,7 @@ async def remove_wiki_tag(
 
 
 # ---------------------------------------------------------------------------
-# Bulk issue tagging (rides on the bulk_operations feature)
+# Bulk issue tagging
 # ---------------------------------------------------------------------------
 
 
@@ -448,12 +452,7 @@ async def bulk_tag_issues(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> dict:
-    """Apply/remove tags across many issues. Requires the bulk_operations feature."""
-    from specivo.core.features import has_feature
-
-    if not has_feature("bulk_operations"):
-        raise PermissionDeniedError("Bulk operations are not available")
-
+    """Apply/remove tags across many issues of the project."""
     project = await _get_project(project_key, current_user, db)
 
     # Restrict to issues that belong to the project and are visible to the user.

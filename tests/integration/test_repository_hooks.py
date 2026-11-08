@@ -199,11 +199,12 @@ class TestPush:
         assert await _count(db_session, IssueCommitLink) == 0
         assert await _count(db_session, RepositoryCommit) == 0
 
-    async def test_tag_push_is_ignored(self, client, db_session, world, queued):
+    async def test_tag_push_records_a_tag_and_links_no_commit(self, client, db_session, world, queued):
         integration = await make_integration(db_session, world.project)
         payload = push_payload("github", [commit("t", "RHOOK-1")], ref="refs/tags/v1.0")
         result = await _push_and_process(client, db_session, integration, payload, queued)
-        assert result.status == "ignored"
+        assert result.status == "processed"
+        assert result.detail.startswith("Tag v1.0")
         assert await _count(db_session, IssueCommitLink) == 0
 
     async def test_default_branch_refreshed(self, client, db_session, world, queued):
@@ -428,12 +429,13 @@ class TestRefusals:
         delivery = (await db_session.execute(select(RepositoryDelivery))).scalar_one()
         assert delivery.status == "failed"
 
-    async def test_unhandled_event_is_ignored(self, client, db_session, world, queued):
+    async def test_unhandled_event_is_ignored_without_its_payload(self, client, db_session, world, queued):
         integration = await make_integration(db_session, world.project)
         resp = await _post(client, integration, push_payload("github", [commit("e", "RHOOK-1")]), event="issues")
         assert (resp.status_code, resp.json()) == (200, {"status": "ignored"})
         delivery = (await db_session.execute(select(RepositoryDelivery))).scalar_one()
-        assert (delivery.event, delivery.status) == ("issues", "ignored")
+        assert (delivery.event, delivery.status, delivery.payload) == ("issues", "ignored", None)
+        assert queued == []
 
     async def test_cookie_without_csrf_token_is_not_refused(self, client, db_session, world, queued):
         integration = await make_integration(db_session, world.project)
@@ -477,3 +479,67 @@ class TestOtherProviders:
         integration = await make_integration(db_session, world.project, provider=provider)
         resp = await _post(client, integration, push_payload(provider, [commit(provider, "RHOOK-1")]), secret="nope")
         assert resp.status_code == 401
+
+
+async def _branches(db: AsyncSession, issue: Issue) -> list[str] | None:
+    await db.refresh(issue)
+    return (issue.issue_metadata or {}).get("branches")
+
+
+@pytest.mark.parametrize("provider", ["github", "gitlab", "gitea", "forgejo"])
+class TestBranchMetadata:
+    """Which pushes add their branch to the issue's ``branches`` metadata."""
+
+    async def test_branch_and_message_name_the_issue(self, client, db_session, world, queued, provider):
+        """The message decides the link (its keyword and commands), and the branch is still recorded."""
+        integration = await make_integration(db_session, world.project, provider=provider)
+        branch = "chore/RHOOK-1-try-the-integration"
+        payload = push_payload(provider, [commit(provider, "Fixes RHOOK-1 @15m")], branch=branch)
+        await _push_and_process(client, db_session, integration, payload, queued, delivery=f"{provider}-bm")
+
+        link = (await db_session.execute(select(IssueCommitLink))).scalar_one()
+        assert (link.issue_id, link.source, link.keyword) == (world.issues["RHOOK-1"].id, "message", "fixes")
+        assert await _branches(db_session, world.issues["RHOOK-1"]) == [branch]
+
+    async def test_branch_only(self, client, db_session, world, queued, provider):
+        integration = await make_integration(db_session, world.project, provider=provider)
+        branch = "feat/rhook-2-login-form"
+        payload = push_payload(provider, [commit(provider, "Style the form")], branch=branch)
+        await _push_and_process(client, db_session, integration, payload, queued, delivery=f"{provider}-b")
+
+        link = (await db_session.execute(select(IssueCommitLink))).scalar_one()
+        assert (link.issue_id, link.source) == (world.issues["RHOOK-2"].id, "branch")
+        assert await _branches(db_session, world.issues["RHOOK-2"]) == [branch]
+
+    async def test_message_only_on_an_unrelated_branch(self, client, db_session, world, queued, provider):
+        integration = await make_integration(db_session, world.project, provider=provider)
+        payload = push_payload(provider, [commit(provider, "refs RHOOK-1")], branch="feat/rhook-3-other-work")
+        await _push_and_process(client, db_session, integration, payload, queued, delivery=f"{provider}-m")
+
+        assert await _branches(db_session, world.issues["RHOOK-1"]) is None
+        # The branch's own issue gets it.
+        assert await _branches(db_session, world.issues["RHOOK-3"]) == ["feat/rhook-3-other-work"]
+
+    async def test_default_branch_is_never_recorded(self, client, db_session, world, queued, provider):
+        integration = await make_integration(db_session, world.project, provider=provider)
+        payload = push_payload(provider, [commit(provider, "refs RHOOK-1")])
+        await _push_and_process(client, db_session, integration, payload, queued, delivery=f"{provider}-d")
+
+        assert await _branches(db_session, world.issues["RHOOK-1"]) is None
+        issue = await db_session.get(Issue, world.issues["RHOOK-1"].id)
+        assert issue.issue_metadata["commits"] == [payload["commits"][0]["id"]]
+
+    async def test_default_branch_named_after_the_issue(self, client, db_session, world, queued, provider):
+        integration = await make_integration(db_session, world.project, provider=provider)
+        integration.default_branch = "rhook-1-trunk"
+        await db_session.commit()
+        payload = push_payload(provider, [commit(provider, "Tidy up")], branch="rhook-1-trunk")
+        if provider == "gitlab":
+            payload["project"]["default_branch"] = "rhook-1-trunk"
+        else:
+            payload["repository"]["default_branch"] = "rhook-1-trunk"
+        await _push_and_process(client, db_session, integration, payload, queued, delivery=f"{provider}-dn")
+
+        link = (await db_session.execute(select(IssueCommitLink))).scalar_one()
+        assert (link.issue_id, link.source) == (world.issues["RHOOK-1"].id, "branch")
+        assert await _branches(db_session, world.issues["RHOOK-1"]) is None

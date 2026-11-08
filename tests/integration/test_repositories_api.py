@@ -99,6 +99,7 @@ class TestCrud:
             "merge_status_id": None,
             "merge_automation_enabled": False,
             "ignore_external_pull_requests": True,
+            "environment_types": {},
         }
 
         stored = (
@@ -121,16 +122,20 @@ class TestCrud:
         body = await _create(client, project, manager_headers)
         resp = await client.patch(
             f"{_base(project)}{body['id']}/",
-            json={"is_active": False, "scope": "project_and_subprojects", "repo_url": "https://example.org/w"},
+            json={
+                "is_active": False,
+                "scope": "project_and_subprojects",
+                "repo_url": "https://example.org/example-org/widgets",
+            },
             headers=manager_headers,
         )
         assert resp.status_code == 200, resp.text
         out = resp.json()
-        assert "secret" not in out
+        assert out["secret"] is None
         assert (out["is_active"], out["scope"], out["repo_url"]) == (
             False,
             "project_and_subprojects",
-            "https://example.org/w",
+            "https://example.org/example-org/widgets",
         )
 
     async def test_rotate_replaces_secret(self, client, db_session, project, manager_headers):
@@ -149,7 +154,9 @@ class TestCrud:
     async def test_delete_removes_integration_and_log(self, client, db_session, project, manager_headers):
         body = await _create(client, project, manager_headers)
         db_session.add(
-            RepositoryDelivery(integration_id=body["id"], delivery_id="d-1", event="ping", status="processed")
+            RepositoryDelivery(
+                integration_id=body["id"], provider="github", delivery_id="d-1", event="ping", status="processed"
+            )
         )
         await db_session.commit()
         resp = await client.delete(f"{_base(project)}{body['id']}/", headers=manager_headers)
@@ -168,6 +175,7 @@ class TestCrud:
             db_session.add(
                 RepositoryDelivery(
                     integration_id=body["id"],
+                    provider="github",
                     delivery_id=f"d-{i}",
                     event="push",
                     status="processed",
@@ -284,6 +292,7 @@ class TestValidation:
             manager_headers,
             provider="gitlab",
             repo_full_name="example-group/sub.group/widgets_2",
+            repo_url="https://gitlab.example.com/example-group/sub.group/widgets_2",
             settings={"commands_enabled": True, "fixing_status_id": status.id},
         )
         assert body["repo_full_name"] == "example-group/sub.group/widgets_2"

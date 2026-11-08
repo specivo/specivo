@@ -7,6 +7,9 @@ JavaScript and CSS monoliths were split into modular sources.
 and the charting/icon vendors in §9.
 **Revised:** 2026-09-15 — generated bundles are no longer committed: `specivo/static/dist/` is
 gitignored and built in the Docker image, in CI and by the dev watcher container (§1, §9).
+**Revised:** 2026-11-06 — vendored D3 for Observable Plot; charts load both on demand (§9).
+**Revised:** 2026-11-07 — Apache ECharts replaces Observable Plot and D3 as the chart library: an
+npm dependency, tree-shaken into a page-specific bundle (§1, §12).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -35,16 +38,18 @@ generated, content-hashed artifacts under `specivo/static/dist/`. The stack:
 - **Alpine.js 3.14** — lightweight reactivity (`x-data`, `x-model`, `x-show`)
 - **HTMX 2.0** — HTML-over-the-wire partial updates
 - **Bootstrap 5.3** — grid, utilities only (NOT Bootstrap JS components)
-- **esbuild** — the only build dependency (single Go binary; build time only: image build stage,
+- **esbuild** — the only build tool (single Go binary; build time only: image build stage,
   CI, dev watcher)
+- **Apache ECharts** — the chart library, a pinned npm dependency bundled by esbuild (§12)
 
-Three bundles are produced:
+Four bundles are produced:
 
 | Source entry | Bundle | Role |
 |--------------|--------|------|
 | `frontend/css/specivo.css` | `dist/css/specivo.min.css` | all custom styles |
 | `frontend/js/alpine-init.js` | `dist/js/alpine-init.min.js` | registers every Alpine component + store |
 | `frontend/js/app.js` | `dist/js/app.min.js` | vanilla (non-Alpine) modules |
+| `frontend/js/spend-chart.js` | `dist/js/spend-chart.min.js` | AI spend report and My AI usage charts (ECharts); loaded only by those pages |
 
 - **Content hashing + manifest:** esbuild writes `<name>.<hash>.<ext>` plus a `manifest.json`
   per output dir. At startup the app loads the manifests (`load_asset_manifests()` in `specivo/web/assets.py`)
@@ -223,6 +228,10 @@ User-authored content (wiki pages, issue descriptions, comments) is stored as ra
 rendered server-side:
 
 - **Library:** Python `markdown` with extensions: `fenced_code`, `tables`, `toc`, `codehilite`
+- **Bare URLs** (`https://…`, `http://…`, `www.…`, `mailto:…`) are linked GFM-style by an inline
+  pattern of our own, so code spans and blocks keep them as text, existing links are not linked
+  twice and trailing punctuation stays outside the link. Python-Markdown has no autolink extension
+  for bare URLs, and `pymdownx.magiclink` would add a dependency for this one feature.
 - **Sanitization:** rendered HTML goes through `nh3.clean()` with an explicit allowlist before it
   is wrapped in `Markup`. The content is user-authored, so rendering and sanitizing are one step —
   never mark Markdown-derived HTML safe without it (`specivo/services/markdown_service.py`).
@@ -257,18 +266,20 @@ The `pagination` Jinja2 macro in `components/macros.html` renders a three-part b
 
 ```
 frontend/                          # esbuild SOURCE (build time only: image stage, CI, dev)
-  build.js package.json            # esbuild driver + scripts (esbuild devDep only)
+  build.js package.json            # esbuild driver + scripts (esbuild devDep, echarts dep)
   css/ js/                         # modular partials and ES modules (see §2, §4)
 specivo/static/
   dist/                            # GENERATED build output (gitignored), served at runtime
     css/specivo.min.<hash>.css  +  manifest.json
-    js/{alpine-init,app}.min.<hash>.js  +  manifest.json
+    js/{alpine-init,app,spend-chart}.min.<hash>.js  +  manifest.json
   sw.js                            # service worker (PWA)
   vendor/                          # third-party — immutable
                                    #   bootstrap, alpine (standard + csp builds), htmx
                                    #   (+ json-enc ext), easymde, font-awesome,
-                                   #   observable-plot (charts), mermaid (diagrams,
-                                   #   loaded on demand by modules/mermaid.js)
+                                   #   mermaid (diagrams, loaded on demand by
+                                   #   modules/mermaid.js)
+    LICENSES/                      # licence texts of everything shipped, vendored or
+                                   #   bundled (ECharts, zrender, tslib included)
   fonts/                           # self-hosted WOFF2 — immutable
   img/                             # SVG favicon
 ```
@@ -297,13 +308,48 @@ The `brand_name` DB setting (default: "Specivo") replaces the hardcoded product 
 Cached in memory at startup, updated instantly when admin changes it. "Powered by Specivo" footer
 keeps the product name (not the instance brand).
 
+### 12. Charts: Apache ECharts
+
+Charts use **Apache ECharts** (Apache-2.0; its renderer zrender is BSD-3-Clause), pinned to an
+exact version in `frontend/package.json` and bundled by esbuild, not vendored:
+
+- **Tree-shaken.** `frontend/js/lib/echarts.js` registers only the parts in use (bar and line charts; grid,
+  tooltip, legend, dataset and aria components; the SVG renderer) and re-exports named functions.
+  Charts import ECharts through it, never from `echarts` itself, and never re-export the
+  `echarts/core` namespace, which would keep all of core in the bundle.
+- **Page-specific bundle.** A chart page gets its own esbuild entry (today
+  `frontend/js/spend-chart.js` → `dist/js/spend-chart.min.js`, shared by the AI spend reports
+  and My AI usage) and loads it from the
+  `{% block chart_js %}` of `base.html`, only when there is something to draw. Other pages never
+  download the library. A chart inside an htmx partial (the issue page's AI usage tab) names
+  the bundle in a `data-sp-chart-src` attribute instead; `frontend/js/modules/issue-ai-usage.js`
+  loads it once when such content is swapped in, and the bundle's own htmx hooks draw later swaps.
+- **SVG renderer**, so charts are sharp at any zoom and need no `<canvas>`.
+- **Theme from CSS custom properties.** Colours, text and font are read at draw time
+  (`--sp-text-*`, `--sp-border`, `--sp-bg-elevated`, `--sp-font-body`, and the series palette
+  `--sp-chart-1`…`--sp-chart-8` in `tokens.css`); charts redraw when root theme attributes or
+  `prefers-color-scheme` change.
+- **CSP.** No inline script and no `eval`/`new Function` (the geo JSON parser that has one is not
+  bundled). Data comes from a `data-` attribute; tooltips are built as DOM nodes with
+  `textContent`, never as HTML strings, so stored names cannot inject markup. ECharts sets
+  inline `style` on its own container, tooltip and SVG nodes, which `style-src 'unsafe-inline'`
+  allows.
+- **Accessible.** The chart element keeps `role="img"` and its translated `aria-label`, passed to
+  the ECharts aria component as the description; the table under each chart holds the same
+  numbers.
+- **Offline.** The bundle makes no network requests; the image build (`npm ci`) fetches the
+  package, so air-gapped installs run the prebuilt image as before.
+- **Licences.** ECharts' `LICENSE` and `NOTICE`, its d3-derived part, zrender's and tslib's
+  licences are in `specivo/static/vendor/LICENSES/` and `THIRD-PARTY-NOTICES.md`; a banner keeps
+  the ECharts copyright at the top of the bundle.
+
 ## Consequences
 
 **Positive:**
 - Modular, navigable source — one Alpine component per file, CSS partitioned by cascade layer
 - Minified, content-hashed bundles; manifests drive cache busting (no manual versioning)
-- Runtime stays Node-free (bundles built in a discarded image stage); only one build dependency
-  (esbuild)
+- Runtime stays Node-free (bundles built in a discarded image stage); one build tool (esbuild)
+  and one bundled library (ECharts)
 - No generated files in git: no bundle diff noise or `dist/` merge conflicts, and no committed
   artifact that can drift from source
 - No Bootstrap class collisions — `sp-` prefix is unambiguous

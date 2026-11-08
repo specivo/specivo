@@ -49,6 +49,7 @@ from specivo.schemas.search import (
 )
 from specivo.services.api_key_scope import scope_project_ids
 from specivo.services.permission_service import Permission
+from specivo.services.similarity_threshold import min_similarity_for
 from specivo.services.wiki_utils import WIKI_LINK_RE
 
 # Shortcuts for f-string interpolation into raw SQL. These expand to the
@@ -147,6 +148,11 @@ def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int
 IDENTIFIER_PATTERN = r"(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9_]{0,63})-([0-9]{1,18})(?![A-Za-z0-9_])"
 _IDENTIFIER_RE = re.compile(IDENTIFIER_PATTERN)
 
+# A number from the system an issue was imported from, as a reader writes it:
+# ``RT #123`` or ``#123``. A hash glued to other text (``repo#123``, ``&#123;``)
+# is something else, and a bare ``123`` would pin noise on every number search.
+_SOURCE_NUMBER_RE = re.compile(r"(?<![\w&#-])(?:([^\W\d_][\w-]{0,63})\s+)?(?<![\w&#])#([0-9]{1,18})(?!\w)")
+
 # Bounds the per-query lookup; further tokens are searched as plain text.
 MAX_QUERY_IDENTIFIERS = 10
 # Longest search query (characters) parsed; the rest is ignored. Every term of
@@ -167,6 +173,24 @@ def extract_identifiers(query: str) -> list[str]:
         ident = f"{match.group(1)}-{match.group(2)}".upper()
         if ident not in seen:
             seen.append(ident)
+            if len(seen) == MAX_QUERY_IDENTIFIERS:
+                break
+    return seen
+
+
+def extract_source_numbers(query: str) -> list[tuple[str | None, str]]:
+    """Return the distinct ``(word, number)`` pairs in *query*, the word lower-cased or None.
+
+    They are only looked up: free text keeps these tokens, so full-text results
+    still follow the issues they pin.
+    """
+    seen: list[tuple[str | None, str]] = []
+    for match in _SOURCE_NUMBER_RE.finditer(query[:MAX_QUERY_CHARS]):
+        word = match.group(1)
+        # ``ACME-42 #7`` is two references; ACME-42 names no system.
+        pair = (None if word is None or _IDENTIFIER_RE.fullmatch(word) else word.lower(), match.group(2))
+        if pair not in seen:
+            seen.append(pair)
             if len(seen) == MAX_QUERY_IDENTIFIERS:
                 break
     return seen
@@ -733,26 +757,41 @@ class SearchService:
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         filters: SearchFilters | None = None,
+        source_numbers: list[tuple[str | None, str]] | None = None,
     ) -> list[SearchResult]:
         """Resolve identifier tokens to the issues they name, in query order.
 
         A ``KEY-N`` token names an issue by its current reference, by a
         reference it had before moving to another project
-        (``issue_ref_aliases``), or under a renamed project's retired key
-        (``project_key_aliases``). The hits go through the same visibility,
-        project and metadata filters as full-text results, so a reference
-        the user cannot see resolves to nothing.
+        (``issue_ref_aliases``), under a renamed project's retired key
+        (``project_key_aliases``), or by the key it had in the system it was
+        imported from (``issue_source_refs``). *source_numbers* name imported
+        issues the same way: with a word, the system or a word of the label
+        should match it; without one, any system does. When no issue the
+        reader can see matches the word exactly ("bug #123"), the number is
+        matched alone. The hits go through the
+        same visibility, project and metadata filters as full-text results,
+        so a reference the user cannot see resolves to nothing.
+
+        For one token an issue of this instance comes before an imported one,
+        which may be why a project with the same key exists.
         """
         # Narrow to the authenticating API key's project limit, if any.
         project_id, project_ids = scope_project_ids(project_id, project_ids)
-        refs = [(key, int(num)) for key, _, num in (ident.rpartition("-") for ident in identifiers)]
-        refs = [(key, num) for key, num in refs if num <= _PG_INT_MAX]
-        if not refs:
+        source_numbers = source_numbers or []
+        if not identifiers and not source_numbers:
             return []
+        refs = [(key, int(num)) for key, _, num in (ident.rpartition("-") for ident in identifiers)]
+        # Too large to be a sequence number, but it can still be a source key.
+        refs = [(key, num) for key, num in refs if num <= _PG_INT_MAX]
 
         params: dict[str, Any] = {
             "ref_keys": [key for key, _ in refs],
             "ref_seqs": [num for _, num in refs],
+            "source_keys": [ident.lower() for ident in identifiers],
+            "number_words": [word for word, _ in source_numbers],
+            "number_values": [number for _, number in source_numbers],
+            "number_ord_base": len(identifiers),
         }
         params.update(await self._visibility_params(session, user))
 
@@ -772,38 +811,75 @@ class SearchService:
                 FROM unnest(CAST(:ref_keys AS text[]), CAST(:ref_seqs AS integer[]))
                      WITH ORDINALITY AS t(key, seq, ord)
             ),
+            source_keys AS (
+                SELECT t.token, t.ord
+                FROM unnest(CAST(:source_keys AS text[])) WITH ORDINALITY AS t(token, ord)
+            ),
+            source_numbers AS (
+                SELECT t.word, t.number, t.ord + CAST(:number_ord_base AS bigint) AS ord
+                FROM unnest(CAST(:number_words AS text[]), CAST(:number_values AS text[]))
+                     WITH ORDINALITY AS t(word, number, ord)
+            ),
             resolved AS (
-                SELECT ri.id AS issue_id, refs.ord
+                SELECT ri.id AS issue_id, refs.ord, 0 AS foreign_rank, 0 AS loose
                 FROM refs JOIN issues ri ON ri.project_key = refs.key AND ri.sequence_number = refs.seq
                 UNION ALL
-                SELECT a.issue_id, refs.ord
+                SELECT a.issue_id, refs.ord, 0, 0
                 FROM refs JOIN issue_ref_aliases a
                     ON a.old_project_key = refs.key AND a.old_sequence_number = refs.seq
                 UNION ALL
-                SELECT ri.id, refs.ord
+                SELECT ri.id, refs.ord, 0, 0
                 FROM refs
                 JOIN project_key_aliases pka ON pka.old_key = refs.key
                 JOIN issues ri ON ri.project_id = pka.project_id AND ri.sequence_number = refs.seq
+                UNION ALL
+                SELECT sr.issue_id, sk.ord, 1, 0
+                FROM source_keys sk JOIN issue_source_refs sr ON lower(sr.ref) = sk.token
+                UNION ALL
+                -- loose = 1: the word before the hash names neither this number's
+                -- system nor a word of its label ("bug #123"). Such a match counts
+                -- only when no exact one is visible; see the final SELECT.
+                SELECT sr.issue_id, sn.ord, 1,
+                       CASE WHEN sn.word IS NULL
+                                 OR sr.source_system = sn.word
+                                 OR sn.word = ANY(string_to_array(lower(sr.label), ' '))
+                            THEN 0 ELSE 1 END
+                FROM source_numbers sn JOIN issue_source_refs sr ON lower(sr.ref) = sn.number
             )
         """
         with_clause = f"{cte_prefix}, {ref_ctes}" if cte_prefix else f"WITH {ref_ctes}"
 
+        # Visibility is applied in ``hits`` before choosing between exact and
+        # loose matches, so that choice can't depend on issues the reader
+        # can't see: it would otherwise tell them such an issue exists.
         sql = f"""
-            {with_clause}
+            {with_clause},
+            hits AS (
+                SELECT i.id, r.ord, r.foreign_rank, r.loose
+                FROM resolved r
+                JOIN issues i ON i.id = r.issue_id
+                WHERE 1=1
+                {project_filter}
+                {self._issue_visibility_cte_clause(user, alias="i")}
+                {issue_filter_sql}
+            ),
+            kept AS (
+                SELECT h.id, MIN(h.ord) AS ord, MIN(h.foreign_rank) AS foreign_rank
+                FROM hits h
+                WHERE h.loose = 0
+                   OR NOT EXISTS (SELECT 1 FROM hits exact WHERE exact.ord = h.ord AND exact.loose = 0)
+                GROUP BY h.id
+            )
             SELECT i.id,
                    i.project_key || '-' || i.sequence_number AS title,
                    i.subject AS subtitle,
                    left(coalesce(i.description, ''), {SEARCH_SNIPPET_MAX_CHARS}) AS snippet,
                    i.project_key,
-                   MIN(r.ord) AS ord
-            FROM resolved r
-            JOIN issues i ON i.id = r.issue_id
-            WHERE 1=1
-            {project_filter}
-            {self._issue_visibility_cte_clause(user, alias="i")}
-            {issue_filter_sql}
-            GROUP BY i.id
-            ORDER BY ord
+                   k.ord,
+                   k.foreign_rank
+            FROM kept k
+            JOIN issues i ON i.id = k.id
+            ORDER BY k.ord, k.foreign_rank, i.id
         """
         result = await session.execute(text(sql), params)
         return [
@@ -912,9 +988,16 @@ class SearchService:
         # Issues the query names by reference lead the results, and are kept
         # out of the ranked issue rows and their count so they appear once.
         pinned: list[SearchResult] = []
-        if resolve_identifiers and parsed.identifiers and scope in ("all", "issues"):
+        source_numbers = extract_source_numbers(query)
+        if resolve_identifiers and (parsed.identifiers or source_numbers) and scope in ("all", "issues"):
             pinned = await self._identifier_hits(
-                session, parsed.identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                session,
+                parsed.identifiers,
+                user,
+                project_id=project_id,
+                project_ids=project_ids,
+                filters=filters,
+                source_numbers=source_numbers,
             )
         pinned_exclusion = ""
         if pinned:
@@ -1416,7 +1499,10 @@ class SearchService:
 
         Generates an embedding for the query text, then finds the most
         similar chunks via cosine distance. Returns results mapped back
-        to their source entities.
+        to their source entities. Chunks less similar than the model's
+        minimum similarity (see :mod:`specivo.services.similarity_threshold`)
+        are dropped from both the results and the total, so a query unrelated
+        to the content finds nothing rather than its nearest neighbours.
 
         When ``filters.tag_names`` is set, only tagged issues and wiki pages can
         match (comments and attachments are excluded), keeping hybrid results
@@ -1434,9 +1520,16 @@ class SearchService:
         pinned: list[SearchResult] = []
         if resolve_identifiers:
             identifiers = extract_identifiers(query)
-            if identifiers:
+            source_numbers = extract_source_numbers(query)
+            if identifiers or source_numbers:
                 pinned = await self._identifier_hits(
-                    session, identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                    session,
+                    identifiers,
+                    user,
+                    project_id=project_id,
+                    project_ids=project_ids,
+                    filters=filters,
+                    source_numbers=source_numbers,
                 )
         pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
 
@@ -1445,8 +1538,12 @@ class SearchService:
         if model is None:
             return pinned[pinned_slice], len(pinned)
 
+        from specivo.services.query_embedding_cache import embed_query
+
         try:
-            query_vector = await emb_service.generate_embedding(query, model, intent="query")
+            # Cached briefly in Redis, so a repeated or paged query does not
+            # run the model again (specivo.services.query_embedding_cache).
+            query_vector = await embed_query(emb_service, query, model)
         except Exception as exc:  # noqa: BLE001 - a broken model turns semantic search off, never a 500
             _warn_embedding_failure(model, exc)
             query_vector = None
@@ -1456,6 +1553,15 @@ class SearchService:
         vec_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
 
         params: dict[str, Any] = {"model_id": model.id, "query_vector": vec_literal}
+        # Nearest neighbours exist for any query, related or not: only chunks at
+        # least this similar count as hits (see similarity_threshold).
+        min_similarity = min_similarity_for(model.model_name)
+        score_filter = ""
+        exact_score_filter = ""
+        if min_similarity is not None:
+            params["min_similarity"] = min_similarity
+            score_filter = "AND n.score >= :min_similarity"
+            exact_score_filter = "AND (1 - (ce.embedding <=> CAST(:query_vector AS vector))) >= :min_similarity"
         project_filter = ""
         if project_ids is not None:
             project_filter = "AND ss.project_id = ANY(:project_ids)"
@@ -1567,6 +1673,7 @@ class SearchService:
                 JOIN search_sources ss0 ON ss0.id = sc0.source_id
                 WHERE ce.model_id = :model_id
                 {exact_scope}
+                {exact_score_filter}
             )"""
             else:
                 dims = SEMANTIC_INDEX_DIMENSIONS
@@ -1649,6 +1756,7 @@ class SearchService:
                 LEFT JOIN projects att_wp_p ON att_wp_p.id = att_w.project_id
                 WHERE 1=1
                 {project_filter}
+                {score_filter}
                 AND {sem_where_or}
                 ORDER BY ss.source_type, ss.entity_id, n.score DESC
             ) deduped
@@ -1658,12 +1766,12 @@ class SearchService:
 
         # Rank the first offset + limit entities; the page is cut in Python.
         # The one-row ``fetched`` side reports how many candidates the round
-        # read, even when none of them is visible.
+        # read and the lowest score among them, even when none is visible.
         def semantic_sql(candidates: int | None) -> str:
             return f"""
             {nearest_cte(candidates)}
-            SELECT fetched.n AS candidate_count, page.*
-            FROM (SELECT count(*) AS n FROM nearest) fetched
+            SELECT fetched.n AS candidate_count, fetched.lowest AS lowest_score, page.*
+            FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
             LEFT JOIN ({ranked_sql}) page ON true
             ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
         """
@@ -1688,6 +1796,11 @@ class SearchService:
                     needed,
                 )
                 if candidates is None or len(rows) >= needed:
+                    break
+                lowest = fetched[0]._mapping["lowest_score"]
+                if min_similarity is not None and lowest is not None and lowest < min_similarity:
+                    # The round already reached chunks below the cut-off; the
+                    # wider rounds would only add chunks further away still.
                     break
                 if fetched[0]._mapping["candidate_count"] < candidates:
                     # The index ran out before the limit: the table holds fewer
@@ -1734,6 +1847,7 @@ class SearchService:
                 LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
                 WHERE ce.model_id = :model_id
                 {project_filter}
+                {exact_score_filter}
                 AND {count_where_or}
             """
             count_result = await session.execute(text(count_sql), params)
@@ -1760,6 +1874,10 @@ class SearchService:
         3. Merge using RRF (k=60): score = 1/(k+rank_fts) + 1/(k+rank_semantic)
         4. Sort by combined score, apply offset/limit
 
+        The semantic list holds only hits above the minimum similarity, so a
+        result found by the semantic side alone must clear it, while every
+        keyword hit stays (a keyword hit below it just gets no semantic boost).
+
         Issues the query names by reference (``ACME-42``) are resolved
         directly and placed ahead of the fused ranking, rather than fused:
         RRF would let a strong semantic neighbour outrank the exact hit.
@@ -1772,9 +1890,16 @@ class SearchService:
         project_id, project_ids = scope_project_ids(project_id, project_ids)
         pinned: list[SearchResult] = []
         identifiers = extract_identifiers(query)
-        if identifiers and scope in ("all", "issues"):
+        source_numbers = extract_source_numbers(query)
+        if (identifiers or source_numbers) and scope in ("all", "issues"):
             pinned = await self._identifier_hits(
-                session, identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                session,
+                identifiers,
+                user,
+                project_id=project_id,
+                project_ids=project_ids,
+                filters=filters,
+                source_numbers=source_numbers,
             )
 
         # Get both result sets (unpaginated for RRF merging).
