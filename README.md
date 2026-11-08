@@ -41,9 +41,9 @@ More on [specivo.io/ai-usage](https://specivo.io/ai-usage/) and in the user guid
 
 ## The problem
 
-Teams lose knowledge constantly. Decisions get made in chat and vanish. Architecture docs scatter across five tools. AI coding agents make it worse — they ship code in a black box. What was done, why, and how it connects to other work becomes impossible to track after the session ends.
+Teams lose knowledge constantly. Decisions get made in chat and vanish. Architecture docs scatter across five tools. AI coding agents make it worse — they ship code in a black box. What was done, why, and how it connects to other work becomes impossible to track after the session ends. And every person now works through their own mix of agents, plans and API keys, so nobody can see how each of them actually works with AI or what it costs.
 
-Specivo fixes this by letting agents work inside the tracker, not outside it. Users plan sprints with help from agents, assign issues to people or agents, and review what was done in a familiar issue tracker UI. Agents create issues, update wiki pages, log time, and manage versions through MCP tools — one config line, no glue code. Every action is tracked, searchable, and connected. Assign tasks to different models, track outcomes, and see which agents deliver quality and which produce slop that humans had to fix.
+Specivo fixes this by letting agents work inside the tracker, not outside it. Users plan sprints with help from agents, assign issues to people or agents, and review what was done in a familiar issue tracker UI. Agents create issues, update wiki pages, log time, and manage versions through MCP tools — one config line, no glue code. Every action is tracked, searchable, and connected. For each person, project and feature, Specivo shows which tools and models were used, how much AI money and how much time went into it, and which agent sessions did the work; each release shows the time logged on it. Assign tasks to different models, track outcomes, and see which agents deliver quality and which produce slop that humans had to fix.
 
 ## Quick start
 
