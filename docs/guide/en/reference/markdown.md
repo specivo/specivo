@@ -53,6 +53,9 @@ Task lists work too:
 ![Alt text](https://specivo.example.com/image.png)
 ```
 
+A bare web address such as `https://specivo.example.com/docs` is turned into a link on its own, so
+you don't need the `[text](url)` form just to make an address clickable.
+
 To attach and embed an image on an issue or wiki page, upload it as an
 [attachment](../issues/attachments.md) first, then link to it.
 

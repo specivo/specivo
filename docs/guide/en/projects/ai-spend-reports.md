@@ -113,8 +113,11 @@ The period buttons are always shown; the other settings are under **Dates, filte
   over the whole range and sums the rest into **Other**; the CSV lists every row.
 - **User**: type part of a name or login and pick the person. It finds only people whose usage you
   may see there; without JavaScript, type the exact login.
-- **Tool**, **Model**, **Cost type**: narrow the usage. Unallocated seat cost has no tool
-  or model, so it is left out when you filter by one, and likewise when you open a project, an issue
+- **Model**: type part of a model name and pick it. The suggestions come from the price list and the
+  models in the usage you may see in that report, with their provider and aliases. Press Enter to
+  filter by exactly what you typed, for a model nobody has priced.
+- **Tool**, **Cost type**: narrow the usage. Unallocated seat cost has no tool
+  or model, so it is left out when you filter by tool or model, and likewise when you open a project, an issue
   or a branch.
 - **Currency**: the [reporting currency](../install/currencies.md#reporting-currency) of the project
   (or of the instance on the AI spend page), or any active currency.
@@ -134,7 +137,9 @@ currency and exchange rates, so they add up to the totals:
   seat cost, and a dashed line shows the seat cost alone.
 - **Tokens over time**: input and output in one chart, cache reads and writes in another.
 - The value **by user**, **by project** (AI spend page), **by model** and **by tool**: the eight
-  largest, the rest as **Other**. These show pay-per-use spend, since seat cost is not split by
+  largest, the rest as **Other**. Above each of these charts, pick **8**, **25**, **50** or **100**
+  to show more groups before **Other**; the choice stays in the page address, so a shared link keeps
+  it. (My AI usage and the AI usage tabs always show eight.) These show pay-per-use spend, since seat cost is not split by
   model or tool; the table holds it.
 - **Subscription leverage**, only where you may see seat cost. The AI spend page lists the plans
   with their holders, the people and the instance total: the fees counted in the period against the

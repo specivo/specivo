@@ -70,7 +70,9 @@ OpenAI, Google Gemini, xAI, DeepSeek, Mistral, Moonshot, Z.ai and Alibaba DashSc
 LiteLLM publishes **current** prices only, without their history. So the bundled list is loaded
 **append-only**:
 
-- A model that is new to your instance gets a price valid **from the list's date**.
+- A model that is new to your instance gets its first price valid **from 1 January 2000 (UTC)**, not
+  from the list's date, so usage logged before the list was made is priced too. This applies when
+  the model has no earlier bundled period and no price you entered that starts before it.
 - An unchanged price changes nothing.
 - A changed price **ends** the bundled period at the new list's date and starts a new one. The old
   period stays, so older usage keeps its old price.
@@ -79,9 +81,21 @@ LiteLLM publishes **current** prices only, without their history. So the bundled
 The list is loaded when Specivo is installed, and again whenever a worker starts, so an upgrade that
 brings a newer list applies it by itself. **Load bundled prices now** does the same on demand.
 
-Usage from **before** the first bundled period of a model is not priced: Specivo never falls back
-to a later price for older usage. If you need prices for that time, enter them as a past period
-(below).
+Instances that stored a model's first bundled period from the list's date under an earlier version
+get it moved back on the next load, and the entries from before the old start are priced again.
+
+Usage from **before** the first period of a model is not priced: Specivo never falls back to a later
+price for older usage. If you need an older price than the bundled one, enter it as a past period
+(below); prices you enter win over bundled ones.
+
+### Unpriced usage in reports
+
+When some entries have no price for their model and date, they count as 0 and the report says so
+next to its totals: **N of M entries has no price for its model and date, so it counts as 0**, with
+the models concerned and a link to **Add or load prices**. In the charts, periods with such entries
+are marked with an asterisk. Add a price for the model that covers those dates (or load the
+bundled prices), then use [Recompute past usage](#recompute-past-usage) to value the entries already
+logged.
 
 ## Find a price
 
