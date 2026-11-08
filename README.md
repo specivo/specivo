@@ -15,7 +15,7 @@ Open source. No per-seat pricing. Built for teams that work with AI agents.
 ## AI usage and spend tracking
 
 <p align="center">
-  <a href="https://specivo.io/ai-usage/"><img src="docs/assets/readme/ai-spend-ledger.gif" alt="AI spend flowing from each person into the features they worked on, with the company total (demo data)" width="640"></a>
+  <a href="https://specivo.io/ai-usage/"><img src="docs/assets/readme/ai-spend-ledger.png" alt="AI spend flowing from each person into the features they worked on, with the company total (demo data)" width="640"></a>
 </p>
 
 Your team uses Claude Code, Codex, Cursor and other AI tools every day, on personal plans, company

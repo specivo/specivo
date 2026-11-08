@@ -13,7 +13,7 @@
 ## AI 使用与支出追踪
 
 <p align="center">
-  <a href="https://specivo.io/zh-cn/ai-usage/"><img src="docs/assets/readme/ai-spend-ledger.gif" alt="AI 支出从每个人流向他们处理的功能，并汇总为公司总额（演示数据）" width="640"></a>
+  <a href="https://specivo.io/zh-cn/ai-usage/"><img src="docs/assets/readme/ai-spend-ledger.png" alt="AI 支出从每个人流向他们处理的功能，并汇总为公司总额（演示数据）" width="640"></a>
 </p>
 
 你的团队每天都在用 Claude Code、Codex、Cursor 等 AI 工具，有人用个人订阅，有人用公司席位，有人用 API 密钥。账单只告诉你花了多少，Specivo 告诉你是谁花的、花在了哪个功能上。
