@@ -45,3 +45,8 @@ subtasks to assign and work the individual pieces.
     Only a **standalone** issue can be [moved to another project](updating.md#move-an-issue-to-another-project).
     An issue with a parent or its own subtasks has to be detached from the hierarchy first, so a parent
     and its children never end up split across projects.
+
+!!! note "Deleting a parent"
+    An issue that still has subtasks cannot be deleted, so its subtasks are never removed by accident.
+    Delete the subtasks first, or give them another parent. When you bulk-delete a parent together
+    with all of its subtasks, Specivo deletes them all at once.
