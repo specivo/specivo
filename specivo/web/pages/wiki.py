@@ -20,6 +20,7 @@ from specivo.web.deps import (
     get_current_user_optional,
     get_templates,
     get_web_reader,
+    login_redirect,
     refuse_anonymous_web,
 )
 
@@ -93,7 +94,7 @@ async def wiki_all_pages(
     """Render the wiki page listing all pages."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -136,7 +137,7 @@ async def wiki_new(
     """Render the wiki page creation form."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -191,7 +192,7 @@ async def wiki_trash(
     """Render the wiki trash (deleted pages) view."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -229,7 +230,7 @@ async def wiki_delete(
     """Handle wiki page deletion (form POST)."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -263,7 +264,7 @@ async def wiki_restore(
     """Restore a soft-deleted wiki page."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -429,7 +430,7 @@ async def wiki_edit(
     """Render the wiki page edit form."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -497,7 +498,7 @@ async def wiki_diff(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -560,7 +561,7 @@ async def wiki_history(
     """Render the wiki page history (all versions)."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:

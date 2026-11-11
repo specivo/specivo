@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import available_timezones
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -35,7 +35,7 @@ from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
 from specivo.services.recurring_pattern_service import RecurringPatternService
 from specivo.services.settings_service import SettingsService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
 
 if TYPE_CHECKING:
     from specivo.models.project import Project
@@ -150,7 +150,7 @@ async def recurring_list(
     """Render the recurring-patterns management list for a project."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project = await _resolve_project(project_key, user, db)
@@ -193,7 +193,7 @@ async def recurring_create_form(
     """Render the dedicated create-pattern form page."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project = await _resolve_project(project_key, user, db)
@@ -237,7 +237,7 @@ async def recurring_edit_form(
     """Render the dedicated edit-pattern form page (carries lock_version)."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project = await _resolve_project(project_key, user, db)
@@ -288,7 +288,7 @@ async def recurring_detail(
     """Render a single recurring pattern: schedule, upcoming occurrences, instances."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project = await _resolve_project(project_key, user, db)

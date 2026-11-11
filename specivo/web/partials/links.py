@@ -11,14 +11,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import ENTITY_LINKS_MAX_LIMIT
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.services.entity_link_service import TEXT_LINK_KINDS, EntityLinkService, LinkGraph, resolve_root
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
 
 if TYPE_CHECKING:
     from specivo.models.user import User
@@ -58,7 +58,7 @@ def group_backlinks(graph: LinkGraph) -> dict[str, list[dict[str, Any]]]:
 async def _render(request: Request, db: AsyncSession, ref: str, empty_text: str) -> Response:
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
     try:
         root = await resolve_root(db, user, ref)

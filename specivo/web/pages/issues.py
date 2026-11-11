@@ -33,6 +33,7 @@ from specivo.services.issue_list_filters import (
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from, is_plain_number, visible_issue_keys
 from specivo.services.journal_service import JournalService
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.relation_service import RelationService
@@ -45,6 +46,7 @@ from specivo.web.deps import (
     get_current_user_optional,
     get_templates,
     get_web_reader,
+    login_redirect,
     refuse_anonymous_web,
 )
 from specivo.web.pages.ai_issue_usage import tab_entry_count as ai_usage_tab_entry_count
@@ -245,7 +247,6 @@ async def issues_list(  # noqa: C901, PLR0912, PLR0913, PLR0915
     anonymous = user.is_anonymous
 
     from specivo.core.exceptions import AnonymousAccessDeniedError
-    from specivo.services.permission_service import Permission, check_permission
 
     try:
         project = await _project_svc.get_readable_by_key(db, project_key, user)
@@ -396,7 +397,7 @@ async def issue_create_form(
     """Render the issue creation form."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -404,6 +405,10 @@ async def issue_create_form(
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
+    # The form saves through the API, which needs add_issues: without it the
+    # visitor would fill in a form that cannot be saved.
+    if not await check_permission(user, project.id, Permission.ADD_ISSUES, db):
+        raise HTTPException(status_code=403, detail="Permission denied")
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
@@ -413,7 +418,6 @@ async def issue_create_form(
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
     from specivo.services.metadata_schema_service import MetadataSchemaService
-    from specivo.services.permission_service import Permission, check_permission
 
     schema_svc = MetadataSchemaService()
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
@@ -513,8 +517,6 @@ async def issue_detail(  # noqa: PLR0915
 
     schema_svc = MetadataSchemaService()
     watcher_svc = WatcherService()
-
-    from specivo.services.permission_service import Permission, check_permission
 
     anon_can_view_wiki = False
     if anonymous:
@@ -768,12 +770,14 @@ async def issue_edit_form(
     """Render the issue edit form."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project, issue = await _resolve_issue_project(db, issue_ref, user)
     if redirect := _retired_ref_redirect(request, issue_ref, issue, "edit/"):
         return redirect
+    if not await check_permission(user, project.id, Permission.EDIT_ISSUES, db):
+        raise HTTPException(status_code=403, detail="Permission denied")
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
@@ -783,7 +787,6 @@ async def issue_edit_form(
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
     from specivo.services.metadata_schema_service import MetadataSchemaService
-    from specivo.services.permission_service import Permission, check_permission
 
     schema_svc = MetadataSchemaService()
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
@@ -851,7 +854,7 @@ async def issue_description_diff(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project, issue = await _resolve_issue_project(db, issue_ref, user)
@@ -992,11 +995,10 @@ async def restore_description_version(
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a previous description version by PATCHing the issue."""
-    from specivo.services.permission_service import check_permission
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     project, issue = await _resolve_issue_project(db, issue_ref, user)
@@ -1030,11 +1032,10 @@ async def move_issue_form(
 ) -> Response:
     """Move an issue to another project from the web UI, then redirect to it."""
     from specivo.core.exceptions import ValidationError
-    from specivo.services.permission_service import check_permission
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     _project, issue = await _resolve_issue_project(db, issue_ref, user)

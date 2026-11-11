@@ -286,7 +286,7 @@ export function issueForm(initial) {
                                     body: JSON.stringify({names: tagNames})
                                 });
                             } catch (_e) { /* best-effort */ }
-                            window.location.href = '/projects/' + this.projectKey + '/issues/' + this.displayKey + '/';
+                            window.location.href = '/issue/' + this.displayKey + '/';
                         }
                     } else {
                         /* Tags go with the create request: tagging an issue later
@@ -333,7 +333,7 @@ export function issueForm(initial) {
                             return;
                         }
 
-                        window.location.href = '/projects/' + this.projectKey + '/issues/' + data.key + '/';
+                        window.location.href = '/issue/' + data.key + '/';
                     }
                 } catch (_e) {
                     /* request failed */

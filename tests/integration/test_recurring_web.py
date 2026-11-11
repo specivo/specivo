@@ -265,10 +265,10 @@ async def test_recurring_list_anonymous_redirects_to_login(
     client: AsyncClient,
     project: Project,
 ):
-    """An anonymous visitor is redirected to the login page."""
+    """An anonymous visitor is redirected to the login page, and back here after it."""
     resp = await client.get(
         f"/projects/{project.key}/recurring-patterns/",
         follow_redirects=False,
     )
     assert resp.status_code == 302
-    assert resp.headers["location"] == "/login/"
+    assert resp.headers["location"] == f"/login/?next=%2Fprojects%2F{project.key}%2Frecurring-patterns%2F"

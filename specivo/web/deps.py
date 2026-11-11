@@ -12,6 +12,7 @@ from typing import overload
 from urllib.parse import quote
 
 from fastapi import Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -733,6 +734,19 @@ def _csrf_token(ctx) -> str:
     if request is None:
         return ""
     return str(getattr(request.state, CSRF_STATE_KEY, "") or "")
+
+
+def login_redirect(request: Request) -> RedirectResponse:
+    """Send a visitor without a session to the login page, and back here after it.
+
+    Only a full page fetched with GET comes back: returning to a form's POST
+    URL would fail, and an htmx partial (``/partials/...``) is a fragment,
+    not a page. Those go to the login page alone, as before.
+    """
+    path = request.url.path
+    if request.method != "GET" or "/partials/" in path:
+        return RedirectResponse(LOGIN_PATH, status_code=302)
+    return RedirectResponse(login_url_for(_current_path(request)), status_code=302)
 
 
 @pass_context
