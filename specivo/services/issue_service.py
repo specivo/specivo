@@ -17,7 +17,7 @@ from specivo.core.exceptions import AppError, ConflictError, NotFoundError, Perm
 from specivo.core.i18n import gettext as _
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
-from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import PROJECT_STATUS_ACTIVE, Project, ProjectKeyAlias
 from specivo.models.role import Role
@@ -192,6 +192,40 @@ class IssueService:
                 message=_("Cannot assign issues to a %(status)s version") % {"status": version.status},
                 status_code=422,
             )
+
+    async def _validate_category(self, session: AsyncSession, category_id: int, project_id: int) -> None:
+        """Raise a 422 ``AppError`` unless *category_id* is a category of *project_id*.
+
+        Another project's category is refused like a missing one, so the
+        response does not reveal which ids exist elsewhere.
+        """
+        found = await session.scalar(
+            select(IssueCategory.id).where(IssueCategory.id == category_id, IssueCategory.project_id == project_id)
+        )
+        if found is None:
+            raise AppError(
+                code="validation_error",
+                message=_("Category %(id)s not found in this project") % {"id": category_id},
+                status_code=422,
+            )
+
+    async def load_parent(self, session: AsyncSession, parent_id: int, project_id: int, user: User | None) -> Issue:
+        """Return issue *parent_id* as a parent for an issue of *project_id*.
+
+        The parent must be in the same project (subtasks never span projects,
+        as moving an issue requires), within the API key's limit, and visible
+        to *user* when one is given. Anything else is "not found", so the
+        response does not reveal which issue ids exist.
+        """
+        parent = await session.scalar(select(Issue).where(Issue.id == parent_id))
+        if (
+            parent is None
+            or parent.project_id != project_id
+            or not project_in_scope(parent.project_id)
+            or (user is not None and not await self._check_visible(session, parent, user))
+        ):
+            raise NotFoundError(f"Parent issue {parent_id} not found")
+        return parent
 
     async def validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
         """Validate that issues of *project_id* may be put in sprint *sprint_id*.
@@ -578,6 +612,9 @@ class IssueService:
         if data.sprint_id is not None:
             await self.validate_sprint(session, data.sprint_id, project.id)
 
+        if data.category_id is not None:
+            await self._validate_category(session, data.category_id, project.id)
+
         # Strip project-derived (computed) metadata so it is never stored on the
         # issue — it is overlaid on read instead. This makes the field
         # un-settable from any client and impossible to drift.
@@ -600,11 +637,10 @@ class IssueService:
         # Resolve parent if provided
         parent: Issue | None = None
         if data.parent_id is not None:
-            parent_result = await session.execute(select(Issue).where(Issue.id == data.parent_id))
-            parent = parent_result.scalar_one_or_none()
-            # A parent outside the API key's project limit is not found.
-            if parent is None or not project_in_scope(parent.project_id):
-                raise NotFoundError(f"Parent issue {data.parent_id} not found")
+            # Same project and key limit only: whether the caller may see the
+            # parent is the entry point's check (imports and recurring tasks
+            # create under parents their author need not see today).
+            parent = await self.load_parent(session, data.parent_id, project.id, None)
             await self.check_parent(session, None, parent)
 
         issue = Issue(
@@ -1032,6 +1068,7 @@ class IssueService:
         if data.assigned_to_id is not None:
             issue.assigned_to_id = data.assigned_to_id
         if data.category_id is not None:
+            await self._validate_category(session, data.category_id, issue.project_id)
             issue.category_id = data.category_id
         # fixed_version_id: use model_fields_set to distinguish "not provided"
         # (None default) from "explicitly set to null" (clear the field).
@@ -1086,11 +1123,7 @@ class IssueService:
             target_parent_id = data.parent_id if data.parent_id != 0 else None
             new_parent: Issue | None = None
             if target_parent_id is not None:
-                parent_result = await session.execute(select(Issue).where(Issue.id == target_parent_id))
-                new_parent = parent_result.scalar_one_or_none()
-                # A parent outside the API key's project limit is not found.
-                if new_parent is None or not project_in_scope(new_parent.project_id):
-                    raise NotFoundError(f"Parent issue {target_parent_id} not found")
+                new_parent = await self.load_parent(session, target_parent_id, issue.project_id, user)
                 await self._nested_set.validate_parent(session, issue, new_parent)
 
             await self._nested_set.move_to_parent(session, issue, new_parent)
