@@ -49,7 +49,7 @@ def _issuer_is_up(issuer: str, timeout: float = 1.0) -> bool:
     """Whether the issuer serves its OpenID discovery document."""
     url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310 - fixed http(s) test URL
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # fixed http(s) test URL
             return bool(response.status == 200)
     except (OSError, ValueError):
         return False

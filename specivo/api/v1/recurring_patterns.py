@@ -79,15 +79,11 @@ async def _require_manage_recurring_tasks(
         raise PermissionDeniedError("You do not have permission to manage recurring tasks")
 
 
-async def _get_pattern_in_project(
-    pattern_id: int, project: Project, db: AsyncSession
-) -> RecurringPattern:
+async def _get_pattern_in_project(pattern_id: int, project: Project, db: AsyncSession) -> RecurringPattern:
     """Load a pattern and assert it belongs to *project* (404 otherwise)."""
     pattern = await _pattern_service.get_by_id(db, pattern_id)
     if pattern.project_id != project.id:
-        raise NotFoundError(
-            f"Recurring pattern {pattern_id} not found in project '{project.key}'"
-        )
+        raise NotFoundError(f"Recurring pattern {pattern_id} not found in project '{project.key}'")
     return pattern
 
 
@@ -235,9 +231,7 @@ async def preview_occurrences(
     # Load skip exceptions (EXDATEs) so the preview reflects reality.
     exdates, _overrides = await _pattern_service._load_exceptions(db, pattern.id)
 
-    occurrences = expand_occurrences(
-        _pattern_service.build_spec(pattern), now, window_end, exdates
-    )
+    occurrences = expand_occurrences(_pattern_service.build_spec(pattern), now, window_end, exdates)
     return OccurrencePreview(occurrences=occurrences, count=len(occurrences))
 
 
@@ -278,9 +272,7 @@ async def override_occurrence(
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
     pattern = await _get_pattern_in_project(pattern_id, project, db)
-    exc = await _pattern_service.override_occurrence(
-        db, pattern, body.occurrence_at, body.payload
-    )
+    exc = await _pattern_service.override_occurrence(db, pattern, body.occurrence_at, body.payload)
     return RecurrenceExceptionOut.model_validate(exc)
 
 
@@ -303,9 +295,7 @@ async def split_recurring_pattern(
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
     pattern = await _get_pattern_in_project(pattern_id, project, db)
-    new_pattern = await _pattern_service.split_from(
-        db, pattern, body.occurrence_at, body.new_pattern, current_user
-    )
+    new_pattern = await _pattern_service.split_from(db, pattern, body.occurrence_at, body.new_pattern, current_user)
     # Reload so server-defaulted timestamps are populated before serialising.
     await db.refresh(new_pattern)
     return _pattern_out(new_pattern, project.key)

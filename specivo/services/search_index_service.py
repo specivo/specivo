@@ -111,7 +111,7 @@ def _comment_excluded(api_key_id: int | None, is_service_account: bool | None) -
     return bool(settings.search_exclude_bot_comments and (api_key_id is not None or is_service_account))
 
 
-def load_source_chunks(conn: Connection, source_type: str, entity_id: int) -> tuple[int, list[str]] | None:
+def load_source_chunks(conn: Connection, source_type: str, entity_id: int) -> tuple[int, list[str]] | None:  # noqa: PLR0911
     """Return ``(project_id, chunks)`` for a source, or None when it must not be indexed.
 
     None covers a deleted entity, a soft-deleted wiki page, a comment the
@@ -378,7 +378,7 @@ def _guarded(conn: Connection, source_type: str, entity_id: int, work: Any) -> A
     try:
         with conn.begin_nested():
             return work()
-    except Exception as exc:  # noqa: BLE001 - indexing must never fail the content write
+    except Exception as exc:  # indexing must never fail the content write
         logger.warning("Search indexing failed for %s %d: %s", source_type, entity_id, describe_error(exc))
         logger.debug("Search indexing failure for %s %d", source_type, entity_id, exc_info=True)
         return None
@@ -407,7 +407,7 @@ def _changed(obj: object, attrs: tuple[str, ...]) -> bool:
     return any(state.attrs[name].history.has_changes() for name in attrs)
 
 
-def _collect(
+def _collect(  # noqa: C901, PLR0912
     session: Session,
 ) -> tuple[set[SourceKey], list[tuple[int, int]], list[tuple[int, int]], set[int]]:
     """Find the sources a flush touched, from the session's pre-flush state.
@@ -507,7 +507,7 @@ def dispatch_embedding(sources: Iterable[SourceKey]) -> bool:
         from specivo.tasks.embeddings import embed_search_sources
 
         embed_search_sources.apply_async(args=[payload], countdown=SEARCH_EMBED_DEBOUNCE_SECONDS, retry=False)
-    except Exception as exc:  # noqa: BLE001 - a dead broker must not fail the request
+    except Exception as exc:  # a dead broker must not fail the request
         logger.warning(
             "Could not queue embedding for %d search source(s) (%s); the backfill will catch up: %s",
             len(payload),

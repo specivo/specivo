@@ -158,7 +158,7 @@ class SsoSession:
 
 
 #: ``secret_box`` purpose of ``RefreshToken.id_token_encrypted``.
-ID_TOKEN_PURPOSE = "sso-id-token"
+ID_TOKEN_PURPOSE = "sso-id-token"  # noqa: S105
 
 _sessions = SessionService()
 
@@ -314,9 +314,9 @@ class AuthService:
 
             try:
                 palette = await SettingsService().get_avatar_palette(session)
-                color = random.choice(palette)
+                color = random.choice(palette)  # noqa: S311
                 user.preferences = {**user.preferences, "avatar_color": color}
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass  # Non-critical — don't block login
 
         # 7 & 8. Generate tokens

@@ -455,7 +455,7 @@ class AiUsageService:
             raise NotFoundError(f"AI usage entry {entry_id} not found")
         return entry
 
-    async def list_entries(
+    async def list_entries(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -528,7 +528,7 @@ class AiUsageService:
         )
         return list(rows), int(total)
 
-    async def summarize_entries(
+    async def summarize_entries(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -606,7 +606,7 @@ class AiUsageService:
             setattr(summary, name, items)
         return summary
 
-    async def _list_conditions(
+    async def _list_conditions(  # noqa: C901, PLR0912, PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -989,7 +989,7 @@ class AiUsageService:
         """Raise the 422 the content of *data* would get (tool, model, dates, tokens, cost, texts); no authorization."""
         await self._validated(session, data, source=source)
 
-    async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
+    async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:  # noqa: C901
         from specivo.services.ai_subscription_service import AiToolService
 
         if source not in AI_USAGE_SOURCES:
@@ -1361,7 +1361,7 @@ class AiUsageService:
             await self._audit(session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER, actor, entry, details, request)
         return UpsertResult(entry, "updated")
 
-    async def update(
+    async def update(  # noqa: C901, PLR0912
         self,
         session: AsyncSession,
         actor: User,

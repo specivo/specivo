@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-# (compiled_pattern, passage_prefix, query_prefix)
+# (compiled_pattern, passage_prefix, query_prefix)  # noqa: ERA001
 _REGISTRY: list[tuple[re.Pattern[str], str, str]] = [
     # E5-instruct variants (must precede generic E5 pattern)
     (

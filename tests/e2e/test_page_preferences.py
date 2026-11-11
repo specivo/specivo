@@ -33,9 +33,7 @@ def test_color_swatches_visible(admin_page: Page) -> None:
     admin_page.wait_for_load_state("networkidle")
     swatches = admin_page.locator(".sp-color-swatch")
     expect(swatches.first).to_be_visible()
-    assert swatches.count() >= 5, (
-        f"Expected at least 5 color swatches, found {swatches.count()}"
-    )
+    assert swatches.count() >= 5, f"Expected at least 5 color swatches, found {swatches.count()}"
 
 
 def test_header_search(admin_page: Page) -> None:

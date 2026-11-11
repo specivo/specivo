@@ -88,7 +88,7 @@ async def embed_query(service: EmbeddingService, text: str, model: EmbeddingMode
     try:
         redis = await get_redis()
         cached = await redis.get(key)
-    except Exception as exc:  # noqa: BLE001 - the cache is optional
+    except Exception as exc:  # the cache is optional  # noqa: BLE001
         logger.debug("Query embedding cache unavailable (%s)", exc)
         cached = None
     if cached:
@@ -100,6 +100,6 @@ async def embed_query(service: EmbeddingService, text: str, model: EmbeddingMode
     if vector is not None and redis is not None:
         try:
             await redis.set(key, _encode(vector), ex=ttl)
-        except Exception as exc:  # noqa: BLE001 - the cache is optional
+        except Exception as exc:  # the cache is optional  # noqa: BLE001
             logger.debug("Could not store a query embedding (%s)", exc)
     return vector

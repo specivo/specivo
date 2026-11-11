@@ -41,9 +41,7 @@ async def preview_markdown(
     data: MarkdownPreviewRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
-    _rl: None = Depends(  # noqa: B008
-        rate_limit("markdown_preview", max_requests=60, window_seconds=60)
-    ),
+    _rl: None = Depends(rate_limit("markdown_preview", max_requests=60, window_seconds=60)),
 ) -> MarkdownPreviewResponse:
     """Render markdown to sanitized HTML using the server-side renderer.
 

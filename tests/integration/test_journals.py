@@ -860,9 +860,7 @@ async def test_metadata_change_is_journaled(
     )
     journals = list(result.scalars().all())
     # Find any journal carrying an issue_metadata detail
-    meta_details = [
-        d for j in journals for d in j.details if d.prop_key == "issue_metadata"
-    ]
+    meta_details = [d for j in journals for d in j.details if d.prop_key == "issue_metadata"]
     assert len(meta_details) == 1
     assert meta_details[0].old_value in (None, "{}")
     assert "severity" in meta_details[0].new_value

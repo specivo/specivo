@@ -164,17 +164,13 @@ async def test_russian_project_matches_both_stem_directions(
     tracker, _, _ = lookups
 
     # Per-project russian language set BEFORE content creation -> index uses russian.
-    ru_project = await _make_project(
-        db_session, key="RUFT", identifier="ru-fts-project", fts_language="russian"
-    )
+    ru_project = await _make_project(db_session, key="RUFT", identifier="ru-fts-project", fts_language="russian")
     await _add_manager(db_session, ru_project, search_user)
 
     await _create_issue(authed_client, ru_project.key, tracker.id, "Защита диссертации")
 
     # Genitive form (as indexed)
-    resp = await authed_client.get(
-        SEARCH_URL, params={"q": "диссертации", "scope": "issues"}
-    )
+    resp = await authed_client.get(SEARCH_URL, params={"q": "диссертации", "scope": "issues"})
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["total_count"] >= 1
@@ -182,9 +178,7 @@ async def test_russian_project_matches_both_stem_directions(
     assert any("диссертации" in s for s in subtitles)
 
     # Nominative form -> russian stemming should still match (both directions).
-    resp2 = await authed_client.get(
-        SEARCH_URL, params={"q": "диссертация", "scope": "issues"}
-    )
+    resp2 = await authed_client.get(SEARCH_URL, params={"q": "диссертация", "scope": "issues"})
     assert resp2.status_code == 200, resp2.text
     data2 = resp2.json()
     assert data2["total_count"] >= 1
@@ -205,22 +199,16 @@ async def test_english_default_project_does_not_stem_russian(
     """
     tracker, _, _ = lookups
 
-    en_project = await _make_project(
-        db_session, key="ENFT", identifier="en-fts-project"
-    )
+    en_project = await _make_project(db_session, key="ENFT", identifier="en-fts-project")
     await _add_manager(db_session, en_project, search_user)
 
     await _create_issue(authed_client, en_project.key, tracker.id, "Защита диссертации")
 
     # english stemmer treats these as distinct tokens -> nominative does not match genitive.
-    resp = await authed_client.get(
-        SEARCH_URL, params={"q": "диссертация", "scope": "issues"}
-    )
+    resp = await authed_client.get(SEARCH_URL, params={"q": "диссертация", "scope": "issues"})
     assert resp.status_code == 200, resp.text
     data = resp.json()
     en_subtitles = [
-        i["subtitle"]
-        for i in data["items"]
-        if i["result_type"] == "issue" and i["project_key"] == en_project.key
+        i["subtitle"] for i in data["items"] if i["result_type"] == "issue" and i["project_key"] == en_project.key
     ]
     assert not any("диссертации" in s for s in en_subtitles)

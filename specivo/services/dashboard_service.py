@@ -592,7 +592,7 @@ async def activity_groups(
     if te_visible is not None:
         te_stmt = te_stmt.where(te_visible)
     for te in (await session.execute(te_stmt)).scalars():
-        events.append(
+        events.append(  # noqa: PERF401
             ActivityEvent(
                 ts=te.created_at,
                 kind="time",
@@ -652,8 +652,11 @@ async def activity_groups(
     return await _fold(session, scope, events, groups_limit)
 
 
-async def _fold(
-    session: AsyncSession, scope: DashboardScope, events: list[ActivityEvent], groups_limit: int
+async def _fold(  # noqa: PLR0912
+    session: AsyncSession,
+    scope: DashboardScope,  # noqa: ARG001
+    events: list[ActivityEvent],
+    groups_limit: int,  # noqa: ARG001, RUF100
 ) -> list[ActivityGroup]:
     """Fold consecutive events of one actor (and key) on one target into groups, and label them."""
     runs: list[tuple[tuple[Any, ...], list[ActivityEvent]]] = []

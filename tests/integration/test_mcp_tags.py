@@ -122,9 +122,7 @@ async def issue(db_session, project, tracker, priority, status, admin):
 
 @pytest_asyncio.fixture
 async def wiki_page(db_session, project, admin):
-    page, _ = await WikiService().create_page(
-        db_session, project.id, title="MCP Wiki Tag", text="body", author=admin
-    )
+    page, _ = await WikiService().create_page(db_session, project.id, title="MCP Wiki Tag", text="body", author=admin)
     await db_session.commit()
     await db_session.refresh(page)
     return page
@@ -263,10 +261,10 @@ class TestTagEntityTool:
 
         await _tag(db_session, admin, issue.display_key, "add", "tracked")
         rows = (
-            await db_session.execute(
-                select(SecurityAuditLog).where(SecurityAuditLog.event_type == "tag_added")
-            )
-        ).scalars().all()
+            (await db_session.execute(select(SecurityAuditLog).where(SecurityAuditLog.event_type == "tag_added")))
+            .scalars()
+            .all()
+        )
         assert len(rows) >= 1
         assert rows[0].details.get("source") == "mcp"
 
@@ -303,9 +301,7 @@ class TestTagsInIssueResponses:
         result = await _show_issue(db_session, admin, issue.display_key, metadata_only=True)
         assert "Tags: backend" in result
 
-    async def test_list_issues_shows_tags_per_issue(
-        self, db_session, admin, project, tracker, priority, status, issue
-    ):
+    async def test_list_issues_shows_tags_per_issue(self, db_session, admin, project, tracker, priority, status, issue):
         from specivo.mcp.tools import _list_issues, _tag
 
         svc = IssueService()

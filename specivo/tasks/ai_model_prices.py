@@ -51,5 +51,5 @@ async def load_bundled_ai_model_prices_async() -> None:
 def _load_bundled_prices_at_start(**_kwargs) -> None:  # type: ignore[no-untyped-def]
     try:
         run_async(load_bundled_ai_model_prices_async())
-    except Exception as exc:  # noqa: BLE001 - a start-up step must not stop the worker
+    except Exception as exc:  # a start-up step must not stop the worker  # noqa: BLE001
         logger.warning("Loading the bundled AI model prices at worker start failed: %s", exc)

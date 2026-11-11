@@ -194,8 +194,6 @@ class IssueUpdateOut(IssueOut):
 class IssueListResponse(PaginatedResponse[IssueOut]):
     """Paginated issue list response."""
 
-    pass
-
 
 class SimilarIssueOut(BaseModel):
     """An issue whose subject resembles a title being typed (``GET .../issues/similar/``).

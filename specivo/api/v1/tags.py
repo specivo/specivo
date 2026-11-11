@@ -81,7 +81,7 @@ async def _log_tag(
     details: dict,
 ) -> None:
     """Emit a tag audit event, swallowing audit failures (matches metadata schemas)."""
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=event,
@@ -92,12 +92,12 @@ async def _log_tag(
             details={"project_key": project.key, **details},
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
 # ---------------------------------------------------------------------------
-# Vocabulary: list / search / create / update / delete
+# Vocabulary: list / search / create / update / delete  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 

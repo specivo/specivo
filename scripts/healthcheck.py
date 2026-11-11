@@ -36,7 +36,7 @@ def main() -> int:
     prefix = os.environ.get("STEALTH_PREFIX", "").rstrip("/")
     url = f"http://127.0.0.1:{port}{prefix}/health/"
     try:
-        with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310 - fixed local URL
+        with urllib.request.urlopen(url, timeout=4) as resp:
             return 0 if resp.status == 200 else 1
     except Exception as exc:  # noqa: BLE001 - any failure means unhealthy
         print(f"health check failed: {exc}", file=sys.stderr)

@@ -52,9 +52,7 @@ async def get_lookups(session: AsyncSession) -> Lookups:
         select(IssuePriority).where(IssuePriority.active.is_(True)).order_by(IssuePriority.position)
     )
     activities_r = await session.execute(
-        select(TimeEntryActivity)
-        .where(TimeEntryActivity.active.is_(True))
-        .order_by(TimeEntryActivity.position)
+        select(TimeEntryActivity).where(TimeEntryActivity.active.is_(True)).order_by(TimeEntryActivity.position)
     )
 
     _cache = Lookups(

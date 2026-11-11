@@ -154,9 +154,7 @@ class TestRecurringPatternRoundTrip:
         assert "Created recurring pattern" in out
         assert "Weekly standup notes" in out
 
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         rows = list(result.scalars().all())
         assert len(rows) == 1
         pattern = rows[0]
@@ -197,9 +195,7 @@ class TestRecurringPatternRoundTrip:
             rrule_raw="FREQ=WEEKLY;BYDAY=MO",
         )
         assert "Created recurring pattern" in out
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pattern = result.scalar_one()
         assert pattern.rrule_raw == "FREQ=WEEKLY;BYDAY=MO"
 
@@ -222,9 +218,7 @@ class TestRecurrenceOccurrences:
 
         # dtstart far in the past so occurrences land within the window from now.
         await _create(db_session, admin, project, tracker, dtstart="2020-01-06T09:00:00+00:00")
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         out = await _list_recurrence_occurrences(db_session, admin, project.key, pid, days=30)
@@ -239,16 +233,12 @@ class TestRecurrenceOccurrences:
         )
 
         await _create(db_session, admin, project, tracker, dtstart="2020-01-06T09:00:00+00:00")
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         before = await _list_recurrence_occurrences(db_session, admin, project.key, pid, days=30)
         # Pull the first occurrence datetime out of the preview text.
-        first_line = next(
-            ln.strip() for ln in before.splitlines() if "T09:00:00" in ln
-        )
+        first_line = next(ln.strip() for ln in before.splitlines() if "T09:00:00" in ln)
         first_occ = first_line.strip()
 
         out = await _skip_recurrence_occurrence(db_session, admin, project.key, pid, first_occ)
@@ -264,52 +254,38 @@ class TestRecurrenceOccurrences:
 
 
 class TestRecurringPatternPermissions:
-    async def test_create_denied_for_non_manager(
-        self, db_session, viewer, project, tracker, role_view_only
-    ):
+    async def test_create_denied_for_non_manager(self, db_session, viewer, project, tracker, role_view_only):
         await _add_member(db_session, project, viewer, role_view_only)
         with pytest.raises(PermissionDeniedError):
             await _create(db_session, viewer, project, tracker)
 
-    async def test_update_denied_for_non_manager(
-        self, db_session, admin, viewer, project, tracker, role_view_only
-    ):
+    async def test_update_denied_for_non_manager(self, db_session, admin, viewer, project, tracker, role_view_only):
         from specivo.mcp.tools import _update_recurring_pattern
 
         await _create(db_session, admin, project, tracker)
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         await _add_member(db_session, project, viewer, role_view_only)
         with pytest.raises(PermissionDeniedError):
             await _update_recurring_pattern(db_session, viewer, project.key, pid, name="hacked")
 
-    async def test_delete_denied_for_non_manager(
-        self, db_session, admin, viewer, project, tracker, role_view_only
-    ):
+    async def test_delete_denied_for_non_manager(self, db_session, admin, viewer, project, tracker, role_view_only):
         from specivo.mcp.tools import _delete_recurring_pattern
 
         await _create(db_session, admin, project, tracker)
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         await _add_member(db_session, project, viewer, role_view_only)
         with pytest.raises(PermissionDeniedError):
             await _delete_recurring_pattern(db_session, viewer, project.key, pid)
 
-    async def test_skip_denied_for_non_manager(
-        self, db_session, admin, viewer, project, tracker, role_view_only
-    ):
+    async def test_skip_denied_for_non_manager(self, db_session, admin, viewer, project, tracker, role_view_only):
         from specivo.mcp.tools import _skip_recurrence_occurrence
 
         await _create(db_session, admin, project, tracker)
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         await _add_member(db_session, project, viewer, role_view_only)
@@ -356,9 +332,7 @@ class TestRecurringPatternAudit:
         )
 
         await _create(db_session, admin, project, tracker, dtstart="2020-01-06T09:00:00+00:00")
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         before_u = await _audit_count(db_session, "recurring_pattern_updated", project.id)
@@ -366,9 +340,7 @@ class TestRecurringPatternAudit:
         assert await _audit_count(db_session, "recurring_pattern_updated", project.id) == before_u + 1
 
         before_s = await _audit_count(db_session, "recurrence_occurrence_skipped", project.id)
-        await _skip_recurrence_occurrence(
-            db_session, admin, project.key, pid, "2020-01-06T09:00:00+00:00"
-        )
+        await _skip_recurrence_occurrence(db_session, admin, project.key, pid, "2020-01-06T09:00:00+00:00")
         assert await _audit_count(db_session, "recurrence_occurrence_skipped", project.id) == before_s + 1
 
         before_d = await _audit_count(db_session, "recurring_pattern_deleted", project.id)
@@ -379,9 +351,7 @@ class TestRecurringPatternAudit:
         from specivo.mcp.tools import _list_recurrence_occurrences
 
         await _create(db_session, admin, project, tracker, dtstart="2020-01-06T09:00:00+00:00")
-        result = await db_session.execute(
-            select(RecurringPattern).where(RecurringPattern.project_id == project.id)
-        )
+        result = await db_session.execute(select(RecurringPattern).where(RecurringPattern.project_id == project.id))
         pid = result.scalar_one().id
 
         before = await _audit_count(db_session, "recurrence_occurrences_listed", project.id)

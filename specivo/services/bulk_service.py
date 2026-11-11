@@ -121,15 +121,15 @@ class BulkService:
                     )
                 )
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # Catch any error (workflow denied, validation, etc.) — record and continue
                 code = getattr(exc, "code", "internal_error")
                 message = str(exc)
                 display_key_fallback = f"#{issue_id}"
-                try:
+                try:  # noqa: SIM105
                     # Try to get display_key if issue was loaded
                     display_key_fallback = issue.display_key  # type: ignore[union-attr,possibly-undefined]
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
 
                 failed.append(
@@ -192,13 +192,13 @@ class BulkService:
                     )
                 )
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 code = getattr(exc, "code", "internal_error")
                 message = str(exc)
                 display_key_fallback = f"#{issue_id}"
-                try:
+                try:  # noqa: SIM105
                     display_key_fallback = issue.display_key  # type: ignore[union-attr,possibly-undefined]
-                except Exception:
+                except Exception:  # noqa: BLE001, S110
                     pass
 
                 failed.append(

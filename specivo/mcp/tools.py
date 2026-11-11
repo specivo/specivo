@@ -264,7 +264,7 @@ async def _resolve_list_filters(
     return filters
 
 
-async def _list_issues(
+async def _list_issues(  # noqa: C901, PLR0913
     session: AsyncSession,
     user: User,
     project_key: str,
@@ -580,7 +580,7 @@ def _extract_section(text: str, search: str) -> str | None:
     return None
 
 
-async def _create_issue(
+async def _create_issue(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     project_key: str,
@@ -651,7 +651,7 @@ async def _create_issue(
     return result
 
 
-async def _update_issue(
+async def _update_issue(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     issue_ref: str,
@@ -1099,7 +1099,7 @@ async def _list_wiki_pages(
     pages = await _wiki_svc.list_pages(session, project.id)
     lines = [f"Wiki pages for {project.key} ({len(pages)} total):", ""]
     for p in pages:
-        lines.append(f"  {p.slug}  —  {p.title}")
+        lines.append(f"  {p.slug}  —  {p.title}")  # noqa: PERF401
     if not pages:
         lines.append("  (none)")
     await _log_tool(session, user, AuditEvent.WIKI_LISTED, "list_wiki_pages", {"project_key": project_key})
@@ -1199,7 +1199,7 @@ async def _list_comments(
             body = j.notes or ""
             if body or names is None:
                 for body_line in body.splitlines() or [""]:
-                    lines.append(f"  {body_line}")
+                    lines.append(f"  {body_line}")  # noqa: PERF401
             lines.append("")
 
     if end < total:
@@ -1540,7 +1540,7 @@ async def _read_wiki_section(
             if s["heading"] is not None and s["level"] <= sec_level:
                 end_line = s["start"]
                 break
-        if end_line is not None:
+        if end_line is not None:  # noqa: SIM108
             result_lines = lines[section["start"] : end_line]
         else:
             result_lines = lines[section["start"] :]
@@ -1551,7 +1551,7 @@ async def _read_wiki_section(
             if s["heading"] is not None:
                 end_line = s["start"]
                 break
-        if end_line is not None:
+        if end_line is not None:  # noqa: SIM108
             result_lines = lines[section["start"] : end_line]
         else:
             result_lines = lines[section["start"] :]
@@ -1603,7 +1603,7 @@ async def _replace_wiki_section(
     # Build new content: heading line + new body + rest
     heading_line = section["heading"]
     before = "\n".join(lines[: section["start"]])
-    if end_line is not None:
+    if end_line is not None:  # noqa: SIM108
         after = "\n".join(lines[end_line:])
     else:
         after = ""
@@ -1651,11 +1651,11 @@ async def _list_lookups(session: AsyncSession, user: User) -> str:
 
     lines = ["Trackers:", ""]
     for t in trackers:
-        lines.append(f"  {t.id}  {t.name}")
+        lines.append(f"  {t.id}  {t.name}")  # noqa: PERF401
     lines.append("")
     lines.append("Statuses:")
     for s in statuses:
-        lines.append(f"  {s.id}  {s.name}  [{s.category}]")
+        lines.append(f"  {s.id}  {s.name}  [{s.category}]")  # noqa: PERF401
     lines.append("")
     lines.append("Priorities:")
     for p in priorities:
@@ -1922,7 +1922,7 @@ def _detect_lossy_number(value: Any) -> str | None:
     return None
 
 
-async def _metadata(
+async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
     session: AsyncSession,
     user: User,
     target_ref: str,
@@ -2538,7 +2538,7 @@ async def _list_recurring_patterns(session: AsyncSession, user: User, project_ke
             occ = expand_occurrences(_recurring_pattern_svc.build_spec(p), now, window_end, exdates)
             if occ:
                 next_hint = f"  next: {occ[0].isoformat()}"
-        except Exception:
+        except Exception:  # noqa: BLE001
             next_hint = ""
         lines.append(f"  [{p.id}] {p.name} ({rule}, {p.anchor_mode}, {state}){next_hint}")
     if not patterns:
@@ -2554,7 +2554,7 @@ async def _list_recurring_patterns(session: AsyncSession, user: User, project_ke
     return "\n".join(lines)
 
 
-async def _create_recurring_pattern(
+async def _create_recurring_pattern(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     project_key: str,
@@ -2613,7 +2613,7 @@ async def _create_recurring_pattern(
     return f"Created recurring pattern '{pattern.name}' (ID: {pattern.id}) in {project.key}."
 
 
-async def _update_recurring_pattern(
+async def _update_recurring_pattern(  # noqa: C901, PLR0913
     session: AsyncSession,
     user: User,
     project_key: str,
@@ -2768,7 +2768,7 @@ async def _list_recurrence_occurrences(
         "",
     ]
     for occ in occurrences:
-        lines.append(f"  {occ.isoformat()}")
+        lines.append(f"  {occ.isoformat()}")  # noqa: PERF401
     if not occurrences:
         lines.append("  (none)")
 
@@ -3309,7 +3309,7 @@ async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str
     return "issue", issue_project, issue.id, issue.display_key
 
 
-async def _tag(
+async def _tag(  # noqa: C901, PLR0911, PLR0912
     session: AsyncSession,
     user: User,
     target_ref: str,
@@ -3392,7 +3392,7 @@ async def _tag(
         changed = await _add_tags(session, user, "tag", kind, project, entity_id, target_ref, names)
         return f"Added tags to {display}: {', '.join(changed) or '(already present)'}"
 
-    # op == "remove"
+    # op == "remove"  # noqa: ERA001
     for n in names:
         existing_tag = await _tag_svc.get_by_name(session, project.id, n)
         if existing_tag is None:

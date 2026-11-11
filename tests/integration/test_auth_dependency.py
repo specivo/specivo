@@ -252,9 +252,7 @@ class TestSilentRefreshOnApi:
         assert "access_token=" in joined
         assert "refresh_token=" in joined
 
-    async def test_expired_access_no_refresh_returns_401(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_expired_access_no_refresh_returns_401(self, client: AsyncClient, db_session: AsyncSession):
         user = await _create_user(db_session, login="silent_refresh_no_refresh")
         expired_access = _make_jwt_with_remember(user.id, expired=True)
 
@@ -262,9 +260,7 @@ class TestSilentRefreshOnApi:
         assert resp.status_code == 401
         assert resp.json()["errors"][0]["code"] == "auth_token_expired"
 
-    async def test_expired_access_invalid_refresh_returns_401(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_expired_access_invalid_refresh_returns_401(self, client: AsyncClient, db_session: AsyncSession):
         user = await _create_user(db_session, login="silent_refresh_bad_refresh")
         expired_access = _make_jwt_with_remember(user.id, expired=True)
 
@@ -279,9 +275,7 @@ class TestSilentRefreshOnApi:
         # Fall through to the original expired-token failure code.
         assert resp.json()["errors"][0]["code"] == "auth_token_expired"
 
-    async def test_api_key_path_ignores_refresh_cookie(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_api_key_path_ignores_refresh_cookie(self, client: AsyncClient, db_session: AsyncSession):
         """Bearer <api_key> requests must not trigger silent refresh —
         callers on the header path manage their own tokens.
         """
@@ -312,9 +306,7 @@ class TestSilentRefreshOnApi:
         assert "access_token=" not in joined
         assert "refresh_token=" not in joined
 
-    async def test_remember_false_produces_session_cookies(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_remember_false_produces_session_cookies(self, client: AsyncClient, db_session: AsyncSession):
         """When the old access_token carried rem=False, the refreshed
         cookies are session cookies (no Max-Age)."""
         user = await _create_user(db_session, login="silent_refresh_nomember")

@@ -207,7 +207,7 @@ async def get_mcp_session_store() -> RedisSessionStore:
     client from :func:`specivo.core.redis.get_redis` and the
     ``mcp_session_ttl_seconds`` setting.
     """
-    global _store  # noqa: PLW0603
+    global _store
     if _store is None:
         # Local imports to avoid a circular dependency at module import
         # time: ``specivo.core.redis`` does not depend on anything MCP.
@@ -216,15 +216,13 @@ async def get_mcp_session_store() -> RedisSessionStore:
 
         settings = get_settings()
         redis = await get_redis()
-        _store = RedisSessionStore(
-            redis, ttl_seconds=settings.mcp_session_ttl_seconds
-        )
+        _store = RedisSessionStore(redis, ttl_seconds=settings.mcp_session_ttl_seconds)
     return _store
 
 
 def reset_mcp_session_store() -> None:
     """Clear the cached singleton. Test-only helper."""
-    global _store  # noqa: PLW0603
+    global _store
     _store = None
 
 
@@ -245,7 +243,7 @@ async def check_redis_persistence(redis: Redis) -> bool:
     """
     try:
         cfg = await redis.config_get("appendonly")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return True
     if not cfg:
         return True

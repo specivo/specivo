@@ -52,7 +52,7 @@ class CredentialBrokerService:
             await session.flush()
         except IntegrityError:
             await session.rollback()
-            raise ConflictError(f"External system '{name}' already exists")
+            raise ConflictError(f"External system '{name}' already exists")  # noqa: B904
         logger.info("Registered external system %d: %s (%s)", system.id, name, system_type)
         return system
 

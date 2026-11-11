@@ -83,7 +83,7 @@ async def test_rows_take_the_integration_provider_and_numbers_are_per_provider()
         _alembic("upgrade", "0056")
         for table in ("repository_deliveries", "pull_requests"):
             rows = await _execute(
-                f"SELECT provider FROM {table} WHERE integration_id = {_INTEGRATION}",  # noqa: S608
+                f"SELECT provider FROM {table} WHERE integration_id = {_INTEGRATION}",
                 key=_PROJECT_KEY,
             )
             assert rows == [("gitlab",)], table
@@ -104,7 +104,7 @@ async def test_rows_take_the_integration_provider_and_numbers_are_per_provider()
         # Down again: the other provider's request cannot fit the old key and goes.
         _alembic("downgrade", "0055")
         rows = await _execute(
-            f"SELECT number FROM pull_requests WHERE integration_id = {_INTEGRATION}",  # noqa: S608
+            f"SELECT number FROM pull_requests WHERE integration_id = {_INTEGRATION}",
             key=_PROJECT_KEY,
         )
         assert rows == [(7,)]

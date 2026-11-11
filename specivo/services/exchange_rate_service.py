@@ -103,7 +103,7 @@ def parse_rate(value: object, *, field: str = "rate") -> Decimal:
 
     At most 12 digits before and 12 after the decimal point; never rounded.
     """
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, bool) or isinstance(value, float):  # noqa: SIM101
         raise _invalid_rate("Rates must be given as decimal strings", field)
     if isinstance(value, Decimal):
         text = format_decimal_plain(value)

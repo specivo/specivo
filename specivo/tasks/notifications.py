@@ -60,4 +60,4 @@ def send_notification_email(  # type: ignore[no-untyped-def]
         logger.info("Notification email sent to %s: %s", to_email, msg["Subject"])
     except (smtplib.SMTPException, OSError) as exc:
         logger.warning("Failed to send email to %s: %s", to_email, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc)  # noqa: B904

@@ -152,9 +152,7 @@ class _Sender:
 
     @property
     def body(self) -> bytes:
-        return b"".join(
-            m.get("body", b"") for m in self.messages if m["type"] == "http.response.body"
-        )
+        return b"".join(m.get("body", b"") for m in self.messages if m["type"] == "http.response.body")
 
 
 async def _noop_receive() -> dict[str, Any]:  # pragma: no cover - never awaited
@@ -271,9 +269,7 @@ async def test_unknown_session_id_without_redis_entry_returns_404(
     send = _Sender()
 
     async with manager.run():
-        await manager._handle_stateful_request(
-            _make_scope("never-seen"), _noop_receive, send
-        )
+        await manager._handle_stateful_request(_make_scope("never-seen"), _noop_receive, send)
 
     assert send.status == 404
     assert b"Session not found" in send.body
@@ -303,9 +299,7 @@ async def test_session_survives_manager_restart(
     manager_a = _make_manager(store_a)
     send_a = _Sender()
     async with manager_a.run():
-        await manager_a._handle_stateful_request(
-            _make_scope(None), _noop_receive, send_a
-        )
+        await manager_a._handle_stateful_request(_make_scope(None), _noop_receive, send_a)
         assert send_a.status == 200
         session_id = next(iter(manager_a._server_instances))
     # Exiting the run() context simulates the api process dying: task group
@@ -319,16 +313,12 @@ async def test_session_survives_manager_restart(
     manager_b = _make_manager(store_b)
     send_b = _Sender()
     async with manager_b.run():
-        await manager_b._handle_stateful_request(
-            _make_scope(session_id), _noop_receive, send_b
-        )
+        await manager_b._handle_stateful_request(_make_scope(session_id), _noop_receive, send_b)
 
         # Critical assertion: no 404. The request succeeded and a fresh
         # transport was registered under the exact same session id the
         # client supplied.
-        assert send_b.status == 200, (
-            f"Rehydration failed: got status {send_b.status} body={send_b.body!r}"
-        )
+        assert send_b.status == 200, f"Rehydration failed: got status {send_b.status} body={send_b.body!r}"
         assert session_id in manager_b._server_instances
         rehydrated = manager_b._server_instances[session_id]
         assert isinstance(rehydrated, _FakeHTTPTransport)
@@ -369,9 +359,7 @@ async def test_redis_down_during_rehydration_falls_back_to_404(
     send = _Sender()
 
     async with manager.run():
-        await manager._handle_stateful_request(
-            _make_scope("ghost"), _noop_receive, send
-        )
+        await manager._handle_stateful_request(_make_scope("ghost"), _noop_receive, send)
 
     assert send.status == 404
 
@@ -397,9 +385,7 @@ async def test_rehydration_refreshes_sliding_ttl(
     manager = _make_manager(store)
     send = _Sender()
     async with manager.run():
-        await manager._handle_stateful_request(
-            _make_scope("seeded"), _noop_receive, send
-        )
+        await manager._handle_stateful_request(_make_scope("seeded"), _noop_receive, send)
 
     assert send.status == 200
     new_exp = fake_redis._expiries["mcp:session:seeded"]
@@ -510,9 +496,7 @@ async def test_owner_key_can_rehydrate(patch_transport: None, store: RedisSessio
     [KEY_SAME_USER, KEY_OTHER_USER, _NO_KEY],
     ids=["different-key-same-user", "different-user", "no-key"],
 )
-async def test_foreign_credential_cannot_rehydrate(
-    patch_transport: None, store: RedisSessionStore, key: str
-) -> None:
+async def test_foreign_credential_cannot_rehydrate(patch_transport: None, store: RedisSessionStore, key: str) -> None:
     session_id = await _open_session(store)
     _assert_not_found(await _rehydrate(store, session_id, key))
     # The refused attempt did not destroy the owner's session.

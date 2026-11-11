@@ -178,8 +178,8 @@ class OpenStream:
         self._disconnect.set()
 
 
-async def wait_for(predicate, timeout: float = 10.0) -> None:  # type: ignore[no-untyped-def]
+async def wait_for(predicate, timeout: float = 10.0) -> None:  # type: ignore[no-untyped-def]  # noqa: ASYNC109
     """Poll ``predicate`` until it is truthy or fail after ``timeout`` seconds."""
     with anyio.fail_after(timeout):
-        while not predicate():
+        while not predicate():  # noqa: ASYNC110
             await anyio.sleep(0.01)

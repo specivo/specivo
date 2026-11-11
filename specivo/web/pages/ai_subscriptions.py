@@ -275,14 +275,14 @@ async def my_ai_subscriptions(
 
 
 @router.post(MY_URL, response_model=None)
-async def my_ai_subscription_create(
+async def my_ai_subscription_create(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
     plan_key: str = Form(CUSTOM_PLAN_KEY),
     provider: str = Form(""),
     plan_name: str = Form(""),
-    tool_slugs: list[str] = Form([]),  # noqa: B008
+    tool_slugs: list[str] = Form([]),
     amount: str = Form(""),
     currency: str = Form(""),
     billing_period: str = Form("month"),
@@ -368,7 +368,7 @@ async def my_ai_subscription_edit(
 
 
 @router.post(MY_URL + "{subscription_id}/", response_model=None)
-async def my_ai_subscription_update(
+async def my_ai_subscription_update(  # noqa: PLR0913
     subscription_id: int,
     request: Request,
     user: Annotated[User, Depends(require_user)],
@@ -376,7 +376,7 @@ async def my_ai_subscription_update(
     plan_key: str = Form(CUSTOM_PLAN_KEY),
     provider: str = Form(""),
     plan_name: str = Form(""),
-    tool_slugs: list[str] = Form([]),  # noqa: B008
+    tool_slugs: list[str] = Form([]),
     amount: str = Form(""),
     currency: str = Form(""),
     billing_period: str = Form("month"),
@@ -444,7 +444,7 @@ async def _people(db: AsyncSession, include_id: int | None = None) -> list[dict[
     ]
 
 
-async def _render_admin(
+async def _render_admin(  # noqa: PLR0913
     request: Request,
     db: AsyncSession,
     user: User,
@@ -520,7 +520,7 @@ async def admin_ai_subscriptions(
 
 
 @router.post(ADMIN_URL, response_model=None)
-async def admin_ai_subscription_create(
+async def admin_ai_subscription_create(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,
@@ -528,7 +528,7 @@ async def admin_ai_subscription_create(
     plan_key: str = Form(CUSTOM_PLAN_KEY),
     provider: str = Form(""),
     plan_name: str = Form(""),
-    tool_slugs: list[str] = Form([]),  # noqa: B008
+    tool_slugs: list[str] = Form([]),
     amount: str = Form(""),
     currency: str = Form(""),
     billing_period: str = Form("month"),
@@ -605,7 +605,7 @@ async def admin_ai_subscription_edit(
 
 
 @router.post(ADMIN_URL + "{subscription_id}/", response_model=None)
-async def admin_ai_subscription_update(
+async def admin_ai_subscription_update(  # noqa: PLR0913
     subscription_id: int,
     request: Request,
     user: Annotated[User, Depends(require_admin)],
@@ -613,7 +613,7 @@ async def admin_ai_subscription_update(
     plan_key: str = Form(CUSTOM_PLAN_KEY),
     provider: str = Form(""),
     plan_name: str = Form(""),
-    tool_slugs: list[str] = Form([]),  # noqa: B008
+    tool_slugs: list[str] = Form([]),
     amount: str = Form(""),
     currency: str = Form(""),
     billing_period: str = Form("month"),

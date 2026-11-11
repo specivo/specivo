@@ -346,7 +346,7 @@ class ReportForm:
         return urlencode({k: v for k, v in values.items() if v != ""})
 
 
-def _form_params(
+def _form_params(  # noqa: PLR0913
     preset: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
@@ -521,7 +521,7 @@ def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
         ("provider", key.get("provider")),
     ):
         if value:
-            params[name] = value
+            params[name] = value  # noqa: PERF403
     if "issue" in key:
         params["issue"] = row.labels.get("issue") or NONE_VALUE
     if "branch" in key:
@@ -1516,7 +1516,7 @@ async def admin_spend_report(
 
 
 @router.get(ADMIN_ENTRIES_URL, response_class=HTMLResponse)
-async def admin_spend_entries(
+async def admin_spend_entries(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,

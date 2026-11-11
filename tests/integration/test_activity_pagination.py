@@ -358,8 +358,7 @@ async def test_explicit_activity_page_1_still_shows_oldest(
     )
     assert resp.status_code == 200, resp.text
     assert oldest_sentinel in resp.text, (
-        "Explicit ?activity_page=1 must show the oldest entries — pagination "
-        "navigation must remain monotonic."
+        "Explicit ?activity_page=1 must show the oldest entries — pagination navigation must remain monotonic."
     )
 
 
@@ -417,8 +416,7 @@ async def test_activity_partial_no_activity_page_lands_on_last_page(
     )
     assert resp.status_code == 200, resp.text
     assert sentinel in resp.text, (
-        "Activity partial must default to the newest page when no "
-        "activity_page query parameter is supplied."
+        "Activity partial must default to the newest page when no activity_page query parameter is supplied."
     )
 
 

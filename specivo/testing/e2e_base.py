@@ -66,7 +66,7 @@ _E2E_SERVER_ENV = {
     # see a disabled user lose the session without waiting for the interval.
     "SSO_IDP_RECHECK_MINUTES": "0",
 }
-E2E_PASSWORD = "testpassword"
+E2E_PASSWORD = "testpassword"  # noqa: S105
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ E2E_PASSWORD = "testpassword"
 def _run_migrations():
     """Run alembic upgrade head once before E2E tests start."""
     result = subprocess.run(
-        ["uv", "run", "alembic", "upgrade", "head"],
+        ["uv", "run", "alembic", "upgrade", "head"],  # noqa: S607
         env={**os.environ},
         capture_output=True,
         text=True,
@@ -91,7 +91,7 @@ def _run_migrations():
 def _seed_lookups(_run_migrations):
     """Seed lookup tables (trackers, statuses, priorities) via the CLI seed command."""
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "specivo.cli.seed"],
+        ["uv", "run", "python", "-m", "specivo.cli.seed"],  # noqa: S607
         env={**os.environ},
         capture_output=True,
         text=True,
@@ -124,14 +124,14 @@ def kill_port_listeners(port: int) -> None:
     ``host.docker.internal:<port>`` (an IdP calling the back-channel logout
     URL), so killing every listed process took the Docker engine down.
     """
-    result = subprocess.run(
-        ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+    result = subprocess.run(  # noqa: S603
+        ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],  # noqa: S607
         capture_output=True,
         text=True,
     )
     for pid in result.stdout.split():
         if pid.isdigit():
-            subprocess.run(["kill", "-9", pid], capture_output=True)
+            subprocess.run(["kill", "-9", pid], capture_output=True)  # noqa: S603, S607
 
 
 @pytest.fixture(scope="session")
@@ -150,8 +150,8 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     kill_port_listeners(E2E_SERVER_PORT)
     time.sleep(0.5)
 
-    proc = subprocess.Popen(
-        [
+    proc = subprocess.Popen(  # noqa: S603
+        [  # noqa: S607
             "uv",
             "run",
             "uvicorn",
@@ -190,7 +190,7 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
 
 
 @pytest.fixture(scope="session")
-def e2e_seed_data(e2e_server) -> dict:
+def e2e_seed_data(e2e_server) -> dict:  # noqa: ARG001
     """Create test users via a subprocess. Returns credentials dict.
 
     Uses a subprocess with psycopg2-style INSERT to avoid asyncio
@@ -227,10 +227,10 @@ async def _seed():
         await conn.close()
 
 asyncio.run(_seed())
-""".format(db_url=os.environ["DATABASE_URL"], password=E2E_PASSWORD)
+""".format(db_url=os.environ["DATABASE_URL"], password=E2E_PASSWORD)  # noqa: S608
 
-    result = subprocess.run(
-        ["uv", "run", "python", "-c", script],
+    result = subprocess.run(  # noqa: S603
+        ["uv", "run", "python", "-c", script],  # noqa: S607
         env={**os.environ},
         capture_output=True,
         text=True,
@@ -257,7 +257,7 @@ def _login_and_get_token(base_url: str, login: str, password: str) -> tuple[str,
         json={"login": login, "password": password},
         timeout=10,
     )
-    assert resp.status_code == 200, f"E2E login failed for {login}: {resp.text}"
+    assert resp.status_code == 200, f"E2E login failed for {login}: {resp.text}"  # noqa: S101
 
     token = resp.json()["access_token"]
     cookies = []
@@ -389,7 +389,7 @@ def create_project(api: httpx.Client, prefix: str = "E2E", **kwargs: object) -> 
     key = unique_key(prefix)
     payload: dict = {"name": f"Test {key}", "identifier": key.lower(), "key": key, **kwargs}
     resp = api_post_with_retry(api, "/api/v1/projects/", json=payload)
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 201, resp.text  # noqa: S101
     return resp.json()
 
 
@@ -398,24 +398,24 @@ def create_issue(api: httpx.Client, project_key: str, subject: str, **kwargs: ob
     tracker_id = get_first_tracker_id(api)
     payload: dict = {"subject": subject, "project_key": project_key, "tracker_id": tracker_id, **kwargs}
     resp = api_post_with_retry(api, f"/api/v1/projects/{project_key}/issues/", json=payload)
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 201, resp.text  # noqa: S101
     return resp.json()
 
 
 _cached_tracker_id: int | None = None
 
 
-def get_first_tracker_id(api: httpx.Client) -> int:
+def get_first_tracker_id(api: httpx.Client) -> int:  # noqa: ARG001
     """Get the first available tracker ID from the DB (cached per session)."""
-    global _cached_tracker_id  # noqa: PLW0603
+    global _cached_tracker_id
     if _cached_tracker_id is not None:
         return _cached_tracker_id
     # Query DB directly via psycopg2 (sync) to avoid event loop issues
     import subprocess
 
     db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
-    result = subprocess.run(
-        [
+    result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
             "uv",
             "run",
             "python",
@@ -429,7 +429,7 @@ async def _f():
     finally:
         await conn.close()
 print(asyncio.run(_f()))
-""",
+""",  # noqa: S608
         ],
         capture_output=True,
         text=True,

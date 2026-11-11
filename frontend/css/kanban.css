@@ -47,4 +47,3 @@
 .kanban-card-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-link); font-weight: 500; margin-bottom: var(--sp-space-xs); display: flex; align-items: center; gap: var(--sp-space-sm); }
 .kanban-card-title { font-size: var(--sp-font-size-sm); line-height: 1.4; margin-bottom: var(--sp-space-sm); color: var(--sp-text-primary); }
 .kanban-card-footer { display: flex; align-items: center; justify-content: space-between; }
-

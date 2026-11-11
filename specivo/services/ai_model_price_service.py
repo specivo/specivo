@@ -130,7 +130,7 @@ async def price_usage_of(session: AsyncSession, price_id: int) -> PriceUsage:
         row = (
             await session.execute(
                 text(
-                    f"SELECT count(*), max({ref.instant_column}) FROM {ref.table} "  # noqa: S608 - registered identifiers
+                    f"SELECT count(*), max({ref.instant_column}) FROM {ref.table} "  # registered identifiers  # noqa: S608
                     f"WHERE {ref.price_column} = :price_id"
                 ),
                 {"price_id": price_id},
@@ -158,7 +158,7 @@ def parse_unit_price(value: object, field_name: str) -> Decimal | None:
     """
     if value is None:
         return None
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, bool) or isinstance(value, float):  # noqa: SIM101
         raise _invalid("Prices must be given as decimal strings", field_name)
     if isinstance(value, Decimal):
         value = format(value, "f")

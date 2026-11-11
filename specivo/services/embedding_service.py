@@ -265,7 +265,7 @@ class EmbeddingService:
             return None
 
         # Journal (comment) gating: check settings before indexing
-        if source_type == SearchSourceType.JOURNAL:
+        if source_type == SearchSourceType.JOURNAL:  # noqa: SIM102
             if await self._should_skip_comment(session, entity_id):
                 return None
 

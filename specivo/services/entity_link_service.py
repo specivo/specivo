@@ -148,7 +148,7 @@ def _instance_origin() -> str | None:
 
     try:
         return get_settings().app_url
-    except Exception:  # noqa: BLE001 - outside a configured environment no URL is this instance's
+    except Exception:  # outside a configured environment no URL is this instance's  # noqa: BLE001
         return None
 
 
@@ -297,7 +297,7 @@ class EntityLinkService:
             savepoint = await session.begin_nested()
             try:
                 await self.rebuild_source(session, source_type, source_id)
-            except Exception as exc:  # noqa: BLE001 - one bad text must not stop the others
+            except Exception as exc:  # one bad text must not stop the others  # noqa: BLE001
                 if savepoint.is_active:
                     await savepoint.rollback()
                 logger.warning("Could not rebuild links of %s %d: %s", source_type, source_id, exc)
@@ -505,13 +505,13 @@ class EntityLinkService:
             return {}
         found: dict[str, int] = {}
         for key, project_id in await session.execute(select(Project.key, Project.id).where(Project.key.in_(keys))):
-            found[key] = project_id
+            found[key] = project_id  # noqa: PERF403
         missing = keys - found.keys()
         if missing:
             for key, project_id in await session.execute(
                 select(ProjectKeyAlias.old_key, ProjectKeyAlias.project_id).where(ProjectKeyAlias.old_key.in_(missing))
             ):
-                found[key] = project_id
+                found[key] = project_id  # noqa: PERF403
         return found
 
     async def _resolve_wiki_targets(self, session: AsyncSession, rows: list[_Row]) -> None:
@@ -532,7 +532,7 @@ class EntityLinkService:
                         WikiPage.wiki_id == wiki_id, WikiPage.slug.in_(batch), WikiPage.deleted_at.is_(None)
                     )
                 ):
-                    pages[slug] = page_id
+                    pages[slug] = page_id  # noqa: PERF403
                 # A renamed page is still reached under its old slug, as on the page.
                 missing = [s for s in batch if s not in pages]
                 if missing:
@@ -548,7 +548,7 @@ class EntityLinkService:
                             WikiPage.deleted_at.is_(None),
                         )
                     ):
-                        pages[old] = page_id
+                        pages[old] = page_id  # noqa: PERF403
             for row in project_rows:
                 row.target_wiki_page_id = pages.get(row.target_ref)
 
@@ -624,7 +624,7 @@ class EntityLinkService:
             .where(scope, Attachment.filename.in_(names))
             .order_by(Attachment.created_at.asc(), Attachment.id.asc())
         ):
-            files[filename] = attachment_id  # the newest wins, as when rendering
+            files[filename] = attachment_id  # the newest wins, as when rendering  # noqa: PERF403
         for row in by_name:
             row.target_attachment_id = files.get(row.target_ref)
 
@@ -698,7 +698,7 @@ class EntityLinkService:
         await reader.describe(graph, root, order)
         return graph
 
-    async def _raw_edges(
+    async def _raw_edges(  # noqa: C901, PLR0912
         self, session: AsyncSession, node: NodeKey, direction: str, kinds: frozenset[str]
     ) -> list[_RawEdge]:
         node_type, node_id = node
@@ -734,7 +734,7 @@ class EntityLinkService:
                     edges.append(_RawEdge(node, ("issue", parent_id), KIND_PARENT))
             if KIND_CHILD in kinds:
                 for child_id in (await session.execute(select(Issue.id).where(Issue.parent_id == node_id))).scalars():
-                    edges.append(_RawEdge(node, ("issue", child_id), KIND_CHILD))
+                    edges.append(_RawEdge(node, ("issue", child_id), KIND_CHILD))  # noqa: PERF401
             if KIND_ATTACHMENT in kinds:
                 for attachment_id in (
                     await session.execute(
@@ -743,7 +743,7 @@ class EntityLinkService:
                         )
                     )
                 ).scalars():
-                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))
+                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))  # noqa: PERF401
             if KIND_COMMIT in kinds or KIND_PULL_REQUEST in kinds:
                 from specivo.models.repository import IssueCommitLink, IssuePullRequestLink
 
@@ -753,14 +753,14 @@ class EntityLinkService:
                             select(IssueCommitLink.commit_id).where(IssueCommitLink.issue_id == node_id)
                         )
                     ).scalars():
-                        edges.append(_RawEdge(node, ("commit", commit_id), KIND_COMMIT))
+                        edges.append(_RawEdge(node, ("commit", commit_id), KIND_COMMIT))  # noqa: PERF401
                 if KIND_PULL_REQUEST in kinds:
                     for pr_id in (
                         await session.execute(
                             select(IssuePullRequestLink.pull_request_id).where(IssuePullRequestLink.issue_id == node_id)
                         )
                     ).scalars():
-                        edges.append(_RawEdge(node, ("pull_request", pr_id), KIND_PULL_REQUEST))
+                        edges.append(_RawEdge(node, ("pull_request", pr_id), KIND_PULL_REQUEST))  # noqa: PERF401
         elif node_type == "wiki_page":
             if KIND_PARENT in kinds:
                 parent_id = await session.scalar(select(WikiPage.parent_id).where(WikiPage.id == node_id))
@@ -770,7 +770,7 @@ class EntityLinkService:
                 for child_id in (
                     await session.execute(select(WikiPage.id).where(WikiPage.parent_id == node_id))
                 ).scalars():
-                    edges.append(_RawEdge(node, ("wiki_page", child_id), KIND_CHILD))
+                    edges.append(_RawEdge(node, ("wiki_page", child_id), KIND_CHILD))  # noqa: PERF401
             if KIND_ATTACHMENT in kinds:
                 for attachment_id in (
                     await session.execute(
@@ -779,7 +779,7 @@ class EntityLinkService:
                         )
                     )
                 ).scalars():
-                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))
+                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))  # noqa: PERF401
         return edges
 
     async def _text_edges_out(self, session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
@@ -1180,7 +1180,7 @@ class _Reader:
                 # admins only, and files on wiki comments are for admins only;
                 # an admin's project-limited key reaches only its projects.
                 admin = admin_reaches(self.user, journal_project_id)
-                if issue_id is None:
+                if issue_id is None:  # noqa: SIM108
                     ok = admin
                 else:
                     ok = self._issues.get(issue_id, False) and (not is_private or admin)

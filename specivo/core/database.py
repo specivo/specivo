@@ -50,7 +50,7 @@ def get_engine() -> AsyncEngine:
 
         # Register ltree codec for every new asyncpg connection
         @event.listens_for(_engine.sync_engine, "connect")
-        def _on_connect(dbapi_connection, connection_record):
+        def _on_connect(dbapi_connection, connection_record):  # noqa: ARG001
             dbapi_connection.run_async(_register_ltree_codec)
 
         # Per-request SQL profiling (only in debug mode)

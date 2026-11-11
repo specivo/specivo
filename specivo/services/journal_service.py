@@ -527,7 +527,7 @@ class JournalService:
         session: AsyncSession,
         journal_id: int,
         issue_id: int,
-        user: User,
+        user: User,  # noqa: ARG002
     ) -> Journal:
         """Clear resolution on a journal thread.
 

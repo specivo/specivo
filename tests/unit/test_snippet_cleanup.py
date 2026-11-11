@@ -46,7 +46,7 @@ class TestCleanSnippet:
 
     def test_html_escaped(self):
         """HTML in content is escaped to prevent XSS."""
-        text = '<img src=x onerror=alert(1)> hello'
+        text = "<img src=x onerror=alert(1)> hello"
         result = _clean_snippet(text)
         assert "<img" not in result
         assert "&lt;img" in result

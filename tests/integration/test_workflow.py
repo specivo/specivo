@@ -698,7 +698,7 @@ async def test_field_rules_add_no_query_when_no_rules_exist(
     await db_session.commit()
     statements: list[str] = []
 
-    def _record(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+    def _record(conn, cursor, statement, *args) -> None:
         # The test's own transaction may open a savepoint; that is not the check's.
         if not statement.startswith(("SAVEPOINT", "RELEASE SAVEPOINT")):
             statements.append(statement)

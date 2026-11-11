@@ -317,7 +317,7 @@ async def seed_non_member_role(session: AsyncSession) -> None:
 # Default workflow transitions
 # ---------------------------------------------------------------------------
 
-# (tracker_name, old_status_name, new_status_name)
+# (tracker_name, old_status_name, new_status_name)  # noqa: ERA001
 _DEFAULT_TRANSITIONS: list[tuple[str, str, str]] = [
     # Bug workflow
     ("Bug", "New", "In Progress"),

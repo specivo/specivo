@@ -161,7 +161,7 @@ async def create_user(
     await db.flush()
     await db.refresh(user)
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -169,7 +169,7 @@ async def create_user(
             details={"action": "user_created", "target_user_id": user.id, "target_login": user.login},
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     await db.commit()  # commit before response to avoid reload race condition
@@ -219,7 +219,7 @@ async def reset_password(
     await SessionService().revoke_user_sessions(db, user.id, reason="admin_password_reset", actor_id=admin.id)
     await db.flush()
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -227,7 +227,7 @@ async def reset_password(
             details={"action": "password_reset", "target_user_id": user.id, "target_login": user.login},
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return {"detail": "Password reset successfully"}
@@ -305,7 +305,7 @@ async def lock_user(
     await db.flush()
     await db.refresh(user)
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -313,7 +313,7 @@ async def lock_user(
             details={"action": "user_locked", "target_user_id": user.id, "target_login": user.login},
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return UserOut.model_validate(user)
@@ -342,7 +342,7 @@ async def unlock_user(
     await db.flush()
     await db.refresh(user)
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -350,14 +350,14 @@ async def unlock_user(
             details={"action": "user_unlocked", "target_user_id": user.id, "target_login": user.login},
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return UserOut.model_validate(user)
 
 
 # ---------------------------------------------------------------------------
-# Deactivate / reactivate (deprovisioning)
+# Deactivate / reactivate (deprovisioning)  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 _user_svc = UserService()
@@ -422,7 +422,7 @@ async def reactivate_user(
     inactive = await _user_svc.reactivate(db, user, actor_id=admin.id)
     await db.refresh(user)
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -430,7 +430,7 @@ async def reactivate_user(
             details={"action": "user_reactivated", "target_user_id": user.id, "target_login": user.login},
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     await db.commit()  # commit before response to avoid reload race condition
@@ -494,7 +494,7 @@ async def create_user_api_key(
         check_scope_access=False,
     )
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -507,7 +507,7 @@ async def create_user_api_key(
             },
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return ApiKeyCreated(
@@ -538,7 +538,7 @@ async def delete_user_api_key(
     target = await _get_user_or_404(db, user_id)
     await _api_key_svc.delete(session=db, user_id=target.id, key_id=key_id)
 
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.MEMBER_CHANGE,
@@ -551,7 +551,7 @@ async def delete_user_api_key(
             },
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return Response(status_code=204)

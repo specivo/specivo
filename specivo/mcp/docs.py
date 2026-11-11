@@ -441,7 +441,7 @@ def _build_tool_table(mcp_server: MCPServer | None = None) -> str:
                 if tool.name not in summaries:
                     desc = tool.description or ""
                     summaries[tool.name] = desc.split("\n")[0][:80]
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     rows: list[str] = []

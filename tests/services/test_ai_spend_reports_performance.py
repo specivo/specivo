@@ -44,7 +44,7 @@ def _days() -> list[date]:
 async def _count(db: AsyncSession, viewer: User, project: Project | None, **kw: Any) -> tuple[int, Any]:
     seen: list[str] = []
 
-    def _on(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+    def _on(conn, cursor, statement, *args) -> None:
         seen.append(statement)
 
     clear_role_cache(db)

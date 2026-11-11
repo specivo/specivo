@@ -39,10 +39,10 @@ _audit_svc = SecurityAuditService()
 
 
 @router.get("/search/", response_class=HTMLResponse)
-async def search_page(
+async def search_page(  # noqa: C901, PLR0912, PLR0913, PLR0915
     request: Request,
     response: Response,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
     q: str = Query(""),
     mode: str = Query("hybrid"),
@@ -51,7 +51,7 @@ async def search_page(
     mf: str = Query("", description="Metadata field slug to filter by"),
     mv: str = Query("", description="Metadata value to filter by"),
     ma: int = Query(0, description="1 if the metadata field is array-typed"),
-    tag: list[str] = Query(default=[], description="Tag name(s) to filter by (AND logic)"),  # noqa: B006
+    tag: list[str] = Query(default=[], description="Tag name(s) to filter by (AND logic)"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
@@ -191,7 +191,7 @@ async def search_page(
     # path — which the read-only transaction the request runs in would refuse
     # outright.
     if not anonymous and (q.strip() or active_filters is not None):
-        try:
+        try:  # noqa: SIM105
             await _audit_svc.log_search_query(
                 session=db,
                 user_id=user.id,
@@ -202,7 +202,7 @@ async def search_page(
                 type_counts=type_counts or None,
                 request=request,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     templates = get_templates()

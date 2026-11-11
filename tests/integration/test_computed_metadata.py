@@ -116,9 +116,7 @@ async def test_created_issue_shows_project_computed_field(
 
 
 @pytest.mark.asyncio
-async def test_computed_field_not_persisted(
-    client, db_session, admin_token, project, tracker, open_status, priority
-):
+async def test_computed_field_not_persisted(client, db_session, admin_token, project, tracker, open_status, priority):
     """The derived value must never be written to issue_metadata (cannot drift)."""
     resp = await _create_issue(client, admin_token, project, tracker, open_status, priority)
     issue_id = resp.json()["id"]
@@ -136,7 +134,12 @@ async def test_client_cannot_set_computed_field(
 ):
     """A client value for the computed key is stripped, not stored; read shows project value."""
     resp = await _create_issue(
-        client, admin_token, project, tracker, open_status, priority,
+        client,
+        admin_token,
+        project,
+        tracker,
+        open_status,
+        priority,
         metadata={"Area": "Forged", "keep": "yes"},
     )
     assert resp.status_code == 201, resp.text
@@ -153,9 +156,7 @@ async def test_client_cannot_set_computed_field(
 
 
 @pytest.mark.asyncio
-async def test_update_strips_computed_field(
-    client, db_session, admin_token, project, tracker, open_status, priority
-):
+async def test_update_strips_computed_field(client, db_session, admin_token, project, tracker, open_status, priority):
     """PATCH that includes the computed key must not persist it."""
     resp = await _create_issue(client, admin_token, project, tracker, open_status, priority)
     data = resp.json()
@@ -189,9 +190,7 @@ async def test_configure_computed_metadata_via_project_update(
     await db_session.commit()
     await db_session.refresh(plain)
 
-    await ProjectService().update(
-        db_session, plain, ProjectUpdate(computed_metadata={"Area": "Operations"})
-    )
+    await ProjectService().update(db_session, plain, ProjectUpdate(computed_metadata={"Area": "Operations"}))
     await db_session.commit()
 
     resp = await _create_issue(client, admin_token, plain, tracker, open_status, priority)

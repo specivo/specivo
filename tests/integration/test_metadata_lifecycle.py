@@ -263,9 +263,7 @@ class TestDeleteSafe:
         # Verify schema is gone
         from sqlalchemy import select
 
-        result = await db_session.execute(
-            select(MetadataSchema).where(MetadataSchema.id == schema_id)
-        )
+        result = await db_session.execute(select(MetadataSchema).where(MetadataSchema.id == schema_id))
         assert result.scalar_one_or_none() is None
 
     async def test_raises_conflict_when_in_use(
@@ -307,9 +305,7 @@ class TestUsageEndpoint:
         issue_with_metadata: Issue,
     ):
         """GET .../usage/ returns the correct count."""
-        resp = await admin_client.get(
-            f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/usage/"
-        )
+        resp = await admin_client.get(f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/usage/")
         assert resp.status_code == 200
         data = resp.json()
         assert data["schema_id"] == schema.id
@@ -323,9 +319,7 @@ class TestUsageEndpoint:
         schema: MetadataSchema,
     ):
         """GET .../usage/ returns 0 when no issues use the schema."""
-        resp = await admin_client.get(
-            f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/usage/"
-        )
+        resp = await admin_client.get(f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/usage/")
         assert resp.status_code == 200
         assert resp.json()["usage_count"] == 0
 
@@ -336,9 +330,7 @@ class TestUsageEndpoint:
         schema: MetadataSchema,
     ):
         """Unauthenticated request returns 401."""
-        resp = await client.get(
-            f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/usage/"
-        )
+        resp = await client.get(f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/usage/")
         assert resp.status_code == 401
 
 
@@ -355,9 +347,7 @@ class TestSafeDeleteEndpoint:
         schema: MetadataSchema,
     ):
         """DELETE returns 204 when schema has no usage."""
-        resp = await admin_client.delete(
-            f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/"
-        )
+        resp = await admin_client.delete(f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/")
         assert resp.status_code == 204
 
     async def test_delete_returns_409_when_in_use(
@@ -368,9 +358,7 @@ class TestSafeDeleteEndpoint:
         issue_with_metadata: Issue,
     ):
         """DELETE returns 409 when issues use the schema's metadata keys."""
-        resp = await admin_client.delete(
-            f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/"
-        )
+        resp = await admin_client.delete(f"/api/v1/admin/projects/{project.key}/metadata-schemas/{schema.id}/")
         assert resp.status_code == 409
         data = resp.json()
         assert any("Cannot delete" in e["message"] for e in data["errors"])

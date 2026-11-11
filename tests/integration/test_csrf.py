@@ -122,9 +122,7 @@ async def test_mutating_request_without_csrf_rejected(client: AsyncClient, db_se
     assert "CSRF" in resp.json()["detail"]
 
 
-async def test_mutating_request_with_wrong_token_rejected(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_mutating_request_with_wrong_token_rejected(client: AsyncClient, db_session: AsyncSession):
     """POST with mismatched CSRF cookie and header returns 403."""
     user = UserFactory.build(login="csrf_mismatch_user", status="active")
     db_session.add(user)
@@ -162,9 +160,7 @@ async def test_mutating_request_with_wrong_token_rejected(
 # ---------------------------------------------------------------------------
 
 
-async def test_mutating_request_with_valid_csrf_succeeds(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_mutating_request_with_valid_csrf_succeeds(client: AsyncClient, db_session: AsyncSession):
     """PATCH with matching CSRF cookie + header succeeds."""
     user = UserFactory.build(login="csrf_ok_user", status="active")
     db_session.add(user)
@@ -198,9 +194,7 @@ async def test_mutating_request_with_valid_csrf_succeeds(
     assert resp.status_code != 403, f"CSRF should have passed: {resp.text}"
 
 
-async def test_csrf_token_in_form_body_accepted(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_csrf_token_in_form_body_accepted(client: AsyncClient, db_session: AsyncSession):
     """CSRF token in URL-encoded form body is accepted."""
     user = UserFactory.build(login="csrf_form_user", status="active")
     db_session.add(user)
@@ -353,8 +347,7 @@ def test_csrf_secret_rotates_when_settings_secret_key_changes(monkeypatch):
         object.__setattr__(settings, "secret_key", "x" * 64)
         mw_b = CSRFMiddleware(_noop)
         assert not mw_b._validate_token(token), (
-            "rotating settings.secret_key must invalidate tokens signed "
-            "under the previous key"
+            "rotating settings.secret_key must invalidate tokens signed under the previous key"
         )
     finally:
         object.__setattr__(settings, "secret_key", original_key)

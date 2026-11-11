@@ -376,7 +376,7 @@ async def _link_signed_in_user(
     return ResolvedAccount(user=user, identity=identity, outcome="linked")
 
 
-async def _auto_link_target(
+async def _auto_link_target(  # noqa: PLR0911
     db: AsyncSession, *, provider: SsoProvider, claims: Mapping[str, Any], sub_hash: str
 ) -> User | None:
     """Rule 3: the one user the verified email may link to, or ``None`` (with the reason logged)."""

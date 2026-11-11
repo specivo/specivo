@@ -77,7 +77,7 @@ _REVIEWER_STATES = {
 class GitLabProvider:
     name = "gitlab"
 
-    def verify(self, headers: Mapping[str, str], raw_body: bytes, secret: str) -> None:
+    def verify(self, headers: Mapping[str, str], raw_body: bytes, secret: str) -> None:  # noqa: ARG002
         given = header(headers, "X-Gitlab-Token")
         if not given:
             raise SignatureError("missing X-Gitlab-Token")

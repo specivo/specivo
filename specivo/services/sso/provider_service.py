@@ -194,7 +194,7 @@ class ProviderService:
         return {pid: count for pid, count in rows.all()}
 
     def secret_status(self, provider: SsoProvider) -> SecretStatus:
-        if provider.token_endpoint_auth_method == "none":
+        if provider.token_endpoint_auth_method == "none":  # noqa: S105
             return SecretStatus.NOT_REQUIRED
         if provider.client_secret_encrypted:
             try:
@@ -215,7 +215,7 @@ class ProviderService:
         stored secret cannot be decrypted (``SECRET_KEY`` rotated): the admin
         has to enter it again.
         """
-        if provider.token_endpoint_auth_method == "none":
+        if provider.token_endpoint_auth_method == "none":  # noqa: S105
             return None
         if provider.client_secret_encrypted:
             return secret_box.decrypt(provider.client_secret_encrypted, CLIENT_SECRET_PURPOSE)
@@ -330,7 +330,7 @@ class ProviderService:
         await invalidate_provider_cache(provider.id)
         return provider
 
-    async def update(
+    async def update(  # noqa: C901, PLR0912, PLR0915
         self, session: AsyncSession, provider_id: int, data: SsoProviderUpdate, *, actor: User | None
     ) -> ProviderUpdateResult:
         """Apply the fields present in ``data``.
@@ -781,7 +781,7 @@ class ProviderService:
                     "Identity provider URLs must use https (SSO_ALLOW_INSECURE_HTTP is off)",
                     field,
                 )
-        public = values["token_endpoint_auth_method"] == "none"
+        public = values["token_endpoint_auth_method"] == "none"  # noqa: S105
         if public and secret_source is not None:
             raise _invalid(
                 "sso_client_secret_not_allowed",

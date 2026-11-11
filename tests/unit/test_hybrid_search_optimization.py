@@ -109,7 +109,7 @@ async def test_search_with_skip_count_returns_zero_total():
     # Mock the session.execute to track calls
     # We need to verify that no COUNT query is executed
     execute_calls = []
-    _original_execute = mock_session.execute  # noqa: F841
+    _original_execute = mock_session.execute
 
     async def tracking_execute(stmt, params=None):
         sql_text = str(stmt) if hasattr(stmt, "text") else str(stmt)

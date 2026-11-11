@@ -224,7 +224,7 @@ def queue_processing(delivery_ids: Iterable[int]) -> int:
     for delivery_id in delivery_ids:
         try:
             process_repository_delivery.apply_async(args=[delivery_id], retry=False)
-        except Exception as exc:  # noqa: BLE001 - a dead broker must not fail the forge's request
+        except Exception as exc:  # a dead broker must not fail the forge's request  # noqa: BLE001
             logger.warning(
                 "Could not queue repository delivery %d (%s); the sweeper will retry it",
                 delivery_id,
@@ -282,7 +282,7 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
     else:
         try:
             result = await _dispatch(session, integration, delivery.event, delivery.payload or {})
-        except Exception as exc:  # noqa: BLE001 - recorded on the delivery, never lost
+        except Exception as exc:  # recorded on the delivery, never lost
             logger.exception(
                 "Repository delivery %d failed",
                 delivery_pk,
@@ -394,7 +394,7 @@ async def _scope_projects(session: AsyncSession, integration: RepositoryIntegrat
             if project_id != root.id and await check_permission(
                 creator, project_id, Permission.MANAGE_PROJECT, session
             ):
-                allowed[key] = project_id
+                allowed[key] = project_id  # noqa: PERF403
     return allowed
 
 

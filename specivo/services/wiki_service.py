@@ -310,7 +310,7 @@ class WikiService:
                     "deleted_page_ids": deleted_ids,
                 },
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for wiki page delete %d", page.id)
 
         return deleted_ids
@@ -386,7 +386,7 @@ class WikiService:
                     "restored_page_ids": restored_ids,
                 },
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for wiki page restore %d", page.id)
 
         return restored_ids
@@ -406,7 +406,9 @@ class WikiService:
         return list(result.scalars().all())
 
     async def hard_delete_expired_pages(
-        self, session: AsyncSession, retention_days: int = 90,
+        self,
+        session: AsyncSession,
+        retention_days: int = 90,
     ) -> list[int]:
         """Permanently delete pages in trash older than retention_days.
 
@@ -422,9 +424,7 @@ class WikiService:
         expired_ids = [row[0] for row in result.all()]
 
         if expired_ids:
-            await session.execute(
-                delete(WikiPage).where(WikiPage.id.in_(expired_ids))
-            )
+            await session.execute(delete(WikiPage).where(WikiPage.id.in_(expired_ids)))
             await session.flush()
 
         return expired_ids
@@ -436,9 +436,7 @@ class WikiService:
             return []
 
         stmt = (
-            select(WikiPage)
-            .where(WikiPage.wiki_id == wiki.id, WikiPage.deleted_at.is_(None))
-            .order_by(WikiPage.title)
+            select(WikiPage).where(WikiPage.wiki_id == wiki.id, WikiPage.deleted_at.is_(None)).order_by(WikiPage.title)
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -539,7 +537,9 @@ class WikiService:
 
     async def _get_page_by_slug(self, session: AsyncSession, wiki_id: int, slug: str) -> WikiPage | None:
         stmt = select(WikiPage).where(
-            WikiPage.wiki_id == wiki_id, WikiPage.slug == slug, WikiPage.deleted_at.is_(None),
+            WikiPage.wiki_id == wiki_id,
+            WikiPage.slug == slug,
+            WikiPage.deleted_at.is_(None),
         )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()

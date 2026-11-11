@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # Contributions are merged into the release branch, so pull requests that
+    # target it get the same checks as those that target main.
+    branches: [main, "release/**"]
   workflow_call:
 
 # Every job only checks out code and uploads artifacts, which needs no more
@@ -39,7 +41,36 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --all-extras
-      - run: uv run ruff check specivo/ tests/
+      # The stricter rules (complexity, bugbear, bandit, blind except, ...)
+      # apply to new code; existing violations carry a noqa. See CONTRIBUTING.md.
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format
+        run: uv run ruff format --check .
+      - name: Layer contracts (import-linter)
+        run: uv run lint-imports
+      # Informational: lists the functions above complexity grade C and the
+      # modules with a low maintainability index. It never fails the build.
+      - name: Complexity report (radon)
+        if: always()
+        run: |
+          {
+            echo "## Complexity report"
+            echo '### Functions with cyclomatic complexity grade D or worse'
+            echo '```'
+            uv run radon cc specivo -n D -s --total-average
+            echo '```'
+            echo '### Modules with maintainability index grade B or worse'
+            echo '```'
+            uv run radon mi specivo -n B -s
+            echo '```'
+          } | tee complexity-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload complexity report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: complexity-report
+          path: complexity-report.md
 
   test:
     runs-on: ubuntu-latest
@@ -74,6 +105,9 @@ jobs:
       SPECIVO_REQUIRE_BUNDLES: "1"
     steps:
       - uses: actions/checkout@v7
+        with:
+          # diff-cover compares against the pull request's base branch.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --all-extras
 
@@ -114,6 +148,16 @@ jobs:
       - name: Coverage summary
         if: always()
         run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      # New and changed lines in a pull request must be covered by tests.
+      - name: Coverage of changed lines
+        if: github.event_name == 'pull_request'
+        run: |
+          uv run diff-cover coverage.xml \
+            --compare-branch="origin/${{ github.base_ref }}" \
+            --fail-under=80 \
+            --format "markdown:diff-cover.md"
+          cat diff-cover.md >> "$GITHUB_STEP_SUMMARY"
 
   test-e2e:
     runs-on: ubuntu-latest

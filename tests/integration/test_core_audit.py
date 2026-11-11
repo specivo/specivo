@@ -86,7 +86,7 @@ class TestLoginSuccessAudit:
         # httpx test client provides a client IP
         assert event.ip_address is not None
         # user_agent may be None in test client but field should exist
-        assert "user_agent" in SecurityAuditLog.__table__.columns or event.user_agent is not None or True
+        assert "user_agent" in SecurityAuditLog.__table__.columns or event.user_agent is not None or True  # noqa: SIM222
 
 
 class TestLoginFailureAudit:

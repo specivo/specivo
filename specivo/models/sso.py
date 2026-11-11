@@ -49,8 +49,8 @@ SLUG_PATTERN = r"^[a-z0-9-]{2,40}$"
 #: ``client_secret_env`` may only name variables in this namespace. Anything
 #: else (``SECRET_KEY``, ``DATABASE_URL`` ...) would let whoever controls the
 #: provider row send Specivo's own secrets to a token endpoint of their choice.
-CLIENT_SECRET_ENV_PREFIX = "SPECIVO_SSO_SECRET_"
-CLIENT_SECRET_ENV_PATTERN = r"^SPECIVO_SSO_SECRET_[A-Z0-9][A-Z0-9_]{0,44}$"
+CLIENT_SECRET_ENV_PREFIX = "SPECIVO_SSO_SECRET_"  # noqa: S105
+CLIENT_SECRET_ENV_PATTERN = r"^SPECIVO_SSO_SECRET_[A-Z0-9][A-Z0-9_]{0,44}$"  # noqa: S105
 _CLIENT_SECRET_ENV_RE = re.compile(CLIENT_SECRET_ENV_PATTERN)
 
 

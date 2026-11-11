@@ -296,7 +296,7 @@ async def run_validation(args: argparse.Namespace, adapter: Any) -> int:
     report = await validate()
     print(report.format_text())
     if args.report_json:
-        Path(args.report_json).write_text(json.dumps(report.as_dict(), indent=2))
+        Path(args.report_json).write_text(json.dumps(report.as_dict(), indent=2))  # noqa: ASYNC240
         logger.info("Wrote the report to %s", args.report_json)
     return 0 if report.ok else 1
 
@@ -314,7 +314,7 @@ async def _run(args: argparse.Namespace, adapter_cls: type[Any]) -> int:
 
     print(summary.format_text())
     if args.report_json:
-        Path(args.report_json).write_text(json.dumps(summary.as_dict(), indent=2))
+        Path(args.report_json).write_text(json.dumps(summary.as_dict(), indent=2))  # noqa: ASYNC240
         logger.info("Wrote the report to %s", args.report_json)
 
     if summary.dry_run:
@@ -335,7 +335,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     # need a plugin's password hasher, and it must be registered here.
     try:
         bootstrap()
-    except Exception as exc:  # noqa: BLE001 - a misconfigured plugin is reported, not traced
+    except Exception as exc:  # a misconfigured plugin is reported, not traced  # noqa: BLE001
         logger.error("Could not load plugins: %s", exc)
         sys.exit(1)
 
@@ -348,7 +348,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         # Phases commit as they finish, so an interrupted import is resumable.
         logger.error("Interrupted. Re-run with --resume and the run id printed above to continue.")
         sys.exit(130)
-    except Exception as exc:  # pragma: no cover - CLI surface
+    except Exception as exc:  # pragma: no cover - CLI surface  # noqa: BLE001
         logger.error("Import failed: %s", exc)
         sys.exit(1)
 

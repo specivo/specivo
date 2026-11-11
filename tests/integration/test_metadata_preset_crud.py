@@ -253,9 +253,7 @@ class TestDeletePreset:
         await svc.delete_preset(db_session, custom_preset)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(MetadataPreset).where(MetadataPreset.id == preset_id)
-        )
+        result = await db_session.execute(select(MetadataPreset).where(MetadataPreset.id == preset_id))
         assert result.scalar_one_or_none() is None
 
     async def test_raises_403_for_builtin(
@@ -399,9 +397,7 @@ class TestPresetCRUDAPI:
         custom_preset: MetadataPreset,
     ):
         """DELETE /admin/metadata-presets/{slug}/ deletes custom presets."""
-        resp = await admin_client.delete(
-            f"/api/v1/admin/metadata-presets/{custom_preset.slug}/"
-        )
+        resp = await admin_client.delete(f"/api/v1/admin/metadata-presets/{custom_preset.slug}/")
         assert resp.status_code == 204
 
     async def test_delete_builtin_preset_returns_403(
@@ -410,16 +406,12 @@ class TestPresetCRUDAPI:
         builtin_preset: MetadataPreset,
     ):
         """DELETE returns 403 for builtin presets."""
-        resp = await admin_client.delete(
-            f"/api/v1/admin/metadata-presets/{builtin_preset.slug}/"
-        )
+        resp = await admin_client.delete(f"/api/v1/admin/metadata-presets/{builtin_preset.slug}/")
         assert resp.status_code == 403
 
     async def test_delete_preset_not_found(self, admin_client: AsyncClient):
         """DELETE with unknown slug returns 404."""
-        resp = await admin_client.delete(
-            "/api/v1/admin/metadata-presets/nonexistent/"
-        )
+        resp = await admin_client.delete("/api/v1/admin/metadata-presets/nonexistent/")
         assert resp.status_code == 404
 
 
@@ -479,9 +471,7 @@ class TestDeletePresetWithActiveSchemas:
         db_session.add(schema)
         await db_session.commit()
 
-        resp = await admin_client.delete(
-            f"/api/v1/admin/metadata-presets/{custom_preset.slug}/"
-        )
+        resp = await admin_client.delete(f"/api/v1/admin/metadata-presets/{custom_preset.slug}/")
         assert resp.status_code == 409
 
     async def test_delete_succeeds_after_disabling_preset(
@@ -510,7 +500,5 @@ class TestDeletePresetWithActiveSchemas:
         assert resp.status_code == 204
 
         # Now delete should succeed
-        resp = await admin_client.delete(
-            f"/api/v1/admin/metadata-presets/{custom_preset.slug}/"
-        )
+        resp = await admin_client.delete(f"/api/v1/admin/metadata-presets/{custom_preset.slug}/")
         assert resp.status_code == 204

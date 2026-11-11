@@ -136,7 +136,7 @@ class AiToolService:
             .on_conflict_do_nothing(index_elements=["slug"])
         )
         tool = await session.get(AiTool, normalized)
-        assert tool is not None
+        assert tool is not None  # noqa: S101
         logger.info("Added AI tool %r on first use (inactive)", normalized)
         return tool
 
@@ -512,7 +512,7 @@ class AiSubscriptionService:
         if actor.id != details["target_user_id"]:
             await self._audit(session, AuditEvent.AI_SUBSCRIPTION_DELETED, actor, request, details, sub_id)
 
-    async def _validated(
+    async def _validated(  # noqa: C901, PLR0912, PLR0915
         self, session: AsyncSession, changes: Mapping[str, Any], *, current: AiSubscription | None
     ) -> dict[str, Any]:
         """Column values for a new subscription (*current* ``None``) or the changed fields of one.

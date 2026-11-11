@@ -316,7 +316,7 @@ class Snapshot:
         return names.get(int(value), value)
 
     def _attachment(self, a: Attachment) -> tuple:
-        if a.container_type == "Issue":
+        if a.container_type == "Issue":  # noqa: SIM108
             container = self.keys[a.container_id]
         else:
             container = str(self.pages[a.container_id])
@@ -387,7 +387,7 @@ async def fresh_database() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(url)
     try:
         environment = {**os.environ, "DATABASE_URL": url.render_as_string(hide_password=False)}
-        subprocess.run(
+        subprocess.run(  # noqa: ASYNC221
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             check=True,
             env=environment,
@@ -415,7 +415,7 @@ async def import_into_fresh_database(
     """Run the import command's pipeline for *argv* into a database of its own, and snapshot it."""
     import specivo.services.attachment_service as attachment_service
 
-    storage.mkdir()
+    storage.mkdir()  # noqa: ASYNC240
     attachment_service._upload_dir = storage  # restored by the test's monkeypatch
     async with fresh_database() as session_factory:
         summary = await run_import(argv, session_factory)

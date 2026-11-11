@@ -55,10 +55,10 @@ IMPORT_ACCOUNT_STATE_KEY = "import_account_id"
 
 # Report sections. The section name is printed as the heading of its list, so it
 # has to read as a statement about the accounts under it.
-NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"
+NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"  # noqa: S105
 NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
-NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"
-NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"
+NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"  # noqa: S105
+NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"  # noqa: S105
 NOTE_EXTERNAL_AUTH = "accounts_that_signed_in_through_an_external_directory"
 NOTE_ADMINS_GRANTED = "accounts_imported_as_administrators"
 NOTE_ADMINS_NOT_GRANTED = "source_administrators_imported_without_administrator_rights"
@@ -322,12 +322,12 @@ def _imported_password(ctx: PhaseContext, ir: IRUser, login: str) -> str | None:
     # adapter declares; checked again for whatever it actually emitted.
     _require_enabled(credential.algorithm)
     hasher = get_password_hasher_registry().get(credential.algorithm)
-    assert hasher is not None
+    assert hasher is not None  # noqa: S101
     try:
         return hasher.from_source(credential.fields)
     except CredentialImportError as exc:
         ctx.warn("Password could not be carried over; the account will set a new one", login=login, reason=str(exc))
-    except Exception:  # noqa: BLE001 - a plugin hasher's bug must not end the import
+    except Exception:  # a plugin hasher's bug must not end the import
         logger.exception("Password hasher %r failed on an imported account", credential.algorithm)
         ctx.warn(
             "Password could not be carried over; the account will set a new one",

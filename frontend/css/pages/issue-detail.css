@@ -155,4 +155,3 @@
 .summary-box svg { width: 18px; height: 18px; }
 .log-form { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-md); padding: var(--sp-space-xl); margin-bottom: var(--sp-space-xl); }
 .log-form h3 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-lg); }
-

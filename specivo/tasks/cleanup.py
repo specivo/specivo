@@ -31,9 +31,9 @@ def cleanup_expired_tokens(self) -> None:  # type: ignore[no-untyped-def]
     """
     try:
         run_async(_cleanup_async())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Token cleanup failed: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc)  # noqa: B904
 
 
 async def _cleanup_async() -> None:
@@ -123,9 +123,9 @@ def ensure_audit_partitions(self) -> None:  # type: ignore[no-untyped-def]
     """
     try:
         run_async(_ensure_audit_partitions_async())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Audit partition maintenance failed: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc)  # noqa: B904
 
 
 async def _ensure_audit_partitions_async() -> None:
@@ -149,5 +149,5 @@ def _ensure_audit_partitions_at_start(**_kwargs) -> None:  # type: ignore[no-unt
     try:
         run_async(_ensure_audit_partitions_async())
         logger.info("Audit log partitions checked at worker start")
-    except Exception as exc:  # noqa: BLE001 - a start-up check must not stop the worker
+    except Exception as exc:  # a start-up check must not stop the worker  # noqa: BLE001
         logger.warning("Audit partition check at worker start failed: %s", exc)

@@ -279,7 +279,7 @@ async def test_the_query_count_does_not_grow_with_the_entries(db_session: AsyncS
     async def statements() -> int:
         seen: list[str] = []
 
-        def _count(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+        def _count(conn, cursor, statement, *args) -> None:
             seen.append(statement)
 
         engine = db_session.bind.sync_engine  # type: ignore[union-attr]

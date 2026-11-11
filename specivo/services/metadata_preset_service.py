@@ -137,9 +137,7 @@ class MetadataPresetService:
 
         # Case-insensitive uniqueness: also guards against colliding with a
         # built-in preset's slug.
-        existing = await session.execute(
-            select(MetadataPreset).where(func.lower(MetadataPreset.slug) == slug.lower())
-        )
+        existing = await session.execute(select(MetadataPreset).where(func.lower(MetadataPreset.slug) == slug.lower()))
         if existing.scalar_one_or_none() is not None:
             raise AppError(
                 code="conflict",
@@ -217,9 +215,7 @@ class MetadataPresetService:
             )
         # Check for active schemas referencing this preset
         result = await session.execute(
-            select(func.count())
-            .select_from(MetadataSchema)
-            .where(MetadataSchema.preset_slug == preset.slug)
+            select(func.count()).select_from(MetadataSchema).where(MetadataSchema.preset_slug == preset.slug)
         )
         active_count = result.scalar_one()
         if active_count > 0:

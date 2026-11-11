@@ -49,7 +49,7 @@ def validate_json_schema(schema_definition: dict) -> None:
     try:
         validator_cls.check_schema(schema_definition)
     except jsonschema.exceptions.SchemaError as exc:
-        raise ValidationError(
+        raise ValidationError(  # noqa: B904
             message=_("Invalid JSON Schema: {reason}").format(reason=exc.message),
             field="schema_definition",
             details={"schema_path": list(exc.absolute_schema_path)},
@@ -242,7 +242,7 @@ class MetadataSchemaService:
             await session.flush()
         except IntegrityError:
             await session.rollback()
-            raise AppError(
+            raise AppError(  # noqa: B904
                 code="conflict",
                 message=f"A metadata schema named '{data.name}' already exists for this project/tracker combination.",
                 status_code=409,
@@ -460,7 +460,7 @@ class MetadataSchemaService:
         project_keys: dict[int, str] = {pid: key for pid, key in rows}
         for pid in sorted(by_project, key=lambda p: project_keys.get(p, "")):
             project_schemas = sorted(by_project[pid], key=lambda s: (s.tracker_id is not None, s.name))
-            async for issue_id, key, tracker_id, metadata in self._issue_batches(session, pid, batch_size):
+            async for issue_id, key, tracker_id, metadata in self._issue_batches(session, pid, batch_size):  # noqa: B007
                 for schema in project_schemas:
                     if schema.tracker_id is not None and schema.tracker_id != tracker_id:
                         continue

@@ -47,7 +47,7 @@ async def time_entries_list(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
     if not await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -118,7 +118,7 @@ async def time_entry_form(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
     if not await check_permission(user, project.id, Permission.LOG_TIME, db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")

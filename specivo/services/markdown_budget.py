@@ -246,7 +246,7 @@ def _block_scan_cost(block: str) -> float:
         elif first == "]":
             if brackets:
                 bracket_chars += pos - brackets.pop()
-            if token == "](":
+            if token == "](":  # noqa: S105
                 parens.append((pos + 1, True))
         elif first == "(":
             parens.append((pos, False))
@@ -389,7 +389,7 @@ class RenderDeadline(Extension):
         self.cpu_deadline = _cpu_clock() + cpu_seconds
         self.wall_deadline = _wall_clock() + cpu_seconds * WALL_CLOCK_FACTOR
 
-    def extendMarkdown(self, md: Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: Markdown) -> None:  # Python-Markdown API  # noqa: N802
         for pattern in md.inlinePatterns:
             pattern.handleMatch = self._checked(pattern.handleMatch)
         for processor in md.parser.blockprocessors:
@@ -489,7 +489,7 @@ def _reference_document() -> str:
     """About 9 KB of ordinary Markdown: headings, links, emphasis, lists, tables, code."""
     sections = []
     for i in range(30):
-        sections.append(
+        sections.append(  # noqa: PERF401
             f"## Section {i}\n\n"
             f"See [the docs](https://example.com/p/{i}) and ![chart](https://example.com/c{i}.png), "
             f"**bold** and *emphasis* with `code {i}`.\n\n"

@@ -39,4 +39,3 @@
 
 /* File type icons */
 .sp-file-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--sp-border-radius); background: var(--sp-bg-muted); font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); flex-shrink: 0; text-transform: uppercase; }
-

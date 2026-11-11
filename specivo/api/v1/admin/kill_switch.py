@@ -53,8 +53,8 @@ async def _resolve_kill_actor(request: Request, db: AsyncSession = DB_SESSION) -
 
     try:
         user = await get_current_user(request, db)
-    except Exception:
-        raise AppError(
+    except Exception:  # noqa: BLE001
+        raise AppError(  # noqa: B904
             code="unauthorized",
             message="Admin access or valid X-Kill-Token required",
             status_code=401,

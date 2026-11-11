@@ -132,7 +132,7 @@ class RelationService:
             )
 
         # Step 5: circular dependency check for blocking / scheduling chains
-        if canonical_type in _CIRCULAR_CHECK_TYPES:
+        if canonical_type in _CIRCULAR_CHECK_TYPES:  # noqa: SIM102
             if await self._check_circular(session, from_id, to_id, canonical_type):
                 raise ValidationError(
                     message=(f"Creating this '{canonical_type}' relation would introduce a circular dependency."),

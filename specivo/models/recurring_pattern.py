@@ -166,9 +166,7 @@ class RecurringPattern(Base, TimestampMixin, LockVersionMixin):
     # Tracker-style extensions (the part pure RRULE cannot express).
     # ------------------------------------------------------------------
 
-    anchor_mode: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="fixed", server_default="fixed"
-    )
+    anchor_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="fixed", server_default="fixed")
     base_date_strategy: Mapped[str] = mapped_column(
         String(12), nullable=False, default="scheduled", server_default="scheduled"
     )
@@ -186,9 +184,7 @@ class RecurringPattern(Base, TimestampMixin, LockVersionMixin):
     # Explicit list of ISO date strings treated as non-working (holidays).
     holiday_calendar: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
-    creation_lead_time_days: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=30, server_default="30"
-    )
+    creation_lead_time_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
 
     # ------------------------------------------------------------------
     # Carry-over / reset / rotation config.
@@ -197,9 +193,7 @@ class RecurringPattern(Base, TimestampMixin, LockVersionMixin):
     # Per-field-group booleans controlling what copies from the previous instance.
     # Relations/attachments default OFF (see RecurringPatternService risk notes).
     carry_over: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    reset_checklist: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true"
-    )
+    reset_checklist: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     # e.g. {"user_ids": [3, 7, 9], "strategy": "round_robin"}
     assignee_rotation: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     rotation_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
@@ -213,9 +207,7 @@ class RecurringPattern(Base, TimestampMixin, LockVersionMixin):
     # ------------------------------------------------------------------
 
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_generated_occurrence_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_generated_occurrence_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ------------------------------------------------------------------
     # Relationships (lazy="raise" — always use selectinload explicitly).

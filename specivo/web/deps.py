@@ -44,8 +44,8 @@ def _resolve_git_commit() -> str:
     _src_dir = str(Path(__file__).resolve().parent.parent.parent)
     for cwd in ("/app", _src_dir):
         try:
-            result = subprocess.run(  # noqa: S603, S607
-                ["git", "rev-parse", "--short", "HEAD"],
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=2,
@@ -54,7 +54,7 @@ def _resolve_git_commit() -> str:
             commit = result.stdout.strip()
             if commit:
                 return commit
-        except Exception:
+        except Exception:  # noqa: BLE001, S112
             continue
     return os.environ.get("GIT_COMMIT", "")
 
@@ -162,7 +162,7 @@ def _localdate(value, skeleton: str = "yMMMd") -> str:
     return format_date(value, skeleton)
 
 
-def _timeago(
+def _timeago(  # noqa: C901
     dt,
     tz_name: str = "UTC",
     mode: str = "smart",
@@ -256,7 +256,7 @@ def _timeago(
     return _date()
 
 
-def get_templates(theme: str = "default") -> Jinja2Templates:
+def get_templates(theme: str = "default") -> Jinja2Templates:  # noqa: C901, PLR0915
     """Build a Jinja2Templates instance with theme-aware ChoiceLoader.
 
     Resolution order:
@@ -378,7 +378,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     _code_formatter = _HtmlFormatter(nowrap=True)
 
     def _highlight_sql(text: str) -> markupsafe.Markup:
-        return markupsafe.Markup(_pygments_highlight(text or "", _sql_lexer, _code_formatter))
+        return markupsafe.Markup(_pygments_highlight(text or "", _sql_lexer, _code_formatter))  # noqa: S704
 
     templates.env.filters["highlight_sql"] = _highlight_sql
 
@@ -492,7 +492,7 @@ def setup_plugin_assets(plugins: list) -> None:
 # Static files, ``/static/...``, are mounted outside the router and never touch
 # this dependency, so the page keeps its CSS and bundles. The form posts to
 # ``/api/v1/auth/change-password/``, which the API side exempts.
-CHANGE_PASSWORD_PATH = "/my/password/"
+CHANGE_PASSWORD_PATH = "/my/password/"  # noqa: S105
 _PASSWORD_CHANGE_ALLOWED_SUFFIXES = (CHANGE_PASSWORD_PATH, "/logout/")
 
 
@@ -576,7 +576,7 @@ async def get_current_user_optional(
         # Any other AppError (invalid/revoked token, locked/deactivated
         # account) falls through to rendering the page as anonymous.
         return None
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
     # Per-user locale override: the LocaleMiddleware runs before auth, so the

@@ -200,7 +200,7 @@ async def run_backfill(
                     done += 1
                     try:
                         chunk_count, removed = await session.run_sync(_sync_in_session, source_type, entity_id)
-                    except Exception as exc:  # noqa: BLE001 - one bad source must not stop the run
+                    except Exception as exc:  # one bad source must not stop the run
                         report.failures += 1
                         logger.warning("  Could not index %s %d: %s", source_type, entity_id, describe_error(exc))
                         logger.debug("Index failure for %s %d", source_type, entity_id, exc_info=True)
@@ -221,7 +221,7 @@ async def run_backfill(
                             report.chunks_embedded += await embedder.embed_pending(
                                 session, [(source_type, entity_id)], model_id=model_id, reembed=reembed
                             )
-                    except Exception as exc:  # noqa: BLE001 - keep the chunks, report the failure
+                    except Exception as exc:  # keep the chunks, report the failure
                         report.failures += 1
                         logger.warning("  Could not embed %s %d: %s", source_type, entity_id, describe_error(exc))
                         logger.debug("Embed failure for %s %d", source_type, entity_id, exc_info=True)

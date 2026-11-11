@@ -263,7 +263,7 @@ def _brand() -> str:
 
 def _send(
     to: str,
-    language: str | None,
+    language: str | None,  # noqa: ARG001
     *,
     subject: str,
     name: str,
@@ -648,7 +648,7 @@ class EmailChangeService:
                 # An unknown token names nobody: nothing worth an audit row.
                 raise exc
             raise await self._fail(db, row.user_id, problem, exc)
-        assert row is not None and user is not None
+        assert row is not None and user is not None  # noqa: S101
 
         new_email = row.new_email
         if await self._address_owner(db, new_email, except_user_id=user.id) is not None:

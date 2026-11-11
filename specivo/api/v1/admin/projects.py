@@ -71,7 +71,7 @@ async def rename_project(
             details=details,
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     parent_key = await _service.get_parent_key(db, project)

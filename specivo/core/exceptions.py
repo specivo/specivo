@@ -182,7 +182,7 @@ def _render_error_html(
                 context,
                 status_code=status_code,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         # Fall back to standalone error template
@@ -320,7 +320,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:  # noqa: ARG001
     """Convert Pydantic V2 RequestValidationError into the standard error envelope."""
     errors = []
     for error in exc.errors():

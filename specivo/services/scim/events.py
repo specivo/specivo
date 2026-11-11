@@ -40,7 +40,7 @@ def _emit(message: str, *args: object, event: AuditEvent, actor_id: int | None, 
     logger.info(message, *args, extra={"event": str(event), "request_id": current_request_id(), "audit": details})
     try:
         record_event(event, user_id=actor_id, details=details)
-    except Exception as exc:  # noqa: BLE001 - the audit trail must never break the action it records
+    except Exception as exc:  # the audit trail must never break the action it records  # noqa: BLE001
         logger.warning("scim.audit.failed event=%s error=%s", event.value, type(exc).__name__)
 
 

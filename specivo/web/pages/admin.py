@@ -457,7 +457,7 @@ async def admin_group_detail(
     try:
         group = await svc.get(db, group_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Group not found")
+        raise HTTPException(status_code=404, detail="Group not found")  # noqa: B904
 
     users, user_total = await svc.list_users(db, group_id, limit=GROUP_LIST_CAP)
     projects = await svc.list_projects(db, group_id)
@@ -482,7 +482,7 @@ async def admin_group_detail(
 
 
 # ---------------------------------------------------------------------------
-# Versions (cross-project)
+# Versions (cross-project)  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 
@@ -768,7 +768,7 @@ async def admin_currency_toggle(
     try:
         await CurrencyService().set_active(db, code, is_active == "1", user, request=request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Currency not found")
+        raise HTTPException(status_code=404, detail="Currency not found")  # noqa: B904
     await db.commit()
     return _currencies_redirect(show if show in _CURRENCY_FILTERS else "all", q)
 
@@ -979,7 +979,7 @@ async def admin_settings_anonymous_access(
     db: AsyncSession = DB_SESSION,
     enabled: str = Form(""),
     confirm: str = Form(""),
-    confirmed_projects: list[str] = Form(default=[]),  # noqa: B008
+    confirmed_projects: list[str] = Form(default=[]),
 ) -> Response:
     """Turn the anonymous access switch on or off.
 
@@ -1153,7 +1153,7 @@ def _parse_day(value: str) -> date | None:
 
 
 @router.get("/admin/audit-log/", response_class=HTMLResponse)
-async def admin_audit_log(
+async def admin_audit_log(  # noqa: C901, PLR0912, PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,

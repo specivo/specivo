@@ -212,9 +212,7 @@ async def test_recurring_edit_form_page_renders(
     tracker, _status, _priority = lookups
     pattern = await _create_pattern(manager_client, project.key, tracker.id)
 
-    resp = await manager_client.get(
-        f"/projects/{project.key}/recurring-patterns/{pattern['id']}/edit/"
-    )
+    resp = await manager_client.get(f"/projects/{project.key}/recurring-patterns/{pattern['id']}/edit/")
     assert resp.status_code == 200, resp.text
     html = resp.text
     assert "Edit recurring pattern" in html
@@ -230,9 +228,7 @@ async def test_recurring_edit_form_404_for_nonexistent_pattern(
     project: Project,
 ):
     """Editing a nonexistent pattern id returns 404."""
-    resp = await manager_client.get(
-        f"/projects/{project.key}/recurring-patterns/999999/edit/"
-    )
+    resp = await manager_client.get(f"/projects/{project.key}/recurring-patterns/999999/edit/")
     assert resp.status_code == 404
 
 

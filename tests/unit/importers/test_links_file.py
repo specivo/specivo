@@ -325,9 +325,9 @@ class TestUntrustedFile:
         store.put(_text(1))
         store.commit()
         conn = sqlite3.connect(path)
-        conn.execute(f"UPDATE pending SET {column} = ?", (value,))  # noqa: S608
+        conn.execute(f"UPDATE pending SET {column} = ?", (value,))
         if column != "written_sha256":
-            conn.execute(f"UPDATE pending_ref SET {column} = ?", (value,))  # noqa: S608
+            conn.execute(f"UPDATE pending_ref SET {column} = ?", (value,))
         conn.commit()
         conn.close()
         reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)
@@ -486,7 +486,7 @@ class TestSpecialFiles:
                 try:
                     attempt()
                     outcome.append(None)
-                except BaseException as exc:  # noqa: BLE001 - handed to the test thread
+                except BaseException as exc:  # handed to the test thread
                     outcome.append(exc)
 
             # A daemon thread: if the open hangs, the test fails instead of hanging with it.
@@ -580,7 +580,7 @@ class TestWaitingLinks:
         store.put_parent(_parent())
         store.commit()
         conn = sqlite3.connect(path)
-        conn.execute(f"UPDATE {table} SET {column} = ?", (value,))  # noqa: S608
+        conn.execute(f"UPDATE {table} SET {column} = ?", (value,))
         conn.commit()
         conn.close()
         reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)

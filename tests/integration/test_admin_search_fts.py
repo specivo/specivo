@@ -123,10 +123,7 @@ class TestReindexService:
 
         async def _matches_russian() -> bool:
             row = await db_session.execute(
-                text(
-                    "SELECT search_vector @@ plainto_tsquery('russian', 'диссертация') "
-                    "FROM issues WHERE id = :id"
-                ),
+                text("SELECT search_vector @@ plainto_tsquery('russian', 'диссертация') FROM issues WHERE id = :id"),
                 {"id": issue.id},
             )
             return bool(row.scalar_one())

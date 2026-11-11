@@ -195,7 +195,7 @@ async def _audit_failure(db: AsyncSession, request: Request, provider: SsoProvid
         await SecurityAuditService().log_sso_login_failure(
             db, provider_slug=provider.slug, issuer=provider.issuer, reason=exc.code, request=request
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("sso.audit.failed provider=%s", provider.slug)
 
 
@@ -380,7 +380,7 @@ async def sso_callback(
             sub_hash=result.sub_hash,
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("sso.audit.failed provider=%s", provider.slug)
 
     # Commit before the browser follows the redirect, so the new session

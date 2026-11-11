@@ -34,7 +34,7 @@ _reaction_svc = ReactionService()
 
 
 @router.get("/issues/table/", response_class=HTMLResponse)
-async def issue_table_partial(
+async def issue_table_partial(  # noqa: PLR0913
     request: Request,
     project_key: str = Query(...),
     db: AsyncSession = DB_SESSION,
@@ -306,7 +306,7 @@ async def issue_development_partial(
 async def issue_development_timeline_partial(
     issue_ref: str,
     request: Request,
-    kinds: list[str] = Query(default=[]),  # noqa: B008
+    kinds: list[str] = Query(default=[]),
     offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = DB_SESSION,
 ) -> Response:

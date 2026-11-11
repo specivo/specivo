@@ -76,7 +76,7 @@ from specivo.services.sso.http import override_transport
 
 DEFAULT_ISSUER = "https://idp.example.com/realms/test"
 DEFAULT_CLIENT_ID = "specivo"
-DEFAULT_CLIENT_SECRET = "test-client-secret-0123456789"
+DEFAULT_CLIENT_SECRET = "test-client-secret-0123456789"  # noqa: S105
 
 BACKCHANNEL_LOGOUT_EVENT = "http://schemas.openid.net/event/backchannel-logout"
 
@@ -136,12 +136,12 @@ OMIT: Any = _Omit()
 
 
 @functools.cache
-def _rsa_key(slot: int) -> rsa.RSAPrivateKey:
+def _rsa_key(slot: int) -> rsa.RSAPrivateKey:  # noqa: ARG001
     return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
 @functools.cache
-def _ec_key(slot: int) -> ec.EllipticCurvePrivateKey:
+def _ec_key(slot: int) -> ec.EllipticCurvePrivateKey:  # noqa: ARG001
     return ec.generate_private_key(ec.SECP256R1())
 
 
@@ -254,14 +254,14 @@ class MockIdP:
         client_id: str = DEFAULT_CLIENT_ID,
         client_secret: str | None = DEFAULT_CLIENT_SECRET,
         *,
-        token_endpoint_auth_method: str = "client_secret_basic",
+        token_endpoint_auth_method: str = "client_secret_basic",  # noqa: S107
         clock: Callable[[], float] = time.time,
         code_ttl_seconds: int = 60,
         token_ttl_seconds: int = 300,
     ) -> None:
         if token_endpoint_auth_method not in ("client_secret_basic", "client_secret_post", "none"):
             raise ValueError(f"unsupported token_endpoint_auth_method {token_endpoint_auth_method!r}")
-        if token_endpoint_auth_method != "none" and not client_secret:
+        if token_endpoint_auth_method != "none" and not client_secret:  # noqa: S105
             raise ValueError("a confidential client needs a client_secret")
         self.issuer = issuer.rstrip("/")
         self.client_id = client_id
@@ -659,7 +659,7 @@ class MockIdP:
         }
         return _apply(doc, self.discovery_overrides)
 
-    def _handle(self, request: httpx.Request) -> httpx.Response:
+    def _handle(self, request: httpx.Request) -> httpx.Response:  # noqa: PLR0911
         route = self._routes.get(request.url.path) if request.url.host == self._host else None
         if route is None:
             return httpx.Response(404, json={"error": "not_found"})

@@ -149,7 +149,7 @@ def backchannel_catcher() -> Iterator[BackchannelCatcher]:
     catcher = BackchannelCatcher()
 
     class Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802 - http.server API
+        def do_POST(self) -> None:  # http.server API
             length = int(self.headers.get("Content-Length") or 0)
             form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
             token = (form.get("logout_token") or [""])[0]

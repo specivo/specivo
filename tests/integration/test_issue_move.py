@@ -184,9 +184,7 @@ async def test_move_recomputes_project_derived_metadata(
 
 
 @pytest.mark.asyncio
-async def test_move_clears_project_scoped_fields(
-    db_session, inbox, home, tracker, open_status, priority, admin_user
-):
+async def test_move_clears_project_scoped_fields(db_session, inbox, home, tracker, open_status, priority, admin_user):
     """Service-level: fixed_version/sprint/category/tags are cleared on move."""
     from specivo.models.tag import Tag, TagLink
     from specivo.models.version import Version
@@ -217,16 +215,12 @@ async def test_move_clears_project_scoped_fields(
     assert refreshed.fixed_version_id is None
     assert refreshed.sprint_id is None
     assert refreshed.category_id is None
-    tag_links = await db_session.scalar(
-        select(func.count()).select_from(TagLink).where(TagLink.issue_id == issue.id)
-    )
+    tag_links = await db_session.scalar(select(func.count()).select_from(TagLink).where(TagLink.issue_id == issue.id))
     assert tag_links == 0
 
 
 @pytest.mark.asyncio
-async def test_move_to_same_project_rejected(
-    client, db_session, admin_token, inbox, tracker, open_status, priority
-):
+async def test_move_to_same_project_rejected(client, db_session, admin_token, inbox, tracker, open_status, priority):
     await _create(client, admin_token, inbox, tracker, open_status, priority)
     resp = await _move(client, admin_token, "INB-1", "INB")
     assert resp.status_code == 422, resp.text
@@ -257,9 +251,7 @@ async def test_move_rejects_issue_with_children(
 
 
 @pytest.mark.asyncio
-async def test_mcp_move_issue_tool(
-    db_session, inbox, home, tracker, open_status, priority, admin_user
-):
+async def test_mcp_move_issue_tool(db_session, inbox, home, tracker, open_status, priority, admin_user):
     """The MCP specivo_move_issue tool moves and reports both refs."""
     from specivo.mcp.tools import _move_issue
     from specivo.schemas.issue import IssueCreate

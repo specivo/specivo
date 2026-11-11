@@ -32,7 +32,7 @@ class TestEmailResponse(BaseModel):
 @router.post("/admin/test-email/", response_model=TestEmailResponse)
 async def send_test_email(
     payload: TestEmailRequest,
-    current_user: User = Depends(require_admin_api),  # noqa: B008
+    current_user: User = Depends(require_admin_api),
 ) -> TestEmailResponse:
     """Send a test email synchronously to verify SMTP configuration (admin only)."""
     settings = get_settings()
