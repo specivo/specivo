@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError
@@ -154,7 +155,15 @@ class BulkService:
         succeeded: list[BulkResultItem] = []
         failed: list[BulkResultItem] = []
 
-        for issue_id in issue_ids:
+        # An issue with subtasks cannot be deleted, so delete deepest first: in
+        # a nested set a subtask's lft is above its parent's, and a selection
+        # holding a parent with all its subtasks is deleted whole, in any order.
+        lft_by_id = dict(
+            (await session.execute(select(Issue.id, Issue.lft).where(Issue.id.in_(issue_ids)))).tuples().all()
+        )
+        ordered = sorted(issue_ids, key=lambda i: lft_by_id.get(i) or 0, reverse=True)
+
+        for issue_id in ordered:
             try:
                 issue = await self._load_visible(session, issue_id, user)
                 if issue is None:
@@ -211,4 +220,8 @@ class BulkService:
                 )
                 logger.debug("Bulk delete failed for issue %d: %s", issue_id, message)
 
+        # Report in the order the caller listed the issues.
+        position = {issue_id: n for n, issue_id in enumerate(issue_ids)}
+        succeeded.sort(key=lambda item: position[item.id])
+        failed.sort(key=lambda item: position[item.id])
         return BulkResult(succeeded=succeeded, failed=failed)
