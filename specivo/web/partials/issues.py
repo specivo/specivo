@@ -197,7 +197,6 @@ async def issue_attachments_partial(
     Lazy-loaded on first click of the Attachments tab in the issue detail page
     so the main page render skips the attachments SELECT entirely.
     """
-    import json
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
@@ -218,22 +217,22 @@ async def issue_attachments_partial(
 
     attachments = await _issue_svc.list_attachments(db, issue.id)
 
-    issue_attachments_json = json.dumps(
-        [
-            {
-                "id": att.id,
-                "filename": att.filename,
-                "content_type": att.content_type or "application/octet-stream",
-                "filesize": att.filesize,
-                "author": {
-                    "id": att.author_id,
-                    "name": att.author.display_name or att.author.login,
-                },
-                "created_at": att.created_at.isoformat() if att.created_at else None,
-            }
-            for att in attachments
-        ]
-    )
+    # Rendered with ``| tojson`` in the template, which escapes ``<``, ``>``
+    # and ``&``: file names and display names are user input.
+    issue_attachments = [
+        {
+            "id": att.id,
+            "filename": att.filename,
+            "content_type": att.content_type or "application/octet-stream",
+            "filesize": att.filesize,
+            "author": {
+                "id": att.author_id,
+                "name": att.author.display_name or att.author.login,
+            },
+            "created_at": att.created_at.isoformat() if att.created_at else None,
+        }
+        for att in attachments
+    ]
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -241,7 +240,7 @@ async def issue_attachments_partial(
         "pages/issues/_tab_attachments.html",
         context={
             "issue": issue,
-            "issue_attachments_json": issue_attachments_json,
+            "issue_attachments": issue_attachments,
             "user": user,
         },
     )
