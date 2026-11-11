@@ -668,7 +668,8 @@ async def test_non_member_cannot_edit_project(
         json={"name": "Hacked Name"},
         headers={"Authorization": f"Bearer {user_token}"},
     )
-    assert resp.status_code == 403
+    # A private project the caller is not a member of is not found (ADR-0004).
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import AppError, PermissionDeniedError
+from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
+from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
@@ -73,13 +74,17 @@ async def _require_manage(
         raise PermissionDeniedError("You do not have permission to manage this project")
 
 
-async def _require_project_access(
-    project,
-    user: User,
-    db: AsyncSession,
-) -> None:
-    """Raise 404 if user cannot access the project."""
-    await _service.require_project_access(db, project, user)
+async def _reachable(key: str, user: User, db: AsyncSession) -> Project:
+    """Resolve project *key* if *user* may reach it, else raise 404.
+
+    A missing key and a project *user* cannot reach get the same answer,
+    naming the key as given (ADR-0004), so the permission checks that follow
+    (403) only ever run for a project the caller already knows exists.
+    """
+    try:
+        return await _service.get_readable_by_key(db, key.upper(), user)
+    except NotFoundError:
+        raise NotFoundError(f"Project '{key.upper()}' not found") from None
 
 
 async def _can_manage(project, user: User, db: AsyncSession) -> bool:
@@ -107,6 +112,26 @@ def _branch_name(project) -> BranchNameConfig:
     return BranchNameConfig(format=settings.format, types=dict(settings.types), default_type=settings.default_type)
 
 
+async def _ancestors_reachable(db: AsyncSession, project: Project, user: User) -> bool:
+    """Whether *user* may reach every ancestor of *project*.
+
+    ``parent_id``, ``parent_key`` and ``path`` spell out the ancestors, and a
+    public project can hang under a private parent: they are shown only when
+    the whole lineage is reachable (anonymous visitors never see them).
+    """
+    parent_id = project.parent_id
+    while parent_id is not None:
+        parent = await db.get(Project, parent_id)
+        if parent is None:
+            return False
+        try:
+            await _service.require_project_access(db, parent, user)
+        except NotFoundError:
+            return False
+        parent_id = parent.parent_id
+    return True
+
+
 def _project_out(
     project,
     parent_key: str | None,
@@ -114,6 +139,7 @@ def _project_out(
     *,
     detail: bool = False,
     reporting_currency: str | None = None,
+    lineage_visible: bool = True,
 ) -> ProjectOut:
     return ProjectOut(
         computed_metadata=computed_metadata,
@@ -126,9 +152,9 @@ def _project_out(
         identifier=project.identifier,
         key=project.key,
         description=project.description,
-        parent_id=project.parent_id,
-        parent_key=parent_key,
-        path=project.path,
+        parent_id=project.parent_id if lineage_visible else None,
+        parent_key=parent_key if lineage_visible else None,
+        path=project.path if lineage_visible else None,
         is_public=project.is_public,
         inherit_members=project.inherit_members,
         status=project.status,
@@ -200,7 +226,7 @@ async def list_projects(
     items = []
     for p in projects:
         parent_key = await _service.get_parent_key(db, p)
-        items.append(_project_out(p, parent_key))
+        items.append(_project_out(p, parent_key, lineage_visible=await _ancestors_reachable(db, p, current_user)))
 
     return PaginatedResponse(total_count=total, offset=offset, limit=limit, items=items)
 
@@ -233,13 +259,17 @@ async def get_project(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
 
     parent_key = await _service.get_parent_key(db, project)
     computed = await _disclosed_computed_metadata(project, current_user, db)
     return _project_out(
-        project, parent_key, computed, detail=True, reporting_currency=await reporting_currency_for(db, project)
+        project,
+        parent_key,
+        computed,
+        detail=True,
+        reporting_currency=await reporting_currency_for(db, project),
+        lineage_visible=await _ancestors_reachable(db, project, current_user),
     )
 
 
@@ -251,7 +281,7 @@ async def update_project(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db)
 
     project = await _service.update(db, project, data, actor=current_user, request=request)
@@ -264,6 +294,7 @@ async def update_project(
         computed_values(project.settings),
         detail=True,
         reporting_currency=await reporting_currency_for(db, project),
+        lineage_visible=await _ancestors_reachable(db, project, current_user),
     )
 
 
@@ -387,8 +418,7 @@ async def list_members(
     db: AsyncSession = DB_SESSION,
 ) -> list[MemberOut]:
     """List every membership on the project — users first, then user groups."""
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
     rows = await _service.list_members(db, project)
     rows += await _service.list_group_memberships(db, project)
     return [MemberOut(**row) for row in rows]
@@ -411,8 +441,7 @@ async def search_assignees(
     ``limit`` is the last. Needs an account and access to the project (404
     otherwise, for a private project).
     """
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
     users = await _service.search_assignable_users(db, project, q, offset=offset, limit=limit)
     return [
         AssigneeSuggestionOut(
@@ -435,7 +464,7 @@ async def add_member(
     db: AsyncSession = DB_SESSION,
 ) -> MemberOut:
     """Add a user or a user group to the project with the given roles."""
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db, request)
 
     principal = Principal.of(user_id=data.user_id, group_id=data.group_id)
@@ -467,7 +496,7 @@ async def remove_member(
 ) -> None:
     """Remove a membership. *principal_type* is ``user`` or ``group``."""
     principal = Principal.parse(principal_type, principal_id)
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db, request)
 
     # Capture the holder's name before the delete takes it out of reach.
@@ -490,7 +519,7 @@ async def update_member_roles(
 ) -> MemberOut:
     """Replace all roles held by one membership. ``user`` or ``group``."""
     principal = Principal.parse(principal_type, principal_id)
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db, request)
 
     await _service.update_member_roles(db, project, principal, data.role_ids)
@@ -521,8 +550,7 @@ async def get_modules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ModulesOut:
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
     modules = await _service.get_modules(db, project)
     return ModulesOut(modules=modules)
 
@@ -534,7 +562,7 @@ async def update_modules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ModulesOut:
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db)
 
     modules = await _service.set_modules(db, project, data.modules)

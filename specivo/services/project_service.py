@@ -13,7 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.exceptions import AnonymousAccessDeniedError, AppError, ConflictError, NotFoundError, ValidationError
+from specivo.core.exceptions import (
+    AnonymousAccessDeniedError,
+    AppError,
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
@@ -31,6 +38,7 @@ from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTING
 from specivo.services.permission_service import (
     Permission,
     anonymous_role,
+    check_permission,
     member_principal_clause,
     projects_granting,
 )
@@ -335,6 +343,27 @@ class ProjectService:
                 raise AnonymousAccessDeniedError() from None
             raise
         await self.require_project_access(session, project, user)
+        return project
+
+    async def get_permitted_by_key(
+        self, session: AsyncSession, key: str, user: User, permission: str | Permission
+    ) -> Project:
+        """Resolve project *key* for an action that needs *permission* there.
+
+        A key that names no project and a project *user* cannot reach both
+        raise the same ``NotFoundError``, naming the key as the caller wrote
+        it (the stored key would reveal that a private project exists, or what
+        a retired key was renamed to). Only a reachable project answers
+        ``PermissionDeniedError`` when the permission is missing, so a
+        non-member can never tell a private project from a missing one
+        (ADR-0004).
+        """
+        try:
+            project = await self.get_readable_by_key(session, key, user)
+        except NotFoundError:
+            raise NotFoundError(f"Project '{key}' not found") from None
+        if not await check_permission(user, project.id, permission, session):
+            raise PermissionDeniedError(f"You do not have the '{permission}' permission in this project")
         return project
 
     async def get_parent_key(self, session: AsyncSession, project: Project) -> str | None:

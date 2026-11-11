@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.metadata_schema import (
@@ -18,7 +17,7 @@ from specivo.schemas.metadata_schema import (
     PresetEnableRequest,
 )
 from specivo.services.metadata_preset_service import MetadataPresetService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 
 router = APIRouter(tags=["admin-metadata"])
@@ -32,11 +31,8 @@ async def _require_project_manage(
     db: AsyncSession,
 ) -> int:
     """Resolve project and check manage_project permission. Returns project_id."""
-    project = await _project_service.get_by_key(db, project_key.upper())
-    if not user.is_admin:
-        allowed = await check_permission(user, project.id, "manage_project", db)
-        if not allowed:
-            raise PermissionDeniedError("manage_project permission required")
+    # A project the caller cannot reach is "not found", like a missing key.
+    project = await _project_service.get_permitted_by_key(db, project_key.upper(), user, Permission.MANAGE_PROJECT)
     return project.id
 
 
