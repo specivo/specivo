@@ -289,6 +289,9 @@ export function issueForm(initial) {
                             window.location.href = '/projects/' + this.projectKey + '/issues/' + this.displayKey + '/';
                         }
                     } else {
+                        /* Tags go with the create request: tagging an issue later
+                           needs edit_issues, creating one with tags does not. */
+                        payload.tags = tagNames;
                         var res = await spFetch('/api/v1/projects/' + this.projectKey + '/issues/', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -302,17 +305,6 @@ export function issueForm(initial) {
 
                         /* Upload attachments, recorded in one history entry */
                         await this._uploadFiles(data.id, null);
-
-                        /* Apply pending tags */
-                        if (tagNames.length) {
-                            try {
-                                await spFetch('/api/v1/issues/' + data.key + '/tags/', {
-                                    method: 'PUT',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({names: tagNames})
-                                });
-                            } catch (_e) { /* best-effort */ }
-                        }
 
                         /* Create pending relations */
                         for (var j = 0; j < this.pendingRelations.length; j++) {

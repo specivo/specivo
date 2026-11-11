@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.role import Role
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
@@ -64,6 +64,8 @@ async def priority(db_session: AsyncSession):
 async def project(db_session: AsyncSession) -> Project:
     proj = ProjectFactory.build(key="MTAG", name="MCP Tag Test", is_public=True)
     db_session.add(proj)
+    await db_session.flush()
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
@@ -208,6 +210,30 @@ class TestTagEntityTool:
         assert "added" in result and "removed" in result
         got = await _tag(db_session, admin, issue.display_key, "get")
         assert "b" in got and "c" in got and "a" not in got.split(": ", 1)[1].split(", ")
+
+    @pytest.mark.parametrize(("op", "value"), [("add", "new"), ("set", []), ("remove", "keep")])
+    async def test_viewer_cannot_change_issue_tags(
+        self, db_session, admin, viewer, project, issue, role_view_only, op, value
+    ):
+        from specivo.mcp.tools import _tag
+
+        await _tag(db_session, admin, issue.display_key, "add", "keep")
+        await _add_member(db_session, project, viewer, role_view_only)
+        with pytest.raises(PermissionDeniedError):
+            await _tag(db_session, viewer, issue.display_key, op, value)
+        assert await _tag(db_session, viewer, issue.display_key, "get") == f"{issue.display_key}: keep"
+
+    async def test_viewer_without_view_wiki_cannot_read_wiki_tags(
+        self, db_session, viewer, project, wiki_page, role_view_only
+    ):
+        from specivo.mcp.tools import _tag
+
+        await _add_member(db_session, project, viewer, role_view_only)
+        with pytest.raises(PermissionDeniedError):
+            await _tag(db_session, viewer, f"wiki:{project.key}/{wiki_page.slug}", "get")
+        # The same refusal for a slug that does not exist: no page enumeration.
+        with pytest.raises(PermissionDeniedError):
+            await _tag(db_session, viewer, f"wiki:{project.key}/no-such-page", "get")
 
     async def test_add_on_wiki(self, db_session, admin, project, wiki_page):
         from specivo.mcp.tools import _tag

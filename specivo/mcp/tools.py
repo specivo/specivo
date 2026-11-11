@@ -3285,12 +3285,14 @@ async def _add_tags(
     return added
 
 
-async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str):
+async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str, *, write: bool):
     """Resolve a tag target_ref to (kind, project, entity_id, display).
 
     Accepts an issue ref ('ACME-12' or 'issue:ACME-12') or a wiki ref
-    ('wiki:ACME/some-slug').
+    ('wiki:ACME/some-slug'). Raises ``PermissionDeniedError`` unless *user*
+    may read the target's tags, or change them when *write* is set.
     """
+    check = _tag_svc.require_write if write else _tag_svc.require_read
     if target_ref.startswith("wiki:"):
         ref = target_ref[len("wiki:") :]
         if "/" not in ref:
@@ -3298,6 +3300,8 @@ async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str
         pkey, slug = ref.split("/", 1)
         project = await _project_svc.get_by_key(session, pkey.upper())
         await _project_svc.require_project_access(session, project, user)
+        # Before the page lookup, so a refusal does not reveal which slugs exist.
+        await check(session, user, "wiki", project)
         page, _ = await _wiki_svc.get_page(session, project.id, slug)
         return "wiki", project, page.id, f"wiki {project.key}/{page.slug}"
 
@@ -3306,6 +3310,7 @@ async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str
     issue_project = await session.get(Project, issue.project_id)
     if issue_project is None:  # pragma: no cover - defensive
         raise NotFoundError(f"Project for issue '{ref}' not found")
+    await check(session, user, "issue", issue_project)
     return "issue", issue_project, issue.id, issue.display_key
 
 
@@ -3326,7 +3331,7 @@ async def _tag(  # noqa: C901, PLR0911, PLR0912
         return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
 
     try:
-        kind, project, entity_id, display = await _resolve_tag_target(session, user, target_ref)
+        kind, project, entity_id, display = await _resolve_tag_target(session, user, target_ref, write=op != "get")
     except NotFoundError as exc:
         return f"Error: {exc}"
     except ValueError as exc:

@@ -19,7 +19,7 @@ Tags and [metadata](../metadata/index.md) are separate features and serve differ
 | **Shape** | Plain named labels (optionally colored) | Structured key-value fields with schemas |
 | **Best for** | Quick categorical labeling (e.g. "backend", "needs-review") | Typed data fields (e.g. branch name, environment, story points) |
 | **Applied to** | Issues and wiki pages | Issues |
-| **Managed by** | Project Managers (vocabulary); any member (applying) | Schema owners |
+| **Managed by** | Project Managers (vocabulary); members who can edit the issue or wiki page (applying) | Schema owners |
 | **Filterable** | Yes — cross-project tag filter on the search page | Yes — metadata containment filter |
 
 If you want a simple label, use a tag. If you want a structured field with a type and a schema, use
@@ -34,9 +34,11 @@ prune unused labels.
 <!-- screenshot: tag vocabulary in project settings tabs -->
 
 !!! note "Managers only"
-    Only project **Managers** (and administrators) can create, rename, recolor, or delete tags. Any
-    project member can apply existing tags — or create new ones on the fly — when editing an issue or
-    wiki page.
+    Only project **Managers** (and administrators) can create, rename, recolor, or delete tags in the
+    project settings. Applying tags is part of editing: members whose role can edit issues (or manage
+    wiki pages) apply existing tags, or create new ones on the fly. Members who can only view see the
+    tags but cannot change them. Anyone who can create issues can give a new issue its tags in the
+    **New issue** form.
 
 ### Creating a tag
 
@@ -80,7 +82,8 @@ pre-populate the settings first.
 To remove a tag from an issue, click the remove control on its chip.
 
 !!! tip "Creating tags on the fly"
-    Any member can type a new name in the tag input and the tag is created automatically. The new tag
+    Any member who can edit the issue can type a new name in the tag input and the tag is created
+    automatically. The new tag
     immediately appears in Project Settings → Tags so it can be renamed, recolored, or removed by a
     Manager later.
 

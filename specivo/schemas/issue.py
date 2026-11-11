@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field, field_validator
 
 from specivo.schemas.common import IdName, PaginatedResponse
+from specivo.schemas.tag import MAX_TAG_NAMES, TagNameItem, normalize_tag_names
 
 if TYPE_CHECKING:
     from specivo.models.issue import Issue
@@ -46,6 +47,14 @@ class IssueCreate(BaseModel):
     # needs the set_issues_private permission.
     is_private: bool | None = None
     metadata: dict = Field(default_factory=dict)
+    # Applied after creation by the API, under the add_issues check: creating an
+    # issue with tags needs no edit_issues. Missing names are created.
+    tags: list[TagNameItem] = Field(default_factory=list, max_length=MAX_TAG_NAMES)
+
+    @field_validator("tags")
+    @classmethod
+    def _check_tags(cls, v: list[str]) -> list[str]:
+        return normalize_tag_names(v)
 
     @field_validator("subject")
     @classmethod

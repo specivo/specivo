@@ -252,6 +252,7 @@ async def set_issue_tags(
     db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
+    await _tag_service.require_write(db, current_user, "issue", project)
     diff = await _tag_service.set_issue_tags(db, project, issue.id, data.names, current_user)
     for name in diff["added"]:
         await _log_tag(
@@ -290,6 +291,7 @@ async def add_issue_tag(
     db: AsyncSession = DB_SESSION,
 ) -> TagOut:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
+    await _tag_service.require_write(db, current_user, "issue", project)
     tag, created = await _tag_service.add_to_issue(db, project, issue.id, data.name, current_user)
     if created:
         await _log_tag(
@@ -316,6 +318,7 @@ async def remove_issue_tag(
     db: AsyncSession = DB_SESSION,
 ) -> None:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
+    await _tag_service.require_write(db, current_user, "issue", project)
     removed = await _tag_service.remove_from_issue(db, issue.id, tag_id)
     if removed:
         await _log_tag(
@@ -342,6 +345,7 @@ async def list_wiki_tags(
     db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     project = await _get_project(project_key, current_user, db)
+    await _tag_service.require_read(db, current_user, "wiki", project)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
     tags = await _tag_service.tags_for_wiki_page(db, page.id)
     return [_tag_out(t, project.key) for t in tags]
@@ -357,6 +361,7 @@ async def set_wiki_tags(
     db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     project = await _get_project(project_key, current_user, db)
+    await _tag_service.require_write(db, current_user, "wiki", project)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
     diff = await _tag_service.set_wiki_page_tags(db, project, page.id, data.names, current_user)
     for name in diff["added"]:
@@ -397,6 +402,7 @@ async def add_wiki_tag(
     db: AsyncSession = DB_SESSION,
 ) -> TagOut:
     project = await _get_project(project_key, current_user, db)
+    await _tag_service.require_write(db, current_user, "wiki", project)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
     tag, created = await _tag_service.add_to_wiki_page(db, project, page.id, data.name, current_user)
     if created:
@@ -425,6 +431,7 @@ async def remove_wiki_tag(
     db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _get_project(project_key, current_user, db)
+    await _tag_service.require_write(db, current_user, "wiki", project)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
     removed = await _tag_service.remove_from_wiki_page(db, page.id, tag_id)
     if removed:
@@ -454,6 +461,7 @@ async def bulk_tag_issues(
 ) -> dict:
     """Apply/remove tags across many issues of the project."""
     project = await _get_project(project_key, current_user, db)
+    await _tag_service.require_write(db, current_user, "issue", project)
 
     # Restrict to issues that belong to the project and are visible to the user.
     valid_ids: list[int] = []
