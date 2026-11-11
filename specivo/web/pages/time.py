@@ -6,7 +6,7 @@ from datetime import date
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
@@ -14,7 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.time_entry_service import TimeEntryService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
 
 if TYPE_CHECKING:
     from specivo.models.user import User
@@ -41,7 +41,7 @@ async def time_entries_list(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -112,7 +112,7 @@ async def time_entry_form(
     """Render the log-time form."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:

@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from specivo.web.deps import (
     get_current_user_optional,
     get_templates,
     get_web_reader,
+    login_redirect,
     refuse_anonymous_web,
 )
 
@@ -253,7 +254,7 @@ async def project_roadmap(
     """
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     from specivo.core.exceptions import NotFoundError
@@ -299,7 +300,7 @@ async def project_settings(  # noqa: PLR0915
     """Render project settings page (admin only)."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     from specivo.core.exceptions import NotFoundError
@@ -591,7 +592,7 @@ async def version_detail(
     """Render the version detail page with issues, progress, and time stats."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     from specivo.core.exceptions import NotFoundError

@@ -287,7 +287,7 @@ def test_failures_leave_an_empty_panel_and_a_working_form(
     expect(form.subject_input).to_have_value(SUBJECT)
     admin_page.clock.resume()
     admin_page.locator("button", has_text=re.compile(r"^\s*Create Issue\s*$")).first.click()
-    admin_page.wait_for_url(re.compile(rf"/issues/{key}-\d+/$"), timeout=10000)
+    admin_page.wait_for_url(re.compile(rf"/issue/{key}-\d+/$"), timeout=10000)
     assert len(requests.queries) == 1
 
 
@@ -303,7 +303,7 @@ def test_submit_works_while_a_request_never_answers(admin_page: Page, api_client
 
     admin_page.clock.resume()
     admin_page.locator("button", has_text=re.compile(r"^\s*Create Issue\s*$")).first.click()
-    admin_page.wait_for_url(re.compile(rf"/issues/{key}-\d+/$"), timeout=10000)
+    admin_page.wait_for_url(re.compile(rf"/issue/{key}-\d+/$"), timeout=10000)
 
 
 def test_retries_after_failure_on_next_edit(admin_page: Page, api_client: httpx.Client) -> None:
@@ -341,7 +341,7 @@ def test_mark_as_duplicate_creates_relation(admin_page: Page, api_client: httpx.
 
     admin_page.clock.resume()
     admin_page.locator("button", has_text=re.compile(r"^\s*Create Issue\s*$")).first.click()
-    admin_page.wait_for_url(re.compile(rf"/issues/{key}-\d+/$"), timeout=10000)
+    admin_page.wait_for_url(re.compile(rf"/issue/{key}-\d+/$"), timeout=10000)
     new_key = admin_page.url.rstrip("/").rsplit("/", 1)[-1]
 
     relations = api_client.get(f"/api/v1/issues/{new_key}/relations/").json()
@@ -361,7 +361,7 @@ def test_removed_duplicate_creates_no_relation(admin_page: Page, api_client: htt
 
     admin_page.clock.resume()
     admin_page.locator("button", has_text=re.compile(r"^\s*Create Issue\s*$")).first.click()
-    admin_page.wait_for_url(re.compile(rf"/issues/{key}-\d+/$"), timeout=10000)
+    admin_page.wait_for_url(re.compile(rf"/issue/{key}-\d+/$"), timeout=10000)
     new_key = admin_page.url.rstrip("/").rsplit("/", 1)[-1]
 
     assert api_client.get(f"/api/v1/issues/{new_key}/relations/").json() == []

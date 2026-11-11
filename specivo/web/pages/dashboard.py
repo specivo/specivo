@@ -30,7 +30,7 @@ from specivo.services import dashboard_service as dash
 from specivo.services.ai_spend_report_service import ReportRow
 from specivo.services.notification_service import NotificationService
 from specivo.services.project_service import ProjectService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
 from specivo.web.pages.ai_usage import _money_view
 
 logger = logging.getLogger(__name__)
@@ -478,7 +478,7 @@ async def notifications_page(
     """Render the notifications page."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     notifications, total = await _notif_svc.list_notifications(
