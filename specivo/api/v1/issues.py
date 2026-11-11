@@ -139,6 +139,9 @@ async def create_issue(
         raise PermissionDeniedError("You do not have permission to create issues in this project")
     # Override project_key in body to match path param
     data = data.model_copy(update={"project_key": project.key})
+    if data.parent_id is not None:
+        # A parent the caller cannot see is "not found", like a missing one.
+        await _service.load_parent(db, data.parent_id, project.id, current_user)
     issue = await _service.create(db, project, data, current_user)
     if data.tags:
         diff = await _tag_service.set_issue_tags(db, project, issue.id, data.tags, current_user)

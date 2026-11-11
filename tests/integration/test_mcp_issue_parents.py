@@ -28,6 +28,7 @@ from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
+from specivo.services.nested_set_service import NestedSetService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
@@ -383,14 +384,40 @@ async def test_a_parent_outside_the_key_limit_reads_as_unknown(
     assert await db_session.scalar(select(func.count()).where(Issue.subject == "KMP child")) == 0
 
 
+async def test_a_parent_in_another_project_reads_as_unknown(
+    use_test_session, client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Subtasks never span projects: a visible parent in another project is refused like a missing one."""
+    w = await build_world(db_session, client, "KMX")
+    client.headers.pop("Authorization", None)
+    a_key, a_ref, b_ref = w.a.key, w.a_issue["key"], w.b_issue["key"]
+    mcp_raw_key_var.set(w.open_raw)
+
+    created = await server.specivo_create_issue(
+        project_key=a_key, tracker_id=w.tracker_id, subject="KMX child", parent_ref=b_ref
+    )
+    assert created == f"Error: parent issue '{b_ref}' not found"
+    updated = await server.specivo_update_issue(issue_ref=a_ref, parent_ref=b_ref)
+    assert updated == f"Error: parent issue '{b_ref}' not found"
+    assert await db_session.scalar(select(func.count()).where(Issue.subject == "KMX child")) == 0
+    a_issue = await db_session.get(Issue, w.a_issue["id"])
+    await db_session.refresh(a_issue)
+    assert a_issue.parent_id is None
+
+
 async def test_show_issue_hides_relatives_outside_the_key_limit(
     use_test_session, client: AsyncClient, db_session: AsyncSession
 ) -> None:
     w = await build_world(db_session, client, "KMS")
     client.headers.pop("Authorization", None)
     a_ref, b_ref = w.a_issue["key"], w.b_issue["key"]
+    # Subtasks no longer span projects, but links made before that rule may
+    # remain: set one up directly, as old data would have it.
+    a_issue = await db_session.get(Issue, w.a_issue["id"])
+    b_issue = await db_session.get(Issue, w.b_issue["id"])
+    await NestedSetService().move_to_parent(db_session, b_issue, a_issue)
+    await db_session.commit()
     mcp_raw_key_var.set(w.open_raw)
-    assert (await server.specivo_update_issue(issue_ref=b_ref, parent_ref=a_ref)).startswith("Updated issue")
     a_child = _created_ref(
         await server.specivo_create_issue(
             project_key=w.a.key, tracker_id=w.tracker_id, subject="KMS a child", parent_ref=a_ref

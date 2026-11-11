@@ -174,13 +174,16 @@ def _parse_metadata_filters(raw: list[str] | None) -> list[tuple[str, str]]:
     return pairs
 
 
-async def _resolve_parent_ref(session: AsyncSession, user: User, parent_ref: str) -> Issue:
+async def _resolve_parent_ref(
+    session: AsyncSession, user: User, parent_ref: str, project_id: int | None = None
+) -> Issue:
     """Resolve *parent_ref* (a display key such as ``ACME-12``) to an issue *user* may see.
 
-    Raises ``NotFoundError`` with one message for every refusal: a malformed
-    or unknown ref, a bare database id, an issue *user* may not see and one
-    outside the API key's project limit, so a refusal tells nothing about
-    which issues exist.
+    With *project_id*, the parent must belong to that project too (subtasks
+    never span projects). Raises ``NotFoundError`` with one message for every
+    refusal: a malformed or unknown ref, a bare database id, an issue *user*
+    may not see, one outside the API key's project limit and one in another
+    project, so a refusal tells nothing about which issues exist.
     """
     not_found = NotFoundError(f"parent issue '{parent_ref}' not found")
     if "-" not in parent_ref:
@@ -190,6 +193,8 @@ async def _resolve_parent_ref(session: AsyncSession, user: User, parent_ref: str
     except NotFoundError:
         raise not_found from None
     if not await check_permission(user, parent.project_id, "view_issues", session):
+        raise not_found
+    if project_id is not None and parent.project_id != project_id:
         raise not_found
     return parent
 
@@ -608,7 +613,7 @@ async def _create_issue(  # noqa: PLR0913
         # Checked before anything is written: the error string is committed
         # with the tool call, so a refusal must leave nothing behind.
         try:
-            parent = await _resolve_parent_ref(session, user, parent_ref)
+            parent = await _resolve_parent_ref(session, user, parent_ref, project.id)
             await _issue_svc.check_parent(session, None, parent)
         except (NotFoundError, ValidationError) as exc:
             return f"Error: {exc.message}"
@@ -673,7 +678,7 @@ async def _update_issue(  # noqa: PLR0913
         # Checked before anything is written: the service applies the other
         # fields first, and the error string is committed with the tool call.
         try:
-            parent = await _resolve_parent_ref(session, user, parent_ref)
+            parent = await _resolve_parent_ref(session, user, parent_ref, issue.project_id)
             await _issue_svc.check_parent(session, issue, parent)
         except (NotFoundError, ValidationError) as exc:
             return f"Error: {exc.message}"
