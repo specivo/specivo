@@ -119,7 +119,8 @@ class CSRFMiddleware:
     that the token signature is valid.
 
     Exempt from validation:
-    - Requests with an ``X-API-Key`` header (API key auth, not cookie-based)
+    - Requests with an ``Authorization: Bearer ...`` header (JWT or API key
+      auth, which never reads the session cookie)
     - The exact paths in ``_CSRF_EXEMPT_PATHS`` (login, token refresh,
       password-reset request and confirm)
     - Paths matching an anchored pattern in ``_CSRF_EXEMPT_PATTERNS`` (SSO
@@ -170,8 +171,12 @@ class CSRFMiddleware:
 
     def _needs_csrf(self, path: str, headers: dict[bytes, bytes]) -> bool:
         """Return True if this request requires CSRF validation."""
-        # Non-cookie auth (API key or Bearer token) is not CSRF-vulnerable
-        if b"x-api-key" in headers or b"authorization" in headers:
+        # A Bearer token (JWT or API key) is the only auth that ignores the
+        # session cookie (security.authenticate_request), so only it is not
+        # CSRF-vulnerable. Any other Authorization scheme, or an X-API-Key
+        # header (not an auth method here), falls back to the cookie and is
+        # checked like any cookie request.
+        if headers.get(b"authorization", b"").startswith(b"Bearer "):
             return False
         # Exempt endpoints (pre-auth auth routes) and mounts (MCP)
         if self._is_exempt_path(path):
