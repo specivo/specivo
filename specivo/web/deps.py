@@ -8,6 +8,7 @@ import subprocess
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
+from typing import overload
 from urllib.parse import quote
 
 from fastapi import Request, Response
@@ -96,7 +97,11 @@ async def get_active_sprint_id(db, project_id: int) -> int | None:
     return row[0] if row else None
 
 
-def _to_user_tz(dt, tz_name: str = "UTC"):
+@overload
+def _to_user_tz(dt: datetime, tz_name: str = ...) -> datetime: ...
+@overload
+def _to_user_tz(dt: None, tz_name: str = ...) -> None: ...
+def _to_user_tz(dt: datetime | None, tz_name: str = "UTC") -> datetime | None:
     """Convert a UTC datetime to the given IANA timezone.
 
     Returns a timezone-aware datetime in the user's local timezone.
@@ -118,7 +123,7 @@ def _to_user_tz(dt, tz_name: str = "UTC"):
     return dt.astimezone(tz)
 
 
-def _localtime(dt, tz_name: str = "UTC") -> str:
+def _localtime(dt: datetime | None, tz_name: str = "UTC") -> str:
     """Jinja2 filter: convert UTC datetime to user timezone, format as 'YYYY-MM-DD HH:MM'.
 
     Usage in templates: ``{{ dt | localtime(user.timezone) }}``
@@ -307,7 +312,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:  # noqa: C901, PLR
     from specivo.core.i18n import gettext, ngettext
 
     templates.env.add_extension("jinja2.ext.i18n")
-    templates.env.install_gettext_callables(gettext, ngettext)
+    templates.env.install_gettext_callables(gettext, ngettext)  # type: ignore[attr-defined]  # added by the i18n extension
     # The active request locale, for <html lang> (read by the frontend's
     # Intl date formatting) and anything else that needs the language code.
     from specivo.core.i18n import get_locale
@@ -403,9 +408,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:  # noqa: C901, PLR
             if not raw:
                 return {}
             try:
-                return _json.loads(raw)
+                parsed: dict = _json.loads(raw)
             except (ValueError, TypeError):
                 return {}
+            return parsed
 
         def _truncate(val: object, limit: int = 80) -> str:
             s = _json.dumps(val, separators=(",", ":"), default=str) if not isinstance(val, str) else val

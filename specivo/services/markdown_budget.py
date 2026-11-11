@@ -52,8 +52,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any
 
-from markdown import Markdown  # type: ignore[import-untyped]
-from markdown.extensions import Extension  # type: ignore[import-untyped]
+from markdown import Markdown
+from markdown.extensions import Extension
 
 from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
@@ -391,9 +391,9 @@ class RenderDeadline(Extension):
 
     def extendMarkdown(self, md: Markdown) -> None:  # Python-Markdown API  # noqa: N802
         for pattern in md.inlinePatterns:
-            pattern.handleMatch = self._checked(pattern.handleMatch)
+            pattern.handleMatch = self._checked(pattern.handleMatch)  # type: ignore[method-assign]  # wrapped on purpose
         for processor in md.parser.blockprocessors:
-            processor.run = self._checked(processor.run)
+            processor.run = self._checked(processor.run)  # type: ignore[method-assign]  # wrapped on purpose
 
     def _checked(self, method: Callable[..., Any]) -> Callable[..., Any]:
         cpu_deadline = self.cpu_deadline

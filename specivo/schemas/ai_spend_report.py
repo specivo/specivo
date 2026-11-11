@@ -30,7 +30,7 @@ class ReportAmountOut(BaseModel):
             unconverted=[
                 UnconvertedGroupOut(
                     currency=g.currency,
-                    reason=g.reason.value,  # type: ignore[arg-type]
+                    reason=g.reason.value,
                     amount=MoneyOut.from_money(g.amount),
                     count=g.count,
                     newest_rate_date=g.newest_rate_date,

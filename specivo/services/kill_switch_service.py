@@ -6,8 +6,9 @@ Its API is not mounted; not yet tested for release.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.utils import utcnow
@@ -232,7 +233,7 @@ class KillSwitchService:
         )
         await session.flush()
 
-        count = result.rowcount
+        count = int(cast(CursorResult, result).rowcount or 0)
         logger.info("UNKILL: reactivated %d keys for agent user_id=%d", count, agent_user_id)
         return count
 

@@ -213,13 +213,11 @@ async def seed_statuses(session: AsyncSession) -> None:
 async def seed_trackers(session: AsyncSession) -> None:
     """Upsert default trackers, pointing default_status_id at 'New'."""
     # Resolve the "New" status id
-    result = await session.execute(select(IssueStatus).where(IssueStatus.name == "New"))
-    new_status = result.scalar_one_or_none()
+    new_status = (await session.execute(select(IssueStatus).where(IssueStatus.name == "New"))).scalar_one_or_none()
     new_status_id = new_status.id if new_status else None
 
     for data in _DEFAULT_TRACKERS:
-        result = await session.execute(select(Tracker).where(Tracker.name == data["name"]))
-        tracker = result.scalar_one_or_none()
+        tracker = (await session.execute(select(Tracker).where(Tracker.name == data["name"]))).scalar_one_or_none()
         tracker_data = {**data, "default_status_id": new_status_id}
         if tracker is None:
             tracker = Tracker(**tracker_data)

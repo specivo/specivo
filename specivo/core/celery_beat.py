@@ -23,7 +23,7 @@ import stat
 import tempfile
 from pathlib import Path
 
-from celery.beat import PersistentScheduler  # type: ignore[import-untyped]
+from celery.beat import PersistentScheduler
 
 logger = logging.getLogger(__name__)
 

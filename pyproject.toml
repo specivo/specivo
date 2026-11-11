@@ -64,6 +64,8 @@ dev = [
     "pytest-playwright>=0.6.2",
     "pytest-xdist>=3.8.0",
     "types-jsonschema>=4.26.0.20260324",
+    "types-markdown>=3.11.3.20261108",
+    "types-pygments>=2.21.0.20260819",
     "types-python-dateutil>=2.9",
 ]
 
@@ -161,6 +163,17 @@ python_version = "3.12"
 strict = false
 warn_return_any = true
 warn_unused_configs = true
+# Like ruff's RUF100: an ignore that no longer suppresses anything fails, so
+# remove it when you fix the line.
+warn_unused_ignores = true
+# Reads pydantic field defaults, so models with optional fields can be built
+# without passing every field.
+plugins = ["pydantic.mypy"]
+
+# These ship neither type hints nor a stub package.
+[[tool.mypy.overrides]]
+module = ["celery", "celery.*", "onnxruntime"]
+ignore_missing_imports = true
 
 
 [tool.importlinter]

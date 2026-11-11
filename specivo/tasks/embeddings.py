@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from celery.signals import worker_ready  # type: ignore[import-untyped]
+from celery.signals import worker_ready
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_EMBEDDING
 from specivo.tasks import EMBEDDING_QUEUE, celery_app
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @celery_app.task(
     bind=True, ignore_result=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMBEDDING
 )
-def embed_search_sources(self, sources: list[list]) -> None:  # type: ignore[no-untyped-def]
+def embed_search_sources(self, sources: list[list]) -> None:
     """Embed the chunks of *sources* that have no embedding for the default model.
 
     Idempotent: a source deleted or already embedded since the task was queued
@@ -87,7 +87,7 @@ def _consumes_embedding_queue(consumer: object) -> bool:
 
 
 @worker_ready.connect
-def _log_embedding_model_status(sender: object = None, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+def _log_embedding_model_status(sender: object = None, **_kwargs) -> None:
     """Say once, at start of the worker that embeds, whether semantic indexing can run there."""
     if sender is not None and not _consumes_embedding_queue(sender):
         return
@@ -125,7 +125,7 @@ async def _log_model_status_async() -> None:
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
-def backfill_model_embeddings(self, model_id: int, reembed: bool = False) -> None:  # type: ignore[no-untyped-def]
+def backfill_model_embeddings(self, model_id: int, reembed: bool = False) -> None:
     """Embed the chunks that have no embedding for a model, or all chunks with *reembed*.
 
     Args:

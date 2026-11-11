@@ -74,7 +74,8 @@ its activity windows.
 from __future__ import annotations
 
 import time
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, cast
 
 from redis.asyncio import Redis
 
@@ -83,6 +84,11 @@ _KEY_PREFIX = "mcp:session:"
 
 def _key(session_id: str) -> str:
     return f"{_KEY_PREFIX}{session_id}"
+
+
+def _hgetall(redis: Redis, key: str) -> Awaitable[dict[str, str]]:
+    # redis-py types its commands for both the sync and async clients.
+    return cast("Awaitable[dict[str, str]]", redis.hgetall(key))
 
 
 class RedisSessionStore:
@@ -148,7 +154,7 @@ class RedisSessionStore:
 
         Returns ``None`` if the session does not exist or has expired.
         """
-        raw = await self._redis.hgetall(_key(session_id))
+        raw = await _hgetall(self._redis, _key(session_id))
         if not raw:
             return None
         return dict(raw)
@@ -161,7 +167,7 @@ class RedisSessionStore:
         successful read.
         """
         key = _key(session_id)
-        raw = await self._redis.hgetall(key)
+        raw = await _hgetall(self._redis, key)
         if not raw:
             return None
         now = int(time.time())

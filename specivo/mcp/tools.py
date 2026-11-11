@@ -2586,13 +2586,13 @@ async def _create_recurring_pattern(  # noqa: PLR0913
             template_description=template_description,
             template_priority_id=template_priority_id,
             template_assigned_to_id=template_assigned_to_id,
-            freq=freq,  # type: ignore[arg-type]
+            freq=freq,
             rrule_interval=rrule_interval,
             byday=_parse_byday(byday),
             rrule_count=rrule_count,
             rrule_raw=rrule_raw,
-            anchor_mode=anchor_mode,  # type: ignore[arg-type]
-            base_date_strategy=base_date_strategy,  # type: ignore[arg-type]
+            anchor_mode=anchor_mode,
+            base_date_strategy=base_date_strategy,
             dtstart=_parse_occurrence_at(dtstart),
             timezone=timezone,
             creation_lead_time_days=creation_lead_time_days,

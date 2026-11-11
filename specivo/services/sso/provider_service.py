@@ -273,7 +273,7 @@ class ProviderService:
             backchannel_action=provider.backchannel_action,
             verify_session_at_idp=provider.verify_session_at_idp,
             idp_check_failure=provider.idp_check_failure,
-            session_recheck_status=provider.session_recheck_status,  # type: ignore[arg-type]
+            session_recheck_status=provider.session_recheck_status,
             session_recheck_status_at=provider.session_recheck_status_at,
             session_max_age_hours=provider.session_max_age_hours,
             extra_auth_params={k: str(v) for k, v in (provider.extra_auth_params or {}).items()},
@@ -675,7 +675,7 @@ class ProviderService:
         logger.info("sso.provider.self_test provider=%s ok=false step=%s reason=%s", provider.slug, step, exc.reason)
         return SsoSelfTestResult(
             ok=False,
-            failed_step=step,  # type: ignore[arg-type]
+            failed_step=step,
             error_code=exc.code,
             error_reason=exc.reason,
             warnings=warnings or [],

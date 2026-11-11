@@ -85,7 +85,7 @@ class _StripWWWAuthenticate:
 _session_manager: StreamableHTTPSessionManager | None = None
 
 
-async def _default_store_provider():  # type: ignore[no-untyped-def]
+async def _default_store_provider():
     """Lazy provider for the Redis-backed session store.
 
     Imports inside the body to avoid pulling redis at module-import time,

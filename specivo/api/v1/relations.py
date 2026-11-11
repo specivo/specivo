@@ -135,7 +135,7 @@ async def delete_relation(
 
     # Record journal entries on both issues after successful delete
     canonical_type = removed.relation_type
-    sym_type = str(RELATION_TYPES[canonical_type]["sym"])
+    sym_type = RELATION_TYPES[canonical_type]["sym"]
     await _journal_service.record_relation_change(
         db, removed.issue_from, current_user, canonical_type, removed.issue_to.display_key, added=False
     )

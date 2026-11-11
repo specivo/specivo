@@ -6,6 +6,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import TypedDict
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,12 +24,19 @@ logger = logging.getLogger(__name__)
 # Relation type metadata
 # ---------------------------------------------------------------------------
 
+
 # Maps every user-facing type label to:
 #   "sym"     — the label shown when looking at the relation from the other side
 #   "reverse" — the canonical DB type to store when this is used as the "from" side
 #               (None means it IS the canonical type and is stored as-is)
 #   "canonical" — the DB-stored form
-RELATION_TYPES: dict[str, dict[str, str | None]] = {
+class RelationTypeInfo(TypedDict):
+    sym: str
+    reverse: str | None
+    canonical: str
+
+
+RELATION_TYPES: dict[str, RelationTypeInfo] = {
     "relates": {"sym": "relates", "reverse": None, "canonical": "relates"},
     "duplicates": {"sym": "duplicated", "reverse": None, "canonical": "duplicates"},
     "duplicated": {"sym": "duplicates", "reverse": "duplicates", "canonical": "duplicates"},

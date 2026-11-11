@@ -12,9 +12,9 @@
   {"label": "Description Changes"}
 ]) }}
 
-<h1 class="page-title" style="font-size:var(--sp-font-size-xl);">{% trans key=issue.display_key %}Description Changes — %(key)s{% endtrans %} <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-md);">{% trans num=selected_num %}Version #%(num)s{% endtrans %}</span></h1>
+<h1 class="page-title" style="font-size:var(--sp-font-size-xl);">{% trans key=issue.display_key %}Description Changes — %(key)s{% endtrans %} <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-md);">{% trans num=selected_num or "?" %}Version #%(num)s{% endtrans %}</span></h1>
 
-{% if selected_num > 1 %}
+{% if selected_num and selected_num > 1 %}
 {# Diff and side-by-side comparison — only for versions after the first #}
 <div class="card" style="padding:var(--sp-space-lg);margin-bottom:var(--sp-space-xl);overflow-x:auto;">
   <div style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);line-height:1.5;">
@@ -45,7 +45,7 @@
     </div>
   </div>
   <div>
-    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-success);">{% trans num=selected_num %}Version #%(num)s{% endtrans %} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">{% trans %}(after){% endtrans %}</span></h3>
+    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-success);">{% trans num=selected_num or "?" %}Version #%(num)s{% endtrans %} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">{% trans %}(after){% endtrans %}</span></h3>
     <div class="card" style="padding:var(--sp-space-lg);">
       <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">' ~ _('Empty') ~ '</em>' }}</div>
     </div>

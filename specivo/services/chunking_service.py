@@ -66,7 +66,7 @@ class ChunkingService:
         placeholders: dict[str, str] = {}
         counter = 0
 
-        def _replace_fence(m: re.Match) -> str:  # type: ignore[type-arg]
+        def _replace_fence(m: re.Match) -> str:
             nonlocal counter
             key = f"\x00FENCE{counter}\x00"
             counter += 1
