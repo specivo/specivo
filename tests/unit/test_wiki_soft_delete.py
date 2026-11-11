@@ -274,7 +274,7 @@ async def test_restore_page_clears_deleted_fields(
     await _svc.delete_page(db_session, page.id, deleted_by=actor)
     await db_session.commit()
 
-    await _svc.restore_page(db_session, page.id)
+    await _svc.restore_page(db_session, page.id, project_id=project.id)
     await db_session.commit()
     await db_session.refresh(page)
 
@@ -292,7 +292,7 @@ async def test_restore_page_reappears_in_list(
     await _svc.delete_page(db_session, page.id, deleted_by=actor)
     await db_session.commit()
 
-    await _svc.restore_page(db_session, page.id)
+    await _svc.restore_page(db_session, page.id, project_id=project.id)
     await db_session.commit()
 
     pages = await _svc.list_pages(db_session, project.id)
@@ -312,7 +312,7 @@ async def test_restore_page_cascade_restores_co_deleted_children(
     await _svc.delete_page(db_session, parent.id, deleted_by=actor, cascade_children=True)
     await db_session.commit()
 
-    await _svc.restore_page(db_session, parent.id, cascade=True)
+    await _svc.restore_page(db_session, parent.id, project_id=project.id, cascade=True)
     await db_session.commit()
 
     for node in [parent, child]:
@@ -332,7 +332,7 @@ async def test_restore_page_no_cascade_leaves_children_deleted(
     await _svc.delete_page(db_session, parent.id, deleted_by=actor, cascade_children=True)
     await db_session.commit()
 
-    await _svc.restore_page(db_session, parent.id, cascade=False)
+    await _svc.restore_page(db_session, parent.id, project_id=project.id, cascade=False)
     await db_session.commit()
 
     await db_session.refresh(parent)
@@ -355,7 +355,7 @@ async def test_restore_page_conflict_when_slug_taken(
     await _create_page(db_session, project, actor, "Conflict Slug")
 
     with pytest.raises((ConflictError, Exception)):
-        await _svc.restore_page(db_session, page.id)
+        await _svc.restore_page(db_session, page.id, project_id=project.id)
 
 
 # ---------------------------------------------------------------------------

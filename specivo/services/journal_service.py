@@ -493,6 +493,22 @@ class JournalService:
         await emit_issue_commented(session, issue, journal, user)
         return journal
 
+    async def get_readable(self, session: AsyncSession, journal_id: int, issue_id: int, user: User) -> Journal:
+        """Return journal *journal_id* of issue *issue_id* if *user* may read it.
+
+        For routes that take a journal id next to an issue they already
+        checked: the journal must belong to that issue, and a private journal
+        is readable by admins only, as in the activity feed. Anything else is
+        ``NotFoundError``, the same as an id that does not exist.
+        """
+        stmt = select(Journal).where(Journal.id == journal_id, Journal.issue_id == issue_id)
+        if not user.is_admin:
+            stmt = stmt.where(Journal.is_private.is_(False))
+        journal = await session.scalar(stmt)
+        if journal is None:
+            raise NotFoundError(f"Journal {journal_id} not found on this issue")
+        return journal
+
     async def resolve_thread(
         self,
         session: AsyncSession,

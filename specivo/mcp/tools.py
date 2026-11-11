@@ -1385,7 +1385,7 @@ async def _restore_wiki(
     if page is None:
         raise NotFoundError(f"Deleted wiki page '{slug}' not found")
 
-    restored_ids = await _wiki_svc.restore_page(session, page.id, cascade=cascade)
+    restored_ids = await _wiki_svc.restore_page(session, page.id, project_id=project.id, cascade=cascade)
     await session.flush()
     await _log_tool(
         session,

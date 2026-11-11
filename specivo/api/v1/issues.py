@@ -960,6 +960,8 @@ async def resolve_thread(
     )
     if not can_resolve:
         raise PermissionDeniedError("Only the author, assignee, or a user with edit permission can resolve")
+    # Its notes are returned below, so a private journal must be readable.
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     journal = await _journal_service.resolve_thread(
         session=db,
@@ -1002,6 +1004,7 @@ async def unresolve_thread(
     )
     if not can_resolve:
         raise PermissionDeniedError("Only the author, assignee, or a user with edit permission can resolve")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     await _journal_service.unresolve_thread(
         session=db,
@@ -1093,12 +1096,9 @@ async def toggle_reaction(
 ) -> dict:
     """Toggle an emoji reaction on a journal entry."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
-
-    # Verify the journal exists and belongs to this issue
-    result = await db.execute(select(Journal).where(Journal.id == journal_id))
-    journal = result.scalar_one_or_none()
-    if journal is None or journal.issue_id != issue.id:
-        raise NotFoundError("Journal not found")
+    if not await check_permission(current_user, issue.project_id, "view_issues", db):
+        raise PermissionDeniedError("You do not have permission to react in this project")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     added = await _reaction_svc.toggle_reaction(db, journal_id, current_user.id, emoji)
     return {"added": added, "emoji": emoji}
