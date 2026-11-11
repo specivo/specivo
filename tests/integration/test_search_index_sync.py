@@ -209,7 +209,7 @@ class TestKeywordWithoutModel:
         assert await _chunks(db_session, "wiki_page", page.id) == []
         assert page.id not in await _found(db_session, world.admin, "keepers", "wiki")
 
-        await wiki.restore_page(db_session, page.id)
+        await wiki.restore_page(db_session, page.id, project_id=world.project.id)
         await db_session.commit()
         assert await _chunks(db_session, "wiki_page", page.id) == ["Lighthouse Rota\n\nKeepers rotate monthly."]
 
@@ -639,7 +639,7 @@ class TestTrashedWikiPageAttachments:
             assert attachment.id not in await _found(db_session, user, "estuary", "attachments")
             assert attachment.id not in await _semantic_ids(db_session, user, query)
 
-        await WikiService().restore_page(db_session, page.id)
+        await WikiService().restore_page(db_session, page.id, project_id=world.project.id)
         await db_session.commit()
         assert await _chunks(db_session, "attachment", attachment.id) != []
         assert ["attachment", attachment.id] in queued[-1]

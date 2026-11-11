@@ -320,9 +320,14 @@ class WikiService:
         session: AsyncSession,
         page_id: int,
         *,
+        project_id: int,
         cascade: bool = True,
     ) -> list[int]:
-        """Restore a soft-deleted wiki page.
+        """Restore a soft-deleted wiki page of project *project_id*'s wiki.
+
+        The page id often comes from a URL while the permission was checked on
+        *project_id*: a page of another project's wiki is "not found", like a
+        missing one.
 
         If cascade is True, co-deleted children (same deleted_at ±1s) are also restored.
         Raises ConflictError if an active page with the same slug exists.
@@ -330,7 +335,10 @@ class WikiService:
         Returns list of restored page IDs.
         """
         page = await self._get_page_by_id_include_deleted(session, page_id)
-        if page is None or page.deleted_at is None:
+        page_project_id = (
+            await session.scalar(select(Wiki.project_id).where(Wiki.id == page.wiki_id)) if page is not None else None
+        )
+        if page is None or page.deleted_at is None or page_project_id != project_id:
             raise NotFoundError("Deleted wiki page not found")
 
         # Check slug conflict

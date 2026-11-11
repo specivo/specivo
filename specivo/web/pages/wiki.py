@@ -275,7 +275,10 @@ async def wiki_restore(
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    await _wiki_svc.restore_page(db, page_id)
+    try:
+        await _wiki_svc.restore_page(db, page_id, project_id=project.id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Deleted wiki page not found") from None
 
     return RedirectResponse(
         f"/projects/{project_key}/wiki/trash/",

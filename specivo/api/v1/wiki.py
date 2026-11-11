@@ -246,7 +246,7 @@ async def restore_wiki_page(
 
         raise NotFoundError(f"Deleted wiki page '{slug}' not found")
 
-    await _service.restore_page(db, page.id)
+    await _service.restore_page(db, page.id, project_id=project.id)
     await db.refresh(page)
     return _page_out(page)
 
