@@ -75,6 +75,7 @@ class BulkService:
         failed: list[BulkResultItem] = []
 
         for issue_id in issue_ids:
+            display_key = f"#{issue_id}"
             try:
                 # Load issue
                 issue = await self._load_visible(session, issue_id, user)
@@ -111,8 +112,18 @@ class BulkService:
 
                 data = IssueUpdate(**update_fields)
 
-                # Apply update via IssueService (handles workflow, journals, etc.)
-                issue = await self._issue_service.update(session, issue, data, user)
+                # Apply update via IssueService (handles workflow, journals, etc.).
+                # It sets fields one by one and may refuse one late (a version
+                # or category of another project): the savepoint undoes what it
+                # flushed, and expiring the issue drops what it had not, so a
+                # refused issue keeps nothing and the next issue's flush cannot
+                # write it without a journal entry.
+                try:
+                    async with session.begin_nested():
+                        issue = await self._issue_service.update(session, issue, data, user)
+                except Exception:
+                    session.expire(issue)
+                    raise
 
                 succeeded.append(
                     BulkResultItem(
@@ -126,17 +137,10 @@ class BulkService:
                 # Catch any error (workflow denied, validation, etc.) — record and continue
                 code = getattr(exc, "code", "internal_error")
                 message = str(exc)
-                display_key_fallback = f"#{issue_id}"
-                try:  # noqa: SIM105
-                    # Try to get display_key if issue was loaded
-                    display_key_fallback = issue.display_key  # type: ignore[union-attr]
-                except Exception:  # noqa: BLE001, S110
-                    pass
-
                 failed.append(
                     BulkResultItem(
                         id=issue_id,
-                        key=display_key_fallback,
+                        key=display_key,
                         success=False,
                         error={"code": code, "message": message},
                     )
