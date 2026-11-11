@@ -81,6 +81,9 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
         # GIN index on metadata JSONB for key/value queries
         Index("ix_issues_metadata_gin", "issue_metadata", postgresql_using="gin"),
         Index("ix_issues_recurring_pattern_id", "recurring_pattern_id"),
+        # The nested-set shifts run ``WHERE root_id = :r AND lft >= :x`` (and on
+        # rgt) under the tree's lock on every subtask insert and move.
+        Index("ix_issues_root_id_lft", "root_id", "lft"),
         # DB-level idempotency guard: at most one issue per (pattern, occurrence).
         # Partial so non-recurring issues (NULL pattern) are unconstrained.
         Index(

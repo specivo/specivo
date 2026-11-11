@@ -444,7 +444,30 @@ async def test_move_child_to_root(
 
 
 @pytest.mark.asyncio
-async def test_delete_parent_orphans_children(
+async def test_delete_parent_with_subtasks_is_refused(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    token: str,
+    parent_and_child: tuple[dict, dict],
+) -> None:
+    """A parent is not deleted while it has subtasks: that would take the subtree with it."""
+    parent, child = parent_and_child
+
+    resp = await client.delete(f"/api/v1/issues/{parent['key']}/", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 409, resp.text
+    assert "subtask" in resp.text
+
+    ids = set((await db_session.execute(select(Issue.id).where(Issue.id.in_([parent["id"], child["id"]])))).scalars())
+    assert ids == {parent["id"], child["id"]}
+
+    # Once the subtask is gone, the parent can be deleted.
+    auth = {"Authorization": f"Bearer {token}"}
+    assert (await client.delete(f"/api/v1/issues/{child['key']}/", headers=auth)).status_code == 204
+    assert (await client.delete(f"/api/v1/issues/{parent['key']}/", headers=auth)).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_mid_level_parent_is_refused(
     client: AsyncClient,
     db_session: AsyncSession,
     token: str,
@@ -454,25 +477,61 @@ async def test_delete_parent_orphans_children(
     priority: IssuePriority,
     parent_and_child: tuple[dict, dict],
 ) -> None:
-    """Deleting a parent orphans its direct children (parent_id → NULL via SET NULL)."""
-    parent, child = parent_and_child
-
-    resp = await client.delete(
-        f"/api/v1/issues/{parent['key']}/",
-        headers={"Authorization": f"Bearer {token}"},
+    """A subtask that has subtasks of its own is refused too, so no orphan keeps a stale tree."""
+    _parent, child = parent_and_child
+    await _create_issue(
+        client, token, project.key, tracker.id, open_status.id, priority.id, "Grandchild", parent_id=child["id"]
     )
-    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/issues/{child['key']}/", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 409, resp.text
 
-    # Child should still exist (SET NULL FK, not CASCADE)
-    result = await db_session.execute(select(Issue).where(Issue.id == child["id"]))
-    child_issue = result.scalar_one_or_none()
-    # The child may have been deleted (CASCADE on root_id) or orphaned (SET NULL on parent_id).
-    # Per the model: parent_id has SET NULL, root_id has CASCADE.
-    # If root_id == parent.id and root_id has CASCADE, child is deleted.
-    # This test documents which behavior the implementation provides.
-    if child_issue is not None:
-        # Orphaned: parent_id is NULL
-        assert child_issue.parent_id is None
+
+@pytest.mark.asyncio
+async def test_bulk_delete_takes_a_whole_subtree_in_any_order(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+    parent_and_child: tuple[dict, dict],
+) -> None:
+    """Selecting a parent with all its subtasks deletes them all, parent listed first or not."""
+    parent, child = parent_and_child
+    grandchild = await _create_issue(
+        client, token, project.key, tracker.id, open_status.id, priority.id, "Grandchild", parent_id=child["id"]
+    )
+    order = [parent["id"], grandchild["id"], child["id"]]
+    resp = await client.post(
+        "/api/v1/issues/bulk-delete/", json={"issue_ids": order}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["failed"] == []
+    assert [item["id"] for item in body["succeeded"]] == order  # reported in the caller's order
+    remaining = (await db_session.execute(select(Issue.id).where(Issue.id.in_(order)))).scalars().all()
+    assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_refuses_a_parent_whose_subtasks_stay(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    token: str,
+    parent_and_child: tuple[dict, dict],
+) -> None:
+    parent, child = parent_and_child
+    resp = await client.post(
+        "/api/v1/issues/bulk-delete/", json={"issue_ids": [parent["id"]]}, headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["succeeded"] == []
+    assert body["failed"][0]["id"] == parent["id"]
+    assert "subtask" in body["failed"][0]["error"]["message"]
+    child_row = (await db_session.execute(select(Issue).where(Issue.id == child["id"]))).scalar_one()
+    assert child_row.parent_id == parent["id"]
 
 
 # ---------------------------------------------------------------------------

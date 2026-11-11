@@ -1258,11 +1258,23 @@ class IssueService:
     async def delete(self, session: AsyncSession, issue: Issue, actor: User | None = None) -> None:
         """Delete an issue permanently.
 
+        An issue with subtasks is refused (``ConflictError``): deleting it would
+        take the whole subtree with it (``root_id`` cascades) or leave the
+        subtasks pointing into a tree that no longer has them. Delete the
+        subtasks, or move them to another parent, first.
+
         When the deleted issue has a parent, recalculate the parent's derived
         attributes after deletion since one child has been removed.
 
         ``actor`` is who deleted it, for the ``issue.deleted`` webhook event.
         """
+        subtasks = await session.scalar(select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id))
+        if subtasks:
+            raise ConflictError(
+                message=_("%(key)s has %(count)d subtask(s). Delete them or move them to another parent first.")
+                % {"key": issue.display_key, "count": subtasks}
+            )
+
         parent_id = issue.parent_id
         display_key = issue.display_key
         issue_id = issue.id
