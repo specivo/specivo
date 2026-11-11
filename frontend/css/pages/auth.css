@@ -92,4 +92,3 @@ body.standalone::before { content: ''; position: fixed; top: 0; left: 0; right: 
 
 /* Actions */
 .error-actions { display: flex; align-items: center; justify-content: center; gap: var(--sp-space-md); }
-

@@ -250,4 +250,3 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 .velocity-table-bar { flex: 1; height: 6px; background: var(--sp-bg-input); border-radius: 3px; overflow: hidden; min-width: 60px; }
 .velocity-table-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
 .velocity-table-bar-text { font-size: 10px; color: var(--sp-text-muted); white-space: nowrap; min-width: 32px; }
-
