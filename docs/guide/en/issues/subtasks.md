@@ -12,7 +12,8 @@ pieces underneath it.
 
 Set the **parent issue** field on the child to point at the parent. You can do this when
 [creating](creating.md) the issue or later when [editing](updating.md) it. To build a parent with
-several children, create the parent first, then point each child at it.
+several children, create the parent first, then point each child at it. The parent has to be an issue of the
+same project that you can see.
 
 ## Build a hierarchy
 
