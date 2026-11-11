@@ -286,7 +286,7 @@
         <a class="activity-tab" data-tab="time" :class="{ active: tab === 'time' }" @click.prevent="show('time')" href="#time">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         {% endif %}
         {% if show_ai_usage_tab %}
-        <a class="activity-tab" data-tab="ai-usage" data-testid="ai-usage-tab" :class="{ active: tab === 'ai-usage' }" @click.prevent="show('ai-usage')" href="#ai-usage">{% trans %}AI usage{% endtrans %}</a>
+        <a class="activity-tab" data-tab="ai-usage" data-testid="ai-usage-tab" :class="{ active: tab === 'ai-usage' }" @click.prevent="show('ai-usage')" href="#ai-usage">{% trans %}AI usage{% endtrans %}{% if ai_usage_count %} <span class="tab-count" data-testid="ai-usage-tab-count">{{ ai_usage_count }}</span>{% endif %}</a>
         {% endif %}
         <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}

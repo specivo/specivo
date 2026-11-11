@@ -47,6 +47,7 @@ from specivo.web.deps import (
     get_web_reader,
     refuse_anonymous_web,
 )
+from specivo.web.pages.ai_issue_usage import tab_entry_count as ai_usage_tab_entry_count
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
@@ -531,6 +532,7 @@ async def issue_detail(  # noqa: PLR0915
         await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
         or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
     )
+    ai_usage_count = await ai_usage_tab_entry_count(db, user, project, issue) if show_ai_usage_tab else 0
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -728,6 +730,7 @@ async def issue_detail(  # noqa: PLR0915
             "can_view_time_entries": can_view_time_entries,
             "can_log_time": can_log_time,
             "show_ai_usage_tab": show_ai_usage_tab,
+            "ai_usage_count": ai_usage_count,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             "metadata_value_names": value_names,

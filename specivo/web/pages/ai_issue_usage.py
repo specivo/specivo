@@ -411,6 +411,19 @@ async def _sessions(
     }
 
 
+async def tab_entry_count(db: AsyncSession, user: User, project: Project, issue: Issue) -> int:
+    """How many counted entries the tab shows by default, for the badge on its label.
+
+    Matches the tab's default view: the sub-issues' usage is included when the
+    issue has any, excluded entries are left out, and only the entries *user*
+    may read are counted.
+    """
+    has_children = bool(await db.scalar(select(exists().where(Issue.parent_id == issue.id))))
+    scope: dict[str, Any] = {"issue_tree_id": issue.id} if has_children else {"issue_id": issue.id}
+    _none, total = await _usage.list_entries(db, user, project=project, excluded=False, limit=0, **scope)
+    return total
+
+
 async def _context(
     request: Request,
     response: Response,
