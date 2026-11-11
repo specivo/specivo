@@ -177,9 +177,7 @@ async def sprint_backlog(
     members = await _project_svc.list_members(db, project)
 
     # Load backlog issues (sprint_id IS NULL) with pagination
-    backlog_issues, backlog_total = await _sprint_svc.backlog_issues(
-        db, project.id, user, offset=offset, limit=limit
-    )
+    backlog_issues, backlog_total = await _sprint_svc.backlog_issues(db, project.id, user, offset=offset, limit=limit)
 
     # Collect all sprints available for the sprint picker (active + planned)
     all_available_sprints = []
@@ -257,11 +255,7 @@ async def sprint_board(
         raise HTTPException(status_code=404, detail="Sprint not found in this project")
 
     # Load statuses for column ordering
-    statuses = (
-        (await db.execute(select(IssueStatus).order_by(IssueStatus.position)))
-        .scalars()
-        .all()
-    )
+    statuses = (await db.execute(select(IssueStatus).order_by(IssueStatus.position))).scalars().all()
 
     # Load board data grouped by status name
     board = await _sprint_svc.board_data(db, sprint, user)
@@ -306,8 +300,7 @@ async def sprint_board(
             "board_base_params": board_base_params,
             "total_issues": total_issues,
             "can_manage_sprint": (
-                user.is_admin
-                or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
+                user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
             ),
             "active_sprint_id": sprint.id if sprint.status == "active" else None,
         },
@@ -362,9 +355,7 @@ async def sprint_edit(
     issues_in_sprint = list(result.scalars().all())
 
     total_issue_count = len(issues_in_sprint)
-    completed_issue_count = sum(
-        1 for i in issues_in_sprint if i.status.category in ("done", "closed")
-    )
+    completed_issue_count = sum(1 for i in issues_in_sprint if i.status.category in ("done", "closed"))
 
     members = await _project_svc.list_members(db, project)
 
@@ -432,16 +423,18 @@ async def sprint_analytics(
 
         completion_rate = round(completed * 100 / committed) if committed > 0 else 0
 
-        velocity_data.append({
-            "name": sprint.name,
-            "committed": committed,
-            "completed": completed,
-            "completion_rate": completion_rate,
-            "duration": duration,
-            "start_date": sprint.start_date.isoformat() if sprint.start_date else None,
-            "end_date": sprint.end_date.isoformat() if sprint.end_date else None,
-            "sprint_id": sprint.id,
-        })
+        velocity_data.append(
+            {
+                "name": sprint.name,
+                "committed": committed,
+                "completed": completed,
+                "completion_rate": completion_rate,
+                "duration": duration,
+                "start_date": sprint.start_date.isoformat() if sprint.start_date else None,
+                "end_date": sprint.end_date.isoformat() if sprint.end_date else None,
+                "sprint_id": sprint.id,
+            }
+        )
 
         total_completed_issues += completed
         total_committed_issues += committed
@@ -458,34 +451,28 @@ async def sprint_analytics(
 
         completion_rate = round(completed * 100 / committed) if committed > 0 else 0
 
-        velocity_data.append({
-            "name": sprint.name,
-            "committed": committed,
-            "completed": completed,
-            "completion_rate": completion_rate,
-            "duration": duration,
-            "start_date": sprint.start_date.isoformat() if sprint.start_date else None,
-            "end_date": sprint.end_date.isoformat() if sprint.end_date else None,
-            "sprint_id": sprint.id,
-            "active": True,
-        })
+        velocity_data.append(
+            {
+                "name": sprint.name,
+                "committed": committed,
+                "completed": completed,
+                "completion_rate": completion_rate,
+                "duration": duration,
+                "start_date": sprint.start_date.isoformat() if sprint.start_date else None,
+                "end_date": sprint.end_date.isoformat() if sprint.end_date else None,
+                "sprint_id": sprint.id,
+                "active": True,
+            }
+        )
 
     # Compute summary stats (from completed sprints only)
     num_completed = len(completed_sprints)
     avg_velocity = round(total_completed_issues / num_completed, 1) if num_completed else 0
-    avg_committed = (
-        round(total_committed_issues / num_completed, 1) if num_completed else 0
-    )
+    avg_committed = round(total_committed_issues / num_completed, 1) if num_completed else 0
     avg_completion_rate = (
-        round(total_completed_issues * 100 / total_committed_issues)
-        if total_committed_issues > 0
-        else 0
+        round(total_completed_issues * 100 / total_committed_issues) if total_committed_issues > 0 else 0
     )
-    avg_duration = (
-        round(total_duration_days / sprints_with_duration, 1)
-        if sprints_with_duration > 0
-        else 0
-    )
+    avg_duration = round(total_duration_days / sprints_with_duration, 1) if sprints_with_duration > 0 else 0
 
     # Get active sprint ID for sidebar
     active_sprint_id = active_sprints[0].id if active_sprints else None
@@ -557,12 +544,8 @@ async def sprint_detail(
     issues_in_sprint = list((await db.execute(issue_stmt)).scalars().all())
 
     total_issues = len(issues_in_sprint)
-    completed_issues = sum(
-        1 for i in issues_in_sprint if i.status and i.status.category in ("done", "closed")
-    )
-    in_progress_issues = sum(
-        1 for i in issues_in_sprint if i.status and i.status.category == "active"
-    )
+    completed_issues = sum(1 for i in issues_in_sprint if i.status and i.status.category in ("done", "closed"))
+    in_progress_issues = sum(1 for i in issues_in_sprint if i.status and i.status.category == "active")
     remaining_issues = total_issues - completed_issues
     completion_pct = round(completed_issues * 100 / total_issues) if total_issues else 0
 
@@ -588,9 +571,7 @@ async def sprint_detail(
         else:
             grouped["todo"].append(issue)
 
-    can_manage = user.is_admin or await check_permission(
-        user, project.id, Permission.MANAGE_SPRINTS, db
-    )
+    can_manage = user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
 
     templates = get_templates()
     return templates.TemplateResponse(

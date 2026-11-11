@@ -171,9 +171,7 @@ async def test_create_drops_none_values(store: RedisSessionStore) -> None:
 
 
 @pytest.mark.unit
-async def test_get_updates_last_seen_and_refreshes_ttl(
-    fake_redis: _FakeRedis, store: RedisSessionStore
-) -> None:
+async def test_get_updates_last_seen_and_refreshes_ttl(fake_redis: _FakeRedis, store: RedisSessionStore) -> None:
     await store.create("sess-2", {"api_key_id": 1})
     initial_exp = fake_redis._expiries["mcp:session:sess-2"]
 
@@ -187,9 +185,7 @@ async def test_get_updates_last_seen_and_refreshes_ttl(
 
 
 @pytest.mark.unit
-async def test_get_returns_none_after_expiry(
-    fake_redis: _FakeRedis, store: RedisSessionStore
-) -> None:
+async def test_get_returns_none_after_expiry(fake_redis: _FakeRedis, store: RedisSessionStore) -> None:
     await store.create("sess-3", {"api_key_id": 1})
     fake_redis._advance(61)  # TTL is 60s
     assert await store.get("sess-3") is None
@@ -198,9 +194,7 @@ async def test_get_returns_none_after_expiry(
 
 
 @pytest.mark.unit
-async def test_touch_refreshes_ttl_without_reading(
-    fake_redis: _FakeRedis, store: RedisSessionStore
-) -> None:
+async def test_touch_refreshes_ttl_without_reading(fake_redis: _FakeRedis, store: RedisSessionStore) -> None:
     await store.create("sess-4", {"api_key_id": 1})
     fake_redis._advance(30)
     assert await store.touch("sess-4") is True
@@ -249,9 +243,7 @@ async def test_session_survives_store_instance_replacement(
     still running and persistent.
     """
     store_a = RedisSessionStore(fake_redis, ttl_seconds=120)
-    await store_a.create(
-        "durable", {"api_key_id": 99, "user_id": 5}
-    )
+    await store_a.create("durable", {"api_key_id": 99, "user_id": 5})
 
     # Drop store_a entirely; construct a brand-new store against the
     # same Redis backend (what happens on api restart).
@@ -303,12 +295,8 @@ async def test_startup_warning_logged_when_aof_disabled(
     with caplog.at_level(logging.WARNING):
         ok = await check_redis_persistence(fake)
         if not ok:
-            logging.getLogger("specivo.main").warning(
-                "Redis AOF persistence is disabled (appendonly=no)."
-            )
-    assert any(
-        "AOF persistence is disabled" in rec.message for rec in caplog.records
-    )
+            logging.getLogger("specivo.main").warning("Redis AOF persistence is disabled (appendonly=no).")
+    assert any("AOF persistence is disabled" in rec.message for rec in caplog.records)
 
 
 @pytest.mark.unit
@@ -319,6 +307,4 @@ async def test_no_warning_when_aof_enabled(
     with caplog.at_level(logging.WARNING):
         ok = await check_redis_persistence(fake)
         assert ok is True
-    assert not any(
-        "AOF persistence is disabled" in rec.message for rec in caplog.records
-    )
+    assert not any("AOF persistence is disabled" in rec.message for rec in caplog.records)

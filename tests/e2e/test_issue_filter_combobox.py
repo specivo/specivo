@@ -48,7 +48,7 @@ def filter_project(api_client: httpx.Client) -> dict:
     project = create_project(api_client, prefix="FCB")
     key = project["key"]
     role_id = _db_value(
-        "INSERT INTO roles (name, permissions) VALUES ($1, '[\"view_issues\", \"add_issues\"]'::jsonb) RETURNING id",
+        'INSERT INTO roles (name, permissions) VALUES ($1, \'["view_issues", "add_issues"]\'::jsonb) RETURNING id',
         f"Filter viewer {key}",
     )
     user_id = _db_value("SELECT id FROM users WHERE lower(login) = 'e2e_user'")
@@ -191,9 +191,9 @@ def test_filter_bar_fits_a_phone(admin_page: Page, filter_project: dict) -> None
         f"assigned_to_id={filter_project['user_id']}&fixed_version_id={filter_project['version_id']}",
     )
     expect(admin_page.locator('[data-filter-chip="assigned_to_id"]')).to_be_visible()
-    assert admin_page.evaluate(
-        "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2"
-    ), "the page scrolls sideways at 375 px"
+    assert admin_page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2"), (
+        "the page scrolls sideways at 375 px"
+    )
     tag_field = _combo(admin_page, "tag_id").get_by_role("combobox")
     tag_field.click()
     menu = _combo(admin_page, "tag_id").get_by_role("listbox")

@@ -223,12 +223,24 @@ async def test_velocity_across_sprints(
     await db_session.commit()
     for i in range(2):
         await _create_issue_for_sprint(
-            db_session, project, actor, s1, f"S1 Done {i}",
-            tracker=tracker, status=status_done, priority=priority,
+            db_session,
+            project,
+            actor,
+            s1,
+            f"S1 Done {i}",
+            tracker=tracker,
+            status=status_done,
+            priority=priority,
         )
     await _create_issue_for_sprint(
-        db_session, project, actor, s1, "S1 Open",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        s1,
+        "S1 Open",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
     await _svc.complete_sprint(db_session, s1, actor)
     await db_session.commit()
@@ -239,8 +251,14 @@ async def test_velocity_across_sprints(
     await db_session.commit()
     for i in range(4):
         await _create_issue_for_sprint(
-            db_session, project, actor, s2, f"S2 Done {i}",
-            tracker=tracker, status=status_done, priority=priority,
+            db_session,
+            project,
+            actor,
+            s2,
+            f"S2 Done {i}",
+            tracker=tracker,
+            status=status_done,
+            priority=priority,
         )
     await _svc.complete_sprint(db_session, s2, actor)
     await db_session.commit()
@@ -251,13 +269,25 @@ async def test_velocity_across_sprints(
     await db_session.commit()
     for i in range(3):
         await _create_issue_for_sprint(
-            db_session, project, actor, s3, f"S3 Done {i}",
-            tracker=tracker, status=status_done, priority=priority,
+            db_session,
+            project,
+            actor,
+            s3,
+            f"S3 Done {i}",
+            tracker=tracker,
+            status=status_done,
+            priority=priority,
         )
     for i in range(2):
         await _create_issue_for_sprint(
-            db_session, project, actor, s3, f"S3 Open {i}",
-            tracker=tracker, status=status_open, priority=priority,
+            db_session,
+            project,
+            actor,
+            s3,
+            f"S3 Open {i}",
+            tracker=tracker,
+            status=status_open,
+            priority=priority,
         )
     await _svc.complete_sprint(db_session, s3, actor)
     await db_session.commit()
@@ -286,7 +316,9 @@ async def test_burndown_data_active_sprint(
     tracker, status_open, status_done, priority = lookups
 
     sprint = await _create_sprint(
-        db_session, project, "Burndown Sprint",
+        db_session,
+        project,
+        "Burndown Sprint",
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 14),
     )
@@ -295,20 +327,38 @@ async def test_burndown_data_active_sprint(
 
     # Issue 1: 8h estimated, done
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Task A",
-        tracker=tracker, status=status_done, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Task A",
+        tracker=tracker,
+        status=status_done,
+        priority=priority,
         estimated_hours=Decimal("8"),
     )
     # Issue 2: 5h estimated, open
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Task B",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Task B",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
         estimated_hours=Decimal("5"),
     )
     # Issue 3: 3h estimated, open
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Task C",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Task C",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
         estimated_hours=Decimal("3"),
     )
 
@@ -344,7 +394,9 @@ async def test_burndown_data_no_estimates(
     tracker, status_open, status_done, priority = lookups
 
     sprint = await _create_sprint(
-        db_session, project, "No Estimates Sprint",
+        db_session,
+        project,
+        "No Estimates Sprint",
         start_date=date(2026, 4, 1),
         end_date=date(2026, 4, 14),
     )
@@ -352,8 +404,14 @@ async def test_burndown_data_no_estimates(
     await db_session.commit()
 
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "No Est Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "No Est Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
 
     result = await _svc.burndown_data(db_session, sprint, admin)

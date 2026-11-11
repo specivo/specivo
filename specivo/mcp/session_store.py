@@ -216,9 +216,7 @@ async def get_mcp_session_store() -> RedisSessionStore:
 
         settings = get_settings()
         redis = await get_redis()
-        _store = RedisSessionStore(
-            redis, ttl_seconds=settings.mcp_session_ttl_seconds
-        )
+        _store = RedisSessionStore(redis, ttl_seconds=settings.mcp_session_ttl_seconds)
     return _store
 
 

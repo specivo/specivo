@@ -197,7 +197,10 @@ def viewport_size(viewport_name: str) -> dict:
 
 @pytest.fixture
 def responsive_page(
-    browser, e2e_server, _admin_auth, viewport_name: str  # noqa: F811
+    browser,
+    e2e_server,
+    _admin_auth,
+    viewport_name: str,  # noqa: F811
 ) -> Generator[Page, None, None]:
     """Authenticated page (admin) at the parametrized viewport size."""
     _, cookies = _admin_auth

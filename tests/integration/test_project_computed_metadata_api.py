@@ -104,9 +104,7 @@ async def test_get_returns_configured_computed_metadata(client: AsyncClient, adm
 
 
 @pytest.mark.integration
-async def test_configured_and_unconfigured_projects_are_distinguishable(
-    client: AsyncClient, admin_token: str
-) -> None:
+async def test_configured_and_unconfigured_projects_are_distinguishable(client: AsyncClient, admin_token: str) -> None:
     """An unconfigured project reports {}, not the same payload as a configured one."""
     await _create_project(client, admin_token, "CFG", "configured-proj")
     await _create_project(client, admin_token, "UNC", "unconfigured-proj")
@@ -124,9 +122,7 @@ async def test_configured_and_unconfigured_projects_are_distinguishable(
 
 
 @pytest.mark.integration
-async def test_computed_metadata_survives_a_patch_of_other_fields(
-    client: AsyncClient, admin_token: str
-) -> None:
+async def test_computed_metadata_survives_a_patch_of_other_fields(client: AsyncClient, admin_token: str) -> None:
     """Editing the name must not silently drop the configured map."""
     await _create_project(client, admin_token, "SRV", "survive-proj", computed_metadata={"Area": "Ops"})
 
@@ -164,9 +160,7 @@ async def test_empty_map_clears_the_configuration(client: AsyncClient, admin_tok
 @pytest.mark.integration
 async def test_create_accepts_computed_metadata(client: AsyncClient, admin_token: str) -> None:
     """A project can be created configured, with no follow-up PATCH."""
-    resp = await _create_project(
-        client, admin_token, "CRT", "create-proj", computed_metadata={"Area": "Support"}
-    )
+    resp = await _create_project(client, admin_token, "CRT", "create-proj", computed_metadata={"Area": "Support"})
     assert resp.status_code == 201, resp.text
     assert resp.json()["computed_metadata"] == {"Area": "Support"}
 
@@ -237,9 +231,7 @@ async def test_non_member_on_public_project_sees_null(
     client: AsyncClient, db_session: AsyncSession, admin_token: str
 ) -> None:
     """Public visibility grants project access, not configuration access."""
-    await _create_project(
-        client, admin_token, "PUB", "public-proj", is_public=True, computed_metadata={"Area": "Ops"}
-    )
+    await _create_project(client, admin_token, "PUB", "public-proj", is_public=True, computed_metadata={"Area": "Ops"})
     outsider = UserFactory.build(login="pcm_outsider", status="active")
     db_session.add(outsider)
     await db_session.flush()

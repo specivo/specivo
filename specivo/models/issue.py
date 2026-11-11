@@ -294,7 +294,4 @@ class IssueRefAlias(Base, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<IssueRefAlias {self.old_project_key}-{self.old_sequence_number} "
-            f"-> issue_id={self.issue_id}>"
-        )
+        return f"<IssueRefAlias {self.old_project_key}-{self.old_sequence_number} -> issue_id={self.issue_id}>"

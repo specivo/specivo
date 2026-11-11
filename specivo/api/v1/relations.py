@@ -79,10 +79,20 @@ async def create_relation(
     user_type = data.relation_type
     sym_type = RELATION_TYPES[user_type]["sym"]
     await _journal_service.record_relation_change(
-        db, issue_from, current_user, user_type, issue_to.display_key, added=True,
+        db,
+        issue_from,
+        current_user,
+        user_type,
+        issue_to.display_key,
+        added=True,
     )
     await _journal_service.record_relation_change(
-        db, issue_to, current_user, sym_type, issue_from.display_key, added=True,
+        db,
+        issue_to,
+        current_user,
+        sym_type,
+        issue_from.display_key,
+        added=True,
     )
 
     # Build the response from the persisted relation

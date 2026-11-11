@@ -351,9 +351,7 @@ async def test_web_trash_page_returns_200(
     _wiki_project: Project,
 ):
     user = admin_client.state.user
-    page, _content = await _svc.create_page(
-        db_session, _wiki_project.id, "Web Trash Page", "content", user
-    )
+    page, _content = await _svc.create_page(db_session, _wiki_project.id, "Web Trash Page", "content", user)
     await db_session.commit()
     await db_session.refresh(page)
 
@@ -376,9 +374,7 @@ async def test_web_trash_page_shows_deleted_page_titles(
     _wiki_project: Project,
 ):
     user = admin_client.state.user
-    page, _ = await _svc.create_page(
-        db_session, _wiki_project.id, "Trash Title Check", "content", user
-    )
+    page, _ = await _svc.create_page(db_session, _wiki_project.id, "Trash Title Check", "content", user)
     await db_session.commit()
     await db_session.refresh(page)
 
@@ -416,9 +412,7 @@ async def test_web_delete_redirects_to_wiki_index(
     _wiki_project: Project,
 ):
     user = admin_client.state.user
-    page, _ = await _svc.create_page(
-        db_session, _wiki_project.id, "Web Delete Me", "content", user
-    )
+    page, _ = await _svc.create_page(db_session, _wiki_project.id, "Web Delete Me", "content", user)
     await db_session.commit()
 
     token = admin_client.state.token
@@ -439,9 +433,7 @@ async def test_web_delete_removes_page_from_wiki_list(
     _wiki_project: Project,
 ):
     user = admin_client.state.user
-    page, _ = await _svc.create_page(
-        db_session, _wiki_project.id, "Web Delete Invisible", "content", user
-    )
+    page, _ = await _svc.create_page(db_session, _wiki_project.id, "Web Delete Invisible", "content", user)
     await db_session.commit()
 
     token = admin_client.state.token
@@ -472,9 +464,7 @@ async def test_web_restore_redirects_to_trash(
     _wiki_project: Project,
 ):
     user = admin_client.state.user
-    page, _ = await _svc.create_page(
-        db_session, _wiki_project.id, "Web Restore Me", "content", user
-    )
+    page, _ = await _svc.create_page(db_session, _wiki_project.id, "Web Restore Me", "content", user)
     await db_session.commit()
     await db_session.refresh(page)
 
@@ -498,9 +488,7 @@ async def test_web_restore_page_reappears_in_wiki(
     _wiki_project: Project,
 ):
     user = admin_client.state.user
-    page, _ = await _svc.create_page(
-        db_session, _wiki_project.id, "Web Restored Page", "content", user
-    )
+    page, _ = await _svc.create_page(db_session, _wiki_project.id, "Web Restored Page", "content", user)
     await db_session.commit()
     await db_session.refresh(page)
 

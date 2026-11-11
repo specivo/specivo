@@ -365,9 +365,7 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         a, b, c = await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["component=frontend"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["component=frontend"])
         assert a.display_key in result
         assert b.display_key in result  # array contains "frontend"
         assert c.display_key not in result
@@ -377,9 +375,7 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         _a, b, _c = await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["component=backend"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["component=backend"])
         # Only bravo has "backend" in its component array; charlie has component="backend"
         # as a scalar so also matches.
         assert b.display_key in result
@@ -404,18 +400,14 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["component=nonexistent"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["component=nonexistent"])
         assert "(none)" in result
 
     async def test_empty_filter_list_is_noop(self, db_session, admin, seed):
         from specivo.mcp.tools import _list_issues
 
         a, b, c = await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=[]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=[])
         assert a.display_key in result
         assert b.display_key in result
         assert c.display_key in result
@@ -424,9 +416,7 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"])
         assert result.startswith("Error")
         assert "key=value" in result
 
@@ -434,9 +424,7 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["=value"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["=value"])
         assert result.startswith("Error")
         assert "empty key" in result
 
@@ -891,9 +879,7 @@ class TestMcpListComments:
         result = await _list_comments(db_session, admin, issue.display_key, order="asc")
         assert result.index("first") < result.index("second")
 
-    async def test_show_issue_includes_comments_count(
-        self, db_session: AsyncSession, admin: User, seed: dict
-    ):
+    async def test_show_issue_includes_comments_count(self, db_session: AsyncSession, admin: User, seed: dict):
         from specivo.mcp.tools import _add_comment, _show_issue
 
         issue = await self._make_issue(db_session, admin, seed)
@@ -1163,10 +1149,9 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         # Create sprint directly via service to get its id
         from specivo.schemas.sprint import SprintCreate
         from specivo.services.sprint_service import SprintService
+
         sprint_svc = SprintService()
-        sprint = await sprint_svc.create(
-            db_session, seed["project"], SprintCreate(name="Sprint A")
-        )
+        sprint = await sprint_svc.create(db_session, seed["project"], SprintCreate(name="Sprint A"))
         await db_session.commit()
         sprint_id = sprint.id
 
@@ -1199,12 +1184,8 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         await db_session.commit()
 
         await db_session.refresh(issue)
-        assert issue.fixed_version_id == version_id, (
-            "fixed_version_id was wiped by an update that did not mention it"
-        )
-        assert issue.sprint_id == sprint_id, (
-            "sprint_id was wiped by an update that did not mention it"
-        )
+        assert issue.fixed_version_id == version_id, "fixed_version_id was wiped by an update that did not mention it"
+        assert issue.sprint_id == sprint_id, "sprint_id was wiped by an update that did not mention it"
         assert issue.done_ratio == 50
 
     async def test_update_can_still_set_version_and_sprint_explicitly(
@@ -1229,9 +1210,7 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         assert new_version_id is not None
 
         sprint_svc = SprintService()
-        new_sprint = await sprint_svc.create(
-            db_session, seed["project"], SprintCreate(name="Sprint B")
-        )
+        new_sprint = await sprint_svc.create(db_session, seed["project"], SprintCreate(name="Sprint B"))
         await db_session.commit()
 
         await _create_issue(
@@ -1279,9 +1258,7 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         assert version_id is not None
 
         sprint_svc = SprintService()
-        sprint = await sprint_svc.create(
-            db_session, seed["project"], SprintCreate(name="Sprint C")
-        )
+        sprint = await sprint_svc.create(db_session, seed["project"], SprintCreate(name="Sprint C"))
         await db_session.commit()
 
         await _create_issue(
@@ -1302,7 +1279,5 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         svc = IssueService()
         issue = await svc.get_by_display_key(db_session, "ACME-1", user=admin)
         assert "replaced" in (issue.description or "")
-        assert issue.fixed_version_id == version_id, (
-            "edit_description wiped fixed_version_id"
-        )
+        assert issue.fixed_version_id == version_id, "edit_description wiped fixed_version_id"
         assert issue.sprint_id == sprint.id, "edit_description wiped sprint_id"

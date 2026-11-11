@@ -176,20 +176,29 @@ async def test_sprint_detail_page_renders_header_metrics_and_issues(
 
     # 2 done, 1 open -> completion = 66%
     await _create_issue(
-        manager_client, project.key,
-        tracker.id, status_done.id, priority.id,
+        manager_client,
+        project.key,
+        tracker.id,
+        status_done.id,
+        priority.id,
         "Shipped feature A",
         sprint_id=sprint["id"],
     )
     await _create_issue(
-        manager_client, project.key,
-        tracker.id, status_done.id, priority.id,
+        manager_client,
+        project.key,
+        tracker.id,
+        status_done.id,
+        priority.id,
         "Shipped feature B",
         sprint_id=sprint["id"],
     )
     await _create_issue(
-        manager_client, project.key,
-        tracker.id, status_todo.id, priority.id,
+        manager_client,
+        project.key,
+        tracker.id,
+        status_todo.id,
+        priority.id,
         "Not yet started",
         sprint_id=sprint["id"],
     )

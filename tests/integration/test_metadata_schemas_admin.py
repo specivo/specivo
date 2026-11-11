@@ -114,15 +114,12 @@ async def test_pm_can_update_schema(
 ) -> None:
     project_key, pm_token, _ = project_with_pm
     # Seed schema directly
-    proj_id = (
-        await db_session.execute(
-            select(MetadataSchema.project_id).select_from(MetadataSchema).limit(0)
-        )
+    proj_id = await db_session.execute(
+        select(MetadataSchema.project_id).select_from(MetadataSchema).limit(0)
     )  # no-op to keep linter happy
     from specivo.models.project import Project
-    project = (
-        await db_session.execute(select(Project).where(Project.key == project_key))
-    ).scalar_one()
+
+    project = (await db_session.execute(select(Project).where(Project.key == project_key))).scalar_one()
     schema = MetadataSchema(
         project_id=project.id,
         name="Original",
@@ -164,9 +161,7 @@ async def test_outsider_cannot_update_schema(
     assert resp.status_code == 403, resp.text
 
 
-async def test_outsider_cannot_create_schema(
-    client: AsyncClient, project_with_outsider
-) -> None:
+async def test_outsider_cannot_create_schema(client: AsyncClient, project_with_outsider) -> None:
     project_key, out_token = project_with_outsider
     resp = await client.post(
         f"/api/v1/admin/projects/{project_key}/metadata-schemas/",
@@ -222,13 +217,17 @@ async def test_update_writes_audit_event(
 
     # Verify audit row exists
     rows = (
-        await db_session.execute(
-            select(SecurityAuditLog).where(
-                SecurityAuditLog.event_type == AuditEvent.METADATA_SCHEMA_UPDATED,
-                SecurityAuditLog.user_id == pm_id,
-                SecurityAuditLog.resource_id == schema_id,
+        (
+            await db_session.execute(
+                select(SecurityAuditLog).where(
+                    SecurityAuditLog.event_type == AuditEvent.METADATA_SCHEMA_UPDATED,
+                    SecurityAuditLog.user_id == pm_id,
+                    SecurityAuditLog.resource_id == schema_id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert rows, "expected metadata_schema_updated audit entry"
     assert rows[0].details.get("changed_fields") == ["name"]

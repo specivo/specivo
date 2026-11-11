@@ -118,9 +118,7 @@ async def test_preview_links_existing_ref_not_bogus(
     )
     await db_session.commit()
 
-    token_resp = await client.post(
-        "/api/v1/auth/login/", json={"login": admin_user.login, "password": "testpassword"}
-    )
+    token_resp = await client.post("/api/v1/auth/login/", json={"login": admin_user.login, "password": "testpassword"})
     token = token_resp.json()["access_token"]
 
     resp = await client.post(

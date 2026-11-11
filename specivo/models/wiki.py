@@ -59,9 +59,7 @@ class WikiPage(Base, TimestampMixin, LockVersionMixin):
     )
     protected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
-    deleted_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    deleted_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     wiki: Mapped[Wiki] = relationship("Wiki", lazy="raise")
@@ -113,4 +111,3 @@ class WikiRedirect(Base):
 
     def __repr__(self) -> str:
         return f"<WikiRedirect id={self.id} from={self.title_from!r} to={self.redirected_to!r}>"
-

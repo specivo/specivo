@@ -240,12 +240,8 @@ async def test_list_sprints_for_project(
     db_session: AsyncSession,
     project: Project,
 ):
-    await _create_sprint(
-        db_session, project, "Sprint B", start_date=date(2026, 5, 15)
-    )
-    await _create_sprint(
-        db_session, project, "Sprint A", start_date=date(2026, 5, 1)
-    )
+    await _create_sprint(db_session, project, "Sprint B", start_date=date(2026, 5, 15))
+    await _create_sprint(db_session, project, "Sprint A", start_date=date(2026, 5, 1))
 
     sprints = await _svc.list_for_project(db_session, project.id)
 
@@ -365,8 +361,14 @@ async def test_complete_sprint_moves_incomplete_to_backlog(
     await db_session.commit()
 
     issue = await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Incomplete Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Incomplete Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
 
     await _svc.complete_sprint(db_session, sprint, actor)
@@ -391,8 +393,14 @@ async def test_complete_sprint_moves_incomplete_to_next_sprint(
     await db_session.commit()
 
     issue = await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Carry Over Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Carry Over Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
 
     await _svc.complete_sprint(db_session, sprint, actor, move_to_sprint_id=next_sprint.id)
@@ -415,8 +423,14 @@ async def test_complete_sprint_keeps_completed_issues(
     await db_session.commit()
 
     done_issue = await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Completed Task",
-        tracker=tracker, status=status_done, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Completed Task",
+        tracker=tracker,
+        status=status_done,
+        priority=priority,
     )
 
     await _svc.complete_sprint(db_session, sprint, actor)
@@ -445,12 +459,24 @@ async def test_complete_sprint_creates_velocity_snapshot(
     await db_session.commit()
 
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Open Issue",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Open Issue",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Done Issue",
-        tracker=tracker, status=status_done, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Done Issue",
+        tracker=tracker,
+        status=status_done,
+        priority=priority,
     )
 
     await _svc.complete_sprint(db_session, sprint, actor)
@@ -481,8 +507,14 @@ async def test_delete_sprint(
     sprint = await _create_sprint(db_session, project, "Delete Me")
 
     issue = await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Orphaned Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Orphaned Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
 
     await _svc.delete(db_session, sprint)
@@ -526,12 +558,24 @@ async def test_board_data_groups_by_status(
     await db_session.commit()
 
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Open Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Open Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
     await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Done Task",
-        tracker=tracker, status=status_done, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Done Task",
+        tracker=tracker,
+        status=status_done,
+        priority=priority,
     )
 
     board = await _svc.board_data(db_session, sprint, reader)
@@ -561,12 +605,24 @@ async def test_backlog_issues_returns_unassigned(
     sprint = await _create_sprint(db_session, project, "Some Sprint")
 
     sprinted_issue = await _create_issue_for_sprint(
-        db_session, project, actor, sprint, "Sprinted Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        sprint,
+        "Sprinted Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
     backlog_issue = await _create_issue_for_sprint(
-        db_session, project, actor, None, "Backlog Task",
-        tracker=tracker, status=status_open, priority=priority,
+        db_session,
+        project,
+        actor,
+        None,
+        "Backlog Task",
+        tracker=tracker,
+        status=status_open,
+        priority=priority,
     )
 
     backlog, total = await _svc.backlog_issues(db_session, project.id, reader)

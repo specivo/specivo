@@ -48,9 +48,7 @@ class Sprint(Base, TimestampMixin):
 
     goal: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    status: Mapped[str] = mapped_column(
-        String(30), nullable=False, default="planned", server_default="planned"
-    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="planned", server_default="planned")
 
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 

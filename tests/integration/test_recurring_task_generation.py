@@ -122,9 +122,7 @@ def _daily_create(
 
 async def _issues_for(db: AsyncSession, pattern_id: int) -> list[Issue]:
     result = await db.execute(
-        select(Issue)
-        .where(Issue.recurring_pattern_id == pattern_id)
-        .order_by(Issue.original_occurrence_at.asc())
+        select(Issue).where(Issue.recurring_pattern_id == pattern_id).order_by(Issue.original_occurrence_at.asc())
     )
     return list(result.scalars().all())
 
@@ -220,9 +218,7 @@ async def test_disabled_pattern_is_skipped(
     pattern = await service.create(
         db_session,
         project,
-        _daily_create(
-            tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, enabled=False
-        ),
+        _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, enabled=False),
         author,
     )
     await db_session.commit()
@@ -253,17 +249,13 @@ async def test_one_failing_pattern_does_not_block_others(
     bad = await service.create(
         db_session,
         project,
-        _daily_create(
-            tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name="Bad pattern"
-        ),
+        _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name="Bad pattern"),
         author,
     )
     good = await service.create(
         db_session,
         project,
-        _daily_create(
-            tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name="Good pattern"
-        ),
+        _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name="Good pattern"),
         author,
     )
     await db_session.commit()
@@ -337,9 +329,7 @@ async def test_batching_processes_all_patterns(
         await service.create(
             db_session,
             project,
-            _daily_create(
-                tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name=f"P{i}"
-            ),
+            _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name=f"P{i}"),
             author,
         )
     await db_session.commit()

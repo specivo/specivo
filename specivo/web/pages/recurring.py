@@ -63,6 +63,7 @@ async def _default_timezone(user: User, db: AsyncSession) -> str:
     instance_tz = (await _settings_svc.get_all(db)).get("default_timezone")
     return instance_tz or "UTC"
 
+
 # Number of upcoming occurrences shown in the server-rendered schedule summary.
 _PREVIEW_COUNT = 5
 

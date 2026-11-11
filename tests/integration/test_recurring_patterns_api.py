@@ -40,9 +40,7 @@ async def _login(client: AsyncClient, login: str, password: str = "testpassword"
     return resp.json()["access_token"]
 
 
-async def _grant_membership(
-    db: AsyncSession, project: Project, user: User, role: Role
-) -> None:
+async def _grant_membership(db: AsyncSession, project: Project, user: User, role: Role) -> None:
     member = Member(project_id=project.id, user_id=user.id)
     db.add(member)
     await db.flush()
@@ -229,9 +227,7 @@ async def test_create_with_naive_dtstart_anchors_to_timezone(
     stored = datetime.datetime.fromisoformat(resp.json()["dtstart"])
     assert stored.tzinfo is not None, "dtstart must be stored timezone-aware"
     # 14:15 wall-clock in Asia/Bangkok (UTC+7) is the instant 07:15 UTC.
-    assert stored.astimezone(datetime.UTC) == datetime.datetime(
-        2026, 6, 18, 7, 15, tzinfo=datetime.UTC
-    )
+    assert stored.astimezone(datetime.UTC) == datetime.datetime(2026, 6, 18, 7, 15, tzinfo=datetime.UTC)
 
 
 @pytest.mark.asyncio
@@ -640,9 +636,7 @@ async def test_split_creates_new_pattern_and_terminates_old(
     assert new_pattern["id"] != created["id"]
     assert new_pattern["name"] == "Split future"
     # The new series is anchored at the boundary occurrence.
-    assert datetime.datetime.fromisoformat(new_pattern["dtstart"]) == datetime.datetime.fromisoformat(
-        boundary
-    )
+    assert datetime.datetime.fromisoformat(new_pattern["dtstart"]) == datetime.datetime.fromisoformat(boundary)
 
     # The old series now has an UNTIL set just before the boundary.
     old = await client.get(
