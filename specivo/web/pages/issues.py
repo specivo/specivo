@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
@@ -52,6 +52,7 @@ from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
     from specivo.models.issue import Issue
+    from specivo.models.journal import JournalDetail
     from specivo.models.project import Project
     from specivo.models.user import User
 
@@ -811,6 +812,29 @@ async def issue_edit_form(
     )
 
 
+async def _description_change(db: AsyncSession, issue: Issue, journal_id: int, user: User) -> JournalDetail | None:
+    """The description change recorded in *journal_id*, if that journal belongs to *issue*.
+
+    The journal id comes from the URL, so it must be checked against the issue
+    whose access was verified; private journals stay hidden from non-admins,
+    as in the activity feed.
+    """
+    from specivo.models.journal import Journal, JournalDetail
+
+    stmt = (
+        select(JournalDetail)
+        .join(Journal, JournalDetail.journal_id == Journal.id)
+        .where(
+            JournalDetail.journal_id == journal_id,
+            JournalDetail.prop_key == "description",
+            Journal.issue_id == issue.id,
+        )
+    )
+    if not user.is_admin:
+        stmt = stmt.where(Journal.is_private.is_(False))
+    return (await db.execute(stmt)).scalars().first()
+
+
 @short_router.get("/issue/{issue_ref}/versions/{journal_id}/", response_class=HTMLResponse)
 async def issue_description_diff(
     issue_ref: str,
@@ -821,8 +845,6 @@ async def issue_description_diff(
     """Render a description diff page for a specific journal entry."""
     import difflib
 
-    from specivo.models.journal import JournalDetail
-
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
         return RedirectResponse("/login/", status_code=302)
@@ -830,13 +852,7 @@ async def issue_description_diff(
 
     project, issue = await _resolve_issue_project(db, issue_ref, user)
 
-    journal_result = await db.execute(
-        select(JournalDetail).where(
-            JournalDetail.journal_id == journal_id,
-            JournalDetail.prop_key == "description",
-        )
-    )
-    detail = journal_result.scalar_one_or_none()
+    detail = await _description_change(db, issue, journal_id, user)
     if detail is None:
         raise HTTPException(status_code=404, detail="Description change not found")
 
@@ -854,7 +870,7 @@ async def issue_description_diff(
     )
 
     # Load all description versions for the history table
-    from specivo.models.journal import Journal
+    from specivo.models.journal import Journal, JournalDetail
     from specivo.models.user import User as UserModel
 
     all_desc_changes = (
@@ -872,7 +888,11 @@ async def issue_description_diff(
             )
             .join(Journal, JournalDetail.journal_id == Journal.id)
             .join(UserModel, Journal.user_id == UserModel.id)
-            .where(JournalDetail.prop_key == "description", Journal.issue_id == issue.id)
+            .where(
+                JournalDetail.prop_key == "description",
+                Journal.issue_id == issue.id,
+                true() if user.is_admin else Journal.is_private.is_(False),
+            )
             .order_by(Journal.created_at.desc(), Journal.id.desc())
         )
     ).all()
@@ -968,7 +988,6 @@ async def restore_description_version(
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a previous description version by PATCHing the issue."""
-    from specivo.models.journal import JournalDetail
     from specivo.services.permission_service import check_permission
 
     user_obj = await get_current_user_optional(request, db)
@@ -981,13 +1000,7 @@ async def restore_description_version(
     if not await check_permission(user, issue.project_id, "edit_issues", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    detail_result = await db.execute(
-        select(JournalDetail).where(
-            JournalDetail.journal_id == journal_id,
-            JournalDetail.prop_key == "description",
-        )
-    )
-    detail = detail_result.scalar_one_or_none()
+    detail = await _description_change(db, issue, journal_id, user)
     if detail is None:
         raise HTTPException(status_code=404, detail="Description version not found")
 
