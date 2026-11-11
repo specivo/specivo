@@ -243,15 +243,41 @@ async def test_bearer_auth_bypasses_csrf(auth_client: AsyncClient):
     assert resp.status_code != 403
 
 
-async def test_api_key_header_bypasses_csrf(client: AsyncClient, db_session: AsyncSession):
-    """Requests with X-API-Key header skip CSRF validation."""
+async def _session_cookie(client: AsyncClient, db_session: AsyncSession, login: str) -> dict[str, str]:
+    """Sign a new user in and return their access_token cookie."""
+    user = UserFactory.build(login=login, status="active")
+    db_session.add(user)
+    await db_session.flush()
+    resp = await client.post("/api/v1/auth/login/", json={"login": user.login, "password": TEST_PASSWORD})
+    assert resp.status_code == 200
+    for key, val in resp.headers.multi_items():
+        if key.lower() == "set-cookie" and "access_token=" in val:
+            return {"access_token": val.split("access_token=")[1].split(";")[0]}
+    raise AssertionError("no access_token cookie")
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        {"X-API-Key": "spv_fake_key_for_csrf_bypass_test"},
+        {"Authorization": "Basic Zm9vOmJhcg=="},
+        {"Authorization": "bearer-ish"},
+    ],
+)
+async def test_non_bearer_auth_header_does_not_skip_csrf_for_a_cookie_session(
+    client: AsyncClient, db_session: AsyncSession, header: dict[str, str]
+):
+    """Only ``Authorization: Bearer`` ignores the cookie, so only it skips CSRF.
+
+    Any other header falls back to the session cookie for authentication, so
+    a request carrying one must still present the CSRF token.
+    """
+    cookies = await _session_cookie(client, db_session, "csrf_header_user")
     resp = await client.patch(
-        "/api/v1/users/me/preferences/",
-        json={"timezone": "UTC"},
-        headers={"X-API-Key": "spv_fake_key_for_csrf_bypass_test"},
+        "/api/v1/users/me/preferences/", json={"timezone": "UTC"}, cookies=cookies, headers=header
     )
-    # Should NOT be 403 CSRF — it will fail with 401 (bad key) instead
-    assert resp.status_code != 403
+    assert resp.status_code == 403
+    assert "CSRF" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

@@ -128,8 +128,11 @@ class Settings(BaseSettings):
     # Example: STEALTH_PREFIX=/s3cr3t → /s3cr3t/api/v1/projects
     stealth_prefix: str = ""
 
-    # CORS — comma-separated origins, or "*" for development
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS — comma-separated origins allowed to call the API from a browser
+    # with credentials. Empty by default: the UI is served from the same
+    # origin and needs none, and every listed origin can act with a signed-in
+    # user's cookies.
+    cors_origins: list[str] = []
     cors_allow_credentials: bool = True
 
     # Trusted hosts — comma-separated, used by TrustedHostMiddleware in production
