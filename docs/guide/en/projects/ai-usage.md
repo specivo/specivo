@@ -79,7 +79,9 @@ For totals per person, model, tool, issue or week, with subscription fees includ
 ## On an issue
 
 An issue's **AI usage** tab sits next to the **Time** tab and answers "what did this feature cost
-in AI?". It loads when you open it and shows:
+in AI?". When usage is logged, the tab's label shows how many entries you can see, counted the way
+the tab counts them (sub-issues included, excluded entries left out). The tab loads when you open
+it and shows:
 
 - **Headline numbers**: the spend, the API-equivalent value, the tokens and entries, how many
   people used AI on the issue, and the first and last day with usage.

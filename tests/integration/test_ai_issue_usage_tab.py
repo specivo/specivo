@@ -295,3 +295,37 @@ async def test_issue_page_loads_the_tab_lazily(client: AsyncClient, w: World) ->
     assert status == 200
     assert 'hx-get="/partials/issues/ITA-1/ai-usage/"' in html
     assert "spend-chart" not in html  # the bundle comes with the tab, only when it has a chart
+
+
+async def _tab_count(client: AsyncClient, user: User, key: str = "ITA-1") -> str | None:
+    """The count badge on the issue page's AI usage tab label, or None without one."""
+    status, html = await _get(client, user, f"/issue/{key}/")
+    assert status == 200, html[:500]
+    match = re.search(r'data-testid="ai-usage-tab-count">(\d+)</span>', html)
+    return match.group(1) if match else None
+
+
+async def test_tab_label_counts_the_entries_the_reader_can_see(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    assert await _tab_count(client, w.mgr) == "2"
+    # Developers see their own entries only, in the badge as in the tab.
+    assert await _tab_count(client, w.alice) == "1"
+    assert await _tab_count(client, w.bob) == "1"
+
+    # Excluded entries are not counted; the sub-issues' entries are, as in the tab.
+    await entry(db_session, w.bob, project=w.p, day=date(2026, 3, 8), api="50", issue=w.public_issue, excluded=True)
+    child = await _child(db_session, w.public_issue, 3, "Child work")
+    await entry(db_session, w.bob, project=w.p, day=date(2026, 3, 10), api="6", issue=child)
+    await db_session.commit()
+    assert await _tab_count(client, w.mgr) == "3"
+    assert await _tab_count(client, w.mgr, "ITA-3") == "1"
+
+
+async def test_tab_label_has_no_count_without_usage(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    lonely = await _child(db_session, w.private_issue, 9, "Nothing yet")
+    await db_session.commit()
+    status, html = await _get(client, w.mgr, f"/issue/{lonely.display_key}/")
+    assert status == 200
+    assert 'data-testid="ai-usage-tab"' in html
+    assert await _tab_count(client, w.mgr, lonely.display_key) is None
