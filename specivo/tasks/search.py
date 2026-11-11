@@ -84,7 +84,7 @@ def reindex_needed_key(project_id: int | None) -> str:
 
 
 @celery_app.task(bind=True)
-def reindex_fts_task(self, project_id: int | None = None):  # type: ignore[no-untyped-def]
+def reindex_fts_task(self, project_id: int | None = None):
     """Rebuild FTS vectors for one project (or all). Returns final counts, or ``{"status": "skipped"}``."""
 
     def progress(counts: dict[str, int]) -> None:
@@ -96,7 +96,7 @@ def reindex_fts_task(self, project_id: int | None = None):  # type: ignore[no-un
     return run_async(_locked_reindex(self.request.id, project_id, progress, waiting))
 
 
-async def _locked_reindex(task_id: str | None, project_id: int | None, progress_cb, waiting_cb=None) -> dict:  # type: ignore[no-untyped-def]
+async def _locked_reindex(task_id: str | None, project_id: int | None, progress_cb, waiting_cb=None) -> dict:
     """Run the reindex under the scope's advisory locks, refreshing and finally releasing the Redis run lock.
 
     A project run that finds its scope held does nothing. An instance run
@@ -184,7 +184,7 @@ async def _locked_reindex(task_id: str | None, project_id: int | None, progress_
         await engine.dispose()
 
 
-async def _keep(lock, token: str) -> bool:  # type: ignore[no-untyped-def]
+async def _keep(lock, token: str) -> bool:
     """Hold *lock* for *token* (``TokenLock.hold``); False when another token holds it.
 
     While Redis cannot be asked nobody can take the lock either (dispatches
@@ -200,7 +200,7 @@ async def _keep(lock, token: str) -> bool:  # type: ignore[no-untyped-def]
         return True
 
 
-async def _reindex_async(project_id: int | None, progress_cb) -> dict:  # type: ignore[no-untyped-def]
+async def _reindex_async(project_id: int | None, progress_cb) -> dict:
     from specivo.core.utils import utcnow
     from specivo.services.search_reindex_service import reindex_fts
 
@@ -216,7 +216,7 @@ async def _reindex_async(project_id: int | None, progress_cb) -> dict:  # type: 
 async def _store_result(project_id: int | None, summary: dict) -> None:
     from specivo.services.settings_service import SettingsService
 
-    updates = {last_result_key(project_id): json.dumps(summary)}
+    updates: dict[str, str | None] = {last_result_key(project_id): json.dumps(summary)}
     if summary.get("status") == "success":
         updates[reindex_needed_key(project_id)] = "0"
     async with task_session() as session:

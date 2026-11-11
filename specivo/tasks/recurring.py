@@ -36,7 +36,7 @@ _LOCK_BLOCKING_TIMEOUT = 5  # seconds — give up quickly if another worker hold
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_RECURRING)
-def generate_recurring_tasks(self) -> None:  # type: ignore[no-untyped-def]
+def generate_recurring_tasks(self) -> None:
     """Materialise due issues for every enabled recurring pattern.
 
     Uses a Redis lock to prevent concurrent runs across multiple workers.
@@ -77,7 +77,7 @@ async def _generate_recurring_async() -> None:
         await r.aclose()
 
 
-async def _generate_for_session(session, now, *, batch_size: int | None = None) -> tuple[int, int, int]:  # type: ignore[no-untyped-def]
+async def _generate_for_session(session, now, *, batch_size: int | None = None) -> tuple[int, int, int]:
     """Materialise due issues for all enabled patterns using *session*.
 
     Loads patterns in batches of ``batch_size`` (defaults to the configured

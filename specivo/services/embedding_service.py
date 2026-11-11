@@ -139,7 +139,7 @@ class EmbeddingService:
                     "Local embedding model %r is not available (missing ONNX/tokenizer files)",
                     model.model_name,
                 )
-                return None  # type: ignore[return-value]
+                return None
             return embedder.encode(prefixed_text)
 
         if model.provider == "mock":

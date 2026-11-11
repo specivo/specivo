@@ -88,7 +88,7 @@ def _read_remember_from_access_cookie(request: Request, settings) -> bool:
             algorithms=["HS256"],
             options={"verify_exp": False},
         )
-        return payload.get("rem", True)
+        return bool(payload.get("rem", True))
     except Exception:  # noqa: BLE001
         return True  # decode failure → default to persistent
 

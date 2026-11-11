@@ -11,7 +11,7 @@ import logging
 import os
 
 import redis.asyncio as aioredis
-from celery.signals import worker_ready  # type: ignore[import-untyped]
+from celery.signals import worker_ready
 from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.tasks import celery_app
@@ -24,7 +24,7 @@ _LOCK_BLOCKING_TIMEOUT = 5  # seconds — give up quickly if another worker hold
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
-def cleanup_expired_tokens(self) -> None:  # type: ignore[no-untyped-def]
+def cleanup_expired_tokens(self) -> None:
     """Delete expired password reset tokens and refresh tokens.
 
     Uses a Redis lock to prevent concurrent runs across multiple workers.
@@ -116,7 +116,7 @@ async def _cleanup_async() -> None:
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
-def ensure_audit_partitions(self) -> None:  # type: ignore[no-untyped-def]
+def ensure_audit_partitions(self) -> None:
     """Create the audit log's monthly partitions 3 months ahead and drop those past retention.
 
     Retention is ``AUDIT_LOG_RETENTION_MONTHS`` (default 12, ``0`` keeps everything).
@@ -140,7 +140,7 @@ async def _ensure_audit_partitions_async() -> None:
 
 
 @worker_ready.connect
-def _ensure_audit_partitions_at_start(**_kwargs) -> None:  # type: ignore[no-untyped-def]
+def _ensure_audit_partitions_at_start(**_kwargs) -> None:
     """Run the partition check once when a worker starts.
 
     The beat entry first fires a day after start; without this a fresh

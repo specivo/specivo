@@ -128,7 +128,7 @@ class BulkService:
                 display_key_fallback = f"#{issue_id}"
                 try:  # noqa: SIM105
                     # Try to get display_key if issue was loaded
-                    display_key_fallback = issue.display_key  # type: ignore[union-attr,possibly-undefined]
+                    display_key_fallback = issue.display_key  # type: ignore[union-attr]
                 except Exception:  # noqa: BLE001, S110
                     pass
 
@@ -197,7 +197,7 @@ class BulkService:
                 message = str(exc)
                 display_key_fallback = f"#{issue_id}"
                 try:  # noqa: SIM105
-                    display_key_fallback = issue.display_key  # type: ignore[union-attr,possibly-undefined]
+                    display_key_fallback = issue.display_key  # type: ignore[union-attr]
                 except Exception:  # noqa: BLE001, S110
                     pass
 

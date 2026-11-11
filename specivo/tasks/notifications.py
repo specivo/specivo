@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMAIL)
-def send_notification_email(  # type: ignore[no-untyped-def]
+def send_notification_email(
     self,
     to_email: str,
     subject: str,

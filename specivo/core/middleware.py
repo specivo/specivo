@@ -16,6 +16,7 @@ import re
 import secrets
 import time
 import uuid
+from typing import Any
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -591,10 +592,10 @@ class LocaleMiddleware:
         """Determine the best locale for this request."""
         from specivo.core.runtime_settings import get_default_language_override
 
-        available = getattr(settings, "available_languages", ["en"])
+        available: list[str] = getattr(settings, "available_languages", ["en"])
         # The admin workspace override (DB-backed) wins over the config default.
-        default = get_default_language_override() or getattr(settings, "default_language", "en")
-        headers = dict(scope.get("headers", []))
+        default = get_default_language_override() or str(getattr(settings, "default_language", "en"))
+        headers: dict[bytes, bytes] = dict(scope.get("headers", []))
 
         # 1. Check specivo_lang cookie
         cookie_header = headers.get(b"cookie", b"").decode()
@@ -742,7 +743,7 @@ class TokenRefreshMiddleware:
         async def send_with_refresh_cookies(message: Message) -> None:
             if message["type"] == "http.response.start":
                 state = scope.get("state", {})
-                tokens: dict[str, str] | None = state.get("refreshed_tokens")
+                tokens: dict[str, Any] | None = state.get("refreshed_tokens")
                 if tokens:
                     from specivo.core.config import get_settings
 
@@ -753,7 +754,7 @@ class TokenRefreshMiddleware:
                             access_token=tokens["access_token"],
                             refresh_token=tokens["refresh_token"],
                             settings=settings,
-                            remember=tokens.get("remember", True),
+                            remember=bool(tokens.get("remember", True)),
                         )
                     )
                     message["headers"] = resp_headers

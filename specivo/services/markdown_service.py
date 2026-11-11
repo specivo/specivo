@@ -35,20 +35,22 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import unquote, urlsplit
 from xml.etree.ElementTree import Element
 
 import markdown as _md
 import markupsafe
 import nh3
-from markdown.extensions import Extension  # type: ignore[import-untyped]
-from markdown.extensions.attr_list import get_attrs_and_remainder  # type: ignore[import-untyped]
-from markdown.extensions.fenced_code import FencedBlockPreprocessor  # type: ignore[import-untyped]
-from markdown.extensions.tables import TableExtension, TableProcessor  # type: ignore[import-untyped]
-from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
-from markdown.preprocessors import Preprocessor  # type: ignore[import-untyped]
-from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
-from markdown.util import HTML_PLACEHOLDER_RE, AtomicString  # type: ignore[import-untyped]
+from markdown.extensions import Extension
+from markdown.extensions.attr_list import get_attrs_and_remainder
+from markdown.extensions.fenced_code import FencedBlockPreprocessor
+from markdown.extensions.tables import TableExtension, TableProcessor
+from markdown.inlinepatterns import InlineProcessor
+from markdown.preprocessors import Preprocessor
+from markdown.treeprocessors import InlineProcessor as InlineTreeprocessor
+from markdown.treeprocessors import Treeprocessor
+from markdown.util import HTML_PLACEHOLDER_RE, AtomicString
 
 from specivo.core.i18n import gettext as _
 from specivo.services import markdown_budget
@@ -181,7 +183,7 @@ class _WikiTableProcessor(TableProcessor):
         masked = _WIKI_LINK_RE.sub(lambda m: m.group(0).replace("|", "\x00"), row)
         cells = []
         pos = 0
-        for cell in super()._split(masked):
+        for cell in super()._split(masked):  # type: ignore[misc]  # private, not in the stubs
             cells.append(row[pos : pos + len(cell)])
             pos += len(cell) + 1
         return cells
@@ -296,7 +298,7 @@ class _BareUrlInlineProcessor(InlineProcessor):
 
     def _inside_raw_anchor(self, data: str, pos: int) -> bool:
         """Whether *pos* in *data* follows a raw inline ``<a ...>`` not closed before it."""
-        stash = self.md.treeprocessors["inline"].stashed_nodes
+        stash = cast("InlineTreeprocessor", self.md.treeprocessors["inline"]).stashed_nodes
         if stash is not self._stash_seen:
             self._stash_seen = stash
             self._inside_anchor_after.clear()
@@ -319,7 +321,7 @@ class _BareUrlInlineProcessor(InlineProcessor):
             known[key] = inside
         return inside
 
-    def handleMatch(  # Python-Markdown API  # noqa: N802
+    def handleMatch(  # type: ignore[override]  # as in the stubs  # noqa: N802
         self, m: re.Match[str], data: str
     ) -> tuple[Element | None, int | None, int | None]:
         url = _trim_bare_url(m.group(1))
@@ -499,7 +501,7 @@ class _IssueRefInlineProcessor(InlineProcessor):
         super().__init__(_ISSUE_REF_PATTERN, md)
         self.known_issue_refs = known_issue_refs
 
-    def handleMatch(  # Python-Markdown API  # noqa: N802
+    def handleMatch(  # type: ignore[override]  # as in the stubs  # noqa: N802
         self,
         m: re.Match[str],
         data: str,  # noqa: ARG002
@@ -551,7 +553,7 @@ class _WikiLinkInlineProcessor(InlineProcessor):
         """Return *text* with its escapes and code spans read back as the author typed them."""
         return _ESCAPED_CHAR_RE.sub(lambda e: "\\" + chr(int(e.group(1))), self.unescape(text))
 
-    def handleMatch(  # Python-Markdown API  # noqa: N802
+    def handleMatch(  # type: ignore[override]  # as in the stubs  # noqa: N802
         self,
         m: re.Match[str],
         data: str,  # noqa: ARG002

@@ -96,9 +96,10 @@ async def _last_result(db: AsyncSession, project_id: int | None) -> dict | None:
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        result: dict = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return None
+    return result
 
 
 async def _running(db: AsyncSession, project_id: int | None) -> tuple[bool, str | None]:

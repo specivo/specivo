@@ -75,6 +75,10 @@ make test-cov && make coverage-diff   # coverage of the lines you changed
   (`# noqa: BLE001 - one bad source must not stop the run`). A `noqa` that no
   longer suppresses anything fails the build (`RUF100`), so remove it when you
   fix the line.
+- **Types.** `mypy specivo/` must pass. The same rule applies to
+  `# type: ignore[<code>]`: always name the error code, prefer fixing the type,
+  give a reason when the ignore stays (`# type: ignore[attr-defined]  # added by
+  the i18n extension`), and remove it once it is unused (`warn_unused_ignores`).
 - **Layers.** `import-linter` keeps the dependency direction: models do not
   import services, services and schemas do not import the API, web, MCP or SCIM
   layers, and core does not import them either. Move shared code down a layer

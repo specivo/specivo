@@ -97,4 +97,4 @@ def _metadata_setter(self: Attachment, value: dict | None) -> None:
     self.file_metadata = value
 
 
-Attachment.metadata = property(_metadata_getter, _metadata_setter)  # type: ignore[assignment,attr-defined]
+Attachment.metadata = property(_metadata_getter, _metadata_setter)  # type: ignore[assignment]

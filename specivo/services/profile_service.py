@@ -64,10 +64,9 @@ class ProfileService:
 
         # Open with Pillow (catches non-image files)
         try:
-            img = Image.open(io.BytesIO(file_content))
-            img.verify()  # Verify it's a valid image
+            Image.open(io.BytesIO(file_content)).verify()  # Verify it's a valid image
             # Re-open after verify (verify() leaves file in unusable state)
-            img = Image.open(io.BytesIO(file_content))
+            img: Image.Image = Image.open(io.BytesIO(file_content))
         except Exception:  # noqa: BLE001
             raise ValidationError("Invalid image file.")  # noqa: B904
 
@@ -79,7 +78,7 @@ class ProfileService:
             img = img.convert("RGB")
 
         # Resize to fit within max dimensions
-        img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
         # Generate UUID filename with hash subdirectory
         file_uuid = uuid.uuid4().hex

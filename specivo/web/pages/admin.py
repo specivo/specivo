@@ -61,7 +61,7 @@ async def require_admin(
         raise HTTPException(status_code=307, headers={"Location": "/login/"})
     if not isinstance(user_obj, User) or not is_global_admin(user_obj):
         raise HTTPException(status_code=403, detail="Admin access required")
-    return user_obj  # type: ignore[return-value]
+    return user_obj
 
 
 async def require_admin_session(

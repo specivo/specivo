@@ -23,7 +23,7 @@ def deliver_webhook(delivery_id: int, attempts: int = 0) -> None:
     """
     from specivo.services.webhook_delivery import deliver
 
-    async def _run():  # type: ignore[no-untyped-def]
+    async def _run():
         async with task_session() as session:
             return await deliver(session, delivery_id, attempts)
 
@@ -42,7 +42,7 @@ def sweep_webhook_deliveries() -> int:
     from specivo.services.webhook_delivery import claim_due
     from specivo.services.webhook_events import dispatch_deliveries
 
-    async def _run():  # type: ignore[no-untyped-def]
+    async def _run():
         async with task_session() as session:
             return await claim_due(session)
 

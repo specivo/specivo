@@ -390,7 +390,8 @@ def create_project(api: httpx.Client, prefix: str = "E2E", **kwargs: object) -> 
     payload: dict = {"name": f"Test {key}", "identifier": key.lower(), "key": key, **kwargs}
     resp = api_post_with_retry(api, "/api/v1/projects/", json=payload)
     assert resp.status_code == 201, resp.text  # noqa: S101
-    return resp.json()
+    created: dict = resp.json()
+    return created
 
 
 def create_issue(api: httpx.Client, project_key: str, subject: str, **kwargs: object) -> dict:
@@ -399,7 +400,8 @@ def create_issue(api: httpx.Client, project_key: str, subject: str, **kwargs: ob
     payload: dict = {"subject": subject, "project_key": project_key, "tracker_id": tracker_id, **kwargs}
     resp = api_post_with_retry(api, f"/api/v1/projects/{project_key}/issues/", json=payload)
     assert resp.status_code == 201, resp.text  # noqa: S101
-    return resp.json()
+    created: dict = resp.json()
+    return created
 
 
 _cached_tracker_id: int | None = None

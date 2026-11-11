@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import Request
-from sqlalchemy import and_, delete, false, func, or_, select, text, union
+from sqlalchemy import CursorResult, and_, delete, false, func, or_, select, text, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -584,7 +584,7 @@ class ProjectService:
             # Bulk re-key all issues
             rekey_stmt = update(Issue).where(Issue.project_id == project.id).values(project_key=new_key)
             result = await session.execute(rekey_stmt)
-            issues_rekeyed = result.rowcount
+            issues_rekeyed = int(cast(CursorResult, result).rowcount or 0)
 
             project.key = new_key
 
@@ -1164,16 +1164,16 @@ class ProjectService:
             .group_by(Wiki.project_id)
         )
         wiki_rows = (await session.execute(wiki_stmt)).all()
-        for row in wiki_rows:
-            stats[row.project_id]["wiki_page_count"] = row.page_count
+        for wiki_row in wiki_rows:
+            stats[wiki_row.project_id]["wiki_page_count"] = wiki_row.page_count
 
         # --- Enabled modules ---
         module_stmt = select(EnabledModule.project_id, EnabledModule.name).where(
             EnabledModule.project_id.in_(project_ids)
         )
         module_rows = (await session.execute(module_stmt)).all()
-        for row in module_rows:
-            if row.project_id in stats:
-                stats[row.project_id]["modules"][row.name] = True
+        for module_row in module_rows:
+            if module_row.project_id in stats:
+                stats[module_row.project_id]["modules"][module_row.name] = True
 
         return stats

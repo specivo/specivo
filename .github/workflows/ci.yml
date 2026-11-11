@@ -49,6 +49,8 @@ jobs:
         run: uv run ruff format --check .
       - name: Layer contracts (import-linter)
         run: uv run lint-imports
+      - name: Type check (mypy)
+        run: uv run mypy specivo/
       # Informational: lists the functions above complexity grade C and the
       # modules with a low maintainability index. It never fails the build.
       - name: Complexity report (radon)

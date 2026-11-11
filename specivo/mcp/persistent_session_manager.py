@@ -288,10 +288,10 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
 
     def __init__(
         self,
-        *args,  # type: ignore[no-untyped-def]
+        *args,
         store_provider: StoreProvider | None = None,
         owner_resolver: OwnerResolver | None = None,
-        **kwargs,  # type: ignore[no-untyped-def]
+        **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._store_provider: StoreProvider | None = store_provider

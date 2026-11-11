@@ -298,7 +298,7 @@ def environment_type(name: str, overrides: Mapping[str, str] | None) -> Environm
         )
         for prefix, value in patterns:
             if lowered.startswith(prefix) and value in ENVIRONMENT_TYPES:
-                return value  # type: ignore[return-value]
+                return value
     return guess_environment_type(name)
 
 

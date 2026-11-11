@@ -43,7 +43,7 @@ class UserFactory(factory.Factory):
 
     login = factory.Sequence(lambda n: f"user{n}")
     email = factory.LazyAttribute(lambda obj: f"{obj.login}@example.com")
-    password_hash = _TEST_PASSWORD_HASH
+    password_hash: str | None = _TEST_PASSWORD_HASH
     display_name = factory.LazyAttribute(lambda obj: f"Test User {obj.login.capitalize()}")
     avatar_url = None
     language = "en"

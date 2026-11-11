@@ -78,7 +78,7 @@ def field_refs(schemas: Iterable[MetadataSchema]) -> dict[str, RefKind]:
     for key, prop in _properties(schemas):
         kind = prop.get(REF_KEYWORD)
         if kind in REF_KINDS:
-            refs[key] = kind  # type: ignore[assignment]
+            refs[key] = kind
     return refs
 
 

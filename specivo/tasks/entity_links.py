@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_LINK_GRAPH)
-def rebuild_entity_links(self, sources: list[list]) -> None:  # type: ignore[no-untyped-def]
+def rebuild_entity_links(self, sources: list[list]) -> None:
     """Rebuild the stored links of each ``[source_type, id]`` in *sources* from its committed text.
 
     Queued by ``entity_link_index`` after a commit. Idempotent, so a retry or
@@ -50,7 +50,7 @@ async def _rebuild_async(keys: list[tuple[str, int]]) -> list[tuple[str, int]]:
 
 
 @celery_app.task(bind=True)
-def rebuild_link_graph_task(self, project_id: int | None = None, triggered_by: str | None = None):  # type: ignore[no-untyped-def]
+def rebuild_link_graph_task(self, project_id: int | None = None, triggered_by: str | None = None):
     """Rebuild every stored link of a project (or the instance), reporting progress.
 
     Dispatched by the settings page after taking the Redis run lock under this
@@ -65,7 +65,7 @@ def rebuild_link_graph_task(self, project_id: int | None = None, triggered_by: s
     return run_async(_full_rebuild_async(self.request.id, project_id, triggered_by, progress))
 
 
-async def _full_rebuild_async(task_id: str | None, project_id: int | None, triggered_by: str | None, progress) -> dict:  # type: ignore[no-untyped-def]
+async def _full_rebuild_async(task_id: str | None, project_id: int | None, triggered_by: str | None, progress) -> dict:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 

@@ -656,8 +656,8 @@ class IssueService:
 
         # Store initial description as version 0 so the first edit has a diff baseline
         if issue.description:
-            empty_attrs = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
-            initial_attrs = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
+            empty_attrs: dict[str, str | None] = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
+            initial_attrs: dict[str, str | None] = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
             initial_attrs["description"] = issue.description
             await self._journal_service.record_change(
                 session=session,

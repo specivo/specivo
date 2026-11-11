@@ -14,7 +14,7 @@ All tests are pure -- no database, no I/O, no .po/.mo files required.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -183,29 +183,52 @@ class TestLoadTranslations:
         result = gettext("Some string")
         assert result == "Some string"
 
-    def test_load_translations_merges_catalogs(self):
-        """Multiple locale dirs are merged so plugin strings are found."""
-        from pathlib import Path
-        from unittest.mock import patch
+    @staticmethod
+    def _write_catalog(root, locale: str, domain: str, messages: dict[str, str]) -> None:
+        """Compile *messages* into ``root/<locale>/LC_MESSAGES/<domain>.mo``."""
+        from babel.messages.catalog import Catalog
+        from babel.messages.mofile import write_mo
 
+        catalog = Catalog(locale=locale, domain=domain)
+        for msgid, msgstr in messages.items():
+            catalog.add(msgid, msgstr)
+        mo_dir = root / locale / "LC_MESSAGES"
+        mo_dir.mkdir(parents=True)
+        with (mo_dir / f"{domain}.mo").open("wb") as fh:
+            write_mo(fh, catalog)
+
+    def _load(self, tmp_path, locale: str):
         from specivo.core.i18n import _load_translations
 
-        mock_core_trans = MagicMock()
-        mock_plugin_trans = MagicMock()
-        # Simulate a real Translations object (not NullTranslations)
-        mock_plugin_trans.__class__ = type("Translations", (), {})
-
         with (
-            patch("specivo.core.i18n.Translations") as MockTranslations,
-            patch("specivo.core.i18n._extra_locale_dirs", [(Path("/fake/pro/locale"), "specivo_pro")]),
+            patch("specivo.core.i18n._LOCALE_DIR", tmp_path / "core"),
+            patch("specivo.core.i18n._extra_locale_dirs", [(tmp_path / "plugin", "specivo_plugin")]),
             patch("specivo.core.i18n._translations_cache", {}),
         ):
-            MockTranslations.load.side_effect = [mock_core_trans, mock_plugin_trans]
+            return _load_translations(locale)
 
-            result = _load_translations("th")
+    def test_plugin_catalog_is_merged_into_core(self, tmp_path):
+        self._write_catalog(tmp_path / "core", "th", "specivo", {"Issues": "core-th-issues"})
+        self._write_catalog(tmp_path / "plugin", "th", "specivo_plugin", {"Boards": "plugin-th-boards"})
 
-            # Core translations loaded first
-            assert MockTranslations.load.call_count == 2
-            # Plugin translations merged into core
-            mock_core_trans.merge.assert_called_once_with(mock_plugin_trans)
-            assert result is mock_core_trans
+        trans = self._load(tmp_path, "th")
+
+        assert trans.gettext("Issues") == "core-th-issues"
+        assert trans.gettext("Boards") == "plugin-th-boards"
+
+    def test_plugin_catalog_is_used_when_the_locale_has_no_core_catalog(self, tmp_path):
+        (tmp_path / "core").mkdir()
+        self._write_catalog(tmp_path / "plugin", "th", "specivo_plugin", {"Boards": "plugin-th-boards"})
+
+        trans = self._load(tmp_path, "th")
+
+        assert trans.gettext("Boards") == "plugin-th-boards"
+        assert trans.gettext("Issues") == "Issues"
+
+    def test_missing_plugin_catalog_leaves_core_unchanged(self, tmp_path):
+        self._write_catalog(tmp_path / "core", "th", "specivo", {"Issues": "core-th-issues"})
+        (tmp_path / "plugin").mkdir()
+
+        trans = self._load(tmp_path, "th")
+
+        assert trans.gettext("Issues") == "core-th-issues"

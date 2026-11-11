@@ -7,8 +7,8 @@ that fail in CI/test environments where env vars aren't yet set.
 import os
 
 from celery import Celery
-from celery.schedules import crontab  # type: ignore[import-untyped]
-from celery.signals import worker_init  # type: ignore[import-untyped]
+from celery.schedules import crontab
+from celery.signals import worker_init
 
 from specivo.core.celery_beat import default_schedule_file
 

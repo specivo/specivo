@@ -640,7 +640,7 @@ _IMPORT_MAP_RUNNERS = {
 }
 
 
-def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:
     import_map = sub.add_parser(
         "import-map",
         help="Inspect and rename the scopes of the import identifier map",

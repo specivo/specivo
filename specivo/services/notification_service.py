@@ -580,7 +580,7 @@ class NotificationService:
 
     def _is_channel_enabled(self, prefs: dict, channel_key: str) -> bool:
         """Check if a channel is enabled. Missing key = enabled (default-on)."""
-        return prefs.get(channel_key, True)
+        return bool(prefs.get(channel_key, True))
 
     async def _get_prefs(
         self,

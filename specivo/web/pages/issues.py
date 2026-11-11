@@ -929,8 +929,8 @@ async def issue_description_diff(
 
     # Find selected version number for display
     selected_version = next((v for v in versions if v["is_selected"]), None)
-    selected_num = selected_version["num"] if selected_version else "?"
-    prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
+    selected_num: int | None = selected_version["num"] if selected_version else None
+    prev_num = selected_num - 1 if selected_num is not None and selected_num > 1 else None
 
     known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, user, old_text, new_text)
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)

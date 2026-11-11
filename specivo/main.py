@@ -280,12 +280,13 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     for plugin in pm.plugins:
         plugin.on_startup(application)
 
-    # Error handlers — register most specific first.
-    application.add_exception_handler(RequestValidationError, request_validation_error_handler)
-    application.add_exception_handler(AppError, app_error_handler)
+    # Error handlers — register most specific first. Starlette types every
+    # handler as taking a plain Exception, so the narrower ones need an ignore.
+    application.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore[arg-type]
+    application.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
     application.add_exception_handler(ScimError, scim_error_handler)
-    application.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
+    application.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
     application.add_exception_handler(Exception, unhandled_exception_handler)
 
     # robots.txt and the sitemap — always at the root, not behind the stealth
