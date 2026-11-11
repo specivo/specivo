@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from fastapi import Request
-from sqlalchemy import CursorResult, and_, delete, false, func, or_, select, text, union
+from sqlalchemy import CursorResult, and_, delete, exists, false, func, or_, select, text, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -625,7 +625,17 @@ class ProjectService:
         return project, issues_rekeyed
 
     async def delete(self, session: AsyncSession, project: Project) -> None:
-        """Delete a project and all its children (CASCADE handles DB rows)."""
+        """Delete *project* with its issues, wiki pages and time entries (database CASCADE).
+
+        Subprojects are not deleted along with it: ``projects.parent_id`` is
+        ``RESTRICT``, so a project that has any raises ``ConflictError`` and
+        nothing is deleted. Delete or move the subprojects first.
+        """
+        has_children = await session.scalar(select(exists().where(Project.parent_id == project.id)))
+        if has_children:
+            raise ConflictError(
+                message=f"Project '{project.key}' has subprojects; delete or move them before deleting it"
+            )
         await session.delete(project)
         await session.flush()
 

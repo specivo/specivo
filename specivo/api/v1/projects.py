@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
@@ -30,7 +33,7 @@ from specivo.services.computed_metadata_service import computed_values
 from specivo.services.currency_service import reporting_currency_for
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
-from specivo.services.security_audit_service import MemberAction, SecurityAuditService
+from specivo.services.security_audit_service import AuditEvent, MemberAction, SecurityAuditService
 from specivo.services.similar_issues import project_setting_enabled
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -267,12 +270,30 @@ async def update_project(
 @router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     key: str,
-    current_user: User = Depends(get_current_user),
+    request: Request,
+    current_user: Annotated[User, Depends(require_admin_api)],
     db: AsyncSession = DB_SESSION,
 ) -> None:
+    """Delete a project with all its issues, wiki pages and time entries. Instance admins only.
+
+    Irreversible, so it is not a project manager's call (archiving, the
+    reversible way, is admin-only too). A project with subprojects is refused
+    with 409. The deletion is audited.
+    """
     project = await _service.get_by_key(db, key.upper())
-    await _require_manage(project, current_user, db)
+    details = {"project_key": project.key, "name": project.name, "identifier": project.identifier}
+    project_id = project.id
     await _service.delete(db, project)
+    await _audit.log_event(
+        session=db,
+        event_type=AuditEvent.PROJECT_DELETED,
+        user_id=current_user.id,
+        project_id=project_id,
+        resource_type="project",
+        resource_id=project_id,
+        details=details,
+        request=request,
+    )
 
 
 # ---------------------------------------------------------------------------
