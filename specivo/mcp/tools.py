@@ -101,12 +101,44 @@ async def _log_tool(
     await session.flush()
 
 
+async def _get_project(session: AsyncSession, user: User, key: str) -> Project:
+    """Resolve project *key* for *user*, or raise ``NotFoundError``.
+
+    A key that names no project and a project *user* cannot reach (private
+    without membership, outside the API key's limit) get the same message,
+    built from the key as the caller wrote it: echoing the stored key would
+    reveal that the project exists, or what a retired key was renamed to.
+    """
+    try:
+        project = await _project_svc.get_by_key(session, key)
+        await _project_svc.require_project_access(session, project, user)
+    except NotFoundError:
+        raise NotFoundError(f"Project '{key}' not found") from None
+    return project
+
+
 async def _require_permission(
     session: AsyncSession,
     user: User,
     project_id: int,
     permission: str | Permission,
 ) -> None:
+    """Raise unless *user* holds *permission* in project *project_id*.
+
+    A project the user cannot reach at all (private without membership, or
+    outside the API key's limit) is "not found", so a refusal does not reveal
+    which private projects exist (ADR-0004). Only a reachable project answers
+    with a permission error.
+    """
+    project = await session.get(Project, project_id)
+    if project is None:
+        raise NotFoundError("Project not found")
+    try:
+        await _project_svc.require_project_access(session, project, user)
+    except NotFoundError:
+        # Callers resolve the project with _get_project first; this is a
+        # backstop, so it names no key at all.
+        raise NotFoundError("Project not found") from None
     if not await check_permission(user, project_id, permission, session):
         raise PermissionDeniedError(f"Permission '{permission}' denied for this project")
 
@@ -284,7 +316,7 @@ async def _list_issues(  # noqa: C901, PLR0913
     tag: str | None = None,
     release: str | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     filters: dict = {"status": status}
     if sprint_id is not None:
@@ -602,7 +634,7 @@ async def _create_issue(  # noqa: PLR0913
     parent_ref: str | None = None,
     tags: list[str] | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "add_issues")
     try:
         tag_names = _clean_tag_names(tags)
@@ -763,7 +795,7 @@ async def _move_issue(
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "edit_issues")
     old_ref = issue.display_key
-    target = await _project_svc.get_by_key(session, target_project_key.upper())
+    target = await _get_project(session, user, target_project_key.upper())
     await _require_permission(session, user, target.id, "add_issues")
     issue = await _issue_svc.move(session, issue, target, user, notes=notes)
     await session.flush()
@@ -971,7 +1003,7 @@ async def _read_wiki(
     metadata_only: bool = False,
     search: str | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     lines = [
@@ -1099,7 +1131,7 @@ async def _list_wiki_pages(
     user: User,
     project_key: str,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_wiki")
     pages = await _wiki_svc.list_pages(session, project.id)
     lines = [f"Wiki pages for {project.key} ({len(pages)} total):", ""]
@@ -1119,7 +1151,7 @@ async def _edit_wiki(
     search_text: str,
     replace_text: str,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
@@ -1260,7 +1292,7 @@ async def _create_wiki(
     parent_slug: str | None = None,
     tags: list[str] | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
     try:
         tag_names = _clean_tag_names(tags)
@@ -1306,7 +1338,7 @@ async def _delete_wiki(
     slug: str,
     cascade_children: bool = False,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "delete_wiki_pages")
     page, _content = await _wiki_svc.get_page(session, project.id, slug)
     deleted_ids = await _wiki_svc.delete_page(session, page.id, user, cascade_children=cascade_children)
@@ -1333,7 +1365,7 @@ async def _restore_wiki(
 ) -> str:
     from specivo.models.wiki import Wiki, WikiPage
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "delete_wiki_pages")
 
     # Find deleted page by slug (without the deleted_at IS NULL filter)
@@ -1386,7 +1418,7 @@ async def _update_wiki_metadata(
     if parent_slug is None and title is None and protected is None:
         return "Error: at least one of parent_slug, title, or protected must be provided."
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, _content = await _wiki_svc.get_page(session, project.id, slug)
 
@@ -1452,7 +1484,7 @@ async def _append_wiki(
     ``position`` is either ``"end"`` (default) or ``"after:## Heading Name"``
     to insert after a specific section.
     """
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
@@ -1521,7 +1553,7 @@ async def _read_wiki_section(
     include_children: bool = True,
 ) -> str:
     """Read a single section from a wiki page by heading."""
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     text = content.text or ""
@@ -1581,7 +1613,7 @@ async def _replace_wiki_section(
     text: str,
 ) -> str:
     """Replace a section's body while preserving the heading line."""
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
@@ -1692,7 +1724,7 @@ async def _list_metadata_schemas(
     what metadata fields are available before creating/updating issues."""
     from specivo.services.metadata_schema_service import MetadataSchemaService
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
 
     svc = MetadataSchemaService()
@@ -1750,7 +1782,7 @@ async def _create_metadata_schema(
     from specivo.schemas.metadata_schema import MetadataSchemaCreate
     from specivo.services.metadata_schema_service import MetadataSchemaService
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
 
     payload = MetadataSchemaCreate(
@@ -1804,7 +1836,7 @@ async def _update_metadata_schema(
     from specivo.schemas.metadata_schema import MetadataSchemaUpdate
     from specivo.services.metadata_schema_service import MetadataSchemaService
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
 
     svc = MetadataSchemaService()
@@ -1862,7 +1894,7 @@ async def _delete_metadata_schema(
     """
     from specivo.services.metadata_schema_service import MetadataSchemaService
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
 
     svc = MetadataSchemaService()
@@ -2071,7 +2103,7 @@ async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
 
 async def _list_members(session: AsyncSession, user: User, project_key: str) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     members = await _project_svc.list_members(session, project)
     lines = [f"Members of {project.key} ({len(members)} total):", ""]
@@ -2194,7 +2226,7 @@ async def _log_time(
     comments: str | None = None,
     spent_on: date | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _time_entry_svc.require_can_log(session, user, project)
     issue_id: int | None = None
     if issue_ref:
@@ -2359,7 +2391,7 @@ async def _timer(
 
 
 async def _list_versions(session: AsyncSession, user: User, project_key: str) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     versions = await _version_svc.list_for_project(session, project.id)
     lines = [f"Versions for {project.key} ({len(versions)} total):", ""]
@@ -2388,7 +2420,7 @@ async def _create_version(
     status: str = "open",
     due_date: date | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_versions")
     data = VersionCreate(
         name=name,
@@ -2419,7 +2451,7 @@ async def _update_version(
     status: str | None = None,
     due_date: date | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)  # validate project
+    project = await _get_project(session, user, project_key)  # validate project
     await _require_permission(session, user, project.id, "manage_versions")
     version = await _version_svc.get_by_id(session, version_id)
     if version.project_id != project.id:
@@ -2449,7 +2481,7 @@ async def _delete_version(
     project_key: str,
     version_id: int,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_versions")
     version = await _version_svc.get_by_id(session, version_id)
     if version.project_id != project.id:
@@ -2527,7 +2559,7 @@ async def _resolve_pattern_in_project(
 
 
 async def _list_recurring_patterns(session: AsyncSession, user: User, project_key: str) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     patterns = await _recurring_pattern_svc.list_for_project(session, project.id)
     lines = [f"Recurring patterns for {project.key} ({len(patterns)} total):", ""]
@@ -2581,7 +2613,7 @@ async def _create_recurring_pattern(  # noqa: PLR0913
     creation_lead_time_days: int = 30,
     enabled: bool = True,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_recurring_tasks")
     try:
         data = RecurringPatternCreate(
@@ -2638,7 +2670,7 @@ async def _update_recurring_pattern(  # noqa: C901, PLR0913
     creation_lead_time_days: int | None = None,
     enabled: bool | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_recurring_tasks")
     pattern = await _resolve_pattern_in_project(session, project.id, pattern_id)
 
@@ -2701,7 +2733,7 @@ async def _delete_recurring_pattern(
     project_key: str,
     pattern_id: int,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_recurring_tasks")
     pattern = await _resolve_pattern_in_project(session, project.id, pattern_id)
     name = pattern.name
@@ -2725,7 +2757,7 @@ async def _skip_recurrence_occurrence(
     pattern_id: int,
     occurrence_at: str,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_recurring_tasks")
     pattern = await _resolve_pattern_in_project(session, project.id, pattern_id)
     try:
@@ -2752,7 +2784,7 @@ async def _list_recurrence_occurrences(
     pattern_id: int,
     days: int | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     pattern = await _resolve_pattern_in_project(session, project.id, pattern_id)
 
@@ -2794,7 +2826,7 @@ async def _list_recurrence_occurrences(
 
 
 async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     sprints = await _sprint_svc.list_for_project(session, project.id)
     velocity = await _sprint_svc.velocity_for(session, sprints, user)
@@ -2832,7 +2864,7 @@ async def _create_sprint(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
     data = SprintCreate(name=name, goal=goal, start_date=start_date, end_date=end_date)
     sprint = await _sprint_svc.create(session, project, data)
@@ -2858,7 +2890,7 @@ async def _update_sprint(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
@@ -2883,7 +2915,7 @@ async def _start_sprint(
     project_key: str,
     sprint_id: int,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
@@ -2908,7 +2940,7 @@ async def _complete_sprint(
     sprint_id: int,
     move_incomplete_to_sprint_id: int | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
@@ -2943,7 +2975,7 @@ async def _list_sprint_issues(
     """List issues belonging to a sprint (or backlog if sprint_id=0)."""
     from specivo.models.issue import Issue
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
 
     if fields not in ("minimal", "default", "full"):
@@ -3051,7 +3083,7 @@ async def _list_version_issues(
     """List issues assigned to a version/release (or unversioned if version_id=0)."""
     from specivo.models.issue import Issue
 
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
 
     if fields not in ("minimal", "default", "full"):
@@ -3144,7 +3176,7 @@ async def _list_version_issues(
 
 
 async def _list_tags(session: AsyncSession, user: User, project_key: str) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     rows = await _tag_svc.list_with_usage(session, project.id)
     lines = [f"Tags for {project.key} ({len(rows)} total):", ""]
@@ -3166,7 +3198,7 @@ async def _create_tag(
     name: str,
     color: str | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
     try:
         tag = await _tag_svc.create(session, project, TagCreate(name=name, color=color))
@@ -3192,7 +3224,7 @@ async def _update_tag(
     name: str | None = None,
     color: str | None = None,
 ) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
     tag = await _tag_svc.get_by_id(session, tag_id)
     if tag.project_id != project.id:
@@ -3215,7 +3247,7 @@ async def _update_tag(
 
 
 async def _delete_tag(session: AsyncSession, user: User, project_key: str, tag_id: int) -> str:
-    project = await _project_svc.get_by_key(session, project_key)
+    project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
     tag = await _tag_svc.get_by_id(session, tag_id)
     if tag.project_id != project.id:
@@ -3303,7 +3335,7 @@ async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str
         if "/" not in ref:
             raise ValueError("wiki target must be 'wiki:PROJECT_KEY/slug'")
         pkey, slug = ref.split("/", 1)
-        project = await _project_svc.get_by_key(session, pkey.upper())
+        project = await _get_project(session, user, pkey.upper())
         await _project_svc.require_project_access(session, project, user)
         # Before the page lookup, so a refusal does not reveal which slugs exist.
         await check(session, user, "wiki", project)

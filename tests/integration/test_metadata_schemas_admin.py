@@ -158,7 +158,8 @@ async def test_outsider_cannot_update_schema(
         json={"name": "Hijacked"},
         headers={"Authorization": f"Bearer {out_token}"},
     )
-    assert resp.status_code == 403, resp.text
+    # The project is private and the outsider no member: not found (ADR-0004).
+    assert resp.status_code == 404, resp.text
 
 
 async def test_outsider_cannot_create_schema(client: AsyncClient, project_with_outsider) -> None:
@@ -168,7 +169,8 @@ async def test_outsider_cannot_create_schema(client: AsyncClient, project_with_o
         json={"name": "X", "tracker_id": None, "schema_definition": SCHEMA_DEF},
         headers={"Authorization": f"Bearer {out_token}"},
     )
-    assert resp.status_code == 403, resp.text
+    # The project is private and the outsider no member: not found (ADR-0004).
+    assert resp.status_code == 404, resp.text
 
 
 async def test_outsider_cannot_delete_schema(
@@ -187,7 +189,8 @@ async def test_outsider_cannot_delete_schema(
         f"/api/v1/admin/projects/{project_key}/metadata-schemas/{schema_id}/",
         headers={"Authorization": f"Bearer {out_token}"},
     )
-    assert resp.status_code == 403, resp.text
+    # The project is private and the outsider no member: not found (ADR-0004).
+    assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------

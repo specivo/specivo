@@ -32,7 +32,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
@@ -488,7 +488,7 @@ class TestMcpNonMemberPrivateProject:
         seed: dict,
         admin_user: User,
     ):
-        """_list_issues raises PermissionDeniedError for non-member on private project.
+        """_list_issues raises NotFoundError for a non-member on a private project.
 
         An issue is seeded by admin first so the project isn't empty; the
         non-member should still be denied before any data is returned.
@@ -509,7 +509,8 @@ class TestMcpNonMemberPrivateProject:
         )
         await db_session.commit()
 
-        with pytest.raises(PermissionDeniedError):
+        # Not found, like a missing key, so private keys cannot be enumerated (ADR-0004).
+        with pytest.raises(NotFoundError):
             await _list_issues(
                 session=db_session,
                 user=non_member_user,

@@ -29,7 +29,7 @@ from specivo.services.link_graph_admin_service import (
     project_stats,
     rebuild_lock_key,
 )
-from specivo.services.permission_service import Permission, check_permission
+from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 from specivo.tasks import celery_app
 
@@ -43,10 +43,8 @@ def _require_admin(user: User) -> None:
 
 
 async def _require_project_manage(project_key: str, user: User, db: AsyncSession) -> Project:
-    project = await _project_service.get_by_key(db, project_key.upper())
-    if not is_global_admin(user) and not await check_permission(user, project.id, Permission.MANAGE_PROJECT, db):
-        raise PermissionDeniedError("manage_project permission required")
-    return project
+    # A project the caller cannot reach is "not found", like a missing key.
+    return await _project_service.get_permitted_by_key(db, project_key.upper(), user, Permission.MANAGE_PROJECT)
 
 
 async def _lock(project_id: int | None) -> TokenLock:

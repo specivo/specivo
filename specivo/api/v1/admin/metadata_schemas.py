@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.metadata_schema import (
@@ -23,7 +22,7 @@ from specivo.schemas.metadata_schema import (
     MetadataSchemaUsageOut,
 )
 from specivo.services.metadata_schema_service import MetadataSchemaService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
@@ -43,12 +42,8 @@ async def _require_project_manage(
     Mirrors the helper in admin/metadata_presets.py so project managers can
     administer metadata schemas without needing the global is_admin flag.
     """
-    project = await _project_service.get_by_key(db, project_key.upper())
-    if not user.is_admin:
-        allowed = await check_permission(user, project.id, "manage_project", db)
-        if not allowed:
-            raise PermissionDeniedError("manage_project permission required")
-    return project
+    # A project the caller cannot reach is "not found", like a missing key.
+    return await _project_service.get_permitted_by_key(db, project_key.upper(), user, Permission.MANAGE_PROJECT)
 
 
 @router.post(
