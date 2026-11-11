@@ -55,6 +55,7 @@ class AuditEvent(StrEnum):
     ATTACHMENT_DELETED = "attachment_deleted"
     ATTACHMENT_UPDATED = "attachment_description_updated"
     PROJECT_KEY_RENAMED = "project_key_renamed"
+    PROJECT_DELETED = "project_deleted"
     # A connected repository moved to another forge: new hook URL, new secret.
     REPOSITORY_PROVIDER_CHANGED = "repository_provider_changed"
     # A commit or pull request detached from an issue, or moved to another one, by a person.
@@ -370,6 +371,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
     **dict.fromkeys(
         [
             AuditEvent.PROJECT_KEY_RENAMED,
+            AuditEvent.PROJECT_DELETED,
             AuditEvent.REPOSITORY_PROVIDER_CHANGED,
             AuditEvent.METADATA_SCHEMA_CREATED,
             AuditEvent.METADATA_SCHEMA_UPDATED,

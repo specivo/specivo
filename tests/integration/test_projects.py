@@ -232,6 +232,85 @@ async def test_delete_project(
 
 
 @pytest.mark.asyncio
+async def test_project_manager_cannot_delete_the_project(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+) -> None:
+    """Deleting is irreversible, so even a Manager with every project permission is refused."""
+    from specivo.models.member import Member, MemberRole
+    from specivo.models.project import Project
+
+    await client.post(
+        "/api/v1/projects/",
+        json={"name": "Managed", "identifier": "managed", "key": "MGD"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    project = (await db_session.execute(select(Project).where(Project.key == "MGD"))).scalar_one()
+    manager = await _make_user(db_session, login="mgd_manager", status="active")
+    member = Member(user_id=manager.id, project_id=project.id)
+    db_session.add(member)
+    await db_session.flush()
+    db_session.add(MemberRole(member_id=member.id, role_id=(await _make_role(db_session)).id))
+    await db_session.commit()
+    token = await _login(client, manager.login)
+
+    resp = await client.delete("/api/v1/projects/MGD/", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 403
+    resp = await client.get("/api/v1/projects/MGD/", headers={"Authorization": f"Bearer {admin_token}"})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_project_with_subprojects_is_not_deleted(
+    client: AsyncClient,
+    admin_token: str,
+) -> None:
+    auth = {"Authorization": f"Bearer {admin_token}"}
+    await client.post(
+        "/api/v1/projects/", json={"name": "Parent", "identifier": "parent-p", "key": "PAR"}, headers=auth
+    )
+    resp = await client.post(
+        "/api/v1/projects/",
+        json={"name": "Child", "identifier": "child-p", "key": "CHI", "parent_key": "PAR"},
+        headers=auth,
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.delete("/api/v1/projects/PAR/", headers=auth)
+    assert resp.status_code == 409, resp.text
+    assert "subprojects" in resp.text
+    assert (await client.get("/api/v1/projects/PAR/", headers=auth)).status_code == 200
+    assert (await client.get("/api/v1/projects/CHI/", headers=auth)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_project_deletion_is_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+) -> None:
+    from specivo.models.security_audit import SecurityAuditLog
+
+    auth = {"Authorization": f"Bearer {admin_token}"}
+    resp = await client.post(
+        "/api/v1/projects/", json={"name": "Audited", "identifier": "audited", "key": "AUD"}, headers=auth
+    )
+    project_id = resp.json()["id"]
+    assert (await client.delete("/api/v1/projects/AUD/", headers=auth)).status_code == 204
+
+    rows = (
+        (await db_session.execute(select(SecurityAuditLog).where(SecurityAuditLog.event_type == "project_deleted")))
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].project_id == project_id
+    assert rows[0].details["project_key"] == "AUD"
+    assert rows[0].details["name"] == "Audited"
+
+
+@pytest.mark.asyncio
 async def test_list_projects(
     client: AsyncClient,
     db_session: AsyncSession,
