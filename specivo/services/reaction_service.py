@@ -70,11 +70,11 @@ class ReactionService:
                 )
             )
             reaction = existing.scalar_one()
-            return reaction
+            return reaction  # noqa: RET504
 
         await session.flush()
         reaction_obj = await session.get(Reaction, row)
-        assert reaction_obj is not None
+        assert reaction_obj is not None  # noqa: S101
         return reaction_obj
 
     async def remove_reaction(

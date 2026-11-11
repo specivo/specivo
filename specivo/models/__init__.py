@@ -154,5 +154,5 @@ __all__ = [
 # Registers the session events that keep search chunks and the entity link
 # graph in step with content. Imported here, after every model, so that any
 # process that loads the models (api, worker, CLI, tests) indexes the same way.
-import specivo.services.entity_link_index  # noqa: E402, F401
-import specivo.services.search_index_service  # noqa: E402, F401
+import specivo.services.entity_link_index
+import specivo.services.search_index_service  # noqa: F401

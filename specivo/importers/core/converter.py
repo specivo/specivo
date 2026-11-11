@@ -46,6 +46,6 @@ class PassthroughConverter:
     that exercise loaders rather than conversion.
     """
 
-    def convert(self, raw: str, ctx: ConversionContext) -> str:
+    def convert(self, raw: str, ctx: ConversionContext) -> str:  # noqa: ARG002
         """Return *raw* unchanged."""
         return raw

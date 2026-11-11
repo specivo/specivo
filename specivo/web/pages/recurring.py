@@ -82,7 +82,7 @@ async def _resolve_project(
     try:
         project = await _project_svc.get_by_key(db, project_key.upper())
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
     return project
 
@@ -248,7 +248,7 @@ async def recurring_edit_form(
     try:
         pattern = await _pattern_svc.get_by_id(db, pattern_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Recurring pattern not found")
+        raise HTTPException(status_code=404, detail="Recurring pattern not found")  # noqa: B904
     if pattern.project_id != project.id:
         raise HTTPException(status_code=404, detail="Recurring pattern not found")
 
@@ -299,7 +299,7 @@ async def recurring_detail(
     try:
         pattern = await _pattern_svc.get_by_id(db, pattern_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Recurring pattern not found")
+        raise HTTPException(status_code=404, detail="Recurring pattern not found")  # noqa: B904
     if pattern.project_id != project.id:
         raise HTTPException(status_code=404, detail="Recurring pattern not found")
 

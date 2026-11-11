@@ -65,7 +65,7 @@ async def _require_manage(
                 request=request,
             )
             await db.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
         raise PermissionDeniedError("You do not have permission to manage this project")
 
@@ -343,7 +343,7 @@ async def _log_member_change(
                 roles=roles,
                 request=request,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -355,7 +355,7 @@ async def _principal_label(db: AsyncSession, principal: Principal) -> str:
         stmt = select(UserGroup.name).where(UserGroup.id == principal.id)
     try:
         return (await db.execute(stmt)).scalar_one_or_none() or ""
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""
 
 

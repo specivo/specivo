@@ -87,7 +87,7 @@ async def blocklist_token(jti: str, ttl_seconds: int) -> None:
 
         redis = await get_redis()
         await redis.setex(f"{_BLOCKLIST_PREFIX}{jti}", ttl_seconds, "1")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Redis blocklist write failed (jti=%s): %s", jti, exc)
 
 
@@ -152,7 +152,7 @@ async def mark_sessions_revoked(session_ids: Iterable[uuid.UUID | str]) -> None:
             for key in keys:
                 pipe.setex(key, ttl, "1")
             await pipe.execute()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Redis revoked-session write failed (%d sessions): %s", len(keys), exc)
 
 
@@ -174,7 +174,7 @@ async def is_access_token_revoked(jti: str | None, sid: str | None) -> bool:
 
         redis = await get_redis()
         return bool(await redis.exists(*keys) > 0)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Redis blocklist unavailable — denying JWT auth (fail-closed): %s", exc)
         return True
 
@@ -319,13 +319,13 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> User:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
-        raise AppError(
+        raise AppError(  # noqa: B904
             code="auth_token_expired",
             message="Access token has expired",
             status_code=401,
         )
     except jwt.InvalidTokenError:
-        raise AppError(
+        raise AppError(  # noqa: B904
             code="auth_token_invalid",
             message="Invalid access token",
             status_code=401,
@@ -353,7 +353,7 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> User:
     try:
         user_id = int(sub)
     except (ValueError, TypeError):
-        raise AppError(code="auth_token_invalid", message="Invalid subject claim", status_code=401)
+        raise AppError(code="auth_token_invalid", message="Invalid subject claim", status_code=401)  # noqa: B904
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -444,7 +444,7 @@ async def try_silent_refresh(request: Request, db: AsyncSession) -> User | None:
                     options={"verify_exp": False},
                 )
                 remember = payload.get("rem", True)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
         svc = AuthService()
@@ -482,7 +482,7 @@ async def get_current_user(
     return await authenticate_request(request, db)
 
 
-async def get_account_user(current_user: User = Depends(get_current_user)) -> User:  # noqa: B008
+async def get_account_user(current_user: User = Depends(get_current_user)) -> User:
     """FastAPI dependency: the current user, for account-wide operations.
 
     Refuses (403) an API key limited to some projects: managing API keys,
@@ -588,7 +588,7 @@ async def authenticate_request(
                 user_id=user.id,
                 user_agent=user_agent,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # Agent session tracking is non-critical — never block auth
             logger.warning("Agent session tracking failed: %s", exc)
 

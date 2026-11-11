@@ -321,7 +321,7 @@ def expected_answers(viewer: str, content: ProjectContent, grant: Grant) -> Answ
     def visible(issue: Issue) -> bool:
         if grant.level == "admin":
             return True
-        if viewer == "anonymous":
+        if viewer == "anonymous":  # noqa: SIM108
             own = False
         else:
             own = issue.assigned_to_id is not None and issue is content.mine
@@ -375,7 +375,7 @@ async def observe(db: AsyncSession, world: World, viewer: str) -> tuple[dict[str
         checked = {i.id for i in content.issues if await _issues._check_visible(db, i, user)}
         by_key = set()
         for issue in content.issues:
-            try:
+            try:  # noqa: SIM105
                 by_key.add((await _issues.get_by_display_key(db, issue.display_key, user)).id)
             except NotFoundError:
                 pass

@@ -286,7 +286,7 @@ class BundleSourceAdapter(BaseSourceAdapter):
                 self._index = scan_bundle(
                     self._container.root, report, self.limits, files_dir=self._container.files_dir
                 )
-        except Exception as exc:  # noqa: BLE001 - a hostile bundle must give a report, not a traceback
+        except Exception as exc:  # a hostile bundle must give a report, not a traceback
             logger.debug("Reading bundle %s failed", self.path, exc_info=True)
             report.error(ProblemCode.UNREADABLE, self.path.name, f"The bundle could not be read: {exc!r}")
         if not report.ok:

@@ -134,7 +134,7 @@ def color_slots(keys: Iterable[Any]) -> dict[Any, int]:
     for key in keys:
         if key in out:
             continue
-        if key is None or key == "" or key == OTHER or key == NO_PROJECT or rank >= NEUTRAL_SLOT:
+        if key is None or key == "" or key == OTHER or key == NO_PROJECT or rank >= NEUTRAL_SLOT:  # noqa: SIM109
             out[key] = NEUTRAL_SLOT
         else:
             out[key] = rank
@@ -384,7 +384,7 @@ class AiUsageChartService:
     def __init__(self) -> None:
         self._usage = AiUsageService()
 
-    async def charts(
+    async def charts(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -433,7 +433,7 @@ class AiUsageChartService:
             )
         return out
 
-    async def report_charts(
+    async def report_charts(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -578,7 +578,7 @@ class AiUsageChartService:
 
     # -- filling the buckets -------------------------------------------------------------
 
-    async def _fill(
+    async def _fill(  # noqa: C901, PLR0912, PLR0915
         self,
         session: AsyncSession,
         out: UsageCharts,
@@ -590,7 +590,7 @@ class AiUsageChartService:
         from specivo.services.ai_subscription_service import AiToolService
         from specivo.services.exchange_rate_service import ExchangeRateService
 
-        assert out.first is not None and out.last is not None
+        assert out.first is not None and out.last is not None  # noqa: S101
         currency = out.currency
         raw = await self._grouped(session, conditions, out.bucket, currency)
         buckets = {start: Bucket(start=start) for start in bucket_starts(out.first, out.last, out.bucket)}
@@ -810,7 +810,7 @@ class AiUsageChartService:
         """
         from specivo.services.ai_spend_report_service import PERIODS
 
-        assert out.first is not None and out.last is not None
+        assert out.first is not None and out.last is not None  # noqa: S101
         if out.bucket not in PERIODS:
             return
         seat = await reports.seat_breakdown(

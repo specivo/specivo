@@ -151,7 +151,7 @@ def verify_password(plain_password: str, hashed_password: str | None, *, user_id
     start_cost_tracking()
     try:
         matched = bool(hasher.verify(plain_password, hashed_password))
-    except Exception:  # noqa: BLE001 - a third-party hasher must never turn a sign-in into a 500
+    except Exception:  # a third-party hasher must never turn a sign-in into a 500
         logger.exception("Password hasher %r raised while verifying user %s; treated as no match", algorithm, user_id)
         matched = False
     # The timing floor, enforced here so no hasher can opt out: a check that

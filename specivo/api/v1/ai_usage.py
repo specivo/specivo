@@ -206,7 +206,7 @@ async def _changes(db: DbSession, viewer: User, entry: AiUsageEntry, data: AiUsa
 
 
 @router.get("/projects/{project_key}/ai-usage/", response_model=AiUsageListResponse)
-async def list_project_ai_usage(
+async def list_project_ai_usage(  # noqa: PLR0913
     project_key: str,
     db: DbSession,
     user_id: int | None = Query(default=None, description="Only entries logged in this user's name"),
@@ -290,7 +290,7 @@ async def create_project_ai_usage(
 
 
 @router.get("/my/ai-usage/", response_model=AiUsageListResponse)
-async def list_my_ai_usage(
+async def list_my_ai_usage(  # noqa: PLR0913
     db: DbSession,
     project_key: str | None = Query(default=None, description="Only this project's entries"),
     unassigned: bool | None = Query(default=None, description="true: only entries without a project"),

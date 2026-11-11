@@ -59,7 +59,7 @@ TEST_DB_URL = get_settings().database_url
 
 
 @asynccontextmanager
-async def _test_lifespan(app: FastAPI):
+async def _test_lifespan(app: FastAPI):  # noqa: ARG001
     """No-op lifespan — skip eager DB/Redis checks in tests."""
     yield
 
@@ -88,7 +88,7 @@ async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
     engine = create_async_engine(TEST_DB_URL, poolclass=NullPool)
 
     @sa_event.listens_for(engine.sync_engine, "connect")
-    def _on_connect(dbapi_connection, connection_record):
+    def _on_connect(dbapi_connection, connection_record):  # noqa: ARG001
         dbapi_connection.run_async(_register_ltree_codec)
 
     yield engine
@@ -147,7 +147,7 @@ async def db_session(db_engine: AsyncEngine, _test_connection: AsyncConnection) 
 
         async with db_engine.begin() as _cleanup_conn:
             await _cleanup_conn.execute(_text("DELETE FROM security_audit_logs"))
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     # Flush Redis state between tests
@@ -161,7 +161,7 @@ async def db_session(db_engine: AsyncEngine, _test_connection: AsyncConnection) 
         r = aioredis.from_url(os.environ["REDIS_URL"])
         await r.flushdb()
         await r.aclose()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -196,7 +196,7 @@ def _make_test_get_db(connection: AsyncConnection):
 async def client(
     db_engine: AsyncEngine,
     _test_connection: AsyncConnection,
-    db_session: AsyncSession,
+    db_session: AsyncSession,  # noqa: ARG001
 ) -> AsyncGenerator[AsyncClient, None]:
     """Async HTTP client (unauthenticated).
 
@@ -230,7 +230,7 @@ async def unauth_client() -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def auth_client(
-    db_engine: AsyncEngine,
+    db_engine: AsyncEngine,  # noqa: ARG001
     _test_connection: AsyncConnection,
     db_session: AsyncSession,
 ) -> AsyncGenerator[AsyncClient, None]:
@@ -255,7 +255,7 @@ async def auth_client(
             "/api/v1/auth/login/",
             json={"login": user.login, "password": TEST_PASSWORD},
         )
-        assert resp.status_code == 200, f"auth_client login failed: {resp.text}"
+        assert resp.status_code == 200, f"auth_client login failed: {resp.text}"  # noqa: S101
         token = resp.json()["access_token"]
 
         ac.headers["Authorization"] = f"Bearer {token}"
@@ -268,7 +268,7 @@ async def auth_client(
 
 @pytest_asyncio.fixture
 async def admin_client(
-    db_engine: AsyncEngine,
+    db_engine: AsyncEngine,  # noqa: ARG001
     _test_connection: AsyncConnection,
     db_session: AsyncSession,
 ) -> AsyncGenerator[AsyncClient, None]:
@@ -287,7 +287,7 @@ async def admin_client(
             "/api/v1/auth/login/",
             json={"login": user.login, "password": TEST_PASSWORD},
         )
-        assert resp.status_code == 200, f"admin_client login failed: {resp.text}"
+        assert resp.status_code == 200, f"admin_client login failed: {resp.text}"  # noqa: S101
         token = resp.json()["access_token"]
 
         ac.headers["Authorization"] = f"Bearer {token}"
@@ -300,7 +300,7 @@ async def admin_client(
 
 @pytest_asyncio.fixture
 async def agent_client(
-    db_engine: AsyncEngine,
+    db_engine: AsyncEngine,  # noqa: ARG001
     _test_connection: AsyncConnection,
     db_session: AsyncSession,
 ) -> AsyncGenerator[AsyncClient, None]:

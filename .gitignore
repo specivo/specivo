@@ -59,3 +59,7 @@ docs-site/
 frontend/node_modules/
 specivo/static/dist/
 
+# Generated quality reports
+coverage.xml
+complexity-report.md
+diff-cover.md

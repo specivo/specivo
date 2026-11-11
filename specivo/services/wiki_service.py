@@ -310,7 +310,7 @@ class WikiService:
                     "deleted_page_ids": deleted_ids,
                 },
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for wiki page delete %d", page.id)
 
         return deleted_ids
@@ -386,7 +386,7 @@ class WikiService:
                     "restored_page_ids": restored_ids,
                 },
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for wiki page restore %d", page.id)
 
         return restored_ids

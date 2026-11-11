@@ -80,7 +80,7 @@ def idp_refresh_token_purpose(issuer: str, token_endpoint: str, client_id: str) 
 
 
 #: ``secret_box`` purpose of ``SsoProvider.client_secret_encrypted``.
-CLIENT_SECRET_PURPOSE = "sso-client-secret"
+CLIENT_SECRET_PURPOSE = "sso-client-secret"  # noqa: S105
 
 # Registered OAuth error codes are lowercase words joined by underscores.
 _ERROR_CODE_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
@@ -92,7 +92,7 @@ class TokenResponse:
 
     id_token: str = field(repr=False)
     access_token: str = field(repr=False)
-    token_type: str = "Bearer"
+    token_type: str = "Bearer"  # noqa: S105
     expires_in: int | None = None
     scope: str | None = None
     #: Present when the IdP issues refresh tokens for this client and scope.

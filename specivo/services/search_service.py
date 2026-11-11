@@ -97,7 +97,7 @@ def _principal_match(alias: str = "m") -> str:
     definition of the same rule.
     """
     return (
-        f"({alias}.user_id = :current_user_id"
+        f"({alias}.user_id = :current_user_id"  # noqa: S608
         f" OR {alias}.group_id IN (SELECT ugm.group_id FROM user_group_members ugm"
         f" WHERE ugm.user_id = :current_user_id))"
     )
@@ -339,7 +339,7 @@ def _clean_snippet(snippet: str | None) -> str | None:
     # HTML-escape to prevent XSS, then restore safe <mark> tags
     clean = html.escape(clean)
     clean = clean.replace("\x00MARK_OPEN\x00", "<mark>").replace("\x00MARK_CLOSE\x00", "</mark>")
-    return clean
+    return clean  # noqa: RET504
 
 
 def _empty_type_counts(*, include_all: bool = False) -> dict[str, int]:
@@ -469,7 +469,7 @@ class SearchService:
                   AND NOT EXISTS (SELECT 1 FROM members m
                                   WHERE {_principal_match("m")} AND m.project_id = p.id)
             )
-        """
+        """  # noqa: S608
 
     @staticmethod
     def _issue_visible_sql(alias: str) -> str:
@@ -483,13 +483,13 @@ class SearchService:
         return f"""EXISTS (SELECT 1 FROM user_visibility uv
                     WHERE uv.project_id = {alias}.project_id
                     AND ((uv.visibility_level >= 2 AND ({alias}.is_private = false OR {own}))
-                         OR (uv.visibility_level = 1 AND {own})))"""
+                         OR (uv.visibility_level = 1 AND {own})))"""  # noqa: S608
 
     @staticmethod
     def _wiki_visible_sql(project_id_column: str) -> str:
         """Return a predicate, without a leading AND, admitting the wiki of the project in *project_id_column*."""
         return (
-            f"EXISTS (SELECT 1 FROM user_visibility uv WHERE uv.project_id = {project_id_column} AND uv.can_view_wiki)"
+            f"EXISTS (SELECT 1 FROM user_visibility uv WHERE uv.project_id = {project_id_column} AND uv.can_view_wiki)"  # noqa: S608
         )
 
     def _issue_visibility_cte_clause(self, user: User, alias: str = "i") -> str:
@@ -607,7 +607,7 @@ class SearchService:
                 {att_project_filter}
                 ORDER BY score DESC LIMIT :part_limit
             ) attachments_sub
-        """
+        """  # noqa: S608
 
     def _attachment_fts_count_sql(
         self,
@@ -636,7 +636,7 @@ class SearchService:
             WHERE sc.search_vector @@ query
             {att_vis}
             {att_project_filter}
-        """
+        """  # noqa: S608
 
     def _attachment_semantic_vis(self, user: User) -> str:
         """Attachment visibility for semantic search (aliases ``att``, ``att_iss``, ``att_wp``, ``att_w``)."""
@@ -675,7 +675,7 @@ class SearchService:
         for idx, name in enumerate(filters.tag_names):
             pname = f"filter_tag_{idx}"
             out.append(
-                f"AND EXISTS (SELECT 1 FROM tag_links tl JOIN tags t ON t.id = tl.tag_id "
+                f"AND EXISTS (SELECT 1 FROM tag_links tl JOIN tags t ON t.id = tl.tag_id "  # noqa: S608
                 f"WHERE tl.{link_col} = {alias}.id AND lower(t.name) = lower(:{pname}))"
             )
             params[pname] = name
@@ -880,7 +880,7 @@ class SearchService:
             FROM kept k
             JOIN issues i ON i.id = k.id
             ORDER BY k.ord, k.foreign_rank, i.id
-        """
+        """  # noqa: S608
         result = await session.execute(text(sql), params)
         return [
             SearchResult(
@@ -905,7 +905,7 @@ class SearchService:
     # Full-text search
     # ------------------------------------------------------------------
 
-    async def search(
+    async def search(  # noqa: PLR0912, PLR0913, PLR0915
         self,
         session: AsyncSession,
         query: str,
@@ -1034,7 +1034,7 @@ class SearchService:
                     {pinned_exclusion}
                     ORDER BY score DESC LIMIT :part_limit
                 ) issues_sub
-            """
+            """  # noqa: S608
             parts.append(issue_sql)
 
         if scope in ("all", "wiki"):
@@ -1066,7 +1066,7 @@ class SearchService:
                     {wiki_tag_filter}
                     ORDER BY score DESC LIMIT :part_limit
                 ) wiki_sub
-            """
+            """  # noqa: S608
             parts.append(wiki_sql)
 
         # Comment keyword search: search search_chunks content for source_type='comment'
@@ -1095,7 +1095,7 @@ class SearchService:
                     {comment_visibility}
                     ORDER BY score DESC LIMIT :part_limit
                 ) comments_sub
-            """
+            """  # noqa: S608
             parts.append(comment_sql)
 
         # Attachment keyword search: search search_chunks for source_type='attachment'
@@ -1115,7 +1115,7 @@ class SearchService:
             {issue_visibility}
             {issue_filter_sql}
             {pinned_exclusion}
-        """
+        """  # noqa: S608
 
         count_parts["wiki"] = f"""
             SELECT COUNT(*) as cnt
@@ -1133,7 +1133,7 @@ class SearchService:
             {wiki_project_filter}
             {wiki_visibility}
             {wiki_tag_filter}
-        """
+        """  # noqa: S608
 
         if tags_active:
             # Comments/attachments cannot carry tags — report zero for their tabs.
@@ -1151,7 +1151,7 @@ class SearchService:
                 AND ss.source_type = '{_SST_JOURNAL}'
                 {comment_project_filter}
                 {comment_visibility}
-            """
+            """  # noqa: S608
 
             count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf, parsed)
 
@@ -1167,7 +1167,7 @@ class SearchService:
             SELECT * FROM ({union_sql}) combined
             ORDER BY score DESC
             LIMIT :limit OFFSET :offset
-        """
+        """  # noqa: S608
         params["limit"] = ranked_limit
         params["offset"] = ranked_offset
         # Each part must supply every row up to the end of the page, not just
@@ -1211,7 +1211,7 @@ class SearchService:
             type_counts["issues"] += len(pinned)
             type_counts["all"] = sum(type_counts.values())
             # Total for the current scope: sum of active scope types only
-            if scope == "all":
+            if scope == "all":  # noqa: SIM108
                 total = type_counts["all"]
             else:
                 total = type_counts.get(scope, 0)
@@ -1267,7 +1267,7 @@ class SearchService:
             SELECT COUNT(*) as cnt
             FROM issues i
             {where_sql}
-        """
+        """  # noqa: S608
         count_result = await session.execute(text(count_sql), params)
         total = int(count_result.scalar_one())
 
@@ -1298,7 +1298,7 @@ class SearchService:
             {where_sql}
             ORDER BY i.updated_at DESC, i.id DESC
             LIMIT :limit OFFSET :offset
-        """
+        """  # noqa: S608
         result = await session.execute(text(list_sql), params)
         results = [
             SearchResult(
@@ -1404,7 +1404,7 @@ class SearchService:
                     i.updated_at as sort_ts
                 FROM issues i
                 {issue_where}
-            """)
+            """)  # noqa: S608
         if scope in ("all", "wiki"):
             parts.append(f"""
                 SELECT
@@ -1420,7 +1420,7 @@ class SearchService:
                 JOIN wikis w ON w.id = wp.wiki_id
                 JOIN projects p ON p.id = w.project_id
                 {wiki_where}
-            """)
+            """)  # noqa: S608
 
         if not parts:
             return [], total, type_counts
@@ -1434,7 +1434,7 @@ class SearchService:
             FROM ({union_sql}) combined
             ORDER BY sort_ts DESC, id DESC
             LIMIT :limit OFFSET :offset
-        """
+        """  # noqa: S608
         result = await session.execute(text(list_sql), params)
         results = [
             SearchResult(
@@ -1481,7 +1481,7 @@ class SearchService:
         )
         return True
 
-    async def semantic_search(
+    async def semantic_search(  # noqa: C901, PLR0912, PLR0915
         self,
         session: AsyncSession,
         query: str,
@@ -1544,7 +1544,7 @@ class SearchService:
             # Cached briefly in Redis, so a repeated or paged query does not
             # run the model again (specivo.services.query_embedding_cache).
             query_vector = await embed_query(emb_service, query, model)
-        except Exception as exc:  # noqa: BLE001 - a broken model turns semantic search off, never a 500
+        except Exception as exc:  # a broken model turns semantic search off, never a 500  # noqa: BLE001
             _warn_embedding_failure(model, exc)
             query_vector = None
         if query_vector is None:
@@ -1609,20 +1609,20 @@ class SearchService:
                         {issue_vis}
                         {issue_tag_vis}
                         {pinned_exclusion}
-                    ))"""
+                    ))"""  # noqa: S608
         wiki_branch = f"""(ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
                         SELECT 1 FROM wiki_pages wp2
                         JOIN wikis w2 ON w2.id = wp2.wiki_id
                         WHERE wp2.id = ss.entity_id
                         {wiki_vis}
                         {wiki_tag_vis}
-                    ))"""
+                    ))"""  # noqa: S608
         comment_branch = f"""(ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
                         SELECT 1 FROM journals cj
                         JOIN issues ci2 ON ci2.id = cj.issue_id
                         WHERE cj.id = ss.entity_id
                         {comment_vis}
-                    ))"""
+                    ))"""  # noqa: S608
         att_branch = f"""(ss.source_type = '{_SST_ATTACHMENT}' AND att.id IS NOT NULL
                      {att_sem_vis})"""
         att_count_branch = f"""(ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id IS NOT NULL
@@ -1674,7 +1674,7 @@ class SearchService:
                 WHERE ce.model_id = :model_id
                 {exact_scope}
                 {exact_score_filter}
-            )"""
+            )"""  # noqa: S608
             else:
                 dims = SEMANTIC_INDEX_DIMENSIONS
                 distance = f"ce.embedding::vector({dims}) <=> CAST(:query_vector AS vector({dims}))"
@@ -1685,7 +1685,7 @@ class SearchService:
                   AND vector_dims(ce.embedding) = {dims}
                 ORDER BY {distance}
                 LIMIT :candidates
-            )"""
+            )"""  # noqa: S608
             # cte_prefix is "WITH user_visibility AS (...)" or empty (admins).
             return f"{cte_prefix},\n            {body}" if cte_prefix else f"WITH {body}"
 
@@ -1762,7 +1762,7 @@ class SearchService:
             ) deduped
             ORDER BY score DESC, result_type, id
             LIMIT :needed
-        """
+        """  # noqa: S608
 
         # Rank the first offset + limit entities; the page is cut in Python.
         # The one-row ``fetched`` side reports how many candidates the round
@@ -1774,7 +1774,7 @@ class SearchService:
             FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
             LEFT JOIN ({ranked_sql}) page ON true
             ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
-        """
+        """  # noqa: S608
 
         needed = ranked_offset + ranked_limit
         params["needed"] = needed
@@ -1849,7 +1849,7 @@ class SearchService:
                 {project_filter}
                 {exact_score_filter}
                 AND {count_where_or}
-            """
+            """  # noqa: S608
             count_result = await session.execute(text(count_sql), params)
             total = count_result.scalar_one() + len(pinned)
 

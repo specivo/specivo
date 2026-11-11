@@ -104,12 +104,12 @@ class AuditEvent(StrEnum):
     RELATION_LISTED = "relation_listed"
     RELATION_ADDED = "relation_added"
     RELATION_REMOVED = "relation_removed"
-    PASSWORD_RESET_REQUESTED = "password_reset_requested"
-    PASSWORD_RESET_COMPLETED = "password_reset_completed"
-    PASSWORD_RESET_FAILED = "password_reset_failed"
-    PASSWORD_CHANGED = "password_changed"
-    PASSWORD_CHANGE_FAILED = "password_change_failed"
-    PASSWORD_HASH_UPGRADED = "password_hash_upgraded"
+    PASSWORD_RESET_REQUESTED = "password_reset_requested"  # noqa: S105
+    PASSWORD_RESET_COMPLETED = "password_reset_completed"  # noqa: S105
+    PASSWORD_RESET_FAILED = "password_reset_failed"  # noqa: S105
+    PASSWORD_CHANGED = "password_changed"  # noqa: S105
+    PASSWORD_CHANGE_FAILED = "password_change_failed"  # noqa: S105
+    PASSWORD_HASH_UPGRADED = "password_hash_upgraded"  # noqa: S105
     # Self-service email change: requested (details: the new address and
     # whether another account uses it), refused (``reason``), and done, by the
     # person or by an administrator (old and new address, ``by``).
@@ -135,7 +135,7 @@ class AuditEvent(StrEnum):
     SSO_PROVIDER_CREATED = "sso_provider_created"
     SSO_PROVIDER_UPDATED = "sso_provider_updated"
     SSO_PROVIDER_DELETED = "sso_provider_deleted"
-    SSO_PROVIDER_SECRET_CHANGED = "sso_provider_secret_changed"
+    SSO_PROVIDER_SECRET_CHANGED = "sso_provider_secret_changed"  # noqa: S105
     USER_DEPROVISIONED = "user_deprovisioned"
     # SCIM provisioning. The actor is nobody (the IdP); details name the
     # provider (``source: scim``), the SCIM id, the Specivo id and an action.
@@ -679,7 +679,7 @@ class SecurityAuditService:
             await session.flush()
         return log
 
-    async def log_event(
+    async def log_event(  # noqa: PLR0913
         self,
         session: AsyncSession,
         event_type: str | AuditEvent,
@@ -1318,7 +1318,7 @@ class SecurityAuditService:
             },
         )
 
-    async def log_development_link_change(
+    async def log_development_link_change(  # noqa: PLR0913
         self,
         session: AsyncSession,
         *,

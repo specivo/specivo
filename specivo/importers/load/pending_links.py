@@ -115,7 +115,7 @@ async def link_placeholders(ctx: PhaseContext) -> None:
     path = links_path(ctx)
     if path is None or not usable(ctx):
         return
-    if not os.path.lexists(path) and not pending:
+    if not os.path.lexists(path) and not pending:  # noqa: ASYNC240
         return
 
     store = open_for_phase(ctx, path, has_new=bool(pending))
@@ -258,7 +258,7 @@ async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool
     """
     from specivo.importers.load.issue_links import LinkResult, resolve_waiting_links
 
-    if not os.path.lexists(path):
+    if not os.path.lexists(path):  # noqa: ASYNC240
         return LinksOutcome(path, None)
     scope = read_scope(path)
     if scope is None:
@@ -348,7 +348,7 @@ async def _refresh_derived(session: AsyncSession, linked: list[tuple[str, int]])
             ):
                 for entity_id in ids:
                     await embedder.index_source(session, source_type, entity_id)
-    except Exception:  # noqa: BLE001 - the texts are linked either way
+    except Exception:  # the texts are linked either way
         logger.exception("Could not refresh the link graph or search index for linked texts")
 
 

@@ -265,7 +265,7 @@ async def link_parents(ctx: PhaseContext, result: LinkResult) -> None:
     for project_ref in ctx.project_refs:
         async for ir in ctx.adapter.extract_issues(project_ref):
             if ir.parent_ref is not None and ir.source_ref in created:
-                wanted.append((ir.source_ref, ir.parent_ref))
+                wanted.append((ir.source_ref, ir.parent_ref))  # noqa: PERF401
 
     for start in range(0, len(wanted), _BATCH):
         batch = wanted[start : start + _BATCH]
@@ -327,7 +327,7 @@ async def load_issue_links(ctx: PhaseContext) -> None:
     path = pending_links.links_path(ctx)
     usable = path is not None and pending_links.usable(ctx)
     store: LinksStore | None = None
-    if usable and path is not None and os.path.lexists(path):
+    if usable and path is not None and os.path.lexists(path):  # noqa: ASYNC240
         store = pending_links.open_for_phase(ctx, path, has_new=False)
 
     earlier = LinkResult()
@@ -340,7 +340,7 @@ async def load_issue_links(ctx: PhaseContext) -> None:
         await resolve_waiting_relations(ctx.session, ctx.id_map, store, earlier)
 
     waiting = current.waiting_relations or current.waiting_parents
-    if waiting and store is None and usable and path is not None and not os.path.lexists(path):
+    if waiting and store is None and usable and path is not None and not os.path.lexists(path):  # noqa: ASYNC240
         store = pending_links.open_for_phase(ctx, path, has_new=True)
     if store is not None:
         for relation in current.waiting_relations:

@@ -109,7 +109,7 @@ def _clean_tag_names(tag: list[str]) -> list[str]:
     response_model=SearchResponse,
     responses={429: {"description": "rate_limit_exceeded: the per-IP search budget is spent; see Retry-After"}},
 )
-async def search(
+async def search(  # noqa: C901, PLR0912, PLR0913, PLR0915
     request: Request,
     q: str = Query("", description="Search query (optional when a metadata filter is given)"),
     project_key: str | None = Query(None, description="Scope to a specific project"),
@@ -131,7 +131,7 @@ async def search(
     updated_after: datetime | None = Query(None, description="Issues updated after"),
     updated_before: datetime | None = Query(None, description="Issues updated before"),
     metadata: str | None = Query(None, description="JSONB containment filter (JSON string)"),
-    tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),  # noqa: B006
+    tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),
     user: User = Depends(get_reader, scope="function"),
     _budget: None = Depends(_search_budget),
     db: AsyncSession = DB_SESSION,
@@ -212,7 +212,7 @@ async def search(
         try:
             loaded = json.loads(metadata)
         except json.JSONDecodeError:
-            raise ValidationError(
+            raise ValidationError(  # noqa: B904
                 message="Invalid JSON in metadata filter",
                 field="metadata",
             )

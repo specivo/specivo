@@ -99,7 +99,7 @@ def from_record[T](cls: type[T], record: dict[str, Any]) -> T:
     return cls(**kwargs)
 
 
-def _decode(hint: Any, value: Any) -> Any:
+def _decode(hint: Any, value: Any) -> Any:  # noqa: PLR0911
     origin = get_origin(hint)
 
     if origin in (Union, types.UnionType):

@@ -711,7 +711,7 @@ class IssueService:
                     project_key = parts[0].upper()
                     seq = int(parts[1])
                 except ValueError:
-                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
 
                 result = await session.execute(
                     select(Issue).where(Issue.project_key == project_key).where(Issue.sequence_number == seq)
@@ -734,7 +734,7 @@ class IssueService:
         try:
             issue_id = int(display_key)
         except ValueError:
-            raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+            raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
         return await self.get_by_id(session, issue_id, user=user)
 
     async def get_by_id(self, session: AsyncSession, issue_id: int, user: User | None = None) -> Issue:
@@ -796,7 +796,7 @@ class IssueService:
                     project_key = parts[0].upper()
                     seq = int(parts[1])
                 except ValueError:
-                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
 
                 from sqlalchemy.orm import joinedload
 
@@ -833,7 +833,7 @@ class IssueService:
         try:
             issue_id = int(display_key)
         except ValueError:
-            raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+            raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
         return await self.get_with_relations(session, issue_id, user=user)
 
     async def _resolve_retired_ref(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
@@ -975,7 +975,7 @@ class IssueService:
         updated, _journal = await self.update_with_journal(session, issue, data, user, notes, api_key_id)
         return updated
 
-    async def update_with_journal(
+    async def update_with_journal(  # noqa: C901, PLR0912, PLR0915
         self,
         session: AsyncSession,
         issue: Issue,
@@ -1311,7 +1311,7 @@ class IssueService:
             field="status",
         )
 
-    async def list_issues(
+    async def list_issues(  # noqa: C901, PLR0912, PLR0915
         self,
         session: AsyncSession,
         project_id: int | None,

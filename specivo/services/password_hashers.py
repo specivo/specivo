@@ -212,7 +212,7 @@ class BcryptHasher:
             return True
         return _bcrypt_rounds(encoded) != self.rounds
 
-    def from_source(self, fields: Mapping[str, str]) -> str:
+    def from_source(self, fields: Mapping[str, str]) -> str:  # noqa: ARG002
         raise CredentialImportError("bcrypt is the native format; import a foreign bcrypt hash as bcrypt_foreign")
 
 
@@ -315,17 +315,17 @@ class WrappedLegacyHasher(ABC):
                 return False
             params = self.decode_params(segment)
             inner = self.inner_digest(password, params)
-        except Exception:  # noqa: BLE001 - a hasher must never raise on bad input
+        except Exception:  # a hasher must never raise on bad input  # noqa: BLE001
             logger.warning("Unreadable %s password hash; treated as no match", self.algorithm)
             return False
         return _checkpw(self._wrap_input(inner), wrapped)
 
-    def must_update(self, encoded: str) -> bool:
+    def must_update(self, encoded: str) -> bool:  # noqa: ARG002
         return True
 
 
 def sha1_hex(value: str) -> str:
-    return hashlib.sha1(value.encode("utf-8")).hexdigest()  # noqa: S324 - verifying a legacy scheme
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()  # verifying a legacy scheme  # noqa: S324
 
 
 class RedmineSHA1WrappedHasher(WrappedLegacyHasher):
@@ -418,7 +418,7 @@ class DjangoPBKDF2SHA256Hasher:
         actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), rounds)
         return hmac.compare_digest(actual, expected)
 
-    def must_update(self, encoded: str) -> bool:
+    def must_update(self, encoded: str) -> bool:  # noqa: ARG002
         return True
 
 
@@ -450,7 +450,7 @@ class ForeignBcryptHasher:
             return False
         return _checkpw(_truncate(password), value)
 
-    def must_update(self, encoded: str) -> bool:
+    def must_update(self, encoded: str) -> bool:  # noqa: ARG002
         return True
 
 
@@ -486,7 +486,7 @@ class PasswordHasherRegistry:
         for entry in legacy:
             algorithm = getattr(entry.hasher, "algorithm", None)
             _validate_algorithm_id(algorithm, entry.origin)
-            assert isinstance(algorithm, str)
+            assert isinstance(algorithm, str)  # noqa: S101
             if algorithm in entries:
                 raise PasswordHasherError(
                     f"Password hasher id '{algorithm}' is registered twice "
@@ -577,7 +577,7 @@ def build_password_hasher_registry(
         origin = plugin_origin(plugin_name)
         entries.extend(RegisteredHasher(_check_hasher_shape(h, origin), origin) for h in hashers)
     for path in setting_paths:
-        entries.append(RegisteredHasher(load_hasher_from_path(path), f"{ORIGIN_SETTING}:{path}"))
+        entries.append(RegisteredHasher(load_hasher_from_path(path), f"{ORIGIN_SETTING}:{path}"))  # noqa: PERF401
     return PasswordHasherRegistry(BcryptHasher(), entries)
 
 
@@ -586,7 +586,7 @@ _registry: PasswordHasherRegistry | None = None
 
 def install_password_hasher_registry(registry: PasswordHasherRegistry) -> None:
     """Make *registry* the process-wide one. Called by the bootstrap."""
-    global _registry  # noqa: PLW0603
+    global _registry
     _registry = registry
 
 
@@ -596,7 +596,7 @@ def get_password_hasher_registry() -> PasswordHasherRegistry:
     A process that never ran the bootstrap (a script, a unit test) gets the
     built-ins plus the ``PASSWORD_HASHERS`` setting, built on first use.
     """
-    global _registry  # noqa: PLW0603
+    global _registry
     if _registry is None:
         _registry = build_password_hasher_registry(setting_paths=get_settings().password_hashers)
     return _registry

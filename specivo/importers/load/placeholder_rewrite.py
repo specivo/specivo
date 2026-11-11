@@ -158,7 +158,7 @@ TEXT_COLUMNS: dict[tuple[str, str], _TextColumn] = {
     for c in (ISSUE_DESCRIPTION, JOURNAL_NOTES, DETAIL_OLD_VALUE, DETAIL_NEW_VALUE, WIKI_TEXT)
 }
 # The links file accepts exactly these; keep the two lists in step.
-assert frozenset(TEXT_COLUMNS) == ALLOWED_COLUMNS
+assert frozenset(TEXT_COLUMNS) == ALLOWED_COLUMNS  # noqa: S101
 
 
 def _pending(column: _TextColumn, row_id: int, source: str, written: str, left: list[Placeholder]) -> PendingText:

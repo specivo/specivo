@@ -232,7 +232,7 @@ async def test_rehydrated_session_is_already_initialized() -> None:
 
         # Give the rehydrated session's task a tick to produce the reply.
         with anyio.move_on_after(2):
-            while replay.json_body is None:
+            while replay.json_body is None:  # noqa: ASYNC110
                 await anyio.sleep(0.01)
 
         body = replay.json_body

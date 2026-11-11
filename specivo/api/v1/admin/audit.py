@@ -23,7 +23,7 @@ _service = SecurityAuditService()
 
 
 @router.get("/admin/audit-logs/", response_model=AuditLogListResponse)
-async def list_audit_logs(
+async def list_audit_logs(  # noqa: PLR0913
     event_type: str | None = Query(None, description="Filter by one event type"),
     event_types: list[str] | None = Query(
         None, description="Filter by several event types (repeat the parameter); combines with event_type"

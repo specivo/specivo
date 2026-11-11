@@ -224,43 +224,43 @@ class BaseSourceAdapter:
     def extract_projects(self) -> AsyncIterator[IRProject]:
         return _empty()
 
-    def extract_memberships(self, project_ref: str) -> AsyncIterator[IRMembership]:
+    def extract_memberships(self, project_ref: str) -> AsyncIterator[IRMembership]:  # noqa: ARG002
         return _empty()
 
     def extract_custom_fields(self) -> AsyncIterator[IRCustomField]:
         return _empty()
 
-    def extract_versions(self, project_ref: str) -> AsyncIterator[IRVersion]:
+    def extract_versions(self, project_ref: str) -> AsyncIterator[IRVersion]:  # noqa: ARG002
         return _empty()
 
-    def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:
+    def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:  # noqa: ARG002
         return _empty()
 
-    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]:
+    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]:  # noqa: ARG002
         return _empty()
 
-    def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
+    def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:  # noqa: ARG002
         return _empty()
 
-    def extract_journals(self, project_ref: str) -> AsyncIterator[IRJournalEntry]:
+    def extract_journals(self, project_ref: str) -> AsyncIterator[IRJournalEntry]:  # noqa: ARG002
         return _empty()
 
-    def extract_relations(self, project_ref: str) -> AsyncIterator[IRRelation]:
+    def extract_relations(self, project_ref: str) -> AsyncIterator[IRRelation]:  # noqa: ARG002
         return _empty()
 
-    def extract_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:
+    def extract_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:  # noqa: ARG002
         return _empty()
 
-    def extract_attachments(self, project_ref: str) -> AsyncIterator[IRAttachment]:
+    def extract_attachments(self, project_ref: str) -> AsyncIterator[IRAttachment]:  # noqa: ARG002
         return _empty()
 
-    def extract_wiki_pages(self, project_ref: str) -> AsyncIterator[IRWikiPage]:
+    def extract_wiki_pages(self, project_ref: str) -> AsyncIterator[IRWikiPage]:  # noqa: ARG002
         return _empty()
 
-    def extract_time_entries(self, project_ref: str) -> AsyncIterator[IRTimeEntry]:
+    def extract_time_entries(self, project_ref: str) -> AsyncIterator[IRTimeEntry]:  # noqa: ARG002
         return _empty()
 
-    def resolve_attachment_path(self, attachment: IRAttachment) -> Path:
+    def resolve_attachment_path(self, attachment: IRAttachment) -> Path:  # noqa: ARG002
         """Refuse: a source that emits attachments must say where their files are.
 
         ``ValueError`` is what the attachment loader reports and skips, so an
@@ -341,7 +341,7 @@ _registry: SourceAdapterRegistry | None = None
 
 def get_source_registry() -> SourceAdapterRegistry:
     """Return the process-wide registry, built on first use."""
-    global _registry  # noqa: PLW0603
+    global _registry
     if _registry is None:
         _registry = build_source_registry()
     return _registry

@@ -32,11 +32,11 @@ router = APIRouter(tags=["web-auth"], include_in_schema=False)
 async def login_page(
     request: Request,
     db: AsyncSession = DB_SESSION,
-    reset: str = Query(""),  # noqa: B008
-    next_url: str = Query("", alias="next"),  # noqa: B008
-    sso_error: str = Query(""),  # noqa: B008
-    logged_out: str = Query(""),  # noqa: B008
-    local: str = Query(""),  # noqa: B008
+    reset: str = Query(""),
+    next_url: str = Query("", alias="next"),
+    sso_error: str = Query(""),
+    logged_out: str = Query(""),
+    local: str = Query(""),
 ) -> HTMLResponse | RedirectResponse:
     """Render the login page (standalone layout, no sidebar).
 
@@ -194,7 +194,7 @@ async def _token_owner_is_sso_only(db: AsyncSession, user_id: int) -> bool:
 async def reset_password_form(
     request: Request,
     db: AsyncSession = DB_SESSION,
-    token: str = Query(""),  # noqa: B008
+    token: str = Query(""),
 ) -> HTMLResponse:
     """Render the reset password form.
 
@@ -237,12 +237,12 @@ async def profile_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    sso_linked: str = Query(""),  # noqa: B008
-    sso_unlinked: str = Query(""),  # noqa: B008
-    sso_error: str = Query(""),  # noqa: B008
-    email: str = Query(""),  # noqa: B008
-    email_error: str = Query(""),  # noqa: B008
-    email_reauth: str = Query(""),  # noqa: B008
+    sso_linked: str = Query(""),
+    sso_unlinked: str = Query(""),
+    sso_error: str = Query(""),
+    email: str = Query(""),
+    email_error: str = Query(""),
+    email_reauth: str = Query(""),
 ) -> Response:
     """Render the user profile page, with its "Email address" and "Connected accounts" sections.
 

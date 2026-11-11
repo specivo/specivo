@@ -170,7 +170,7 @@ async def run_merge_automation(
     from specivo.services.permission_service import Permission, check_permission
 
     status_id = integration_settings(integration).merge_status_id
-    assert status_id is not None  # merge_applies
+    assert status_id is not None  # merge_applies  # noqa: S101
     try:
         await IssueService().get_by_id(session, issue.id, user=git_user)
     except NotFoundError:
@@ -290,7 +290,7 @@ async def run_commit_commands(
             )
             outcomes.append(("fixes", fixed))
         if wants_time:
-            assert ref.hours is not None
+            assert ref.hours is not None  # noqa: S101
             if not settings.time_logging_enabled:
                 outcomes.append(("time", "time_logging_disabled"))
             else:
@@ -301,7 +301,7 @@ async def run_commit_commands(
 async def _fix(
     session: AsyncSession,
     settings: RepositorySettings,
-    commit: RepositoryCommit,
+    commit: RepositoryCommit,  # noqa: ARG001
     issue: Issue,
     user: User | None,
     commit_label: str,
@@ -365,7 +365,7 @@ async def _log_time(session: AsyncSession, commit: RepositoryCommit, issue: Issu
     if len(first_line) > _TIME_COMMENT_MAX_CHARS:
         first_line = first_line[: _TIME_COMMENT_MAX_CHARS - 1] + "…"
     comment = f"{first_line} ({commit.short_sha})" if first_line else commit.short_sha
-    assert ref.hours is not None
+    assert ref.hours is not None  # noqa: S101
     await service.create(
         session,
         project.id,

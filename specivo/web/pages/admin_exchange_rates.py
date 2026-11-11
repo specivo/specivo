@@ -82,7 +82,7 @@ async def _currency_choices(db: AsyncSession, locale: str) -> list[dict[str, str
     ]
 
 
-async def _render(
+async def _render(  # noqa: PLR0913
     request: Request,
     user: User,
     db: AsyncSession,
@@ -148,7 +148,7 @@ async def _render(
 
 
 @router.get("/admin/exchange-rates/", response_class=HTMLResponse)
-async def admin_exchange_rates(
+async def admin_exchange_rates(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,

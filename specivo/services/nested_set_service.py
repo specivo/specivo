@@ -166,7 +166,7 @@ class NestedSetService:
                 field="parent_id",
             )
 
-        if new_parent is not None:
+        if new_parent is not None:  # noqa: SIM102
             if await self.is_descendant_of(session, new_parent, issue):
                 raise ValidationError(
                     message="Cannot move an issue to one of its own descendants. "
@@ -342,7 +342,7 @@ class NestedSetService:
     # Relationship checks
     # ------------------------------------------------------------------
 
-    async def is_ancestor_of(self, session: AsyncSession, issue: Issue, potential_descendant: Issue) -> bool:
+    async def is_ancestor_of(self, session: AsyncSession, issue: Issue, potential_descendant: Issue) -> bool:  # noqa: ARG002
         """Check if issue is an ancestor of potential_descendant.
 
         True when issue.lft < potential_descendant.lft < potential_descendant.rgt < issue.rgt

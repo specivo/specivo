@@ -155,7 +155,7 @@ def _snapshot_info() -> dict[str, Any]:
 
 
 @router.get("/admin/ai-model-prices/", response_class=HTMLResponse)
-async def admin_ai_model_prices(
+async def admin_ai_model_prices(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,
@@ -332,7 +332,7 @@ async def admin_ai_usage_recompute(
 
 
 @router.post("/admin/ai-model-prices/", response_model=None)
-async def admin_ai_model_price_create(
+async def admin_ai_model_price_create(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,

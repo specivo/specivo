@@ -72,7 +72,7 @@ def _run_js(calls: list[list[object]]) -> list[object]:
         "const calls = JSON.parse(process.argv[2]);"
         "process.stdout.write(JSON.stringify(calls.map(([name, ...args]) => m[name](...args))));"
     )
-    result = subprocess.run(  # noqa: S603 - fixed script, arguments passed as data
+    result = subprocess.run(  # fixed script, arguments passed as data
         [_node(), "--input-type=module", "-e", script, SAFE_URL_JS.as_uri(), json.dumps(calls)],
         capture_output=True,
         text=True,

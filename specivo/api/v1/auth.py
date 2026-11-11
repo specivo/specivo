@@ -89,7 +89,7 @@ def _read_remember_from_access_cookie(request: Request, settings) -> bool:
             options={"verify_exp": False},
         )
         return payload.get("rem", True)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return True  # decode failure → default to persistent
 
 
@@ -149,7 +149,7 @@ async def login(
                 reason=exc.code,
             )
             await db.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass  # Non-critical — never block error response
         raise
 
@@ -168,7 +168,7 @@ async def login(
                 request=request,
                 from_algorithm=result.hash_upgraded_from,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Non-critical — never block login
 
     token_data = TokenResponse(
@@ -317,7 +317,7 @@ async def list_sessions(
 
 
 # ---------------------------------------------------------------------------
-# DELETE /auth/sessions/{session_id}
+# DELETE /auth/sessions/{session_id}  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 
@@ -372,7 +372,7 @@ async def forgot_password(
             request=request,
             email_hint=body.email,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Non-critical — never block the response
 
     return {"detail": "If the email is registered, a reset link has been sent."}
@@ -415,7 +415,7 @@ async def reset_password(
                 request=request,
             )
             await db.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass  # Non-critical — never block error response
         raise
 
@@ -429,7 +429,7 @@ async def reset_password(
             user_id=user_id,
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Non-critical — never block the response
 
     return {"detail": "Password has been reset successfully."}
@@ -495,7 +495,7 @@ async def change_password(
                 request=request,
             )
             await db.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass  # Non-critical — never block the error response
         raise
 
@@ -524,7 +524,7 @@ async def change_password(
             request=request,
             revoked_sessions=revoked,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Non-critical — never block the response
 
     # Commit before responding: the browser reloads its session state as soon

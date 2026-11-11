@@ -36,7 +36,7 @@ from specivo.services.scim import events
 __all__ = ["SCIM_TOKEN_PREFIX", "ScimConfigService", "hash_scim_token", "scim_base_url"]
 
 #: Every SCIM token starts with this, so a leaked one is recognisable (and is never taken for an API key).
-SCIM_TOKEN_PREFIX = "spvscim_"
+SCIM_TOKEN_PREFIX = "spvscim_"  # noqa: S105
 _TOKEN_ENTROPY_BYTES = 32
 _SHOWN_PREFIX_LENGTH = 14
 # ``scim_last_used_at`` is written at most this often.

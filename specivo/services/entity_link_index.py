@@ -154,7 +154,7 @@ def dispatch_entity_links(keys: Iterable[SourceKey]) -> bool:
         from specivo.tasks.entity_links import rebuild_entity_links
 
         rebuild_entity_links.apply_async(args=[payload], retry=False)
-    except Exception as exc:  # noqa: BLE001 - a dead broker must not fail the request
+    except Exception as exc:  # a dead broker must not fail the request  # noqa: BLE001
         logger.warning(
             "Could not queue a link graph rebuild for %d source(s) (%s): %s",
             len(payload),

@@ -53,6 +53,36 @@ Before writing code, read the ADRs in `docs/adr/`. They document conventions tha
 - Sentence case for all headings and comments (see style guide)
 - `from __future__ import annotations` in all new files
 
+## Quality gates
+
+CI runs these checks on every pull request to `main` or a `release/*` branch. Run them locally first:
+
+```bash
+uv run pre-commit install   # once: ruff, formatting and layer checks on every commit
+make lint                   # ruff check, ruff format --check, import-linter, mypy
+make complexity             # informational complexity report (radon)
+make test-cov && make coverage-diff   # coverage of the lines you changed
+```
+
+- **Ruff rules.** Besides style, ruff checks complexity (`C901`, functions above 15),
+  long functions and signatures (`PLR0911`/`PLR0912`/`PLR0913`/`PLR0915`), likely
+  bugs (`B`), security (`S`), blocking calls in async code (`ASYNC`), blind
+  `except Exception` (`BLE`) and more; see `[tool.ruff.lint]` in `pyproject.toml`.
+- **Existing code is grandfathered, new code is not.** Lines that broke these rules
+  when they were introduced carry a `# noqa: <code>`. Do not add new `noqa`
+  comments to get past a check: split the function, narrow the `except`, or bind
+  the SQL parameter instead. When a `noqa` is genuinely needed, say why after it
+  (`# noqa: BLE001 - one bad source must not stop the run`). A `noqa` that no
+  longer suppresses anything fails the build (`RUF100`), so remove it when you
+  fix the line.
+- **Layers.** `import-linter` keeps the dependency direction: models do not
+  import services, services and schemas do not import the API, web, MCP or SCIM
+  layers, and core does not import them either. Move shared code down a layer
+  instead of importing up.
+- **Coverage.** At least 80% of the lines a pull request adds or changes must be
+  covered by tests (`diff-cover`).
+- **Formatting.** `ruff format`; CI fails on unformatted files.
+
 ## Pull request guidelines
 
 - Keep PRs focused: one feature or fix per PR

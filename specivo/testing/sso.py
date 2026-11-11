@@ -109,7 +109,7 @@ class SsoLoginDriver:
         """``GET /auth/oidc/{slug}/login/``; asserts the redirect to the IdP."""
         params = {"next": next_path} if next_path is not None else None
         response = await client.get(f"{prefix}/auth/oidc/{slug or self.provider.slug}/login/", params=params)
-        assert response.status_code == 302, response.text
+        assert response.status_code == 302, response.text  # noqa: S101
         return StartedLogin(
             response=response,
             authorize_url=response.headers["location"],

@@ -326,7 +326,7 @@ async def activity_context(db: AsyncSession, scope: dash.DashboardScope, who: st
     groups = await dash.activity_groups(db, scope, who)
     views = []
     for group in groups:
-        views.append(
+        views.append(  # noqa: PERF401
             {
                 "group": group,
                 "summary": _group_summary(group, locale),

@@ -76,7 +76,7 @@ async def reindex_fts(
                     LIMIT :batch_size
                 )
                 RETURNING id
-                """
+                """  # noqa: S608
             )
             params: dict[str, object] = {"last_id": last_id, "batch_size": batch_size}
             if project_id is not None:

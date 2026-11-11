@@ -245,7 +245,7 @@ async def specivo_list_projects(
 
 
 @mcp.tool()
-async def specivo_list_issues(
+async def specivo_list_issues(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     status: Annotated[
         str,
@@ -406,7 +406,7 @@ async def specivo_issue_development(
 
 
 @mcp.tool()
-async def specivo_create_issue(
+async def specivo_create_issue(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     tracker_id: Annotated[int, Field(description="Tracker ID from specivo_list_lookups (e.g. 1=Bug, 2=Feature).")],
     subject: Annotated[str, Field(description="Issue title/subject line.")],
@@ -493,7 +493,7 @@ async def specivo_create_issue(
 
 
 @mcp.tool()
-async def specivo_update_issue(
+async def specivo_update_issue(  # noqa: PLR0913
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
     subject: Annotated[str | None, Field(description="New subject line.")] = None,
     description: Annotated[
@@ -1227,7 +1227,7 @@ _NO_COUNTERS = (
         "the spend for cost_type 'api'. Entries are stored with source 'mcp' and the calling key."
     )
 )
-async def specivo_log_ai_usage(
+async def specivo_log_ai_usage(  # noqa: PLR0913
     tool: Annotated[str, Field(description="AI tool slug, e.g. 'claude-code', 'codex', 'cursor'.")],
     model: Annotated[str, Field(description="Model name as the tool reports it, e.g. 'claude-sonnet-4-5'.")],
     input_tokens: Annotated[int, Field(ge=0, description="Input tokens, from a hook, the reporter or /cost.")],
@@ -1297,7 +1297,7 @@ async def specivo_log_ai_usage(
         "excluded rather than deleted. " + _NO_COUNTERS
     )
 )
-async def specivo_ai_usage(
+async def specivo_ai_usage(  # noqa: PLR0913
     op: Annotated[str, Field(description="One of: list, get, update, exclude, include.")],
     entry_id: Annotated[int | None, Field(description="Entry ID, for get, update, exclude and include.")] = None,
     project_key: Annotated[
@@ -1392,7 +1392,7 @@ async def specivo_ai_usage(
         "include_sub_issues adds the issues below it), e.g. for the spend total of a closing note."
     )
 )
-async def specivo_ai_usage_report(
+async def specivo_ai_usage_report(  # noqa: PLR0913
     project_key: Annotated[str | None, Field(description="Uppercase project key; omit for the instance.")] = None,
     group_by: Annotated[
         str | None, Field(description="Comma list: user, project, issue, tool, provider, model, cost_type, branch.")
@@ -1463,7 +1463,7 @@ async def specivo_ai_usage_report(
         "administrator."
     )
 )
-async def specivo_ai_subscriptions(
+async def specivo_ai_subscriptions(  # noqa: PLR0913
     op: Annotated[str, Field(description="One of: list, presets, add, update, end, delete.")],
     user: Annotated[str | None, Field(description="list, add: another person's login (administrators only).")] = None,
     periods: Annotated[
@@ -1732,7 +1732,7 @@ async def specivo_list_recurring_patterns(
 
 
 @mcp.tool()
-async def specivo_create_recurring_pattern(
+async def specivo_create_recurring_pattern(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Human-readable pattern name, e.g. 'Weekly status report'.")],
     template_subject: Annotated[
@@ -1873,7 +1873,7 @@ async def specivo_create_recurring_pattern(
 
 
 @mcp.tool()
-async def specivo_update_recurring_pattern(
+async def specivo_update_recurring_pattern(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
     name: Annotated[str | None, Field(description="New pattern name.")] = None,

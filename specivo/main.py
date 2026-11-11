@@ -51,7 +51,7 @@ from specivo.web.router import web_router
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # noqa: ARG001
     settings = get_settings()
     setup_logging(debug=settings.debug)
 
@@ -147,8 +147,8 @@ def get_plugin_manager() -> PluginManager:
     return _plugin_manager
 
 
-def create_app() -> FastAPI:
-    global _plugin_manager  # noqa: PLW0603
+def create_app() -> FastAPI:  # noqa: C901, PLR0915
+    global _plugin_manager
 
     settings = get_settings()
     sp = settings.stealth_prefix.rstrip("/")
@@ -369,14 +369,14 @@ def create_app() -> FastAPI:
             engine = get_engine()
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).error("Health check DB error: %s", exc)
             db_status = "error"
 
         try:
             r = await get_redis()
             await r.ping()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).error("Health check Redis error: %s", exc)
             redis_status = "error"
 
@@ -408,7 +408,7 @@ def create_app() -> FastAPI:
 
         try:
             user = await _get_user(request, db_dep)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
         return bool(user.is_admin)
 

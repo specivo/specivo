@@ -42,7 +42,7 @@ def client_from_request_context(ctx: ServerRequestContext[Any, Any]) -> ClientIn
     """Return the client of an MCP request: its ``clientInfo``, else its HTTP User-Agent."""
     try:
         params = ctx.session.client_params
-    except Exception:  # pragma: no cover - defensive: never fail a request over telemetry
+    except Exception:  # pragma: no cover - defensive: never fail a request over telemetry  # noqa: BLE001
         params = None
     if params is not None:
         info = ClientInfo.of(params.client_info.name, params.client_info.version)

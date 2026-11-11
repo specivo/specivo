@@ -122,7 +122,7 @@ def _scope_problems(dependant: Dependant, path: str) -> Iterator[str]:
         if sub.call is get_db:
             if sub.scope != "function":
                 yield f"{path}: get_db with scope={sub.scope!r}"
-        elif (inspect.isasyncgenfunction(sub.call) or inspect.isgeneratorfunction(sub.call)) and _uses_session(sub):
+        elif (inspect.isasyncgenfunction(sub.call) or inspect.isgeneratorfunction(sub.call)) and _uses_session(sub):  # noqa: SIM102
             # Its exit code would run after the session it holds has closed.
             if sub.scope != "function":
                 yield f"{path}: yield dependency {name} uses the session with scope={sub.scope!r}"

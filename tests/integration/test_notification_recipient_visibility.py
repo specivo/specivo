@@ -459,7 +459,7 @@ async def test_batch_check_uses_a_constant_number_of_queries(db_session: AsyncSe
     async def count(user_ids: list[int]) -> tuple[int, int]:
         statements: list[str] = []
 
-        def _count(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+        def _count(conn, cursor, statement, *args) -> None:
             statements.append(statement)
 
         clear_role_cache(db_session)

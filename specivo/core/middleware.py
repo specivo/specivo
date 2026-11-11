@@ -827,7 +827,7 @@ def install_sql_debug_hooks(engine: object) -> None:
     sync_engine = engine.sync_engine  # type: ignore[attr-defined]
 
     @_event.listens_for(sync_engine, "before_cursor_execute")
-    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
         queries = _sql_debug_queries.get()
         if queries is None:
             return
@@ -835,7 +835,7 @@ def install_sql_debug_hooks(engine: object) -> None:
         queries.append(record)
 
     @_event.listens_for(sync_engine, "after_cursor_execute")
-    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
         queries = _sql_debug_queries.get()
         if queries is None or not queries:
             return

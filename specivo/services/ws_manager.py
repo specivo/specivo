@@ -28,7 +28,7 @@ class WSConnectionManager:
         conns = self._connections.get(user_id)
         if conns is None:
             return
-        try:
+        try:  # noqa: SIM105
             conns.remove(ws)
         except ValueError:
             pass
@@ -44,7 +44,7 @@ class WSConnectionManager:
         for ws in list(conns):
             try:
                 await ws.send_json(data)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("Failed to send WS message to user %s", user_id)
 
     def has_connections(self, user_id: int) -> bool:

@@ -123,7 +123,7 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
     the caller must wire ``get_mcp_session_manager().run()`` into the
     main app lifespan.
     """
-    global _session_manager  # noqa: PLW0603
+    global _session_manager
 
     token_verifier = SpvTokenVerifier()
 

@@ -390,7 +390,7 @@ class AiSpendReportService:
     def __init__(self) -> None:
         self._usage = AiUsageService()
 
-    async def report(
+    async def report(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -475,7 +475,7 @@ class AiSpendReportService:
             sort="key",
         )
 
-    async def _report(
+    async def _report(  # noqa: C901, PLR0912, PLR0913, PLR0915
         self,
         session: AsyncSession,
         viewer: User,
@@ -865,7 +865,7 @@ class AiSpendReportService:
 
     # -- seat allocation -------------------------------------------------------------
 
-    async def _seat_items(
+    async def _seat_items(  # noqa: C901, PLR0912
         self,
         session: AsyncSession,
         builder: _RowBuilder,
@@ -1039,7 +1039,7 @@ class AiSpendReportService:
             row._results[measure].append(result)
 
     @staticmethod
-    async def _label(session: AsyncSession, viewer: User, rows: list[ReportRow], dims: tuple[str, ...]) -> None:
+    async def _label(session: AsyncSession, viewer: User, rows: list[ReportRow], dims: tuple[str, ...]) -> None:  # noqa: ARG004
         """Fill ``labels``: user names, project keys, issue keys, tool names (one query each)."""
         from specivo.services.ai_subscription_service import AiToolService
 
@@ -1177,7 +1177,7 @@ def _finish(row: ReportRow, currency: str, seat_shown: bool) -> None:
         row.total_spend = row.marginal
 
 
-def _sort_key(dims: tuple[str, ...], period: str | None, sort: str) -> Any:
+def _sort_key(dims: tuple[str, ...], period: str | None, sort: str) -> Any:  # noqa: ARG001
     def key(row: ReportRow) -> tuple[Any, ...]:
         parts: list[Any] = []
         if sort == "spend":

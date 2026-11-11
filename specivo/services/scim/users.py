@@ -408,7 +408,7 @@ class ScimUserService:
         except LastActiveAdminError:  # pragma: no cover - administrators are refused above
             raise self._refuse(provider, res, user, "administrator") from None
 
-    async def _apply(
+    async def _apply(  # noqa: C901, PLR0912
         self,
         db: AsyncSession,
         provider: SsoProvider,

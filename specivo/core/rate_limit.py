@@ -74,7 +74,7 @@ class RateLimiter:
             from specivo.core.redis import get_redis
 
             redis = await get_redis()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Rate limiter: Redis unavailable (%s) — allowing request", exc)
             return True, self.max_requests - 1, 0
 
@@ -93,7 +93,7 @@ class RateLimiter:
             # Reset TTL so idle keys expire from Redis automatically
             pipe.expire(key, self.window_seconds + 1)
             results = await pipe.execute()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Rate limiter: Redis pipeline error (%s) — allowing request", exc)
             return True, self.max_requests - 1, 0
 
@@ -111,12 +111,12 @@ class RateLimiter:
                     )
                 else:
                     retry_after = self.window_seconds
-            except Exception:
+            except Exception:  # noqa: BLE001
                 retry_after = self.window_seconds
             # Remove the entry we just added since we're rejecting the request
-            try:
+            try:  # noqa: SIM105
                 await redis.zrem(key, str(now_us))
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
             return False, 0, retry_after
 

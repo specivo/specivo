@@ -25,7 +25,7 @@ from specivo.services.auth_utils import hash_password
 
 # Pre-hash once at import time — bcrypt is expensive; tests should not pay
 # full cost on every factory call. The hash is valid for "testpassword".
-_TEST_PASSWORD = "testpassword"
+_TEST_PASSWORD = "testpassword"  # noqa: S105
 _TEST_PASSWORD_HASH = hash_password(_TEST_PASSWORD)
 
 

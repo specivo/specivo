@@ -149,7 +149,7 @@ async def create_issue(
     "/projects/{project_key}/issues/",
     response_model=IssueListResponse,
 )
-async def list_issues(
+async def list_issues(  # noqa: C901, PLR0912, PLR0913
     project_key: str,
     status_filter: str | None = Query(
         default="open",
@@ -542,7 +542,7 @@ async def update_issue(
     if not await check_permission(current_user, issue.project_id, "edit_issues", db):
         raise PermissionDeniedError("You do not have permission to edit issues in this project")
     # Check set_issues_private permission if is_private is being changed
-    if data.is_private is not None and data.is_private != issue.is_private:
+    if data.is_private is not None and data.is_private != issue.is_private:  # noqa: SIM102
         if not await check_permission(current_user, issue.project_id, "set_issues_private", db):
             raise PermissionDeniedError("You do not have permission to change issue privacy")
     old_assignee_id = issue.assigned_to_id

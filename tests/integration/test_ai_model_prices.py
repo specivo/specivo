@@ -242,7 +242,7 @@ async def test_names_are_normalised_and_aliases_match_after_the_model(db_session
 
 async def test_a_naive_instant_is_refused(db_session: AsyncSession) -> None:
     with pytest.raises(AppError):
-        await _service.resolve(db_session, "alpha-1", datetime(2026, 6, 1))  # noqa: DTZ001
+        await _service.resolve(db_session, "alpha-1", datetime(2026, 6, 1))
 
 
 async def test_the_bundled_seed_is_valid_from_its_as_of(db_session: AsyncSession) -> None:
@@ -438,7 +438,7 @@ async def test_prices_in_any_active_currency(db_session: AsyncSession, admin: Us
         ({"prices": {"input": "3", "output": "0.0000001"}}, "ai_model_price_invalid"),
         ({"prices": {"input": "3", "output": "15", "long_input": "6"}}, "ai_model_price_invalid"),
         ({"prices": {"input": "3", "output": "15", "audio": "1"}}, "ai_model_price_invalid"),
-        ({"effective_from": datetime(2026, 6, 1)}, "ai_model_price_invalid"),  # noqa: DTZ001
+        ({"effective_from": datetime(2026, 6, 1)}, "ai_model_price_invalid"),
         ({"effective_to": T0}, "ai_model_price_invalid"),
         ({"provider": "Not A Slug!"}, "ai_model_price_invalid"),
         ({"model": "   "}, "ai_model_price_invalid"),

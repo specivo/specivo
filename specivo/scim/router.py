@@ -67,7 +67,7 @@ class ScimResponse(JSONResponse):
 
 async def scim_error_handler(request: Request, exc: Exception) -> Response:
     """Render a :class:`ScimError` as a SCIM error body."""
-    assert isinstance(exc, ScimError)
+    assert isinstance(exc, ScimError)  # noqa: S101
     return ScimResponse(error_body(exc), status_code=exc.status, headers=exc.headers)
 
 

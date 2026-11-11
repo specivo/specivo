@@ -82,7 +82,7 @@ def write_bundle(
     (root / "manifest.json").write_text(json.dumps(manifest_data or manifest()))
     (root / "lookups.json").write_text(json.dumps(LOOKUPS if lookups is None else lookups))
     for stem, content in records.items():
-        if isinstance(content, str):
+        if isinstance(content, str):  # noqa: SIM108
             text = content
         else:
             text = "".join(json.dumps(record) + "\n" for record in content)
@@ -118,7 +118,7 @@ def within_seconds[T](seconds: float, call: Callable[[], T], *fifos: Path) -> T:
     def run() -> None:
         try:
             outcome.append(call())
-        except BaseException as exc:  # noqa: BLE001 - re-raised in the test's thread
+        except BaseException as exc:  # noqa: BLE001, RUF100
             failure.append(exc)
 
     thread = threading.Thread(target=run, daemon=True)
@@ -126,7 +126,7 @@ def within_seconds[T](seconds: float, call: Callable[[], T], *fifos: Path) -> T:
     thread.join(seconds)
     if thread.is_alive():
         for fifo in fifos:
-            try:
+            try:  # noqa: SIM105
                 os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
             except OSError:
                 pass

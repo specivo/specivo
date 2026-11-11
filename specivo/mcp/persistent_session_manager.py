@@ -407,9 +407,9 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         headers = dict(scope.get("headers") or [])
         ua = headers.get(b"user-agent")
         if ua:
-            try:
+            try:  # noqa: SIM105
                 meta["user_agent"] = ua.decode("latin-1")
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover  # noqa: BLE001, S110
                 pass
         return meta
 
@@ -628,7 +628,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         # after a restart the first client to reconnect would lock out all the
         # rest indefinitely.
         new_session_id = transport.mcp_session_id
-        assert new_session_id is not None
+        assert new_session_id is not None  # noqa: S101
         if session_id is not None:
             await self._serve_existing_session(new_session_id, transport, scope, receive, send)
             return
@@ -660,7 +660,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         from uuid import uuid4
 
         is_rehydration = session_id is not None
-        assert self._task_group is not None
+        assert self._task_group is not None  # noqa: S101
         headers = dict(scope.get("headers") or [])
         raw_version = headers.get(MCP_PROTOCOL_VERSION_HEADER.encode("ascii"))
         protocol_version = raw_version.decode("latin-1") if raw_version else None
@@ -683,7 +683,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
                 retry_interval=self.retry_interval,
                 idle_timeout=self.session_idle_timeout,
             )
-            assert http_transport.mcp_session_id is not None
+            assert http_transport.mcp_session_id is not None  # noqa: S101
             self._server_instances[new_session_id] = http_transport
             if requestor is not None:
                 self._session_owners[new_session_id] = requestor

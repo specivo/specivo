@@ -52,7 +52,7 @@ _STATUS_LABELS = {1: "active", 5: "closed", 9: "archived"}
 @router.get("/projects/", response_class=HTMLResponse)
 async def projects_list(
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the project list page."""
@@ -150,7 +150,7 @@ async def projects_list(
 async def project_detail(
     key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the project detail/overview page."""
@@ -170,7 +170,7 @@ async def project_detail(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     if anonymous:
         # No people, and no numbers derived from issues this visitor cannot
@@ -261,7 +261,7 @@ async def project_roadmap(
     try:
         project = await _svc.get_by_key(db, key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _svc.require_project_access(db, project, user)
 
     version_sort = _version_sort_for(user, sort)
@@ -291,7 +291,7 @@ async def project_roadmap(
 
 
 @router.get("/projects/{key}/settings/", response_class=HTMLResponse)
-async def project_settings(
+async def project_settings(  # noqa: PLR0915
     key: str,
     request: Request,
     db: AsyncSession = DB_SESSION,
@@ -308,7 +308,7 @@ async def project_settings(
     try:
         project = await _svc.get_by_key(db, key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _svc.require_project_access(db, project, user)
 
     if not user.is_admin and not await check_permission(user, project.id, "manage_project", db):
@@ -599,13 +599,13 @@ async def version_detail(
     try:
         project = await _svc.get_by_key(db, key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _svc.require_project_access(db, project, user)
 
     try:
         version = await _version_svc.get_by_id(db, version_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Version not found")
+        raise HTTPException(status_code=404, detail="Version not found")  # noqa: B904
 
     # Verify version belongs to this project
     if version.project_id != project.id:

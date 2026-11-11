@@ -44,7 +44,7 @@ def _wiki_tags_to_dicts(tags: list) -> list[dict]:
 async def wiki_index(
     project_key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki home page, or redirect to it after auto-creation.
@@ -66,7 +66,7 @@ async def wiki_index(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     if user.is_anonymous and not await check_permission(user, project.id, Permission.VIEW_WIKI, db):
         # Reaching the project is not enough: one opted in to issues alone
@@ -99,7 +99,7 @@ async def wiki_all_pages(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
@@ -130,7 +130,7 @@ async def wiki_all_pages(
 async def wiki_new(
     project_key: str,
     request: Request,
-    parent: int | None = Query(None),  # noqa: B008
+    parent: int | None = Query(None),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page creation form."""
@@ -142,7 +142,7 @@ async def wiki_new(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "manage_wiki", db, request=request):
@@ -197,7 +197,7 @@ async def wiki_trash(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
@@ -235,7 +235,7 @@ async def wiki_delete(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
@@ -269,7 +269,7 @@ async def wiki_restore(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
@@ -288,7 +288,7 @@ async def wiki_show(
     project_key: str,
     slug: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a wiki page with its content.
@@ -309,7 +309,7 @@ async def wiki_show(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     if anonymous:
         # One refusal for every reason: a project opted in to issues alone and
@@ -330,7 +330,7 @@ async def wiki_show(
             await _wiki_svc.ensure_home_page(db, project.id, user)
             page, content = await _wiki_svc.get_page(db, project.id, slug)
         else:
-            raise HTTPException(status_code=404, detail="Wiki page not found")
+            raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     all_pages = await _wiki_svc.list_pages(db, project.id)
     can_manage = False if anonymous else await check_permission(user, project.id, "manage_wiki", db)
@@ -432,7 +432,7 @@ async def wiki_edit(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "manage_wiki", db, request=request):
@@ -441,7 +441,7 @@ async def wiki_edit(
     try:
         page, content = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Wiki page not found")
+        raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     all_pages = await _wiki_svc.list_pages(db, project.id)
 
@@ -500,7 +500,7 @@ async def wiki_diff(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
@@ -509,13 +509,13 @@ async def wiki_diff(
     try:
         page, _ = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Wiki page not found")
+        raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     try:
         content_from = await _wiki_svc.get_page_version(db, page.id, from_version)
         content_to = await _wiki_svc.get_page_version(db, page.id, to_version)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Version not found")
+        raise HTTPException(status_code=404, detail="Version not found")  # noqa: B904
 
     # Generate unified diff lines
     from_lines = (content_from.text or "").splitlines(keepends=True)
@@ -563,7 +563,7 @@ async def wiki_history(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
@@ -572,7 +572,7 @@ async def wiki_history(
     try:
         page, content = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Wiki page not found")
+        raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     versions = await _wiki_svc.get_page_history(db, page.id)
 

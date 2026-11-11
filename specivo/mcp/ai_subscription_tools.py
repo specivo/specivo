@@ -315,7 +315,7 @@ def _whose(owner: User, caller: User) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def _ai_subscriptions(
+async def _ai_subscriptions(  # noqa: PLR0913
     session: AsyncSession,
     caller: User,
     op: str,

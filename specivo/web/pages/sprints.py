@@ -46,7 +46,7 @@ async def sprints_list(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     all_sprints = await _sprint_svc.list_for_project(db, project.id)
@@ -126,7 +126,7 @@ async def sprint_backlog(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     # Load all sprints for this project
@@ -243,13 +243,13 @@ async def sprint_board(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     try:
         sprint = await _sprint_svc.get_by_id(db, sprint_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+        raise HTTPException(status_code=404, detail="Sprint not found")  # noqa: B904
 
     if sprint.project_id != project.id:
         raise HTTPException(status_code=404, detail="Sprint not found in this project")
@@ -265,7 +265,7 @@ async def sprint_board(
     for st in statuses:
         param = request.query_params.get(f"col_{st.id}_offset")
         if param is not None:
-            try:
+            try:  # noqa: SIM105
                 col_offsets[st.id] = max(0, int(param))
             except ValueError:
                 pass
@@ -323,7 +323,7 @@ async def sprint_edit(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     can_manage = user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
@@ -333,7 +333,7 @@ async def sprint_edit(
     try:
         sprint = await _sprint_svc.get_by_id(db, sprint_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+        raise HTTPException(status_code=404, detail="Sprint not found")  # noqa: B904
 
     if sprint.project_id != project.id:
         raise HTTPException(status_code=404, detail="Sprint not found in this project")
@@ -393,7 +393,7 @@ async def sprint_analytics(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     all_sprints = await _sprint_svc.list_for_project(db, project.id)
@@ -515,13 +515,13 @@ async def sprint_detail(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     try:
         sprint = await _sprint_svc.get_by_id(db, sprint_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Sprint not found")
+        raise HTTPException(status_code=404, detail="Sprint not found")  # noqa: B904
 
     if sprint.project_id != project.id:
         raise HTTPException(status_code=404, detail="Sprint not found in this project")

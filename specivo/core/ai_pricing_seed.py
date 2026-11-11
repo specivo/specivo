@@ -153,7 +153,7 @@ def format_price(value: Decimal | None) -> str | None:
     if value is None:
         return None
     text = format(value.normalize(), "f")
-    return text
+    return text  # noqa: RET504
 
 
 def format_instant(value: datetime) -> str:

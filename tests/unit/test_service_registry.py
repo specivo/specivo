@@ -24,19 +24,13 @@ pytestmark = pytest.mark.unit
 class FakeService:
     """Minimal service class for testing."""
 
-    pass
-
 
 class FakeServiceOverride(FakeService):
     """Override that extends the original."""
 
-    pass
-
 
 class UnrelatedService:
     """Service that is NOT a subclass of FakeService."""
-
-    pass
 
 
 # ---------------------------------------------------------------------------

@@ -68,7 +68,7 @@ from specivo.schemas.repository import (
 
 logger = logging.getLogger(__name__)
 
-REPO_INTEGRATION_SECRET_PURPOSE = "repo-integration-secret"
+REPO_INTEGRATION_SECRET_PURPOSE = "repo-integration-secret"  # noqa: S105
 #: The seeded role ``$git`` gets for merge automation unless a manager picks another.
 AUTOMATION_ROLE_NAME = "Automation"
 

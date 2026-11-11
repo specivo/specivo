@@ -203,7 +203,7 @@ class Filters:
         }
 
 
-def _filters(
+def _filters(  # noqa: PLR0913
     *,
     user_id: str = "",
     tool: str = "",
@@ -422,7 +422,7 @@ def _share_points(charts: UsageCharts, shares: list[Share], projects: bool) -> l
         if s.key == OTHER:
             points.append({"label": _("Other"), "spend": _float(s.spend), "api": _float(s.api), "other": s.groups})
             continue
-        if projects:
+        if projects:  # noqa: SIM108
             label = _("Unassigned") if s.key == NO_PROJECT else (s.label or "–")
         else:
             label = s.label or "–"
@@ -654,13 +654,13 @@ async def cached_chart_payload(
             if cached:
                 payload: dict[str, Any] | None = json.loads(cached)
                 return payload
-        except Exception:
+        except Exception:  # noqa: BLE001
             key = ""
     view = await build()
     if key:
-        try:
+        try:  # noqa: SIM105
             await redis.set(key, json.dumps(view), ex=ttl)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
     return view
 
@@ -817,7 +817,7 @@ async def _project_for(db: AsyncSession, user: User, project_key: str) -> Projec
 
 
 @router.get("/projects/{project_key}/ai-usage/", response_class=HTMLResponse)
-async def project_ai_usage(
+async def project_ai_usage(  # noqa: PLR0913
     project_key: str,
     request: Request,
     response: Response,
@@ -935,7 +935,7 @@ async def project_ai_usage(
 
 
 @router.get(MY_URL, response_class=HTMLResponse)
-async def my_ai_usage(
+async def my_ai_usage(  # noqa: PLR0913
     request: Request,
     response: Response,
     user: Annotated[User, Depends(require_user)],
@@ -1030,10 +1030,10 @@ async def my_ai_usage_reassign(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    entry_ids: list[str] = Form([]),  # noqa: B008
+    entry_ids: list[str] = Form([]),
     target_project: str = Form(""),
     target_issue: str = Form(""),
-    next: str = Form(""),  # noqa: A002
+    next: str = Form(""),
 ) -> Response:
     """Move the selected entries (one's own) to a project, an issue, or back to unassigned; all or nothing."""
     back = _next_or(next, MY_URL)
@@ -1155,7 +1155,7 @@ def _form_of(entry: AiUsageEntry, refs: EntryReferences, currency: str) -> dict[
     }
 
 
-def _read_form(
+def _read_form(  # noqa: PLR0913
     *,
     project: str,
     issue: str,
@@ -1264,7 +1264,7 @@ async def _form_choices(
     }
 
 
-async def _render_form(
+async def _render_form(  # noqa: PLR0913
     request: Request,
     db: AsyncSession,
     user: User,
@@ -1317,7 +1317,7 @@ async def project_ai_usage_form(
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
     issue: str = Query(""),
-    next: str = Query(""),  # noqa: A002
+    next: str = Query(""),
 ) -> Response:
     """The manual entry form in a project (``?issue=`` fills the issue)."""
     project = await _project_for(db, user, project_key)
@@ -1483,7 +1483,7 @@ async def ai_usage_edit_form(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    next: str = Query(""),  # noqa: A002
+    next: str = Query(""),
 ) -> Response:
     """Edit an entry: everything on manual, API and MCP entries; project, issue and comments on reported ones."""
     entry = await _editable_entry(db, user, entry_id)
@@ -1566,7 +1566,7 @@ async def ai_usage_exclude(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    next: str = Form(""),  # noqa: A002
+    next: str = Form(""),
 ) -> Response:
     """Leave an entry out of totals and reports; a reporter's later updates keep it excluded."""
     return await _set_excluded(request, db, user, entry_id, True, next)
@@ -1578,7 +1578,7 @@ async def ai_usage_include(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    next: str = Form(""),  # noqa: A002
+    next: str = Form(""),
 ) -> Response:
     """Count an excluded entry again."""
     return await _set_excluded(request, db, user, entry_id, False, next)
@@ -1590,7 +1590,7 @@ async def ai_usage_delete(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    next: str = Form(""),  # noqa: A002
+    next: str = Form(""),
 ) -> Response:
     """Delete an entry: manual, API and MCP entries by whoever may edit them; reported ones by administrators."""
     entry = await _service.get_visible(db, entry_id, user)

@@ -31,7 +31,7 @@ def _values(local_date: date, locale: str) -> dict[str, str]:
         # Fall back to English on an unknown/invalid locale rather than raising.
         try:
             return format_date(local_date, skeleton, locale=locale)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return format_date(local_date, skeleton, locale="en")
 
     return {

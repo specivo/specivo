@@ -171,7 +171,7 @@ async def _issues(
     return issues
 
 
-async def process_pull_request(session: AsyncSession, integration: RepositoryIntegration, payload: dict):
+async def process_pull_request(session: AsyncSession, integration: RepositoryIntegration, payload: dict):  # noqa: C901, PLR0912
     """Process one accepted pull request delivery; returns a ``ProcessResult``."""
     from specivo.services.repository_hooks import (
         ProcessResult,

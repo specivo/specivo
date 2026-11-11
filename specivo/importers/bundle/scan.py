@@ -694,12 +694,12 @@ class _Scanner:
     # Called with records that passed their schema, so every required
     # property is there and every value has the right type.
 
-    def _check_users(self, line: int, offset: int, record: dict[str, Any]) -> None:
+    def _check_users(self, line: int, offset: int, record: dict[str, Any]) -> None:  # noqa: ARG002
         credential = record.get("credential")
         if credential:
             self.index.credential_algorithms.add(credential["algorithm"])
 
-    def _check_groups(self, line: int, offset: int, record: dict[str, Any]) -> None:
+    def _check_groups(self, line: int, offset: int, record: dict[str, Any]) -> None:  # noqa: ARG002
         for ref in record.get("member_refs") or []:
             self._ref(GROUPS.name, line, "member_refs", EntityType.USER, ref)
 
@@ -712,7 +712,7 @@ class _Scanner:
     def _in_project(self, record_file: RecordFile, project_ref: str, offset: int) -> None:
         self.index.by_project.setdefault(record_file.name, {}).setdefault(project_ref, []).append(offset)
 
-    def _scoped(self, record_file: RecordFile, line: int, offset: int, record: dict[str, Any]) -> str:
+    def _scoped(self, record_file: RecordFile, line: int, offset: int, record: dict[str, Any]) -> str:  # noqa: ARG002
         project_ref: str = record["project_ref"]
         self._ref(record_file.name, line, "project_ref", EntityType.PROJECT, project_ref)
         return project_ref
@@ -737,7 +737,7 @@ class _Scanner:
         self._in_project(SPRINTS, project_ref, offset)
         self.sprint_project.setdefault(record["source_ref"], project_ref)
 
-    def _check_custom_fields(self, line: int, offset: int, record: dict[str, Any]) -> None:
+    def _check_custom_fields(self, line: int, offset: int, record: dict[str, Any]) -> None:  # noqa: ARG002
         key = record["key"]
         if any(known == key for known, _ in self.custom_fields.values()):
             self.report.error(

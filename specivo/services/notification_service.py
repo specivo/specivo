@@ -111,7 +111,7 @@ class NotificationService:
         self,
         session: AsyncSession,
         issue: Issue,
-        old_assignee_id: int | None,
+        old_assignee_id: int | None,  # noqa: ARG002
         new_assignee_id: int | None,
         actor: User,
     ) -> None:

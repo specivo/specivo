@@ -555,7 +555,7 @@ class TestTheChangeIsJudged:
         await _schema(db_session, project, RELEASE_SCHEMA)
         statements: list[str] = []
 
-        def _record(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+        def _record(conn, cursor, statement, *args) -> None:
             statements.append(statement)
 
         engine = db_session.bind.sync_engine  # type: ignore[union-attr]

@@ -45,9 +45,9 @@ def generate_recurring_tasks(self) -> None:  # type: ignore[no-untyped-def]
     """
     try:
         run_async(_generate_recurring_async())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("Recurring task generation failed: %s", exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc)  # noqa: B904
 
 
 async def _generate_recurring_async() -> None:

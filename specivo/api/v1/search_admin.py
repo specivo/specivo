@@ -278,7 +278,7 @@ async def reindex_instance_status(
 
 
 # ---------------------------------------------------------------------------
-# Per-project (manage_project)
+# Per-project (manage_project)  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 

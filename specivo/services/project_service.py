@@ -178,7 +178,7 @@ class ProjectService:
         self,
         session: AsyncSession,
         data: ProjectCreate,
-        creator_user: User,
+        creator_user: User,  # noqa: ARG002
     ) -> Project:
         """Create a root or child project.
 
@@ -463,7 +463,7 @@ class ProjectService:
 
         if "parent_id" in data.model_fields_set:
             project = await self._reparent(session, project, data.parent_id)
-            return project
+            return project  # noqa: RET504
 
         session.add(project)
         await session.flush()

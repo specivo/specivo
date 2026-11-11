@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from tests.integration.test_similar_issues_api import CREATE, World, grant, login, make_issue, similar
-from tests.integration.test_similar_issues_api import world as world  # noqa: F401 (fixture)
+from tests.integration.test_similar_issues_api import world as world
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration, pytest.mark.serial]
 

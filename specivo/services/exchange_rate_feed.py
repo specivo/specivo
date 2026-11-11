@@ -229,7 +229,7 @@ class _FeedGuardTransport(httpx.AsyncBaseTransport):
         self._direct = direct
         self._resolver = resolver
         self._allow_private = allow_private
-        self._proxy_for = proxy_for or (lambda url: None)
+        self._proxy_for = proxy_for or (lambda url: None)  # noqa: ARG005
         self._proxied = proxied
         self._allow_unresolved_via_proxy = allow_unresolved_via_proxy
         self._proxy_transports: dict[str, httpx.AsyncBaseTransport] = {}
@@ -295,7 +295,7 @@ class _FeedGuardTransport(httpx.AsyncBaseTransport):
                 return await self._direct.handle_async_request(pinned)
             except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 last_error = exc
-        assert last_error is not None
+        assert last_error is not None  # noqa: S101
         raise last_error
 
     async def aclose(self) -> None:
@@ -320,7 +320,7 @@ def _environment_proxy(url: str) -> str | None:
 
 
 def _decimal(value: Any, what: str) -> Decimal:
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, bool) or isinstance(value, float):  # noqa: SIM101
         raise FeedError(f"Invalid rate in {what}")
     try:
         result = Decimal(str(value).strip()) if not isinstance(value, Decimal) else value
@@ -371,7 +371,7 @@ def parse_ecb_xml(text: str) -> list[FeedRate]:
         raise FeedError("The feed is not UTF-8 text")
     try:
         # Bytes, so the parser reads UTF-8 and never another declared encoding.
-        root = ET.fromstring(text.encode("utf-8"))
+        root = ET.fromstring(text.encode("utf-8"))  # noqa: S314
     except ET.ParseError as exc:
         logger.debug("Rate feed XML does not parse: %.200s", exc)
         raise FeedError("The response is not a valid ECB or Frankfurter feed") from None
@@ -504,7 +504,7 @@ async def fetch_feed(
             resolver=resolver,
             allow_private=allow_private,
             proxy_for=proxy_for,
-            proxied=lambda proxy: mock,
+            proxied=lambda proxy: mock,  # noqa: ARG005
             allow_unresolved_via_proxy=allow_unresolved_via_proxy,
         )
     else:

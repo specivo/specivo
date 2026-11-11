@@ -215,7 +215,7 @@ async def _session_issue(session: AsyncSession, user: User) -> tuple[Project, Is
 # ---------------------------------------------------------------------------
 
 
-async def _log_ai_usage(
+async def _log_ai_usage(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     *,
@@ -315,7 +315,7 @@ async def _log_ai_usage(
 # ---------------------------------------------------------------------------
 
 
-async def _ai_usage(
+async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     session: AsyncSession,
     user: User,
     op: str,
@@ -398,7 +398,7 @@ async def _ai_usage(
         changes["comments"] = comments
     for name, value in (("tool", tool), ("model", model)):
         if value is not None and value.strip():
-            changes[name] = value
+            changes[name] = value  # noqa: PERF403
     if provider is not None:
         changes["provider"] = provider.strip() or None
     if cost_type is not None:
@@ -427,7 +427,7 @@ async def _ai_usage(
     return await _show(session, user, entry)
 
 
-async def _list(
+async def _list(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     *,
@@ -559,7 +559,7 @@ def _report_line(row: Any, report: Any) -> str:
     return f"{head}: " + " ".join(measures)
 
 
-async def _ai_usage_report(
+async def _ai_usage_report(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     *,
@@ -665,7 +665,7 @@ async def _ai_usage_report(
     if not report.rows:
         lines.append("  (none)")
     for row in report.rows[:REPORT_MAX_ROWS]:
-        lines.append(f"  {_report_line(row, report)}")
+        lines.append(f"  {_report_line(row, report)}")  # noqa: PERF401
     if len(report.rows) > REPORT_MAX_ROWS:
         from specivo.services.ai_spend_report_service import fold_rows
 

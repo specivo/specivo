@@ -1,5 +1,5 @@
 .PHONY: configure up down logs status create-admin reset-password dev-up dev-down \
-       test test-serial test-all test-unit test-integration test-service test-cov lint format \
+       test test-serial test-all test-unit test-integration test-service test-cov lint format complexity coverage-diff quality \
        migrate migrate-gen migrate-merge seed \
        test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug playwright-install \
@@ -144,7 +144,7 @@ test-service:
 	$(RUN) pytest -m service
 
 test-cov:
-	$(RUN) pytest --cov=specivo --cov-report=html --cov-report=term
+	$(RUN) pytest --cov=specivo --cov-report=html --cov-report=term --cov-report=xml
 
 # E2E (Playwright) — requires test DB running (make test-db-up) and built
 # frontend bundles, which every e2e target builds first.
@@ -190,12 +190,30 @@ frontend-watch:
 # -----------------------------------------------------------------------------
 
 lint:
-	$(RUN) ruff check specivo/ tests/
+	$(RUN) ruff check .
+	$(RUN) ruff format --check .
+	$(RUN) lint-imports
 	$(RUN) mypy specivo/
 
+# Complexity report (informational): functions graded D or worse, and modules
+# with a maintainability index of B or worse.
+complexity:
+	$(RUN) radon cc specivo -n D -s --total-average
+	$(RUN) radon mi specivo -n B -s
+
+# Coverage of the lines changed since BASE (default: the release branch this
+# branch was cut from). Needs coverage.xml: run `make test-cov` first.
+BASE ?= $(shell git for-each-ref --sort=-committerdate --format='%(refname:short)' 'refs/heads/release/*' | head -1)
+coverage-diff:
+	$(RUN) diff-cover coverage.xml --compare-branch=$(BASE) --fail-under=80
+
+# Everything CI checks before the tests: lint, formatting, layer contracts,
+# types, and the complexity report.
+quality: lint complexity
+
 format:
-	$(RUN) ruff format specivo/ tests/
-	$(RUN) ruff check --fix specivo/ tests/
+	$(RUN) ruff format .
+	$(RUN) ruff check --fix .
 
 # -----------------------------------------------------------------------------
 # Database (reads DATABASE_URL, SECRET_KEY, REDIS_URL from env)

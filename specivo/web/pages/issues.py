@@ -86,12 +86,12 @@ async def _resolve_issue_project(
     try:
         issue = await _issue_svc.get_by_display_key_with_relations(db, issue_ref, user=user)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Issue not found")
+        raise HTTPException(status_code=404, detail="Issue not found")  # noqa: B904
 
     try:
         project = await _project_svc.get_by_key(db, issue.project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     return project, issue
@@ -217,10 +217,10 @@ async def _filter_chips(db: AsyncSession, project: Project, user: User, params: 
 
 
 @router.get("/projects/{project_key}/issues/", response_class=HTMLResponse)
-async def issues_list(
+async def issues_list(  # noqa: C901, PLR0912, PLR0913, PLR0915
     project_key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
     status: str = Query("open"),
     tracker_id: str = Query(""),
@@ -250,7 +250,7 @@ async def issues_list(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     anon_can_view_wiki = False
     if anonymous:
@@ -400,7 +400,7 @@ async def issue_create_form(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     lookups = await _get_lookups(db)
@@ -452,7 +452,7 @@ async def imported_issue_redirect(
     system: str,
     ref: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Send a number from the old tracker to the issue it became.
@@ -484,10 +484,10 @@ async def imported_issue_redirect(
 
 
 @short_router.get("/issue/{issue_ref}/", response_class=HTMLResponse)
-async def issue_detail(
+async def issue_detail(  # noqa: PLR0915
     issue_ref: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     activity_page: int | None = Query(None, ge=1),
     db: AsyncSession = DB_SESSION,
 ) -> Response:

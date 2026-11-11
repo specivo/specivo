@@ -57,7 +57,7 @@ async def _create_month(session: AsyncSession, name: str, start: date, end: date
     # parameter would be read in this process's, and could miss a row near the month's edge.
     in_range = f"created_at >= '{start.isoformat()}' AND created_at < '{end.isoformat()}'"
     waiting = await session.scalar(
-        text(f"SELECT count(*) FROM {DEFAULT_PARTITION} WHERE {in_range}"),  # noqa: S608 - constant names
+        text(f"SELECT count(*) FROM {DEFAULT_PARTITION} WHERE {in_range}"),  # constant names  # noqa: S608
     )
     if not waiting:
         await session.execute(text(f"CREATE TABLE {name} PARTITION OF {PARENT_TABLE} {bounds}"))
@@ -97,7 +97,7 @@ async def ensure_partitions(
             async with session.begin_nested():
                 await session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))
                 moved = await _create_month(session, name, start, end)
-        except Exception as exc:  # noqa: BLE001 - one month must not stop the others
+        except Exception as exc:  # one month must not stop the others  # noqa: BLE001
             logger.warning("Could not create audit partition %s: %s", name, exc)
             continue
         created.append(name)
@@ -149,7 +149,7 @@ async def prune_partitions(
                 await session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))
                 await session.execute(text(f"ALTER TABLE {PARENT_TABLE} DETACH PARTITION {name}"))
                 await session.execute(text(f"DROP TABLE {name}"))
-        except Exception as exc:  # noqa: BLE001 - retried by the next daily run
+        except Exception as exc:  # retried by the next daily run  # noqa: BLE001
             logger.warning("Could not drop audit partition %s, will retry tomorrow: %s", name, exc)
             continue
         dropped.append(name)
@@ -158,10 +158,10 @@ async def prune_partitions(
         async with session.begin_nested():
             await session.execute(text(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'"))
             result = await session.execute(
-                text(f"DELETE FROM {DEFAULT_PARTITION} WHERE created_at < :cutoff"),  # noqa: S608 - constant name
+                text(f"DELETE FROM {DEFAULT_PARTITION} WHERE created_at < :cutoff"),  # constant name  # noqa: S608
                 {"cutoff": cutoff},
             )
-    except Exception as exc:  # noqa: BLE001 - retried by the next daily run
+    except Exception as exc:  # retried by the next daily run  # noqa: BLE001
         logger.warning("Could not prune the default audit partition, will retry tomorrow: %s", exc)
     else:
         deleted = getattr(result, "rowcount", 0) or 0

@@ -148,7 +148,7 @@ def compute_costs(inputs: CostInputs) -> Costs:
         else:
             marginal = api_equivalent
     elif cost_type == "local":
-        if local is not None:
+        if local is not None:  # noqa: SIM108
             marginal = local.money
         else:
             marginal = Money.zero(currency)

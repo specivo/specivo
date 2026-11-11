@@ -138,7 +138,7 @@ class AttachmentService:
         import hashlib
         import shutil
 
-        if not source_path.is_file():
+        if not source_path.is_file():  # noqa: ASYNC240
             raise FileNotFoundError(f"Attachment file not found: {source_path}")
 
         digest = hashlib.sha256()
@@ -177,7 +177,7 @@ class AttachmentService:
             await session.flush()
         except Exception:
             # Atomic cleanup: the copy is only wanted if the row lands.
-            try:
+            try:  # noqa: SIM105
                 file_path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -285,7 +285,7 @@ class AttachmentService:
             await session.flush()
         except Exception:
             # Atomic cleanup: remove the file if DB insert fails
-            try:
+            try:  # noqa: SIM105
                 file_path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -327,7 +327,7 @@ class AttachmentService:
                 },
                 request=request,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for attachment %d upload", attachment.id)
 
         return AttachmentUpload(attachment=attachment, journal=history)
@@ -406,7 +406,7 @@ class AttachmentService:
                 },
                 request=request,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for attachment %d delete", att_id)
 
     async def get_by_id(self, session: AsyncSession, attachment_id: int) -> Attachment:
@@ -620,7 +620,7 @@ class AttachmentService:
         )
         return {filename: self.download_url(att_id) for att_id, filename in rows.all()}
 
-    async def can_view_container(
+    async def can_view_container(  # noqa: PLR0911
         self,
         session: AsyncSession,
         user: User,
@@ -846,7 +846,7 @@ class AttachmentService:
                 },
                 request=request,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("Audit logging skipped for attachment %d description update", attachment.id)
 
         # Refresh to reload attributes expired by flush (prevents MissingGreenlet

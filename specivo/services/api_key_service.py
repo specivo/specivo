@@ -67,7 +67,7 @@ def _check_ip_allowlist(ip_allowlist: list | None, client_ip: str | None) -> Non
     try:
         client_addr = ipaddress.ip_address(client_ip)
     except ValueError:
-        raise AppError(
+        raise AppError(  # noqa: B904
             code="api_key_ip_forbidden",
             message=_("Client IP not allowed by key allowlist"),
             status_code=403,

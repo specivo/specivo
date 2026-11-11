@@ -62,13 +62,13 @@ class BasePluginConfig(ABC):
     def get_models(self) -> list:
         return []
 
-    def get_routers(self, prefix: str) -> list:
+    def get_routers(self, prefix: str) -> list:  # noqa: ARG002
         return []
 
-    def get_services(self, registry: Any) -> None:
+    def get_services(self, registry: Any) -> None:  # noqa: B027
         pass
 
-    def get_celery_tasks(self, celery_app: Any) -> None:
+    def get_celery_tasks(self, celery_app: Any) -> None:  # noqa: B027
         pass
 
     def get_migration_path(self) -> Path | None:
@@ -99,5 +99,5 @@ class BasePluginConfig(ABC):
         """
         return []
 
-    def on_startup(self, app: Any) -> None:
+    def on_startup(self, app: Any) -> None:  # noqa: B027
         pass

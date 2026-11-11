@@ -238,7 +238,7 @@ def _localize_to_utc(naive_local: datetime, tz: ZoneInfo) -> datetime:
         # gap is at most a couple of hours, so step minute-by-minute from the
         # gap start to find the first valid local time.
         candidate = naive_local
-        for _ in range(0, 24 * 60):
+        for _ in range(24 * 60):
             candidate = candidate + timedelta(minutes=1)
             c_aware = candidate.replace(tzinfo=tz, fold=0)
             if c_aware.astimezone(UTC).astimezone(tz).replace(tzinfo=None) == candidate:
@@ -285,7 +285,7 @@ def _is_working_day(d: date, working_days: set[int], holidays: set[str]) -> bool
     """True if ``d`` is a working weekday and not a listed holiday."""
     if d.isoweekday() not in working_days:
         return False
-    if d.isoformat() in holidays:
+    if d.isoformat() in holidays:  # noqa: SIM103
         return False
     return True
 
@@ -421,4 +421,4 @@ def expand_occurrences(
 
     # Window filtering: inclusive on both ends, compared in UTC.
     result = sorted(dt for dt in kept if window_start <= dt <= window_end)
-    return result
+    return result  # noqa: RET504

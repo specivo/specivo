@@ -107,7 +107,7 @@ def _warn_about_app_url() -> None:
         from specivo.core.config import get_settings
 
         log_app_url_warning(get_settings(), component="worker")
-    except Exception as exc:  # noqa: BLE001 - a start-up check must not stop the worker
+    except Exception as exc:  # a start-up check must not stop the worker  # noqa: BLE001
         logging.getLogger(__name__).warning("APP_URL check at worker start failed: %s", exc)
 
 

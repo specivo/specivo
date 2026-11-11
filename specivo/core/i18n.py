@@ -110,7 +110,7 @@ def gettext(message: str) -> str:
     try:
         trans = _load_translations(locale)
         return trans.gettext(message)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return message
 
 
@@ -123,7 +123,7 @@ def ngettext(singular: str, plural: str, n: int) -> str:
     try:
         trans = _load_translations(locale)
         return trans.ngettext(singular, plural, n)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return singular if n == 1 else plural
 
 
@@ -144,7 +144,7 @@ def format_date(value: date | datetime, skeleton: str = "yMMMd", locale: str | N
 
     try:
         return format_skeleton(skeleton, value, locale=locale or get_locale())
-    except Exception:
+    except Exception:  # noqa: BLE001
         return format_skeleton(skeleton, value, locale="en")
 
 
@@ -158,7 +158,7 @@ def format_datetime(value: datetime, locale: str | None = None) -> str:
     loc = locale or get_locale()
     try:
         pattern = str(get_datetime_format("medium", locale=loc))
-    except Exception:
+    except Exception:  # noqa: BLE001
         loc = "en"
         pattern = str(get_datetime_format("medium", locale=loc))
     date_part = format_date(value, "yMMMd", loc)

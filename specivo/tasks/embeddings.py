@@ -68,7 +68,7 @@ async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
             try:
                 count = await service.embed_pending(session, [(source_type, entity_id)], model_id=model_id)
                 await session.commit()
-            except Exception as exc:  # noqa: BLE001 - one bad source must not block the rest
+            except Exception as exc:  # one bad source must not block the rest
                 await session.rollback()
                 logger.warning("Embedding failed for %s %d: %s", source_type, entity_id, describe_error(exc))
                 logger.debug("Embedding failure for %s %d", source_type, entity_id, exc_info=True)
@@ -82,7 +82,7 @@ def _consumes_embedding_queue(consumer: object) -> bool:
     try:
         queues = consumer.task_consumer.queues  # type: ignore[attr-defined]
         return any(queue.name == EMBEDDING_QUEUE for queue in queues)
-    except Exception:  # noqa: BLE001 - only decides whether to log a status line
+    except Exception:  # only decides whether to log a status line  # noqa: BLE001
         return True
 
 
@@ -93,7 +93,7 @@ def _log_embedding_model_status(sender: object = None, **_kwargs) -> None:  # ty
         return
     try:
         run_async(_log_model_status_async())
-    except Exception as exc:  # noqa: BLE001 - a status line must not stop the worker
+    except Exception as exc:  # a status line must not stop the worker  # noqa: BLE001
         from specivo.services.search_index_service import describe_error
 
         logger.info("Could not check the embedding model at worker start: %s", describe_error(exc))

@@ -65,7 +65,7 @@ _GROUP_BY = Query(
 )
 
 
-async def _report(
+async def _report(  # noqa: PLR0913
     request: Request,
     response: Response,
     db: DbSession,
@@ -176,7 +176,7 @@ _BRANCH = Query(None, max_length=255, description="A git branch, or '-' for entr
     response_model=SpendReportOut,
     responses={429: {"description": "rate_limit_exceeded: the per-user AI report budget is spent; see Retry-After"}},
 )
-async def project_ai_spend_report(
+async def project_ai_spend_report(  # noqa: PLR0913
     project_key: str,
     request: Request,
     response: Response,
@@ -199,7 +199,7 @@ async def project_ai_spend_report(
     issue: str | None = _ISSUE,
     branch: str | None = _BRANCH,
     sort: Literal["key", "spend"] = Query("key", description="By the grouping key (default), or by total spend"),
-    format: Literal["json", "csv"] = Query("json"),  # noqa: A002
+    format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
     limit: int = _LIMIT,
     current_user: User = Depends(get_current_user),
@@ -245,7 +245,7 @@ async def project_ai_spend_report(
     response_model=SpendReportOut,
     responses={429: {"description": "rate_limit_exceeded: the per-user AI report budget is spent; see Retry-After"}},
 )
-async def instance_ai_spend_report(
+async def instance_ai_spend_report(  # noqa: PLR0913
     request: Request,
     response: Response,
     db: DbSession,
@@ -266,7 +266,7 @@ async def instance_ai_spend_report(
     issue: str | None = _ISSUE,
     branch: str | None = _BRANCH,
     sort: Literal["key", "spend"] = Query("key"),
-    format: Literal["json", "csv"] = Query("json"),  # noqa: A002
+    format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
     limit: int = _LIMIT,
     current_user: User = Depends(get_current_user),

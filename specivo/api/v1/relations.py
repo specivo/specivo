@@ -65,7 +65,7 @@ async def create_relation(
     try:
         issue_to = await _issue_service.get_by_display_key(db, data.issue_to_key, user=current_user)
     except NotFoundError:
-        raise NotFoundError(f"Issue {data.issue_to_key!r} not found")
+        raise NotFoundError(f"Issue {data.issue_to_key!r} not found")  # noqa: B904
 
     relation = await _relation_service.create(
         session=db,
