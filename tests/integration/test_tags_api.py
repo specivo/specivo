@@ -16,7 +16,9 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.models.project import Project
+from specivo.models.member import Member, MemberRole
+from specivo.models.project import EnabledModule, Project
+from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
@@ -48,9 +50,23 @@ def _auth(token: str) -> dict:
 async def project(db_session: AsyncSession) -> Project:
     proj = ProjectFactory.build(key="TAG", name="Tag Test", is_public=True)
     db_session.add(proj)
+    await db_session.flush()
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
+
+
+async def _join(db: AsyncSession, project: Project, user: User, name: str, permissions: list[str]) -> None:
+    """Make *user* a member of *project* with a role holding *permissions*."""
+    role = Role(name=name, permissions=permissions, builtin=0, issues_visibility="default")
+    db.add(role)
+    await db.flush()
+    member = Member(user_id=user.id, project_id=project.id)
+    db.add(member)
+    await db.flush()
+    db.add(MemberRole(member_id=member.id, role_id=role.id))
+    await db.commit()
 
 
 @pytest_asyncio.fixture
@@ -63,12 +79,36 @@ async def admin(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def member(db_session: AsyncSession) -> User:
+async def member(db_session: AsyncSession, project: Project) -> User:
+    """A Developer: may edit issues and wiki pages, so may tag them; not a project manager."""
     user = UserFactory.build(login="tag_member", status="active")
     db_session.add(user)
     await db_session.commit()
+    await _join(
+        db_session,
+        project,
+        user,
+        "Tag Developer",
+        ["view_issues", "add_issues", "edit_issues", "view_wiki", "manage_wiki"],
+    )
     await db_session.refresh(user)
     return user
+
+
+@pytest_asyncio.fixture
+async def reader(db_session: AsyncSession, project: Project) -> User:
+    """A Reporter: sees issues and the wiki and may create issues, but edits neither."""
+    user = UserFactory.build(login="tag_reader", status="active")
+    db_session.add(user)
+    await db_session.commit()
+    await _join(db_session, project, user, "Tag Reporter", ["view_issues", "add_issues", "view_wiki"])
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def reader_token(client: AsyncClient, reader: User) -> str:
+    return await _login(client, reader.login)
 
 
 @pytest_asyncio.fixture
@@ -519,3 +559,70 @@ class TestBulkTagging:
         )
         assert resp.status_code == 404, resp.text
         assert await TagService().tags_for_issue(db_session, hidden.id) == []
+
+
+# ---------------------------------------------------------------------------
+# Who may change tags
+# ---------------------------------------------------------------------------
+
+
+class TestTagWritePermissions:
+    async def test_reader_cannot_change_issue_tags(self, client, project, issue, admin_token, reader_token):
+        resp = await client.post(
+            f"/api/v1/issues/{issue.display_key}/tags/", headers=_auth(admin_token), json={"name": "keep"}
+        )
+        tag_id = resp.json()["id"]
+        url = f"/api/v1/issues/{issue.display_key}/tags/"
+
+        assert (await client.put(url, headers=_auth(reader_token), json={"names": []})).status_code == 403
+        assert (await client.post(url, headers=_auth(reader_token), json={"name": "new"})).status_code == 403
+        assert (await client.delete(f"{url}{tag_id}/", headers=_auth(reader_token))).status_code == 403
+        resp = await client.post(
+            f"/api/v1/projects/{project.key}/issues/bulk-tags/",
+            headers=_auth(reader_token),
+            json={"issue_ids": [issue.id], "add": ["bulk"], "remove": [tag_id]},
+        )
+        assert resp.status_code == 403
+
+        # Reading is still allowed, and nothing changed.
+        resp = await client.get(url, headers=_auth(reader_token))
+        assert resp.status_code == 200
+        assert [t["name"] for t in resp.json()] == ["keep"]
+        resp = await client.get(f"/api/v1/projects/{project.key}/tags/", headers=_auth(admin_token))
+        assert {t["name"] for t in resp.json()} == {"keep"}
+
+    async def test_reader_can_create_an_issue_with_tags(self, client, project, tracker, priority, reader_token):
+        resp = await client.post(
+            f"/api/v1/projects/{project.key}/issues/",
+            headers=_auth(reader_token),
+            json={"project_key": project.key, "tracker_id": tracker.id, "subject": "Tagged", "tags": ["triage"]},
+        )
+        assert resp.status_code == 201, resp.text
+        resp = await client.get(f"/api/v1/issues/{resp.json()['key']}/tags/", headers=_auth(reader_token))
+        assert [t["name"] for t in resp.json()] == ["triage"]
+
+    async def test_reader_cannot_change_wiki_tags(self, client, project, wiki_page, reader_token):
+        url = f"/api/v1/projects/{project.key}/wiki/{wiki_page.slug}/tags/"
+        assert (await client.get(url, headers=_auth(reader_token))).status_code == 200
+        assert (await client.put(url, headers=_auth(reader_token), json={"names": ["x"]})).status_code == 403
+        assert (await client.post(url, headers=_auth(reader_token), json={"name": "x"})).status_code == 403
+
+    async def test_wiki_tags_need_view_wiki(self, db_session, client, project, wiki_page):
+        user = UserFactory.build(login="tag_issues_only", status="active")
+        db_session.add(user)
+        await db_session.commit()
+        await _join(db_session, project, user, "Tag Issues Only", ["view_issues"])
+        token = await _login(client, user.login)
+        resp = await client.get(f"/api/v1/projects/{project.key}/wiki/{wiki_page.slug}/tags/", headers=_auth(token))
+        assert resp.status_code == 403
+
+    async def test_wiki_tags_need_the_wiki_module(self, db_session, client, admin, admin_token):
+        bare = ProjectFactory.build(key="TAGNW", name="No wiki", is_public=True)
+        db_session.add(bare)
+        await db_session.commit()
+        page, _ = await WikiService().create_page(db_session, bare.id, title="Orphan", text="x", author=admin)
+        await db_session.commit()
+        resp = await client.put(
+            f"/api/v1/projects/{bare.key}/wiki/{page.slug}/tags/", headers=_auth(admin_token), json={"names": ["x"]}
+        )
+        assert resp.status_code == 403

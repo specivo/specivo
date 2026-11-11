@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from specivo.api.v1.tags import _log_tag as log_tag_event
 from specivo.core.constants import (
     DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
     DEVELOPMENT_TIMELINE_MAX_LIMIT,
@@ -59,7 +60,9 @@ from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.repository_service import development_for_issue
 from specivo.services.saved_filter_service import SavedFilterService
+from specivo.services.security_audit_service import AuditEvent
 from specivo.services.similar_issue_service import SimilarIssueService
+from specivo.services.tag_service import TagService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
 
@@ -67,6 +70,7 @@ router = APIRouter(tags=["issues"])
 _service = IssueService()
 _bulk_service = BulkService()
 _project_service = ProjectService()
+_tag_service = TagService()
 _journal_service = JournalService()
 _watcher_service = WatcherService()
 _attachment_service = AttachmentService()
@@ -136,6 +140,18 @@ async def create_issue(
     # Override project_key in body to match path param
     data = data.model_copy(update={"project_key": project.key})
     issue = await _service.create(db, project, data, current_user)
+    if data.tags:
+        diff = await _tag_service.set_issue_tags(db, project, issue.id, data.tags, current_user)
+        for name in diff["added"]:
+            await log_tag_event(
+                db,
+                request,
+                AuditEvent.TAG_ADDED,
+                current_user,
+                project,
+                None,
+                {"name": name, "issue_ref": issue.display_key},
+            )
     # The session dependency already commits before the response is sent;
     # committing here as well is harmless and keeps the reload below on
     # committed data.

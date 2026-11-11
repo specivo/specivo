@@ -527,6 +527,9 @@ async def issue_detail(  # noqa: PLR0915
     # log-time form only with log_time, as the time entries API requires.
     can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
     can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
+    # The tag field writes through the tags API, which requires edit_issues;
+    # without it the sidebar lists the tags read-only.
+    can_tag_issue = not anonymous and await check_permission(user, project.id, Permission.EDIT_ISSUES, db)
     # The AI usage tab is loaded when opened (/partials/issues/{key}/ai-usage/);
     # it is offered to those who may view or log AI usage in the project.
     show_ai_usage_tab = not anonymous and (
@@ -730,6 +733,7 @@ async def issue_detail(  # noqa: PLR0915
             "can_manage_relations": can_manage_relations,
             "can_view_time_entries": can_view_time_entries,
             "can_log_time": can_log_time,
+            "can_tag_issue": can_tag_issue,
             "show_ai_usage_tab": show_ai_usage_tab,
             "ai_usage_count": ai_usage_count,
             "issue_tags": issue_tags,
