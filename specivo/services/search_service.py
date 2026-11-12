@@ -67,6 +67,15 @@ _SST_ATTACHMENT = SearchSourceType.ATTACHMENT.value
 
 logger = logging.getLogger(__name__)
 
+# Which branches of the semantic query each search scope keeps.
+_SEMANTIC_SCOPES: dict[str, frozenset[str]] = {
+    "all": frozenset({"issue", "wiki", "comment", "att"}),
+    "issues": frozenset({"issue"}),
+    "wiki": frozenset({"wiki"}),
+    "comments": frozenset({"comment"}),
+    "attachments": frozenset({"att"}),
+}
+
 # Whether the database's pgvector supports iterative index scans, read once per
 # process by ``_prepare_index_scan`` (None until then).
 _pgvector_iterative_scan: bool | None = None
@@ -1481,7 +1490,7 @@ class SearchService:
         )
         return True
 
-    async def semantic_search(  # noqa: C901, PLR0912, PLR0915
+    async def semantic_search(  # noqa: C901, PLR0912, PLR0913, PLR0915 - PLR0913: the same parameters as search()
         self,
         session: AsyncSession,
         query: str,
@@ -1494,8 +1503,13 @@ class SearchService:
         filters: SearchFilters | None = None,
         *,
         resolve_identifiers: bool = True,
+        scope: str = "all",
     ) -> tuple[list[SearchResult], int]:
         """Semantic-only search using pgvector cosine similarity.
+
+        *scope* (``issues``, ``wiki``, ``comments``, ``attachments`` or
+        ``all``) and the issue filters in *filters* narrow the results the way
+        they narrow a keyword search: the issue filters apply to issues.
 
         Generates an embedding for the query text, then finds the most
         similar chunks via cosine distance. Returns results mapped back
@@ -1604,10 +1618,13 @@ class SearchService:
             params["pinned_issue_ids"] = [r.id for r in pinned]
         wiki_tag_vis = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp2")
 
+        # The keyword path's issue filters, on this query's alias for issues.
+        issue_field_filter = re.sub(r"\bi\.", "i2.", self._build_issue_filters(filters, params))
         issue_branch = f"""(ss.source_type = '{_SST_ISSUE}' AND EXISTS (
                         SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
                         {issue_vis}
                         {issue_tag_vis}
+                        {issue_field_filter}
                         {pinned_exclusion}
                     ))"""  # noqa: S608
         wiki_branch = f"""(ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
@@ -1629,11 +1646,18 @@ class SearchService:
                      {self._attachment_semantic_count_vis(user)})"""
 
         _or_join = "\n                    OR\n                    "
-        _result_branches = [issue_branch, wiki_branch]
-        _count_branches = [issue_branch, wiki_branch]
+        in_scope = _SEMANTIC_SCOPES.get(scope, _SEMANTIC_SCOPES["all"])
+        _result_branches = [b for kind, b in (("issue", issue_branch), ("wiki", wiki_branch)) if kind in in_scope]
+        _count_branches = list(_result_branches)
         if not tags_active:
-            _result_branches += [comment_branch, att_branch]
-            _count_branches += [comment_branch, att_count_branch]
+            _result_branches += [
+                b for kind, b in (("comment", comment_branch), ("att", att_branch)) if kind in in_scope
+            ]
+            _count_branches += [
+                b for kind, b in (("comment", comment_branch), ("att", att_count_branch)) if kind in in_scope
+            ]
+        if not _result_branches:
+            return [], 0
         sem_where_or = "(\n                    " + _or_join.join(_result_branches) + "\n                )"
         count_where_or = "(\n                    " + _or_join.join(_count_branches) + "\n                )"
 
@@ -1910,7 +1934,9 @@ class SearchService:
             user=user,
             project_id=project_id,
             project_ids=project_ids,
-            scope="all",
+            # Prefetched within the scope: filtering afterwards would let the
+            # cap fill with results of other types and lose the ones asked for.
+            scope=scope,
             offset=0,
             limit=SEARCH_HYBRID_PREFETCH_LIMIT,
             filters=filters,
@@ -1928,6 +1954,7 @@ class SearchService:
             skip_count=True,
             filters=filters,
             resolve_identifiers=False,
+            scope=scope,
         )
 
         if not fts_results and not sem_results and not pinned:

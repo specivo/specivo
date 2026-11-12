@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from fastapi import APIRouter, Depends, Query, Request, Response, status
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -42,13 +45,14 @@ from specivo.schemas.issue import (
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
 from specivo.schemas.repository import DevelopmentKind, IssueDevelopmentOut, MoveDevelopmentItemIn
+from specivo.schemas.saved_filter import SavedFilterDefinition
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
-from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version
+from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version, time_bound
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
@@ -194,10 +198,10 @@ async def list_issues(  # noqa: C901, PLR0912, PLR0913
     tag_id: int | None = Query(default=None),
     author_id: int | None = Query(default=None),
     subject_contains: str | None = Query(default=None),
-    created_after: str | None = Query(default=None),
-    created_before: str | None = Query(default=None),
-    updated_after: str | None = Query(default=None),
-    updated_before: str | None = Query(default=None),
+    created_after: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
+    created_before: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
+    updated_after: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
+    updated_before: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
     sort: str = Query(default="created_at:desc"),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=200),
@@ -223,7 +227,12 @@ async def list_issues(  # noqa: C901, PLR0912, PLR0913
     # If a saved filter is specified, load it and use its definition as defaults
     if saved_filter_id is not None:
         sf = await _saved_filter_service.get_visible(db, saved_filter_id, project.id, current_user)
-        fd = sf.filter_definition
+        try:
+            # Typed like the query parameters: a stored definition of the wrong
+            # shape (saved before definitions were checked) is a 422, not a 500.
+            fd = SavedFilterDefinition.model_validate(sf.filter_definition).model_dump(exclude_unset=True)
+        except PydanticValidationError as exc:
+            raise ValidationError(f"Saved filter {sf.id} has an invalid definition: {exc.errors()[0]['msg']}") from None
         if status_filter == "open" and "status" in fd:
             status_filter = fd["status"]
         if tracker_id is None and "tracker_id" in fd:
@@ -275,10 +284,10 @@ async def list_issues(  # noqa: C901, PLR0912, PLR0913
         "tag_id": tag_id,
         "author_id": author_id,
         "subject_contains": subject_contains,
-        "created_after": created_after,
-        "created_before": created_before,
-        "updated_after": updated_after,
-        "updated_before": updated_before,
+        "created_after": time_bound(created_after),
+        "created_before": time_bound(created_before, end_of_day=True),
+        "updated_after": time_bound(updated_after),
+        "updated_before": time_bound(updated_before, end_of_day=True),
     }
 
     issues, total_count = await _service.list_issues(

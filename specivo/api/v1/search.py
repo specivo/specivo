@@ -7,7 +7,6 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
@@ -28,7 +27,6 @@ from specivo.core.security import (
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.search import SearchFilters, SearchResponse
-from specivo.services.api_key_scope import scope_clause
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
@@ -69,6 +67,14 @@ async def _search_budget(
     depends on, so FastAPI resolves it once and both see one principal.
     """
     await enforce_search_rate_limit(request, response, anonymous=user.is_anonymous)
+
+
+async def _project_or_none(db: AsyncSession, key: str) -> Project | None:
+    """Project *key* (any case, or a retired key) within the API key's limit, or ``None``."""
+    try:
+        return await _project_service.get_by_key(db, key.upper())
+    except NotFoundError:
+        return None
 
 
 async def _can_reach(db: AsyncSession, project: Project, user: User) -> bool:
@@ -171,12 +177,9 @@ async def search(  # noqa: C901, PLR0912, PLR0913, PLR0915
             # error for the missing one, and the difference is the disclosure.
             project_ids = [(await _project_service.get_readable_by_key(db, key.upper(), user)).id for key in keys]
         elif keys:
-            stmt = select(Project).where(Project.key.in_(keys))
-            # A project outside the API key's limit reads as one that does not exist.
-            key_limit = scope_clause(Project.id)
-            if key_limit is not None:
-                stmt = stmt.where(key_limit)
-            projects = (await db.execute(stmt)).scalars().all()
+            # Each key the way every other project lookup reads it: any case,
+            # a retired key, and outside the API key's limit as missing.
+            projects = [p for p in [await _project_or_none(db, key) for key in keys] if p is not None]
             # Keep only projects the caller may reach; a private project they
             # are not a member of counts as missing, never as "no results".
             project_ids = [p.id for p in projects if await _can_reach(db, p, user)]
@@ -189,11 +192,7 @@ async def search(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if anonymous:
             project_id = (await _project_service.get_readable_by_key(db, project_key.upper(), user)).id
         else:
-            stmt = select(Project).where(Project.key == project_key)
-            key_limit = scope_clause(Project.id)
-            if key_limit is not None:
-                stmt = stmt.where(key_limit)
-            target = (await db.execute(stmt)).scalar_one_or_none()
+            target = await _project_or_none(db, project_key)
             # A project the caller may not reach gets the same answer as one
             # that does not exist, so the filter cannot probe for private keys.
             if target is None or not await _can_reach(db, target, user):
@@ -310,6 +309,8 @@ async def search(  # noqa: C901, PLR0912, PLR0913, PLR0915
             project_ids=project_ids,
             offset=offset,
             limit=limit,
+            filters=active_filters,
+            scope=scope,
         )
     elif mode == "hybrid":
         items, total_count, type_counts = await _service.hybrid_search(
