@@ -9,7 +9,12 @@ from specivo.models.base import Base, TimestampMixin
 
 
 class AgentSession(Base, TimestampMixin):
-    """One activity window of an API key: requests less than the session timeout apart.
+    """One activity window of an MCP connection: tool calls less than the session timeout apart.
+
+    ``connection_hash`` is the SHA-256 hex digest of the MCP transport session
+    id (``Mcp-Session-Id``, or the session id of a legacy SSE stream), so each
+    client connection has sessions of its own even when several share one API
+    key. It is ``NULL`` for plain REST calls, which share one window per key.
 
     ``client_name`` / ``client_version`` name the client that opened the
     window: the MCP ``clientInfo`` (for example ``claude-code`` / ``2.1.0``),
@@ -26,6 +31,12 @@ class AgentSession(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_agent_sessions_api_key_id_last_activity_at", "api_key_id", "last_activity_at"),
         Index("ix_agent_sessions_user_id_last_activity_at", "user_id", "last_activity_at"),
+        Index(
+            "ix_agent_sessions_api_key_id_connection_hash_last_activity_at",
+            "api_key_id",
+            "connection_hash",
+            "last_activity_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -34,6 +45,7 @@ class AgentSession(Base, TimestampMixin):
     issue_id: Mapped[int | None] = mapped_column(
         ForeignKey("issues.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    connection_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     client_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

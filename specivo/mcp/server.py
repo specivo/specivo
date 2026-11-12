@@ -31,6 +31,7 @@ from specivo.mcp.client_context import (
     agent_session_id_var,
     mcp_api_key_id_var,
     mcp_client_var,
+    mcp_connection_var,
 )
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools import (
@@ -122,8 +123,10 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     Here we re-validate it against the DB on every tool call so that
     key revocation, expiry, or user deactivation takes effect immediately.
 
-    The key's ``AgentSession`` is found or started, named after the calling
-    client (``mcp_client_var``), and its id is published in
+    The ``AgentSession`` of the calling connection (``mcp_connection_var``;
+    one per MCP connection, so two clients sharing a key never share one) is
+    found or started, named after the calling client (``mcp_client_var``),
+    and its id is published in
     ``agent_session_id_var`` for the tool call, so a tool can record the
     issue the agent is working on (``record_working_issue``).
 
@@ -154,7 +157,11 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
                 savepoint = await session.begin_nested()
                 try:
                     agent_session = await _agent_session_svc.get_or_create_session(
-                        session, api_key.id, user.id, client=mcp_client_var.get()
+                        session,
+                        api_key.id,
+                        user.id,
+                        client=mcp_client_var.get(),
+                        connection=mcp_connection_var.get(),
                     )
                     await savepoint.commit()
                     agent_session_id = agent_session.id
