@@ -28,6 +28,7 @@ taken is suffixed rather than merged onto whatever holds it.
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from typing import Any
 
@@ -73,6 +74,10 @@ IMPORT_ACCOUNT_REF = "import_account"
 _PLACEHOLDER_EMAIL_DOMAIN = "invalid"
 
 _MAX_LOGIN = 100
+# The login rule of every other account (schemas.user.UserCreate).
+_MIN_LOGIN = 3
+_LOGIN_DISALLOWED = re.compile(r"[^a-z0-9_-]+")
+_REPEATED_DASH = re.compile(r"-{2,}")
 _MAX_EMAIL = 255
 _MAX_DISPLAY_NAME = 255
 _MAX_GROUP_NAME = 255
@@ -393,16 +398,32 @@ async def _exists(session: AsyncSession, column: Any, value: str) -> bool:
     return (await session.execute(stmt)).scalar_one_or_none() is not None
 
 
+def normalise_login(raw: str) -> str:
+    """*raw* in the login alphabet: NFKC, lowercase, anything but ``a-z0-9_-`` turned into ``-``."""
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKC", raw).lower()
+    cleaned = _LOGIN_DISALLOWED.sub("-", folded)
+    return _REPEATED_DASH.sub("-", cleaned).strip("-")
+
+
 async def _unique_login(ctx: PhaseContext, ir: IRUser) -> str:
     """Return a login that fits the column and does not collide.
 
     The source login is kept wherever possible — people recognise their own —
-    and only trimmed, replaced when empty, or suffixed on a clash.
+    but it must follow the rule every other account follows (lowercase
+    letters, digits, ``_`` and ``-``): otherwise a bundle could create
+    ``аlex`` with a Cyrillic ``а`` beside the real ``alex``. It is normalised
+    to that rule, replaced when nothing usable is left, and suffixed on a
+    clash; each change is reported.
     """
-    base = (ir.login or "").strip()[:_MAX_LOGIN]
-    if not base:
-        base = f"user-{ir.source_ref}"
-        ctx.warn("Source account has no login; one was generated", source_ref=ir.source_ref, login=base)
+    raw = (ir.login or "").strip()
+    base = normalise_login(raw)[:_MAX_LOGIN].strip("-")
+    if len(base) < _MIN_LOGIN:
+        base = normalise_login(f"user-{ir.source_ref}")[:_MAX_LOGIN]
+        ctx.warn("Source account has no usable login; one was generated", source_ref=ir.source_ref, login=base)
+    elif base != raw:
+        ctx.warn("Login changed to the allowed characters", wanted=raw, login=base)
 
     candidate = base
     suffix = 2

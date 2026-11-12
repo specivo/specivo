@@ -118,6 +118,12 @@ untrusted bundles.
     Some sources do not reveal everyone's email address. Specivo gives such an account a placeholder
     address that never receives mail, and lists it in the report so you can fill in the real one.
 
+!!! note "Logins"
+    A Specivo login holds lowercase letters, digits, `_` and `-` only. An imported login is changed to
+    fit: `John.Doe` becomes `john-doe`, and letters from other alphabets that look like Latin ones are
+    dropped, so no account can pass itself off as another. Each change is listed in the report. A login
+    already taken here gets a numbered suffix.
+
 ## Running it again, and adding to it later
 
 Every record in a bundle has a stable identifier from the source. Specivo remembers which source record

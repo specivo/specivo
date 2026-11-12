@@ -29,6 +29,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,6 +100,16 @@ def convert_markup(ctx: PhaseContext, raw: str | None) -> str | None:
 # --------------------------------------------------------------------------
 # Issues
 # --------------------------------------------------------------------------
+
+
+# issues.subject is VARCHAR(1024) and IssueCreate refuses a blank one.
+_MAX_SUBJECT = 1024
+
+
+def _subject(ir: IRIssue) -> str:
+    """The issue's subject, fitted to the column; a placeholder when the source has none."""
+    subject = (ir.subject or "").strip()[:_MAX_SUBJECT].strip()
+    return subject or f"Imported issue {ir.source_ref}"
 
 
 async def load_issues(ctx: PhaseContext) -> None:
@@ -174,7 +185,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
             IssueCreate(
                 project_key=project.key,
                 tracker_id=tracker_id,
-                subject=ir.subject or f"Imported issue {ir.source_ref}",
+                subject=_subject(ir),
                 description=convert_markup(ctx, ir.description),
                 status_id=status_id,
                 priority_id=priority_id,
@@ -198,7 +209,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
             # the source made required later) is kept, and reported above.
             validate_metadata=False,
         )
-    except AppError as exc:
+    except (AppError, PydanticValidationError) as exc:
         ctx.warn("Issue could not be created; skipped", issue=ir.source_ref, reason=str(exc))
         return None
 
