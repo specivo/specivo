@@ -645,11 +645,14 @@ class EntityLinkService:
 
         The caller has already checked that *user* may see *root*.
 
-        - ``direction``: ``out`` (what *root* links to, plus its relations,
-          parent, children, attachments, commits and pull requests), ``in``
-          (text links to *root*: backlinks) or ``both``.
+        - ``direction``: ``out`` (what *root* links to, plus all its relations,
+          its parent, children, attachments, commits and pull requests), ``in``
+          (what points at *root*: text links to it, relations stored towards it
+          and the symmetric ones, its parent and its children) or ``both``.
+          ``in`` and ``out`` together give the neighbours of ``both``.
         - ``depth``: 1, or 2 to expand the issue and wiki-page neighbours once
-          more (at most ``ENTITY_LINKS_MAX_EXPANDED`` of them).
+          more (at most ``ENTITY_LINKS_MAX_EXPANDED`` of them). A link met from
+          both of its ends is listed once, as first met.
         - ``kinds``: only these edge kinds (``ALL_KINDS``); all when None.
         - ``limit``: at most this many neighbour nodes besides *root*
           (capped at ``ENTITY_LINKS_MAX_LIMIT``); ``truncated`` says when
@@ -668,6 +671,7 @@ class EntityLinkService:
         reader = _Reader(session, user)
         graph = LinkGraph()
         seen_nodes: set[NodeKey] = {root}
+        seen_edges: set[tuple[Any, ...]] = set()
         order: list[NodeKey] = [root]
         frontier: list[NodeKey] = [root]
         for hop in range(depth):
@@ -687,11 +691,14 @@ class EntityLinkService:
                     order.append(endpoint)
                     if endpoint[0] in ("issue", "wiki_page"):
                         next_frontier.append(endpoint)
-                if (edge.source is None or edge.source in seen_nodes) and (
-                    edge.target is None or edge.target in seen_nodes
+                if (
+                    (edge.source is None or edge.source in seen_nodes)
+                    and (edge.target is None or edge.target in seen_nodes)
+                    and _first_sighting(seen_edges, edge)
                 ):
                     graph.raw_edges.append((edge, hop == 0 and root in (edge.source, edge.target)))
-            if len(next_frontier) > ENTITY_LINKS_MAX_EXPANDED:
+            # The last frontier is never expanded, so capping it would leave nothing out.
+            if hop < depth - 1 and len(next_frontier) > ENTITY_LINKS_MAX_EXPANDED:
                 next_frontier = next_frontier[:ENTITY_LINKS_MAX_EXPANDED]
                 graph.truncated = True
             frontier = next_frontier
@@ -709,6 +716,7 @@ class EntityLinkService:
         if text_kinds and direction in ("in", "both"):
             edges.extend(await self._text_edges_in(session, node, text_kinds))
         if direction == "in":
+            edges.extend(await self._structured_edges_in(session, node, kinds))
             return edges
 
         if node_type == "issue":
@@ -727,14 +735,22 @@ class EntityLinkService:
                         other, label = rel.issue_to_id, rel.relation_type
                     else:
                         other, label = rel.issue_from_id, RELATION_TYPES[rel.relation_type]["sym"]
-                    edges.append(_RawEdge(node, ("issue", other), KIND_RELATION, relation_type=label))
+                    edges.append(
+                        _RawEdge(
+                            node,
+                            ("issue", other),
+                            KIND_RELATION,
+                            relation_type=label,
+                            identity=(KIND_RELATION, rel.id),
+                        )
+                    )
             if KIND_PARENT in kinds:
                 parent_id = await session.scalar(select(Issue.parent_id).where(Issue.id == node_id))
                 if parent_id is not None:
-                    edges.append(_RawEdge(node, ("issue", parent_id), KIND_PARENT))
+                    edges.append(_hierarchy_edge("issue", node_id, parent_id, from_child=True))
             if KIND_CHILD in kinds:
                 for child_id in (await session.execute(select(Issue.id).where(Issue.parent_id == node_id))).scalars():
-                    edges.append(_RawEdge(node, ("issue", child_id), KIND_CHILD))  # noqa: PERF401
+                    edges.append(_hierarchy_edge("issue", child_id, node_id, from_child=False))  # noqa: PERF401
             if KIND_ATTACHMENT in kinds:
                 for attachment_id in (
                     await session.execute(
@@ -765,12 +781,12 @@ class EntityLinkService:
             if KIND_PARENT in kinds:
                 parent_id = await session.scalar(select(WikiPage.parent_id).where(WikiPage.id == node_id))
                 if parent_id is not None:
-                    edges.append(_RawEdge(node, ("wiki_page", parent_id), KIND_PARENT))
+                    edges.append(_hierarchy_edge("wiki_page", node_id, parent_id, from_child=True))
             if KIND_CHILD in kinds:
                 for child_id in (
                     await session.execute(select(WikiPage.id).where(WikiPage.parent_id == node_id))
                 ).scalars():
-                    edges.append(_RawEdge(node, ("wiki_page", child_id), KIND_CHILD))  # noqa: PERF401
+                    edges.append(_hierarchy_edge("wiki_page", child_id, node_id, from_child=False))  # noqa: PERF401
             if KIND_ATTACHMENT in kinds:
                 for attachment_id in (
                     await session.execute(
@@ -780,6 +796,57 @@ class EntityLinkService:
                     )
                 ).scalars():
                     edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))  # noqa: PERF401
+        return edges
+
+    async def _structured_edges_in(self, session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
+        """Relations, parent and children of *node*, each drawn as pointing at *node*.
+
+        A relation points at the issue it is stored towards (``A blocks B``
+        points at B); a ``relates`` relation has no direction and points at
+        both ends. The parent and the children are drawn from the other end:
+        the parent with its ``child`` edge, each child with its ``parent`` edge.
+        Attachments, commits and pull requests belong to *node* and only go out.
+        """
+        node_type, node_id = node
+        model: type[Issue] | type[WikiPage]
+        if node_type == "issue":
+            model = Issue
+        elif node_type == "wiki_page":
+            model = WikiPage
+        else:
+            return []
+        edges: list[_RawEdge] = []
+        if node_type == "issue" and KIND_RELATION in kinds:
+            from specivo.services.relation_service import RELATION_TYPES
+
+            symmetric = [name for name, info in RELATION_TYPES.items() if info["sym"] == name]
+            for rel in (
+                await session.execute(
+                    select(IssueRelation).where(
+                        or_(
+                            IssueRelation.issue_to_id == node_id,
+                            (IssueRelation.issue_from_id == node_id) & IssueRelation.relation_type.in_(symmetric),
+                        )
+                    )
+                )
+            ).scalars():
+                other = rel.issue_from_id if rel.issue_to_id == node_id else rel.issue_to_id
+                edges.append(
+                    _RawEdge(
+                        ("issue", other),
+                        node,
+                        KIND_RELATION,
+                        relation_type=rel.relation_type,
+                        identity=(KIND_RELATION, rel.id),
+                    )
+                )
+        if KIND_CHILD in kinds:
+            parent_id = await session.scalar(select(model.parent_id).where(model.id == node_id))
+            if parent_id is not None:
+                edges.append(_hierarchy_edge(node_type, node_id, parent_id, from_child=False))
+        if KIND_PARENT in kinds:
+            for child_id in (await session.execute(select(model.id).where(model.parent_id == node_id))).scalars():
+                edges.append(_hierarchy_edge(node_type, child_id, node_id, from_child=True))  # noqa: PERF401
         return edges
 
     async def _text_edges_out(self, session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
@@ -808,6 +875,7 @@ class EntityLinkService:
                     broken_ref=None if target is not None else _broken_ref(link),
                     broken_project_id=link.target_project_id,
                     broken_target_type=link.target_type,
+                    identity=("text", link.id),
                 )
             )
         return edges
@@ -839,7 +907,14 @@ class EntityLinkService:
             if source == node:
                 continue
             edges.append(
-                _RawEdge(source, node, link.kind, label=link.display_text, via_journal_id=link.source_journal_id)
+                _RawEdge(
+                    source,
+                    node,
+                    link.kind,
+                    label=link.display_text,
+                    via_journal_id=link.source_journal_id,
+                    identity=("text", link.id),
+                )
             )
         return edges
 
@@ -903,6 +978,28 @@ class _RawEdge:
     broken_ref: str | None = None
     broken_project_id: int | None = None
     broken_target_type: str | None = None
+    # What the edge stands for, the same from either end: a relation, a text link or a parent/child
+    # pair. None for edges read from one end only (attachments, commits, pull requests).
+    identity: tuple[Any, ...] | None = None
+
+
+def _first_sighting(seen: set[tuple[Any, ...]], edge: _RawEdge) -> bool:
+    """Whether *edge* is met for the first time; the far end of an edge reads it again on the next hop."""
+    if edge.identity is None:
+        return True
+    if edge.identity in seen:
+        return False
+    seen.add(edge.identity)
+    return True
+
+
+def _hierarchy_edge(node_type: str, child_id: int, parent_id: int, *, from_child: bool) -> _RawEdge:
+    """The parent/child edge between two issues or two pages, read from the child (``parent``) or the parent."""
+    child, parent = (node_type, child_id), (node_type, parent_id)
+    identity = ("hierarchy", node_type, child_id, parent_id)
+    if from_child:
+        return _RawEdge(child, parent, KIND_PARENT, identity=identity)
+    return _RawEdge(parent, child, KIND_CHILD, identity=identity)
 
 
 @dataclass(slots=True)

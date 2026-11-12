@@ -20,6 +20,7 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.constants import ENTITY_LINKS_MAX_EXPANDED
 from specivo.models.attachment import Attachment
 from specivo.models.entity_link import EntityLink
 from specivo.models.issue import Issue
@@ -346,6 +347,105 @@ class TestGetLinks:
         for kwargs in ({"direction": "sideways"}, {"depth": 3}, {"kinds": ["nonsense"]}):
             with pytest.raises(ValueError):
                 await links.get_links(db_session, world.reader, ("wiki_page", root.id), **kwargs)
+
+
+class TestTraversal:
+    """Each stored link is one edge, ``truncated`` means something was left out, ``in`` mirrors ``out``."""
+
+    async def test_depth_two_lists_each_link_once(self, db_session, world):
+        root = await issue(db_session, world, world.home, "Hub")
+        first = await issue(db_session, world, world.home, "First", f"Follows up {root.display_key}")
+        second = await issue(db_session, world, world.home, "Second")
+        child = await issue(db_session, world, world.home, "Part")
+        child.parent_id = root.id
+        db_session.add_all(
+            [
+                IssueRelation(issue_from_id=root.id, issue_to_id=first.id, relation_type="blocks"),
+                IssueRelation(issue_from_id=first.id, issue_to_id=second.id, relation_type="relates"),
+                IssueRelation(issue_from_id=second.id, issue_to_id=root.id, relation_type="precedes"),
+            ]
+        )
+        await db_session.commit()
+        await rebuild(db_session, first)
+
+        graph = await links.get_links(db_session, world.reader, ("issue", root.id), depth=2)
+        pairs = [(frozenset((e.source, e.target)), e.kind) for e in graph.edges]
+        assert len(pairs) == len(set(pairs)), pairs
+        r, f, s, c = root.display_key, first.display_key, second.display_key, child.display_key
+        assert _edges(graph) == {
+            (r, f, "relation", "out"),
+            (r, s, "relation", "out"),
+            (r, c, "child", "out"),
+            (f, r, "mention", "in"),
+            (f, s, "relation", None),
+        }
+        labels = {(e.source, e.target): e.relation_type for e in graph.edges if e.kind == "relation"}
+        assert labels == {(r, f): "blocks", (r, s): "follows", (f, s): "relates"}
+
+    async def test_a_cut_on_the_last_hop_is_not_truncation(self, db_session, world):
+        count = ENTITY_LINKS_MAX_EXPANDED + 10
+        titles = [f"Leaf {n}" for n in range(count)]
+        for title in titles:
+            await page(db_session, world, world.home, title)
+        root = await page(db_session, world, world.home, "Index", " ".join(f"[[{t}]]" for t in titles))
+        await rebuild(db_session, root)
+
+        one = await links.get_links(db_session, world.reader, ("wiki_page", root.id), direction="out", limit=200)
+        assert len(one.nodes) == count and len(one.edges) == count
+        assert not one.truncated
+        two = await links.get_links(
+            db_session, world.reader, ("wiki_page", root.id), direction="out", depth=2, limit=200
+        )
+        assert two.truncated
+
+    async def test_incoming_includes_relations_and_hierarchy(self, db_session, world):
+        parent = await issue(db_session, world, world.home, "Epic")
+        root = await issue(db_session, world, world.home, "Story")
+        blocker = await issue(db_session, world, world.home, "Blocker")
+        blocked = await issue(db_session, world, world.home, "Waits")
+        peer = await issue(db_session, world, world.home, "Peer")
+        child = await issue(db_session, world, world.home, "Task")
+        root.parent_id = parent.id
+        child.parent_id = root.id
+        db_session.add_all(
+            [
+                IssueRelation(issue_from_id=blocker.id, issue_to_id=root.id, relation_type="blocks"),
+                IssueRelation(issue_from_id=root.id, issue_to_id=blocked.id, relation_type="blocks"),
+                IssueRelation(issue_from_id=root.id, issue_to_id=peer.id, relation_type="relates"),
+            ]
+        )
+        await db_session.commit()
+
+        incoming = await links.get_links(db_session, world.reader, ("issue", root.id), direction="in")
+        r = root.display_key
+        assert _edges(incoming) == {
+            (blocker.display_key, r, "relation", "in"),
+            (peer.display_key, r, "relation", "in"),
+            (parent.display_key, r, "child", "in"),
+            (child.display_key, r, "parent", "in"),
+        }
+        labels = {e.source: e.relation_type for e in incoming.edges if e.kind == "relation"}
+        assert labels == {blocker.display_key: "blocks", peer.display_key: "relates"}
+
+        outgoing = await links.get_links(db_session, world.reader, ("issue", root.id), direction="out")
+        both = await links.get_links(db_session, world.reader, ("issue", root.id), direction="both")
+        assert {n.ref for n in incoming.nodes} | {n.ref for n in outgoing.nodes} == {n.ref for n in both.nodes}
+        assert blocked.display_key not in {n.ref for n in incoming.nodes}
+
+    async def test_incoming_wiki_hierarchy(self, db_session, world):
+        parent = await page(db_session, world, world.home, "Handbook")
+        root = await page(db_session, world, world.home, "Chapter")
+        child = await page(db_session, world, world.home, "Section")
+        root.parent_id = parent.id
+        child.parent_id = root.id
+        await db_session.commit()
+
+        incoming = await links.get_links(db_session, world.reader, ("wiki_page", root.id), direction="in")
+        r = wiki_ref(world.home, "chapter")
+        assert _edges(incoming) == {
+            (wiki_ref(world.home, "handbook"), r, "child", "in"),
+            (wiki_ref(world.home, "section"), r, "parent", "in"),
+        }
 
 
 class TestPermissions:
