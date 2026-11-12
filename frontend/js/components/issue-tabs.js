@@ -38,7 +38,7 @@ export function issueTabs() {
             var name;
             try {
                 name = decodeURIComponent(window.location.hash.slice(1));
-            } catch (e) {
+            } catch (_e) {
                 return;
             }
             if (!this._has(name)) return;

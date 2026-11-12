@@ -25,7 +25,7 @@ export function copyBranchName(initial) {
                 try {
                     await navigator.clipboard.writeText(this.name);
                     done = true;
-                } catch (e) {
+                } catch (_e) {
                     done = false;
                 }
             }

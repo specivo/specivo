@@ -15,6 +15,8 @@ serves at runtime. The runtime never needs Node — only this build step does.
 ```
 frontend/
   build.js              esbuild driver (4 entries -> 4 bundles)
+  eslint.config.mjs     ESLint flat config (npm run lint)
+  eslint-suppressions.json  violations that predate the lint gate
   css/specivo.css       CSS entry: @import list in cascade order
   css/*.css             partials by layer (tokens, base, components, features)
   css/pages/*.css       page-specific partials
@@ -48,7 +50,12 @@ cd frontend
 npm ci                 # once, or after package-lock.json changes
 npm run build          # production: minified + hashed
 npm run watch          # rebuild on change (dev: unminified + sourcemaps)
+npm run lint           # ESLint (also: make lint-js from the repo root)
 ```
+
+ESLint's config is `eslint.config.mjs`. Existing violations are recorded in
+`eslint-suppressions.json`, so only new code has to comply; after fixing one,
+`npm run lint:prune` drops its entry. See "Quality gates" in CONTRIBUTING.md.
 
 Commit only the sources under `frontend/`. Run a build before `make test-e2e`
 (the target does it for you) or when you want the bundle-serving integration

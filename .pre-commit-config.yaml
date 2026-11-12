@@ -11,7 +11,8 @@ repos:
       - id: trailing-whitespace
         exclude: \.(po|pot|svg)$
       - id: end-of-file-fixer
-        exclude: \.(po|pot|svg)$
+        # ESLint writes its suppressions file without a final newline.
+        exclude: (\.(po|pot|svg)|^frontend/eslint-suppressions\.json)$
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml
@@ -37,3 +38,11 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+      # Needs the frontend dependencies: `cd frontend && npm ci` (or
+      # `make lint-js`, which installs them).
+      - id: eslint
+        name: eslint (frontend)
+        entry: npm --prefix frontend run --silent lint
+        language: system
+        pass_filenames: false
+        files: ^frontend/.*\.(js|mjs)$|^frontend/(package\.json|eslint-suppressions\.json)$
