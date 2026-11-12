@@ -77,8 +77,14 @@ class RelationService:
         issue_to: Issue,
         relation_type: str,
         delay: int | None = None,
+        *,
+        actor: User | None = None,
     ) -> IssueRelation:
         """Create an issue relation with normalisation and validation.
+
+        With *actor* (a person or an agent linking the issues, over REST or
+        MCP alike) the change is recorded in both issues' history; imports
+        pass none, since their history comes from the source.
 
         Steps:
         1. Normalise reverse types → canonical form, swapping from/to if needed.
@@ -170,7 +176,22 @@ class RelationService:
         if canonical_type == "precedes" and delay is not None:
             await self._reschedule_successor(session, issue_from, issue_to, delay)
 
+        if actor is not None:
+            await self._record_change(session, actor, issue_from, issue_to, relation_type, added=True)
         return relation
+
+    async def _record_change(
+        self, session: AsyncSession, actor: User, issue_from: Issue, issue_to: Issue, relation_type: str, *, added: bool
+    ) -> None:
+        """Note the relation in both issues' history, each from its own side (``blocks`` / ``blocked``)."""
+        from specivo.services.journal_service import JournalService
+
+        journals = JournalService()
+        sym_type = RELATION_TYPES[relation_type]["sym"]
+        await journals.record_relation_change(
+            session, issue_from, actor, relation_type, issue_to.display_key, added=added
+        )
+        await journals.record_relation_change(session, issue_to, actor, sym_type, issue_from.display_key, added=added)
 
     # ------------------------------------------------------------------
     # Delete
@@ -231,6 +252,7 @@ class RelationService:
         await session.delete(relation)
         await session.flush()
         logger.info("Deleted relation id=%d by user=%d", relation_id, user.id)
+        await self._record_change(session, user, issue_from, issue_to, relation.relation_type, added=False)
         return removed
 
     # ------------------------------------------------------------------

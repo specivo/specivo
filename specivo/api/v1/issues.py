@@ -570,22 +570,14 @@ async def update_issue(
     old_assignee_id = issue.assigned_to_id
     issue, journal = await _service.update_with_journal(db, issue, data, current_user)
 
-    # --- Notifications (from API layer, keeping services decoupled) ---
-    if data.assigned_to_id is not None and data.assigned_to_id != old_assignee_id:
-        await _notification_service.notify_assignment(
-            session=db,
-            issue=issue,
-            old_assignee_id=old_assignee_id,
-            new_assignee_id=data.assigned_to_id,
-            actor=current_user,
-        )
-    if data.status_id is not None:
-        await _notification_service.notify_watchers(
-            session=db,
-            issue=issue,
-            event_type="status_change",
-            actor=current_user,
-        )
+    await _notification_service.notify_issue_updated(
+        db,
+        issue,
+        current_user,
+        old_assignee_id=old_assignee_id,
+        assigned_to_id=data.assigned_to_id,
+        status_given=data.status_id is not None,
+    )
 
     # Reload with relationships
     issue = await _service.get_with_relations(db, issue.id)

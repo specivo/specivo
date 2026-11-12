@@ -27,7 +27,7 @@ from specivo.core.exceptions import (
     ValidationError,
 )
 from specivo.core.utils import utcnow
-from specivo.mcp.client_context import record_working_issue
+from specivo.mcp.client_context import mcp_api_key_id_var, record_working_issue
 from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
@@ -47,6 +47,7 @@ from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
 from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
+from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
@@ -74,6 +75,7 @@ _relation_svc = RelationService()
 _sprint_svc = SprintService()
 _recurring_pattern_svc = RecurringPatternService()
 _tag_svc = TagService()
+_notification_svc = NotificationService()
 
 
 async def _log_tool(
@@ -741,9 +743,25 @@ async def _update_issue(  # noqa: PLR0913
         supplied["parent_id"] = parent.id if parent is not None else 0
     data = IssueUpdate(**supplied, lock_version=issue.lock_version)
     status_before, assignee_before = issue.status_id, issue.assigned_to_id
-    updated = await _issue_svc.update(session, issue, data, user, notes=notes)
+    updated = await _issue_svc.update(session, issue, data, user, notes=notes, api_key_id=mcp_api_key_id_var.get())
     await session.flush()
-    await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "update_issue", {"issue_ref": issue_ref})
+    # The same notifications as an edit over REST.
+    await _notification_svc.notify_issue_updated(
+        session,
+        updated,
+        user,
+        old_assignee_id=assignee_before,
+        assigned_to_id=data.assigned_to_id,
+        status_given=data.status_id is not None,
+    )
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.ISSUE_UPDATED,
+        "update_issue",
+        {"issue_ref": issue_ref},
+        project_id=updated.project_id,
+    )
     if await _starts_work(session, user, updated, status_before, assignee_before) or await _resumes_work(
         session, user, updated
     ):
@@ -836,9 +854,16 @@ async def _edit_description(
     # every other optional field being passed explicitly.
     supplied: dict[str, Any] = {"description": new_description}
     data = IssueUpdate(**supplied, lock_version=issue.lock_version)
-    updated = await _issue_svc.update(session, issue, data, user)
+    updated = await _issue_svc.update(session, issue, data, user, api_key_id=mcp_api_key_id_var.get())
     await session.flush()
-    await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "edit_description", {"issue_ref": issue_ref})
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.ISSUE_UPDATED,
+        "edit_description",
+        {"issue_ref": issue_ref},
+        project_id=updated.project_id,
+    )
     return (
         f"Updated description of {updated.display_key}.\n"
         f"Replaced '{search_text}' -> '{replace_text}'.\n"
@@ -1030,7 +1055,14 @@ async def _read_wiki(
             lines.append("")
             lines.append("Content:")
             lines.append(text)
-    await _log_tool(session, user, AuditEvent.WIKI_READ, "read_wiki", {"project_key": project_key, "slug": slug})
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_READ,
+        "read_wiki",
+        {"project_key": project_key, "slug": slug},
+        project_id=project.id,
+    )
     return "\n".join(lines)
 
 
@@ -1183,7 +1215,7 @@ async def _add_comment(
 ) -> str:
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "add_issue_notes")
-    journal = await _journal_svc.add_comment(session, issue, user, notes)
+    journal = await _journal_svc.add_comment(session, issue, user, notes, api_key_id=mcp_api_key_id_var.get())
     await session.flush()
     await _log_tool(session, user, AuditEvent.COMMENT_ADDED, "add_comment", {"issue_ref": issue_ref})
     return f"Added comment to {issue.display_key} (journal #{journal.sequence}).\nNotes: {notes[:100]}"
@@ -1251,6 +1283,7 @@ async def _list_comments(
         AuditEvent.ISSUE_READ,
         "list_comments",
         {"issue_ref": issue_ref, "limit": limit, "offset": offset, "order": order},
+        project_id=issue.project_id,
     )
     return "\n".join(lines).rstrip() + "\n"
 
@@ -1545,6 +1578,7 @@ async def _append_wiki(
         AuditEvent.WIKI_UPDATED,
         "append_wiki",
         {"project_key": project_key, "slug": slug, "position": position},
+        project_id=project.id,
     )
     return (
         f"Appended to wiki page '{page.title}' (version {new_content.version}).\n"
@@ -1609,6 +1643,7 @@ async def _read_wiki_section(
         AuditEvent.WIKI_READ,
         "read_wiki_section",
         {"project_key": project_key, "slug": slug, "heading": heading},
+        project_id=project.id,
     )
     return f"Wiki: {page.title} (section)\n\n{result_text}"
 
@@ -1677,6 +1712,7 @@ async def _replace_wiki_section(
         AuditEvent.WIKI_UPDATED,
         "replace_wiki_section",
         {"project_key": project_key, "slug": slug, "heading": heading},
+        project_id=project.id,
     )
     return (
         f"Replaced section '{heading}' in wiki page '{page.title}' "
@@ -2187,6 +2223,7 @@ async def _add_relation(
         issue_to=issue_to,
         relation_type=relation_type,
         delay=delay,
+        actor=user,
     )
     await session.flush()
     await _log_tool(
@@ -2882,7 +2919,7 @@ async def _create_sprint(
     await _log_tool(
         session,
         user,
-        AuditEvent.RESOURCE_ACCESS,
+        AuditEvent.SPRINT_CREATED,
         "create_sprint",
         {"project_key": project_key, "name": name, "sprint_id": sprint.id},
         project_id=project.id,
@@ -2911,7 +2948,7 @@ async def _update_sprint(
     await _log_tool(
         session,
         user,
-        AuditEvent.RESOURCE_ACCESS,
+        AuditEvent.SPRINT_UPDATED,
         "update_sprint",
         {"project_key": project_key, "sprint_id": sprint_id},
         project_id=project.id,
