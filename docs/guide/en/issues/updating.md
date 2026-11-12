@@ -52,9 +52,10 @@ resolves** — paste `INB-1` anywhere and it redirects to the issue at its new k
 earlier don't break.
 
 Moving carries the issue's substance with it. **Preserved:** full history and comments, relations,
-attachments, watchers, time entries, and custom [metadata](../metadata/index.md). **Cleared:** the
-fixed version, sprint, category, and tags — these belong to the old project and have no meaning in the
-new one, so you set them fresh in the target.
+attachments, watchers, time entries, [AI usage](../projects/ai-usage.md), and custom
+[metadata](../metadata/index.md). Time and AI usage logged on the issue now count in the target
+project's reports. **Cleared:** the fixed version, sprint, category, and tags — these belong to the old
+project and have no meaning in the new one, so you set them fresh in the target.
 
 !!! note "Only standalone issues can move"
     An issue with a **parent** or its own **subtasks** can't be moved as-is — detach it from the

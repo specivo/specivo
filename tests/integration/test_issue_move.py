@@ -2,11 +2,15 @@
 
 Covers: renumbering + stable internal id, old reference still resolving,
 history/journal preservation and project_id re-sync, clearing of project-scoped
-fields, recomputation of project-derived metadata, and the hierarchy / same-project
-guards.
+fields, recomputation of project-derived metadata, the hierarchy / same-project
+guards, and time and AI usage logged on the issue following it on every move path
+(REST, web, MCP).
 """
 
 from __future__ import annotations
+
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 import pytest_asyncio
@@ -14,14 +18,17 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
+from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
+from tests.factories.time_entry import TimeEntryActivityFactory, TimeEntryFactory
 from tests.factories.user import AdminUserFactory
 
 
@@ -272,3 +279,118 @@ async def test_mcp_move_issue_tool(db_session, inbox, home, tracker, open_status
 
     refreshed = await db_session.get(Issue, issue.id)
     assert refreshed.project_id == home.id
+
+
+async def _attach_usage(db_session: AsyncSession, issue_id: int, project: Project, user: User) -> None:
+    """Log one time entry and one AI usage entry on the issue, plus an AI entry on the project only."""
+    activity = TimeEntryActivityFactory.build()
+    db_session.add(activity)
+    await db_session.flush()
+    db_session.add(
+        TimeEntryFactory.build(project_id=project.id, issue_id=issue_id, user_id=user.id, activity_id=activity.id)
+    )
+    for on_issue in (issue_id, None):
+        db_session.add(
+            AiUsageEntry(
+                project_id=project.id,
+                issue_id=on_issue,
+                user_id=user.id,
+                reporter_user_id=user.id,
+                source="manual",
+                attribution_method="explicit",
+                tool_slug="claude-code",
+                provider="testlab",
+                model="lab-model-1",
+                usage_date=date(2026, 1, 15),
+                request_count=1,
+                input=1000,
+                output=100,
+                cost_type="api",
+                priced_at=datetime(2026, 1, 15, tzinfo=UTC),
+                marginal_amount=Decimal("0.50"),
+                marginal_currency="USD",
+                api_equivalent_amount=Decimal("0.50"),
+                api_equivalent_currency="USD",
+                cost_basis="calculated",
+            )
+        )
+    await db_session.commit()
+
+
+async def _assert_usage_followed(db_session: AsyncSession, issue_id: int, source: Project, target: Project) -> None:
+    """Time and AI usage on the issue moved to *target*; project-only AI usage stayed in *source*."""
+    time_projects = (
+        (await db_session.execute(select(TimeEntry.project_id).where(TimeEntry.issue_id == issue_id))).scalars().all()
+    )
+    assert time_projects == [target.id]
+    issue_ai = (
+        (await db_session.execute(select(AiUsageEntry.project_id).where(AiUsageEntry.issue_id == issue_id)))
+        .scalars()
+        .all()
+    )
+    assert issue_ai == [target.id]
+    project_only_ai = (
+        (
+            await db_session.execute(
+                select(AiUsageEntry.project_id).where(
+                    AiUsageEntry.issue_id.is_(None), AiUsageEntry.project_id.in_([source.id, target.id])
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert project_only_ai == [source.id]
+
+
+@pytest.mark.asyncio
+async def test_rest_move_carries_time_and_ai_usage(
+    client, db_session, admin_token, admin_user, inbox, home, tracker, open_status, priority
+):
+    created = await _create(client, admin_token, inbox, tracker, open_status, priority)
+    await _attach_usage(db_session, created["id"], inbox, admin_user)
+
+    resp = await _move(client, admin_token, created["key"], "HOME")
+    assert resp.status_code == 200, resp.text
+
+    await _assert_usage_followed(db_session, created["id"], inbox, home)
+
+
+@pytest.mark.asyncio
+async def test_web_move_carries_time_and_ai_usage(
+    client, db_session, admin_token, admin_user, inbox, home, tracker, open_status, priority
+):
+    created = await _create(client, admin_token, inbox, tracker, open_status, priority)
+    await _attach_usage(db_session, created["id"], inbox, admin_user)
+
+    resp = await client.post(
+        f"/issue/{created['key']}/move/",
+        data={"target_project_key": "HOME"},
+        cookies={"access_token": admin_token},
+        headers={"Authorization": f"Bearer {admin_token}"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302, resp.text
+
+    await _assert_usage_followed(db_session, created["id"], inbox, home)
+
+
+@pytest.mark.asyncio
+async def test_mcp_move_carries_time_and_ai_usage(db_session, inbox, home, tracker, open_status, priority, admin_user):
+    from specivo.mcp.tools import _move_issue
+    from specivo.schemas.issue import IssueCreate
+    from specivo.services.issue_service import IssueService
+
+    issue = await IssueService().create(
+        db_session,
+        inbox,
+        IssueCreate(project_key="INB", tracker_id=tracker.id, subject="Via MCP with usage"),
+        admin_user,
+    )
+    await db_session.flush()
+    await _attach_usage(db_session, issue.id, inbox, admin_user)
+
+    msg = await _move_issue(db_session, admin_user, issue.display_key, "HOME")
+    assert "HOME-1" in msg
+
+    await _assert_usage_followed(db_session, issue.id, inbox, home)
