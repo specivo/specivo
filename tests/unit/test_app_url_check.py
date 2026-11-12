@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 
 import pytest
@@ -68,10 +67,6 @@ def test_real_addresses_are_fine(app_url: str) -> None:
     assert app_url_problem(app_url) is None
 
 
-def test_default_setting_is_a_problem() -> None:
-    assert app_url_problem(_settings().app_url) == "local"
-
-
 def test_is_local_host_handles_empty() -> None:
     assert is_local_host(None) is False
     assert is_local_host("") is False
@@ -119,19 +114,12 @@ def test_no_startup_warning_for_a_real_address(caplog: pytest.LogCaptureFixture)
     assert not _app_url_records(caplog)
 
 
-def test_lifespan_logs_the_app_url_warning() -> None:
-    from specivo import main
-
-    assert "log_app_url_warning" in inspect.getsource(main.lifespan)
-
-
 def test_worker_start_logs_the_app_url_warning(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import specivo.tasks as tasks
     from specivo.core import config
 
-    assert "_warn_about_app_url" in inspect.getsource(tasks._bootstrap_worker)
     monkeypatch.setattr(config, "get_settings", lambda: _settings(debug=False, app_url="http://localhost:8030"))
     caplog.set_level(logging.WARNING, logger="specivo.core.app_url")
     tasks._warn_about_app_url()

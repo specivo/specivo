@@ -59,7 +59,6 @@ def test_issue_list_empty_state(admin_page: Page, api_client: httpx.Client) -> N
     expect(issues.empty_state).to_be_visible()
 
 
-@pytest.mark.skip(reason="Alpine.js x-model binding not triggered by Playwright fill — investigate separately")
 def test_create_issue_via_form(admin_page: Page, api_client: httpx.Client) -> None:
     """Create an issue through the Alpine.js form and verify redirect."""
     project = _create_project(api_client)
