@@ -85,6 +85,8 @@ class AuditEvent(StrEnum):
     # A sprint was started or completed. Details hold the sprint's name and
     # issue counts (and, on completion, where unfinished issues went); never
     # issue subjects.
+    SPRINT_CREATED = "sprint_created"
+    SPRINT_UPDATED = "sprint_updated"
     SPRINT_STARTED = "sprint_started"
     SPRINT_COMPLETED = "sprint_completed"
     RECURRING_PATTERNS_LISTED = "recurring_patterns_listed"
@@ -356,6 +358,8 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.WIKI_DELETED,
             AuditEvent.WIKI_RESTORED,
             AuditEvent.TIMER_DISCARDED,
+            AuditEvent.SPRINT_CREATED,
+            AuditEvent.SPRINT_UPDATED,
             AuditEvent.SPRINT_STARTED,
             AuditEvent.SPRINT_COMPLETED,
             AuditEvent.TAG_CREATED,

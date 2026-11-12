@@ -14,7 +14,7 @@ from specivo.schemas.relation import RelationCreate, RelationOut
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.permission_service import Permission, check_permission
-from specivo.services.relation_service import RELATION_TYPES, RelationService
+from specivo.services.relation_service import RelationService
 
 router = APIRouter(tags=["relations"])
 _issue_service = IssueService()
@@ -73,26 +73,7 @@ async def create_relation(
         issue_to=issue_to,
         relation_type=data.relation_type,
         delay=data.delay,
-    )
-
-    # Record journal entries on both issues
-    user_type = data.relation_type
-    sym_type = RELATION_TYPES[user_type]["sym"]
-    await _journal_service.record_relation_change(
-        db,
-        issue_from,
-        current_user,
-        user_type,
-        issue_to.display_key,
-        added=True,
-    )
-    await _journal_service.record_relation_change(
-        db,
-        issue_to,
-        current_user,
-        sym_type,
-        issue_from.display_key,
-        added=True,
+        actor=current_user,
     )
 
     # Build the response from the persisted relation
@@ -131,14 +112,4 @@ async def delete_relation(
     on at least one of their projects. A relation to an issue the caller
     cannot see answers 404, like one that does not exist.
     """
-    removed = await _relation_service.delete(db, relation_id, current_user)
-
-    # Record journal entries on both issues after successful delete
-    canonical_type = removed.relation_type
-    sym_type = RELATION_TYPES[canonical_type]["sym"]
-    await _journal_service.record_relation_change(
-        db, removed.issue_from, current_user, canonical_type, removed.issue_to.display_key, added=False
-    )
-    await _journal_service.record_relation_change(
-        db, removed.issue_to, current_user, sym_type, removed.issue_from.display_key, added=False
-    )
+    await _relation_service.delete(db, relation_id, current_user)
