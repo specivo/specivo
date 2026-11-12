@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
@@ -222,9 +222,8 @@ class TestMetadataAppend:
         from specivo.mcp.tools import _metadata
 
         await _metadata(db_session, admin, issue.display_key, "k", "set", "string_value")
-        result = await _metadata(db_session, admin, issue.display_key, "k", "append", "x")
-        assert result.startswith("Error")
-        assert "append" in result
+        with pytest.raises(ValidationError, match="append"):
+            await _metadata(db_session, admin, issue.display_key, "k", "append", "x")
 
 
 # ---------------------------------------------------------------------------
@@ -268,12 +267,12 @@ class TestMetadataRemove:
         from specivo.mcp.tools import _metadata
 
         await _metadata(db_session, admin, issue.display_key, "k", "set", "str")
-        result = await _metadata(db_session, admin, issue.display_key, "k", "remove", "x")
-        assert result.startswith("Error")
+        with pytest.raises(ValidationError):
+            await _metadata(db_session, admin, issue.display_key, "k", "remove", "x")
 
 
 # ---------------------------------------------------------------------------
-# Error cases
+# Refusals
 # ---------------------------------------------------------------------------
 
 
@@ -281,29 +280,26 @@ class TestMetadataErrors:
     async def test_invalid_op(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "k", "clobber", "x")
-        assert result.startswith("Error")
-        assert "invalid op" in result
+        with pytest.raises(ValidationError, match="invalid op"):
+            await _metadata(db_session, admin, issue.display_key, "k", "clobber", "x")
 
     async def test_empty_key(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "", "set", "x")
-        assert result.startswith("Error")
+        with pytest.raises(ValidationError):
+            await _metadata(db_session, admin, issue.display_key, "", "set", "x")
 
     async def test_unknown_scheme(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, "nosuch:xyz", "k", "set", "v")
-        assert result.startswith("Error")
-        assert "scheme" in result
+        with pytest.raises(ValidationError, match="scheme"):
+            await _metadata(db_session, admin, "nosuch:xyz", "k", "set", "v")
 
     async def test_missing_entity(self, db_session, admin):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, "ZZZZ-999", "k", "set", "v")
-        assert result.startswith("Error")
-        assert "not found" in result
+        with pytest.raises(NotFoundError, match="not found"):
+            await _metadata(db_session, admin, "ZZZZ-999", "k", "set", "v")
 
     async def test_permission_denied_raises(self, db_session, limited_user, role_view_only, project, issue):
         from specivo.mcp.tools import _metadata
@@ -316,9 +312,8 @@ class TestMetadataErrors:
         from specivo.mcp.tools import _metadata
 
         big = "x" * (17 * 1024)
-        result = await _metadata(db_session, admin, issue.display_key, "blob", "set", big)
-        assert result.startswith("Error")
-        assert "16384" in result or "exceed" in result
+        with pytest.raises(ValidationError, match="would exceed 16384 bytes"):
+            await _metadata(db_session, admin, issue.display_key, "blob", "set", big)
         await db_session.refresh(issue)
         assert "blob" not in issue.issue_metadata
 
@@ -332,48 +327,36 @@ class TestMetadataLossyNumberGuard:
     async def test_set_scientific_float_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "commits", "set", 4.983e31)
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "commits", "set", 4.983e31)
         await db_session.refresh(issue)
         assert "commits" not in issue.issue_metadata
 
     async def test_append_scientific_float_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "commits", "append", 1.0e20)
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "commits", "append", 1.0e20)
         await db_session.refresh(issue)
         assert "commits" not in issue.issue_metadata
 
     async def test_inf_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "k", "set", float("inf"))
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "k", "set", float("inf"))
 
     async def test_nan_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "k", "set", float("nan"))
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "k", "set", float("nan"))
 
     async def test_list_with_scientific_float_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session,
-            admin,
-            issue.display_key,
-            "commits",
-            "append",
-            ["abc1234567", 4.983e31],
-        )
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "commits", "append", ["abc1234567", 4.983e31])
         await db_session.refresh(issue)
         assert "commits" not in issue.issue_metadata
 

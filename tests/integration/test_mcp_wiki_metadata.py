@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import NotFoundError
+from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.models.wiki import WikiRedirect
@@ -221,14 +221,8 @@ class TestUpdateWikiMetadataNoChangesError:
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
-        result = await _update_wiki_metadata(
-            db_session,
-            admin_user,
-            project.key,
-            wiki_page.slug,
-        )
-        assert "Error" in result
-        assert "at least one" in result
+        with pytest.raises(ValidationError, match="at least one"):
+            await _update_wiki_metadata(db_session, admin_user, project.key, wiki_page.slug)
 
 
 class TestUpdateWikiMetadataNonexistentPage:

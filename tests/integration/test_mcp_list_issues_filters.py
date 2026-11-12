@@ -10,6 +10,8 @@ sight, and never an empty list.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,21 +145,20 @@ async def test_filters_combine(db_session, world) -> None:
 @pytest.mark.parametrize(
     ("argument", "value", "message"),
     [
-        ("assignee", "nobody_here", "Error: Unknown assignee 'nobody_here' in MLF"),
+        ("assignee", "nobody_here", "Unknown assignee 'nobody_here' in MLF"),
         # A real person, but not someone issues of this project can be assigned to.
-        ("assignee", "mlf_outsider", "Error: Unknown assignee 'mlf_outsider' in MLF"),
-        ("tag", "Missing", "Error: Unknown tag 'Missing' in MLF."),
+        ("assignee", "mlf_outsider", "Unknown assignee 'mlf_outsider' in MLF"),
+        ("tag", "Missing", "Unknown tag 'Missing' in MLF."),
         # Another project's tag reads exactly like a missing one.
-        ("tag", "Backend", "Error: Unknown tag 'Backend' in MLF."),
-        ("release", "9.9", "Error: Unknown release '9.9' in MLF"),
+        ("tag", "Backend", "Unknown tag 'Backend' in MLF."),
+        ("release", "9.9", "Unknown release '9.9' in MLF"),
         # A version of another project that is not shared reads like a missing one.
-        ("release", "Other only", "Error: Unknown release 'Other only' in MLF"),
+        ("release", "Other only", "Unknown release 'Other only' in MLF"),
     ],
 )
 async def test_unknown_or_hidden_values_are_errors(db_session, world, argument, value, message) -> None:
-    result = await _list(db_session, world, **{argument: value})
-    assert result.startswith(message)
-    assert "Issues for" not in result
+    with pytest.raises(ValueError, match="^" + re.escape(message)):
+        await _list(db_session, world, **{argument: value})
 
 
 async def test_ids_out_of_sight_read_like_unknown_ones(db_session, world) -> None:
@@ -166,8 +167,8 @@ async def test_ids_out_of_sight_read_like_unknown_ones(db_session, world) -> Non
         ("tag", str(world["other_tag"].id)),
         ("release", str(world["hidden"].id)),
     ):
-        result = await _list(db_session, world, **{argument: value})
-        assert result.startswith(f"Error: Unknown {argument} '{value}' in MLF"), result
+        with pytest.raises(ValueError, match=f"^Unknown {argument} '{value}' in MLF"):
+            await _list(db_session, world, **{argument: value})
 
 
 async def test_blank_arguments_do_not_filter(db_session, world) -> None:

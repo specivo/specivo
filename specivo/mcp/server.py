@@ -466,9 +466,9 @@ async def specivo_create_issue(  # noqa: PLR0913
     Pass parent_ref to make the new issue a child of an existing one (the
     parent may be in another project you can see). A parent that is unknown
     or that you may not see, or one that would exceed the hierarchy depth
-    limit, returns an error string and nothing is created.
+    limit, returns an error and nothing is created.
     Pass tags to tag the issue in the same call; invalid names return an
-    error string and nothing is created.
+    error and nothing is created.
     An issue created in an in-progress status or assigned to you becomes the
     issue this agent session works on (an AI usage attribution hint).
     """
@@ -523,7 +523,7 @@ async def specivo_update_issue(  # noqa: PLR0913
     parent_ref re-parents the issue (its children move with it). An unknown
     parent or one you may not see, a parent that is the issue itself or one
     of its descendants (a cycle), or one that would exceed the hierarchy
-    depth limit returns an error string and nothing is changed.
+    depth limit returns an error and nothing is changed.
     An issue that ends up in progress and assigned to you becomes the issue
     this agent session works on, even when the call changes nothing.
     """
@@ -834,7 +834,7 @@ async def specivo_create_wiki(
 
     Use parent_slug to nest under an existing page.
     Pass tags to tag the page in the same call; invalid names return an
-    error string and nothing is created. Never write tags into the text.
+    error and nothing is created. Never write tags into the text.
     """
     async with _get_session_and_user() as (session, user):
         return await _create_wiki(session, user, project_key, title, text, parent_slug, tags)
@@ -1081,8 +1081,8 @@ async def specivo_metadata(
 
     The 'get' op is read-only and requires only view_issues permission;
     all other ops require edit_issues. Use specivo_list_metadata_schemas
-    first to discover available fields. Recoverable errors are returned
-    as 'Error: ...' strings.
+    first to discover available fields. A refused call returns an error
+    and writes nothing.
 
     The new value of the key is checked against the issue's schemas; one
     that does not match (wrong type, a choice not listed, a list item that
