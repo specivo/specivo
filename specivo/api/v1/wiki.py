@@ -230,21 +230,7 @@ async def restore_wiki_page(
     await _require_wiki_module(project.id, db)
     await _require_delete_wiki(current_user, project.id, db)
 
-    # Find the deleted page by slug (need to query without the deleted_at filter)
-    wiki = await _service.get_or_create_wiki(db, project.id)
-    from sqlalchemy import select as sa_select
-
-    stmt = sa_select(WikiPage).where(
-        WikiPage.wiki_id == wiki.id,
-        WikiPage.slug == slug,
-        WikiPage.deleted_at.isnot(None),
-    )
-    result = await db.execute(stmt)
-    page = result.scalar_one_or_none()
-    if page is None:
-        from specivo.core.exceptions import NotFoundError
-
-        raise NotFoundError(f"Deleted wiki page '{slug}' not found")
+    page = await _service.find_deleted_page(db, project.id, slug)
 
     await _service.restore_page(db, page.id, project_id=project.id)
     await db.refresh(page)
@@ -344,13 +330,9 @@ async def update_wiki_page(
 
     # Update parent if changed
     if data.parent_slug is not None:
-        new_parent_id: int | None = None
-        if data.parent_slug:
-            parent_page = await _service.get_page(db, project.id, data.parent_slug)
-            new_parent_id = parent_page[0].id
-        if new_parent_id != page.parent_id:
-            page.parent_id = new_parent_id
-            await db.flush()
+        new_parent = (await _service.get_page(db, project.id, data.parent_slug))[0] if data.parent_slug else None
+        if (new_parent.id if new_parent is not None else None) != page.parent_id:
+            await _service.set_parent(db, page, new_parent)
             await db.refresh(page)
             data.lock_version = page.lock_version
 

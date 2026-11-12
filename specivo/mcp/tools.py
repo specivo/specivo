@@ -46,6 +46,7 @@ from specivo.services.entity_link_service import EntityLinkService
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
+from specivo.services.markdown_sections import find_section, split_into_sections
 from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import Permission, check_permission
@@ -945,81 +946,6 @@ async def _search(
 # ---------------------------------------------------------------------------
 
 
-def _split_into_sections(text: str) -> list[dict]:
-    """Split markdown into sections by headings.
-
-    Returns list of {"heading": str|None, "level": int, "body": str, "start": int, "end": int}.
-    First section may have heading=None for content before any heading.
-    ``start`` and ``end`` are line indices (0-based) within the original text lines.
-    """
-    import re
-
-    lines = text.split("\n")
-    sections: list[dict] = []
-    current_heading: str | None = None
-    current_level: int = 0
-    current_start: int = 0
-    body_lines: list[str] = []
-
-    for idx, line in enumerate(lines):
-        m = re.match(r"^(#{1,6}) (.+)$", line)
-        if m:
-            # Flush previous section
-            sections.append(
-                {
-                    "heading": current_heading,
-                    "level": current_level,
-                    "body": "\n".join(body_lines),
-                    "start": current_start,
-                    "end": idx - 1 if idx > 0 else 0,
-                }
-            )
-            current_heading = line
-            current_level = len(m.group(1))
-            current_start = idx
-            body_lines = []
-        else:
-            body_lines.append(line)
-
-    # Flush last section
-    sections.append(
-        {
-            "heading": current_heading,
-            "level": current_level,
-            "body": "\n".join(body_lines),
-            "start": current_start,
-            "end": len(lines) - 1,
-        }
-    )
-
-    return sections
-
-
-def _find_section(
-    sections: list[dict],
-    heading: str,
-) -> tuple[int, dict] | None:
-    """Find a section by heading text.
-
-    Accepts both ``## Foo`` (exact heading line) and ``Foo`` (bare text, searches all levels).
-    Returns (index, section_dict) or None.
-    """
-    # Exact heading line match first
-    for idx, s in enumerate(sections):
-        if s["heading"] == heading:
-            return idx, s
-
-    # Bare text: strip leading #s from heading and compare
-    bare = heading.lstrip("#").strip()
-    for idx, s in enumerate(sections):
-        if s["heading"] is not None:
-            section_bare = s["heading"].lstrip("#").strip()
-            if section_bare == bare:
-                return idx, s
-
-    return None
-
-
 async def _read_wiki(
     session: AsyncSession,
     user: User,
@@ -1401,28 +1327,12 @@ async def _restore_wiki(
     slug: str,
     cascade: bool = True,
 ) -> str:
-    from specivo.models.wiki import Wiki, WikiPage
 
     project = await _get_project(session, user, project_key)
     await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "delete_wiki_pages")
 
-    # Find deleted page by slug (without the deleted_at IS NULL filter)
-    wiki_stmt = select(Wiki).where(Wiki.project_id == project.id)
-    wiki_result = await session.execute(wiki_stmt)
-    wiki = wiki_result.scalar_one_or_none()
-    if wiki is None:
-        raise NotFoundError(f"Wiki page '{slug}' not found")
-
-    stmt = select(WikiPage).where(
-        WikiPage.wiki_id == wiki.id,
-        WikiPage.slug == slug,
-        WikiPage.deleted_at.isnot(None),
-    )
-    result = await session.execute(stmt)
-    page = result.scalar_one_or_none()
-    if page is None:
-        raise NotFoundError(f"Deleted wiki page '{slug}' not found")
+    page = await _wiki_svc.find_deleted_page(session, project.id, slug)
 
     restored_ids = await _wiki_svc.restore_page(session, page.id, project_id=project.id, cascade=cascade)
     await session.flush()
@@ -1478,13 +1388,12 @@ async def _update_wiki_metadata(
     if parent_slug is not None:
         old_parent_id = page.parent_id
         if parent_slug == "":
-            page.parent_id = None
+            await _wiki_svc.set_parent(session, page, None)
             changes.append("parent -> (root)")
         else:
             parent_page, _parent_content = await _wiki_svc.get_page(session, project.id, parent_slug)
-            page.parent_id = parent_page.id
+            await _wiki_svc.set_parent(session, page, parent_page)
             changes.append(f"parent -> '{parent_slug}'")
-        await session.flush()
         audit_changes["parent_id"] = {"old": old_parent_id, "new": page.parent_id}
 
     # --- protected ---
@@ -1534,8 +1443,8 @@ async def _append_wiki(
         new_text = current.rstrip("\n") + "\n\n" + text if current.strip() else text
     elif position.startswith("after:"):
         heading_query = position[len("after:") :]
-        sections = _split_into_sections(current)
-        match = _find_section(sections, heading_query)
+        sections = split_into_sections(current)
+        match = find_section(sections, heading_query)
         if match is None:
             return (
                 f"Error: heading '{heading_query}' not found in wiki page '{page.title}'.\n"
@@ -1601,8 +1510,8 @@ async def _read_wiki_section(
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     text = content.text or ""
 
-    sections = _split_into_sections(text)
-    match = _find_section(sections, heading)
+    sections = split_into_sections(text)
+    match = find_section(sections, heading)
     if match is None:
         return (
             f"Error: heading '{heading}' not found in wiki page '{page.title}'.\n"
@@ -1663,8 +1572,8 @@ async def _replace_wiki_section(
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
 
-    sections = _split_into_sections(current)
-    match = _find_section(sections, heading)
+    sections = split_into_sections(current)
+    match = find_section(sections, heading)
     if match is None:
         return (
             f"Error: heading '{heading}' not found in wiki page '{page.title}'.\n"
