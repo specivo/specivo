@@ -62,7 +62,8 @@ Four bundles are produced:
     the Python stage copies `dist/` in after the source. The runtime image and end users never
     need Node. `.dockerignore` keeps any local `dist/` and `node_modules` out of the context.
   - **CI** — the `test` and `test-e2e` jobs build the frontend before pytest; the `frontend` job
-    is a standalone build check. The release workflow builds through the `Dockerfile`.
+    runs ESLint on the sources (`npm run lint`, `make lint-js` locally) and is a standalone build
+    check. The release workflow builds through the `Dockerfile`.
   - **Development** — the `frontend` service in `docker-compose.dev.yml` runs `npm run watch`
     into the host's `specivo/static/dist/`, which the `api` container's `./specivo` mount serves;
     `make dev-up` starts it and `api` waits for its first build. `make frontend-build` does a

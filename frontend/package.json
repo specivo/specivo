@@ -3,10 +3,15 @@
   "scripts": {
     "build": "node build.js",
     "dev": "node build.js --dev",
-    "watch": "node build.js --watch --dev"
+    "watch": "node build.js --watch --dev",
+    "lint": "eslint .",
+    "lint:prune": "eslint . --prune-suppressions"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "@eslint/js": "10.0.1",
+    "esbuild": "^0.25.0",
+    "eslint": "10.14.0",
+    "globals": "17.14.0"
   },
   "dependencies": {
     "echarts": "6.1.0"

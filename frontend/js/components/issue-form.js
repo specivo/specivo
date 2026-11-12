@@ -267,10 +267,11 @@ export function issueForm(initial) {
 
                 var tagNames = (this.pendingTags || []).map(function (t) { return t.name; });
 
+                var res;
                 try {
                     if (this.mode === 'edit') {
                         payload.lock_version = this.lockVersion;
-                        var res = await spFetch('/api/v1/issues/' + this.displayKey + '/', {
+                        res = await spFetch('/api/v1/issues/' + this.displayKey + '/', {
                             method: 'PATCH',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify(payload)
@@ -292,7 +293,7 @@ export function issueForm(initial) {
                         /* Tags go with the create request: tagging an issue later
                            needs edit_issues, creating one with tags does not. */
                         payload.tags = tagNames;
-                        var res = await spFetch('/api/v1/projects/' + this.projectKey + '/issues/', {
+                        res = await spFetch('/api/v1/projects/' + this.projectKey + '/issues/', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify(payload)

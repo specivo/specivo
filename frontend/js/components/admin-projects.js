@@ -73,9 +73,10 @@ export function adminProjects(initial) {
             async submitForm() {
                 this.saving = true;
                 this.formError = '';
+                var res;
                 try {
                     if (this.editMode) {
-                        var res = await spFetch('/api/v1/projects/' + this.form.key + '/', {
+                        res = await spFetch('/api/v1/projects/' + this.form.key + '/', {
                             method: 'PATCH',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
@@ -88,7 +89,7 @@ export function adminProjects(initial) {
                         var modules = ['issue_tracking'];
                         if (this.form.moduleWiki) modules.push('wiki');
                         if (this.form.moduleTime) modules.push('time_tracking');
-                        var res = await spFetch('/api/v1/projects/', {
+                        res = await spFetch('/api/v1/projects/', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({

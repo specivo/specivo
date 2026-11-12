@@ -1,4 +1,4 @@
-function spAttachmentsComponent(initial, defaultContainerType, idField) {
+function spAttachmentsComponent(initial, defaultContainerType) {
         var IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
         var EXT_MAP = {
             pdf: 'pdf', doc: 'doc', docx: 'doc',
@@ -208,7 +208,7 @@ export function wikiAttachments(initial) {
             var el = document.getElementById(initial.dataElementId);
             initial.attachments = el ? JSON.parse(el.textContent) : [];
         }
-        return spAttachmentsComponent(initial, 'WikiPage', 'pageId');
+        return spAttachmentsComponent(initial, 'WikiPage');
     }
 
 export function issueAttachments(initial) {
@@ -217,5 +217,5 @@ export function issueAttachments(initial) {
             var el = document.getElementById(initial.dataElementId);
             initial.attachments = el ? JSON.parse(el.textContent) : [];
         }
-        return spAttachmentsComponent(initial, 'Issue', 'containerId');
+        return spAttachmentsComponent(initial, 'Issue');
     }

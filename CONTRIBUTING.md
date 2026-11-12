@@ -58,8 +58,9 @@ Before writing code, read the ADRs in `docs/adr/`. They document conventions tha
 CI runs these checks on every pull request to `main` or a `release/*` branch. Run them locally first:
 
 ```bash
-uv run pre-commit install   # once: ruff, formatting and layer checks on every commit
+uv run pre-commit install   # once: ruff, formatting, layer and ESLint checks on every commit
 make lint                   # ruff check, ruff format --check, import-linter, mypy
+make lint-js                # ESLint on the frontend sources (frontend/js)
 make complexity             # informational complexity report (radon)
 make test-cov && make coverage-diff   # coverage of the lines you changed
 ```
@@ -86,6 +87,16 @@ make test-cov && make coverage-diff   # coverage of the lines you changed
 - **Coverage.** At least 80% of the lines a pull request adds or changes must be
   covered by tests (`diff-cover`).
 - **Formatting.** `ruff format`; CI fails on unformatted files.
+- **JavaScript.** ESLint checks `frontend/js` and the build script with
+  `eslint:recommended`, a few correctness rules and a complexity limit of 15
+  (`frontend/eslint.config.mjs`). Vendored libraries and the generated bundles
+  are not linted. Violations that predate the gate are counted per file and rule
+  in `frontend/eslint-suppressions.json`; new ones fail the build, and so does
+  an entry that no longer matches anything. After fixing one, run
+  `npm run lint:prune` in `frontend/` to update the file. Do not add entries by
+  hand or with `--suppress-all`. Prefix a binding with `_` when it is unused on
+  purpose (`catch (_e) {}`). The pre-commit hook needs the frontend
+  dependencies installed (`cd frontend && npm ci`, or `make lint-js`).
 
 ## Pull request guidelines
 

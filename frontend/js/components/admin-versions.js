@@ -46,7 +46,6 @@ export function adminVersions(initial) {
             },
 
             async bulkAction(newStatus) {
-                var self = this;
                 var ids = this.selected.slice();
                 var promises = [];
                 for (var i = 0; i < ids.length; i++) {

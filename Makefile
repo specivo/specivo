@@ -1,7 +1,7 @@
 .PHONY: configure up down logs status create-admin reset-password dev-up dev-down \
        test test-serial test-all test-unit test-integration test-service test-cov lint format complexity coverage-diff quality \
        migrate migrate-gen migrate-merge seed \
-       test-db-up test-db-down test-db-reset test-ci \
+       lint-js test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug playwright-install \
        install sync lock help download-model backfill-embeddings rebuild-links reindex-fts import-data \
        build bundle frontend-build frontend-watch \
@@ -196,6 +196,21 @@ lint:
 	$(RUN) python scripts/check_static_rules.py
 	$(RUN) mypy specivo/
 
+# ESLint on the frontend sources (frontend/js and the build script). Uses host
+# Node, or a Node container when npm is absent (as frontend-build does).
+# Violations that predate the gate are listed in frontend/eslint-suppressions.json;
+# after fixing one, run `cd frontend && npm run lint:prune` to drop it.
+lint-js:
+	@if [ "$(FRONTEND_BUILD)" != "docker" ] && command -v npm >/dev/null 2>&1; then \
+		cd frontend && npm ci --prefer-offline --no-audit --no-fund && npm run lint; \
+	else \
+		docker run --rm \
+			-v "$(CURDIR)/frontend:/src/frontend" \
+			-v specivo-frontend-node-modules:/src/frontend/node_modules \
+			-w /src/frontend $(FRONTEND_NODE_IMAGE) \
+			sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run lint"; \
+	fi
+
 # Complexity report (informational): functions graded D or worse, and modules
 # with a maintainability index of B or worse.
 complexity:
@@ -209,8 +224,8 @@ coverage-diff:
 	$(RUN) diff-cover coverage.xml --compare-branch=$(BASE) --fail-under=80
 
 # Everything CI checks before the tests: lint, formatting, layer contracts,
-# types, and the complexity report.
-quality: lint complexity
+# types, the frontend lint, and the complexity report.
+quality: lint lint-js complexity
 
 format:
 	$(RUN) ruff format .

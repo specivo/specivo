@@ -16,9 +16,10 @@ permissions:
   contents: read
 
 jobs:
-  # Build check for the esbuild bundles. They are generated, never committed:
-  # the test jobs below build their own copy, and the release image builds them
-  # in the Dockerfile's frontend stage.
+  # ESLint on the frontend sources, then a build check for the esbuild bundles.
+  # The bundles are generated, never committed: the test jobs below build their
+  # own copy, and the release image builds them in the Dockerfile's frontend
+  # stage.
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -29,6 +30,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      # Existing violations are listed in frontend/eslint-suppressions.json;
+      # new ones, and suppressions that no longer match anything, fail the job.
+      - name: ESLint
+        run: npm run lint
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

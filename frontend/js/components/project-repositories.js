@@ -110,7 +110,7 @@ export function projectRepositories(initial) {
 
     // Mirrors the server's checks in specivo/schemas/repository.py.
     var REPO_NAME = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
-    var REPO_URL = /^https?:\/\/[^\s\/?#]+/i;
+    var REPO_URL = /^https?:\/\/[^\s/?#]+/i;
 
     // Fields in the order they appear in the form; the first failed one gets focus.
     var FIELDS = [

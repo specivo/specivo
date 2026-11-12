@@ -37,7 +37,7 @@ export function countFormatters(locale) {
         try {
             const fmt = new Intl.NumberFormat(tag, options);
             return (v) => fmt.format(v);
-        } catch (e) {
+        } catch (_e) {
             return (v) => String(Math.round(v));
         }
     };

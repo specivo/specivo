@@ -13,7 +13,7 @@ export function formatElapsed(seconds) {
 }
 
 export function readI18n(el, defaults) {
-    var parsed = {};
+    var parsed;
     try {
         parsed = JSON.parse(el.dataset.i18n || '{}');
     } catch (_e) {
