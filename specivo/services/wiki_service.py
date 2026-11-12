@@ -329,6 +329,40 @@ class WikiService:
 
         return deleted_ids
 
+    async def find_deleted_page(self, session: AsyncSession, project_id: int, slug: str) -> WikiPage:
+        """The most recently deleted page with *slug* in project *project_id*'s wiki.
+
+        Slugs are unique among live pages only, so a page created, deleted,
+        created again and deleted again leaves two in the trash: the latest
+        deletion is the one a restore by slug means.
+        """
+        stmt = (
+            select(WikiPage)
+            .join(Wiki, WikiPage.wiki_id == Wiki.id)
+            .where(Wiki.project_id == project_id, WikiPage.slug == slug, WikiPage.deleted_at.is_not(None))
+            .order_by(WikiPage.deleted_at.desc(), WikiPage.id.desc())
+            .limit(1)
+        )
+        page = await session.scalar(stmt)
+        if page is None:
+            raise NotFoundError(f"Deleted wiki page '{slug}' not found")
+        return page
+
+    async def set_parent(self, session: AsyncSession, page: WikiPage, parent: WikiPage | None) -> None:
+        """Move *page* under *parent* (``None``: to the top level).
+
+        Refused (``ValidationError``) when *parent* is the page itself or one
+        of its descendants: the page would leave the tree.
+        """
+        if parent is not None:
+            ancestor: WikiPage | None = parent
+            while ancestor is not None:
+                if ancestor.id == page.id:
+                    raise ValidationError("A wiki page cannot be moved under itself or one of its subpages")
+                ancestor = await session.get(WikiPage, ancestor.parent_id) if ancestor.parent_id is not None else None
+        page.parent_id = parent.id if parent is not None else None
+        await session.flush()
+
     async def restore_page(
         self,
         session: AsyncSession,
@@ -382,11 +416,24 @@ class WikiService:
                 cascade_conditions.append(WikiPage.deleted_by_id == deleted_by_id)
             stmt = select(WikiPage).where(*cascade_conditions)
             result = await session.execute(stmt)
-            co_deleted = list(result.scalars().all())
-            for child in co_deleted:
-                child.deleted_at = None
-                child.deleted_by_id = None
-                restored_ids.append(child.id)
+            candidates = list(result.scalars().all())
+            # Only the page's own subpages deleted with it come back: another
+            # page deleted in the same second (by the same person) is not part
+            # of this restore, and may even be an older page with this slug.
+            by_parent: dict[int | None, list[WikiPage]] = {}
+            for candidate in candidates:
+                by_parent.setdefault(candidate.parent_id, []).append(candidate)
+            taken = {page.slug}
+            queue = [page.id]
+            while queue:
+                for child in by_parent.get(queue.pop(), []):
+                    if child.slug in taken or await self._get_page_by_slug(session, child.wiki_id, child.slug):
+                        continue  # a live page holds the slug now; this one stays in the trash
+                    taken.add(child.slug)
+                    child.deleted_at = None
+                    child.deleted_by_id = None
+                    restored_ids.append(child.id)
+                    queue.append(child.id)
 
         await session.flush()
 
