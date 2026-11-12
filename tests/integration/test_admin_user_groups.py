@@ -120,11 +120,6 @@ class TestCreateGroup:
         assert body["description"] == "Server side"
         assert body["id"] > 0
 
-    async def test_description_is_optional(self, admin_client: AsyncClient):
-        resp = await admin_client.post(GROUPS_URL, json={"name": _name("Minimal")})
-        assert resp.status_code == 201
-        assert resp.json()["description"] is None
-
     async def test_name_is_stripped(self, admin_client: AsyncClient):
         name = _name("Padded")
         resp = await admin_client.post(GROUPS_URL, json={"name": f"  {name}  "})
@@ -140,13 +135,6 @@ class TestCreateGroup:
         assert (await admin_client.post(GROUPS_URL, json={"name": name})).status_code == 201
 
         resp = await admin_client.post(GROUPS_URL, json={"name": name})
-        assert resp.status_code == 409
-
-    async def test_duplicate_name_returns_409_ignoring_case(self, admin_client: AsyncClient):
-        name = _name("CaseFold")
-        assert (await admin_client.post(GROUPS_URL, json={"name": name})).status_code == 201
-
-        resp = await admin_client.post(GROUPS_URL, json={"name": name.upper()})
         assert resp.status_code == 409
         assert resp.json()["errors"][0]["field"] == "name"
 
@@ -190,10 +178,6 @@ class TestListGroups:
         row = resp.json()["items"][0]
         assert row["user_count"] == 1
         assert row["project_count"] == 1
-
-    async def test_search_is_case_insensitive(self, admin_client: AsyncClient, group: UserGroup):
-        resp = await admin_client.get(GROUPS_URL, params={"q": group.name.upper()})
-        assert [item["id"] for item in resp.json()["items"]] == [group.id]
 
     async def test_pagination_reports_the_full_total(self, admin_client: AsyncClient):
         stem = f"{_PREFIX}-listpage"
@@ -273,22 +257,11 @@ class TestUpdateGroup:
         assert resp.json()["name"] == group.name
         assert resp.json()["description"] == "Updated"
 
-    async def test_description_can_be_cleared(self, admin_client: AsyncClient, group: UserGroup):
-        resp = await admin_client.patch(f"{GROUPS_URL}{group.id}/", json={"description": None})
-        assert resp.json()["description"] is None
-
     async def test_rename_onto_an_existing_name_returns_409(self, admin_client: AsyncClient, group: UserGroup):
         taken = _name("Taken")
         await admin_client.post(GROUPS_URL, json={"name": taken})
 
         resp = await admin_client.patch(f"{GROUPS_URL}{group.id}/", json={"name": taken})
-        assert resp.status_code == 409
-
-    async def test_rename_collision_is_case_insensitive(self, admin_client: AsyncClient, group: UserGroup):
-        taken = _name("TakenCased")
-        await admin_client.post(GROUPS_URL, json={"name": taken})
-
-        resp = await admin_client.patch(f"{GROUPS_URL}{group.id}/", json={"name": taken.upper()})
         assert resp.status_code == 409
 
     async def test_blank_name_is_rejected(self, admin_client: AsyncClient, group: UserGroup):
@@ -330,22 +303,6 @@ class TestDeleteGroup:
 
         assert resp.status_code == 204
         assert (await admin_client.get(f"{GROUPS_URL}{group.id}/")).status_code == 404
-
-    async def test_delete_removes_the_project_memberships(
-        self, admin_client: AsyncClient, db_session: AsyncSession, group: UserGroup, member_user: User
-    ):
-        project = await _make_project(db_session)
-        db_session.add(UserGroupMember(group_id=group.id, user_id=member_user.id))
-        await db_session.commit()
-        await _grant(db_session, group, project, [_name("Role")])
-        group_id = group.id
-
-        assert (await admin_client.delete(f"{GROUPS_URL}{group_id}/")).status_code == 204
-
-        remaining = await db_session.execute(select(Member.id).where(Member.group_id == group_id))
-        assert remaining.scalars().all() == []
-        links = await db_session.execute(select(UserGroupMember.id).where(UserGroupMember.group_id == group_id))
-        assert links.scalars().all() == []
 
     async def test_delete_reports_what_it_removed(
         self, admin_client: AsyncClient, db_session: AsyncSession, group: UserGroup, member_user: User

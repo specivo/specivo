@@ -30,6 +30,8 @@ from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFacto
 from tests.factories.project import ProjectFactory
 from tests.factories.user import UserFactory
 
+pytestmark = pytest.mark.service
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

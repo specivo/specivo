@@ -11,20 +11,24 @@ import pytest
 from httpx import AsyncClient
 
 # ---------------------------------------------------------------------------
-# Tests: admin dashboard
+# Tests: admin pages
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-async def test_admin_dashboard(admin_client: AsyncClient):
-    """GET /admin with admin returns 200 and contains 'Admin'."""
-    token = admin_client.state.token
-    resp = await admin_client.get(
-        "/admin/",
-        cookies={"access_token": token},
-    )
+@pytest.mark.parametrize(
+    ("url", "text"),
+    [
+        pytest.param("/admin/", "Admin", id="dashboard"),
+        pytest.param("/admin/workflows/", "Workflow", id="workflows"),
+        pytest.param("/admin/settings/", "Settings", id="settings"),
+    ],
+)
+async def test_admin_page_renders(admin_client: AsyncClient, url: str, text: str):
+    """An admin page answers 200 and carries its heading."""
+    resp = await admin_client.get(url, cookies={"access_token": admin_client.state.token})
     assert resp.status_code == 200
-    assert "Admin" in resp.text
+    assert text in resp.text
 
 
 @pytest.mark.integration
@@ -38,46 +42,11 @@ async def test_admin_requires_admin(auth_client: AsyncClient):
     assert resp.status_code == 403
 
 
-# ---------------------------------------------------------------------------
-# Tests: admin sub-pages
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.integration
-async def test_admin_workflows_page(admin_client: AsyncClient):
-    """GET /admin/workflows with admin returns 200."""
-    token = admin_client.state.token
-    resp = await admin_client.get(
-        "/admin/workflows/",
-        cookies={"access_token": token},
-    )
-    assert resp.status_code == 200
-    assert "Workflow" in resp.text
-
-
-@pytest.mark.integration
-async def test_admin_settings_page(admin_client: AsyncClient):
-    """GET /admin/settings with admin returns 200."""
-    token = admin_client.state.token
-    resp = await admin_client.get(
-        "/admin/settings/",
-        cookies={"access_token": token},
-    )
-    assert resp.status_code == 200
-    assert "Settings" in resp.text
-
-
-@pytest.mark.integration
-async def test_kill_switch_page_is_gone(admin_client: AsyncClient):
-    """GET /admin/kill-switch/ answers 404, like any unknown admin page."""
-    resp = await admin_client.get("/admin/kill-switch/", cookies={"access_token": admin_client.state.token})
-    assert resp.status_code == 404
-
-
-@pytest.mark.integration
-async def test_agent_groups_page_is_gone(admin_client: AsyncClient):
-    """GET /admin/agent-groups/ answers 404, like any unknown admin page."""
-    resp = await admin_client.get("/admin/agent-groups/", cookies={"access_token": admin_client.state.token})
+@pytest.mark.parametrize("url", ["/admin/kill-switch/", "/admin/agent-groups/"])
+async def test_unreleased_admin_page_is_gone(admin_client: AsyncClient, url: str):
+    """The page answers 404, like any unknown admin page."""
+    resp = await admin_client.get(url, cookies={"access_token": admin_client.state.token})
     assert resp.status_code == 404
 
 
