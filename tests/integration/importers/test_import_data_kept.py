@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select, update
 
+from specivo.importers.core.ir import EntityType
+from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.time_entry import TimeEntry, TimeEntryActivity
@@ -137,3 +139,53 @@ class TestPlaceholderRewriteScope:
         added = (await db_session.execute(select(Issue).where(Issue.subject == "Issue b-1"))).scalar_one()
         assert added.description == "Follows BUNDLEWEB-1."
         assert not [w for w in second.warnings if w.message.startswith("Placeholders written as plain text")]
+
+
+class TestCommitsWithinAPhase:
+    """A failure late in a long phase keeps the records committed before it."""
+
+    async def test_a_failure_in_the_second_project_keeps_the_first(
+        self, db_session, build_bundle_import, tmp_path, monkeypatch
+    ):
+        import specivo.importers.load.time_entry_loader as time_entry_loader
+
+        entries = [
+            {
+                "source_ref": f"t-{project_ref}",
+                "project_ref": project_ref,
+                "user_ref": "u1",
+                "activity_ref": "dev",
+                "hours": "1",
+                "spent_on": "2024-01-10",
+            }
+            for project_ref in ("p1", "p2")
+        ]
+        root = write_bundle(
+            tmp_path / "b",
+            users=[user("u1")],
+            projects=[project("p1", identifier="kept-one"), project("p2", identifier="kept-two")],
+            time_entries=entries,
+        )
+        create = time_entry_loader._create_entry
+        calls = 0
+
+        async def second_one_fails(ctx, project_id, ir):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("the database went away")
+            return await create(ctx, project_id, ir)
+
+        monkeypatch.setattr(time_entry_loader, "_create_entry", second_one_fails)
+
+        with pytest.raises(RuntimeError):
+            await build_bundle_import(root).run()
+
+        kept = (await db_session.execute(select(TimeEntry.comments, TimeEntry.hours))).all()
+        assert len(kept) == 1
+        mapped = (
+            await db_session.execute(
+                select(func.count()).where(ImportIdMapping.entity_type == str(EntityType.TIME_ENTRY))
+            )
+        ).scalar_one()
+        assert mapped == 1

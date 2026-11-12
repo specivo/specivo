@@ -12,7 +12,13 @@ issue in the run, not just the current project's.
 
 **Transactions.** A normal run uses one session per phase and commits at the
 end of it, so a failure in a late phase never discards verified earlier work
-and ``--resume`` can pick up from there. A dry run instead shares a single
+and ``--resume`` can pick up from there. The long phases also commit as they
+go (see :meth:`PhaseContext.checkpoint`): after each project, and every
+``commit_every`` records within one, so a failure late in a phase of millions
+of rows keeps what came before it, row locks are not held for the whole phase,
+and ``--resume`` continues from the last commit. That is safe because each
+record is mapped in the id map in the same transaction as the row it became:
+a retried record is found and skipped. A dry run instead shares a single
 session across all phases and always rolls it back, which exercises the real
 write path while guaranteeing nothing is persisted.
 
@@ -87,6 +93,8 @@ class ImportOptions:
     resume_run_id: uuid.UUID | None = None
     stop_after_phase: ImportPhase | None = None
     batch_size: int = 500
+    # Records a long phase writes between commits (see PhaseContext.checkpoint).
+    commit_every: int = 1000
     strict: bool = False
     dispatch_celery: bool = False
     project_key_map: dict[str, str] = field(default_factory=dict)
@@ -220,6 +228,9 @@ class PhaseContext:
     ``state`` is a scratch space carried between phases for anything one phase
     works out and a later one needs — group membership, for instance, which is
     read with the users but only applied when projects exist.
+
+    ``can_commit`` says the phase owns its session and may commit part of its
+    work early (see :meth:`checkpoint`); it is false in a dry run.
     """
 
     phase: ImportPhase
@@ -232,6 +243,30 @@ class PhaseContext:
     project_refs: list[str] = field(default_factory=list)
     state: dict[str, Any] = field(default_factory=dict)
     phase_end_hooks: list[Callable[[bool], None]] = field(default_factory=list)
+    can_commit: bool = False
+    uncommitted: int = 0
+
+    async def checkpoint(self) -> None:
+        """Commit what the phase has written so far.
+
+        For a long phase, at a point where everything written is complete:
+        after a project, or between two records. A failure after it then
+        loses only the work since, and a resumed run skips what was committed,
+        since every record is in the id map with the row it became. Does
+        nothing in a dry run, which must not persist anything, nor in a phase
+        that registered an :meth:`at_phase_end` hook, whose work outside the
+        database is kept in step with the phase's one commit.
+        """
+        if not self.can_commit or self.phase_end_hooks:
+            return
+        await self.session.commit()
+        self.uncommitted = 0
+
+    async def record_written(self) -> None:
+        """Count one record written, and :meth:`checkpoint` every ``commit_every`` of them."""
+        self.uncommitted += 1
+        if self.uncommitted >= max(self.options.commit_every, 1):
+            await self.checkpoint()
 
     def at_phase_end(self, hook: Callable[[bool], None]) -> None:
         """Call *hook* once the phase's transaction has ended.
@@ -371,6 +406,7 @@ class ImportPipeline:
                         project_refs=project_refs,
                         state=state,
                         phase_end_hooks=hooks,
+                        can_commit=shared is None,
                     )
                     for handler in handlers:
                         await handler(context)

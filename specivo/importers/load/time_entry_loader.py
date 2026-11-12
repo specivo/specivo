@@ -61,6 +61,8 @@ async def load_time_entries(ctx: PhaseContext) -> None:
                 ctx.summary.record_skipped(EntityType.TIME_ENTRY)
                 continue
             await _create_entry(ctx, project_id, ir)
+            await ctx.record_written()
+        await ctx.checkpoint()
 
 
 async def _create_entry(ctx: PhaseContext, project_id: int, ir: IRTimeEntry) -> TimeEntry | None:

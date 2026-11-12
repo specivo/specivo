@@ -79,6 +79,8 @@ async def load_attachments(ctx: PhaseContext, kinds: tuple[ContainerKind, ...] |
                 ctx.summary.record_skipped(EntityType.ATTACHMENT)
                 continue
             await _load_one(ctx, ir)
+            await ctx.record_written()
+        await ctx.checkpoint()
 
 
 async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:

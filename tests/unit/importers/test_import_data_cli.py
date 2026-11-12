@@ -179,6 +179,17 @@ class TestRunOptions:
         assert options.batch_size == 50
         assert options.project_key_map == {}
 
+    def test_long_phases_commit_every_thousand_records_unless_told(self, registry):
+        args, cls = self._parse(registry)
+        assert build_options(args, cls.from_args(args)).commit_every == 1000
+        args, cls = self._parse(registry, "--commit-every", "50")
+        assert build_options(args, cls.from_args(args)).commit_every == 50
+
+    @pytest.mark.parametrize("value", ["0", "-5", "many"])
+    def test_commit_every_must_be_a_positive_number(self, registry, value):
+        with pytest.raises(SystemExit):
+            self._parse(registry, "--commit-every", value)
+
     def test_help_points_at_the_dry_run(self, registry, capsys):
         """It is the first thing anyone should run."""
         with pytest.raises(SystemExit):

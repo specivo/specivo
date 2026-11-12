@@ -50,6 +50,7 @@ async def load_wiki_pages(ctx: PhaseContext) -> None:
                 await _add_new_revisions(ctx, page_id, ir)
                 continue
             await _create_page(ctx, project_id, ir)
+        await ctx.checkpoint()
 
 
 async def _add_new_revisions(ctx: PhaseContext, page_id: int, ir: IRWikiPage) -> None:
