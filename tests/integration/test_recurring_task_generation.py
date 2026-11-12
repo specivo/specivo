@@ -282,6 +282,60 @@ async def test_one_failing_pattern_does_not_block_others(
 
 
 @pytest.mark.asyncio
+async def test_pattern_failing_after_materialize_does_not_block_others(
+    db_session: AsyncSession,
+    service: RecurringPatternService,
+    project: Project,
+    tracker: Tracker,
+    status_open: IssueStatus,
+    priority: IssuePriority,
+    author: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pattern that fails after materialise changed it is skipped, and the next one still runs.
+
+    Rolling the savepoint back expires the changed pattern, so the failure must
+    be logged without touching its attributes (a lazy load there would raise
+    outside the greenlet and abort the whole run).
+    """
+    dtstart = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
+    now = dtstart + timedelta(days=5, hours=1)
+
+    bad = await service.create(
+        db_session,
+        project,
+        _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name="Bad pattern"),
+        author,
+    )
+    good = await service.create(
+        db_session,
+        project,
+        _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1, name="Good pattern"),
+        author,
+    )
+    await db_session.commit()
+    bad_id, good_id = bad.id, good.id
+
+    real_materialize = RecurringPatternService.materialize
+
+    async def failing_after_materialize(self, session, pattern, now, **kwargs):  # type: ignore[no-untyped-def]
+        created = await real_materialize(self, session, pattern, now, **kwargs)
+        if pattern.id == bad_id:
+            raise RuntimeError("boom after materialize")
+        return created
+
+    monkeypatch.setattr(RecurringPatternService, "materialize", failing_after_materialize)
+
+    processed, created, errors = await recurring._generate_for_session(db_session, now)
+
+    assert processed == 2
+    assert errors == 1
+    assert created > 0
+    assert await _issues_for(db_session, bad_id) == []
+    assert len(await _issues_for(db_session, good_id)) == created
+
+
+@pytest.mark.asyncio
 async def test_second_run_is_noop(
     db_session: AsyncSession,
     service: RecurringPatternService,
