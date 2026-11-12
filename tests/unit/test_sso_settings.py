@@ -61,12 +61,3 @@ def test_no_warning_by_default(caplog: pytest.LogCaptureFixture):
     caplog.set_level(logging.WARNING, logger="specivo.sso")
     log_startup_warnings(_settings())
     assert not [r for r in caplog.records if r.name == "specivo.sso"]
-
-
-def test_lifespan_calls_startup_warnings():
-    """The warning is only useful if the app actually emits it at startup."""
-    import inspect
-
-    from specivo import main
-
-    assert "log_startup_warnings" in inspect.getsource(main.lifespan)

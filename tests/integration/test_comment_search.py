@@ -5,9 +5,6 @@ Covers:
 - Result metadata: issue key in title, snippet contains matched text
 - Visibility: comments inherit issue visibility (CTE-based)
 - Configurable indexing: min length, bot exclusion, index toggle
-
-NOTE: Comment search via FTS/semantic is not yet implemented.
-Tests that require it are marked xfail.
 """
 
 from __future__ import annotations

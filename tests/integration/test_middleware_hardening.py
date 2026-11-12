@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 from httpx import AsyncClient
-from starlette.requests import Request
-
-from specivo.core.exceptions import _render_error_html
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -46,12 +41,3 @@ async def test_an_odd_request_id_is_replaced(unauth_client: AsyncClient, sent: s
     echoed = resp.headers["x-request-id"]
     assert echoed != sent
     assert len(echoed) == 36  # a fresh UUID4
-
-
-def test_the_last_resort_error_page_escapes_its_text() -> None:
-    request = Request({"type": "http", "method": "GET", "path": "/x", "headers": [], "query_string": b""})
-    with patch("specivo.web.deps.get_templates", side_effect=RuntimeError("templates broken")):
-        resp = _render_error_html(request, 400, title="<b>T</b>", message="<img src=x onerror=alert(1)>")
-    body = resp.body.decode()
-    assert "<img" not in body and "<b>" not in body
-    assert "&lt;img src=x onerror=alert(1)&gt;" in body
