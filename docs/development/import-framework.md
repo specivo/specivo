@@ -213,7 +213,12 @@ file (`core/links_file.py`), next to the bundles, and every later load of the
 scope (and `admin import-map resolve-pending`) retries it:
 
 - **Texts** are rewritten in `LINK_GRAPH` (`placeholder_rewrite.py`,
-  `pending_links.py`); an edited text is never overwritten (hash check).
+  `pending_links.py`). The rewrite pass reads only the rows this run imported
+  (`ImportIdMap.targets_written_by_run`, plus the history entry creating each
+  of its issues); text of earlier runs is linked only through the links file,
+  where an edited text is never overwritten (hash check). So text somebody
+  typed into an imported record is left alone, and the pass costs what the
+  run imported, not what the scope holds.
 - **Parents and relations** are made in `RELATIONS` (`issue_links.py`), with
   the same checks as anywhere else (`NestedSetService.validate_parent` plus a
   depth check that counts the child's own sub-tasks, `RelationService.create`);
