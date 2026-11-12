@@ -49,6 +49,8 @@ jobs:
         run: uv run ruff format --check .
       - name: Layer contracts (import-linter)
         run: uv run lint-imports
+      - name: Static source rules
+        run: uv run python scripts/check_static_rules.py
       - name: Type check (mypy)
         run: uv run mypy specivo/
       # Informational: lists the functions above complexity grade C and the

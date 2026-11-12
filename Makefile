@@ -193,6 +193,7 @@ lint:
 	$(RUN) ruff check .
 	$(RUN) ruff format --check .
 	$(RUN) lint-imports
+	$(RUN) python scripts/check_static_rules.py
 	$(RUN) mypy specivo/
 
 # Complexity report (informational): functions graded D or worse, and modules
