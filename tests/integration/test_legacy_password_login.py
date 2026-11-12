@@ -139,6 +139,8 @@ class TestUpgradeOnSignIn:
         """Regression: password_needs_rehash existed but nothing called it."""
         import bcrypt
 
+        # The suite signs in at bcrypt's minimum cost; raise the configured cost above the old hash's.
+        monkeypatch.setattr(get_settings(), "bcrypt_rounds", 5)
         old = bcrypt.hashpw(PASSWORD.encode(), bcrypt.gensalt(rounds=4)).decode()
         user = await _legacy_user(db_session, "legacy_cost", password_hash=old)
 

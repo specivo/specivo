@@ -42,6 +42,10 @@ if _xdist_worker.startswith("gw") and _xdist_worker[2:].isdigit():
     os.environ["REDIS_URL"] = urlunsplit(urlsplit(os.environ["REDIS_URL"])._replace(path=f"/{_redis_db}"))
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-signing")
 os.environ["DEBUG"] = "false"  # Always disable debug in tests (Makefile exports .env)
+# Test users sign in through the real login endpoint on every client fixture; bcrypt at
+# the production cost (12) is ~0.2 s per sign-in, which dominated the runtime of the suite.
+# 4 is bcrypt's minimum. Tests that care about the cost set bcrypt_rounds themselves.
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
 
 # Default to core-only mode (no plugins). Plugin repos set INSTALLED_PLUGINS

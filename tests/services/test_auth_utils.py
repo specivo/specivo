@@ -82,10 +82,14 @@ class TestPasswordNeedsRehash:
         hashed = hash_password("fresh_password99")
         assert password_needs_rehash(hashed) is False
 
-    def test_low_rounds_hash_needs_rehash(self):
+    def test_low_rounds_hash_needs_rehash(self, monkeypatch):
         """A hash created with fewer rounds than configured needs rehash."""
         import bcrypt as _bcrypt
 
+        from specivo.core.config import get_settings
+
+        # The suite runs at bcrypt's minimum cost; configure a higher one than the hash's.
+        monkeypatch.setattr(get_settings(), "bcrypt_rounds", 5)
         low_salt = _bcrypt.gensalt(rounds=4)
         low_cost_hash = _bcrypt.hashpw(b"upgrade_me", low_salt).decode("utf-8")
         assert password_needs_rehash(low_cost_hash) is True
