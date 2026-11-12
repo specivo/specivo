@@ -8,6 +8,7 @@ Covers:
 
 from __future__ import annotations
 
+import smtplib
 from email import message_from_string, policy
 from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
@@ -30,6 +31,7 @@ def _send(*args: object, **kwargs: object) -> EmailMessage:
     from specivo.tasks.notifications import send_notification_email
 
     smtp = MagicMock()
+    smtp.__enter__.return_value = smtp
     with (
         patch("specivo.tasks.notifications.get_settings", return_value=_settings()),
         patch("specivo.core.mail_headers.get_settings", return_value=_settings()),
@@ -126,3 +128,128 @@ class TestNonIssueMail:
         assert msg["To"] == "bob@example.com"
         assert msg["Bcc"] is None
         assert msg["X-Specivo-Event"] == "comment"
+
+
+class _FakeSMTP:
+    """SMTP stand-in that records whether the connection was closed.
+
+    *fail* maps a method name (``login``, ``sendmail``, ``exit``) to the
+    exception that call raises; ``exit`` is the QUIT sent when the ``with``
+    block ends.
+    """
+
+    def __init__(self, fail: dict[str, BaseException] | None = None) -> None:
+        self.fail = fail or {}
+        self.closed = False
+        self.sent = False
+
+    def _maybe_fail(self, name: str) -> None:
+        if name in self.fail:
+            raise self.fail[name]
+
+    def __enter__(self) -> _FakeSMTP:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.closed = True
+        self._maybe_fail("exit")
+
+    def close(self) -> None:
+        self.closed = True
+
+    def quit(self) -> None:
+        self.closed = True
+        self._maybe_fail("exit")
+
+    def ehlo(self) -> None:
+        pass
+
+    def starttls(self, **_kwargs: object) -> None:
+        pass
+
+    def login(self, *_args: object) -> None:
+        self._maybe_fail("login")
+
+    def sendmail(self, *_args: object) -> dict:
+        self._maybe_fail("sendmail")
+        self.sent = True
+        return {}
+
+
+class _RetriedError(Exception):
+    pass
+
+
+def _run(smtp: object, *, smtp_user: str = "") -> MagicMock:
+    """Run the task against *smtp* (an instance, or an exception the connect raises); return the retry mock."""
+    from specivo.tasks.notifications import send_notification_email
+
+    settings = Settings(  # type: ignore[call-arg]
+        secret_key="k" * 64, smtp_from="noreply@mail.example.com", smtp_tls=False, smtp_user=smtp_user
+    )
+    connect = MagicMock(side_effect=smtp) if isinstance(smtp, BaseException) else MagicMock(return_value=smtp)
+    retry = MagicMock(side_effect=_RetriedError())
+    with (
+        patch("specivo.tasks.notifications.get_settings", return_value=settings),
+        patch("specivo.core.mail_headers.get_settings", return_value=settings),
+        patch("specivo.tasks.notifications.smtplib.SMTP", connect),
+        patch.object(send_notification_email, "retry", retry),
+    ):
+        send_notification_email("bob@example.com", "Hello", "<p>Hi</p>")
+    return retry
+
+
+class TestSmtpErrors:
+    def test_connection_is_closed_when_sending_fails(self):
+        smtp = _FakeSMTP({"sendmail": smtplib.SMTPServerDisconnected("gone")})
+        with pytest.raises(_RetriedError):
+            _run(smtp)
+        assert smtp.closed
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ConnectionRefusedError("refused"),
+            TimeoutError("timed out"),
+            smtplib.SMTPConnectError(421, b"busy"),
+        ],
+    )
+    def test_connection_errors_are_retried(self, error):
+        with pytest.raises(_RetriedError):
+            _run(error)
+
+    @pytest.mark.parametrize(
+        ("method", "error"),
+        [
+            ("sendmail", smtplib.SMTPServerDisconnected("gone")),
+            ("sendmail", smtplib.SMTPDataError(451, b"try again later")),
+            ("sendmail", smtplib.SMTPRecipientsRefused({"bob@example.com": (450, b"mailbox busy")})),
+            ("sendmail", smtplib.SMTPSenderRefused(421, b"busy", "noreply@mail.example.com")),
+        ],
+    )
+    def test_transient_errors_are_retried(self, method, error):
+        with pytest.raises(_RetriedError):
+            _run(_FakeSMTP({method: error}), smtp_user="mailer")
+
+    @pytest.mark.parametrize(
+        ("method", "error"),
+        [
+            ("login", smtplib.SMTPAuthenticationError(535, b"bad credentials")),
+            ("sendmail", smtplib.SMTPRecipientsRefused({"bob@example.com": (550, b"no such user")})),
+            ("sendmail", smtplib.SMTPDataError(554, b"rejected")),
+            ("sendmail", smtplib.SMTPSenderRefused(553, b"not allowed", "noreply@mail.example.com")),
+            ("login", smtplib.SMTPNotSupportedError("AUTH not supported")),
+        ],
+    )
+    def test_permanent_errors_are_not_retried(self, method, error):
+        # The error itself propagates (the task fails), not the retry.
+        smtp = _FakeSMTP({method: error})
+        with pytest.raises(type(error)):
+            _run(smtp, smtp_user="mailer")
+        assert smtp.closed
+
+    def test_quit_failure_after_send_is_not_retried(self):
+        smtp = _FakeSMTP({"exit": smtplib.SMTPResponseException(421, b"closing")})
+        retry = _run(smtp)
+        retry.assert_not_called()
+        assert smtp.sent

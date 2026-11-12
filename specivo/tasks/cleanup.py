@@ -8,19 +8,17 @@ Tasks:
 from __future__ import annotations
 
 import logging
-import os
 
-import redis.asyncio as aioredis
 from celery.signals import worker_ready
-from redis.exceptions import LockError, LockNotOwnedError
 
+from specivo.core.locks import beat_lock
 from specivo.tasks import celery_app
 from specivo.tasks._async import run_async
 
 logger = logging.getLogger(__name__)
 
+_LOCK_KEY = "specivo:cleanup_expired_tokens"
 _LOCK_TIMEOUT = 120  # seconds — max time the lock is held
-_LOCK_BLOCKING_TIMEOUT = 5  # seconds — give up quickly if another worker holds the lock
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
@@ -44,75 +42,65 @@ async def _cleanup_async() -> None:
     from specivo.models.auth import PasswordResetToken, RefreshToken
     from specivo.tasks._async import task_session
 
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    r = aioredis.from_url(redis_url)
-    lock_key = "specivo:cleanup_expired_tokens"
+    async with beat_lock(_LOCK_KEY, _LOCK_TIMEOUT) as acquired:
+        if not acquired:
+            logger.debug("Token cleanup skipped — another worker holds the lock")
+            return
+        now = utcnow()
+        async with task_session() as session:
+            # Delete expired password reset tokens
+            reset_stmt = delete(PasswordResetToken).where(PasswordResetToken.expires_at < now)
+            reset_result = await session.execute(reset_stmt)
+            reset_count = reset_result.rowcount
 
-    try:
-        async with r.lock(lock_key, timeout=_LOCK_TIMEOUT, blocking_timeout=_LOCK_BLOCKING_TIMEOUT):
-            now = utcnow()
-            async with task_session() as session:
-                # Delete expired password reset tokens
-                reset_stmt = delete(PasswordResetToken).where(PasswordResetToken.expires_at < now)
-                reset_result = await session.execute(reset_stmt)
-                reset_count = reset_result.rowcount
+            # Delete used password reset tokens older than 7 days
+            from datetime import timedelta
 
-                # Delete used password reset tokens older than 7 days
-                from datetime import timedelta
+            used_cutoff = now - timedelta(days=7)
+            used_stmt = delete(PasswordResetToken).where(
+                PasswordResetToken.used_at.is_not(None),
+                PasswordResetToken.used_at < used_cutoff,
+            )
+            used_result = await session.execute(used_stmt)
+            used_count = used_result.rowcount
 
-                used_cutoff = now - timedelta(days=7)
-                used_stmt = delete(PasswordResetToken).where(
-                    PasswordResetToken.used_at.is_not(None),
-                    PasswordResetToken.used_at < used_cutoff,
+            # Email change links, a week after they expired (used or not)
+            from specivo.models.auth import EmailChangeToken
+
+            await session.execute(delete(EmailChangeToken).where(EmailChangeToken.expires_at < now - timedelta(days=7)))
+
+            # Delete expired refresh tokens
+            refresh_stmt = delete(RefreshToken).where(RefreshToken.expires_at < now)
+            refresh_result = await session.execute(refresh_stmt)
+            refresh_count = refresh_result.rowcount
+
+            # Repository webhook delivery log, kept for 30 days
+            from specivo.services.repository_hooks import purge_old_deliveries
+
+            delivery_count = await purge_old_deliveries(session)
+
+            await session.commit()
+
+            if delivery_count:
+                logger.info("Repository delivery cleanup: deleted %d old deliveries", delivery_count)
+
+            total = reset_count + used_count + refresh_count
+            if total > 0:
+                logger.info(
+                    "Token cleanup: deleted %d expired reset, %d used reset, %d expired refresh tokens",
+                    reset_count,
+                    used_count,
+                    refresh_count,
                 )
-                used_result = await session.execute(used_stmt)
-                used_count = used_result.rowcount
 
-                # Email change links, a week after they expired (used or not)
-                from specivo.models.auth import EmailChangeToken
+        # Outgoing webhook delivery log: settled rows only, committed batch by batch
+        from specivo.services.webhook_delivery import purge_old_deliveries as purge_old_webhook_deliveries
 
-                await session.execute(
-                    delete(EmailChangeToken).where(EmailChangeToken.expires_at < now - timedelta(days=7))
-                )
+        async with task_session() as session:
+            webhook_count = await purge_old_webhook_deliveries(session)
 
-                # Delete expired refresh tokens
-                refresh_stmt = delete(RefreshToken).where(RefreshToken.expires_at < now)
-                refresh_result = await session.execute(refresh_stmt)
-                refresh_count = refresh_result.rowcount
-
-                # Repository webhook delivery log, kept for 30 days
-                from specivo.services.repository_hooks import purge_old_deliveries
-
-                delivery_count = await purge_old_deliveries(session)
-
-                await session.commit()
-
-                if delivery_count:
-                    logger.info("Repository delivery cleanup: deleted %d old deliveries", delivery_count)
-
-                total = reset_count + used_count + refresh_count
-                if total > 0:
-                    logger.info(
-                        "Token cleanup: deleted %d expired reset, %d used reset, %d expired refresh tokens",
-                        reset_count,
-                        used_count,
-                        refresh_count,
-                    )
-
-            # Outgoing webhook delivery log: settled rows only, committed batch by batch
-            from specivo.services.webhook_delivery import purge_old_deliveries as purge_old_webhook_deliveries
-
-            async with task_session() as session:
-                webhook_count = await purge_old_webhook_deliveries(session)
-
-            if webhook_count:
-                logger.info("Webhook delivery cleanup: deleted %d old deliveries", webhook_count)
-    except LockNotOwnedError:
-        logger.debug("Token cleanup skipped — another worker holds the lock")
-    except LockError:
-        logger.debug("Token cleanup skipped — could not acquire lock")
-    finally:
-        await r.aclose()
+        if webhook_count:
+            logger.info("Webhook delivery cleanup: deleted %d old deliveries", webhook_count)
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)

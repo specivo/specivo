@@ -19,12 +19,9 @@ A Redis distributed lock prevents two workers from generating concurrently.
 from __future__ import annotations
 
 import logging
-import os
-
-import redis.asyncio as aioredis
-from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_RECURRING
+from specivo.core.locks import beat_lock
 from specivo.tasks import celery_app
 from specivo.tasks._async import run_async
 
@@ -32,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 _LOCK_KEY = "specivo:generate_recurring_tasks"
 _LOCK_TIMEOUT = 600  # seconds — generous: a large backlog may take a while
-_LOCK_BLOCKING_TIMEOUT = 5  # seconds — give up quickly if another worker holds it
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_RECURRING)
@@ -61,20 +57,13 @@ async def _generate_recurring_async() -> None:
     from specivo.core.utils import utcnow
     from specivo.tasks._async import task_session
 
-    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    r = aioredis.from_url(redis_url)
-
-    try:
-        async with r.lock(_LOCK_KEY, timeout=_LOCK_TIMEOUT, blocking_timeout=_LOCK_BLOCKING_TIMEOUT):
-            now = utcnow()
-            async with task_session() as session:
-                await _generate_for_session(session, now)
-    except LockNotOwnedError:
-        logger.debug("Recurring task generation skipped — lock lost mid-run")
-    except LockError:
-        logger.debug("Recurring task generation skipped — another worker holds the lock")
-    finally:
-        await r.aclose()
+    async with beat_lock(_LOCK_KEY, _LOCK_TIMEOUT) as acquired:
+        if not acquired:
+            logger.debug("Recurring task generation skipped — another worker holds the lock")
+            return
+        now = utcnow()
+        async with task_session() as session:
+            await _generate_for_session(session, now)
 
 
 async def _generate_for_session(session, now, *, batch_size: int | None = None) -> tuple[int, int, int]:
@@ -117,6 +106,10 @@ async def _generate_for_session(session, now, *, batch_size: int | None = None) 
 
         for pattern in batch:
             processed += 1
+            # Read these before the savepoint: rolling it back expires a pattern
+            # that materialize() changed, and touching its attributes then would
+            # lazy-load outside the greenlet and abort the whole run.
+            pattern_id, pattern_name = pattern.id, pattern.name
             # Each pattern runs in its own SAVEPOINT so a failure rolls back
             # only that pattern's partial work, leaving the session clean for
             # the rest of the batch — one failure never poisons the others.
@@ -131,8 +124,8 @@ async def _generate_for_session(session, now, *, batch_size: int | None = None) 
                 if created:
                     logger.info(
                         "Recurring pattern %d (%s): generated %d issue(s)",
-                        pattern.id,
-                        pattern.name,
+                        pattern_id,
+                        pattern_name,
                         len(created),
                     )
             except Exception:
@@ -141,8 +134,8 @@ async def _generate_for_session(session, now, *, batch_size: int | None = None) 
                     await savepoint.rollback()
                 logger.exception(
                     "Recurring pattern %d (%s): materialisation failed — skipping",
-                    pattern.id,
-                    pattern.name,
+                    pattern_id,
+                    pattern_name,
                 )
 
         if len(batch) < batch_size:
