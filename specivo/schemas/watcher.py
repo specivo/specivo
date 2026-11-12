@@ -6,11 +6,14 @@ from pydantic import BaseModel
 
 
 class WatcherOut(BaseModel):
-    """A user watching an issue."""
+    """A user watching an issue.
+
+    No email address: the watcher list is readable by anyone who can see the
+    issue, and a user's email is private.
+    """
 
     model_config = {"from_attributes": True}
 
     id: int
     login: str
     display_name: str
-    email: str
