@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
+from specivo.core.exceptions import AppError, ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.schemas.search import SearchSourceType
@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 
 class WikiService:
     """Service layer for wiki operations."""
+
+    async def require_module_enabled(self, session: AsyncSession, project_id: int) -> None:
+        """Raise ``PermissionDeniedError`` unless the wiki module is enabled for *project_id*.
+
+        Once an admin turns the wiki off, nothing may read or change its
+        pages (the REST routes check this too).
+        """
+        from specivo.models.project import EnabledModule
+
+        enabled = await session.scalar(
+            select(EnabledModule.id).where(EnabledModule.project_id == project_id, EnabledModule.name == "wiki")
+        )
+        if enabled is None:
+            raise PermissionDeniedError("Wiki module is not enabled for this project")
 
     async def get_wiki(self, session: AsyncSession, project_id: int) -> Wiki | None:
         """Get existing wiki for the project, or return None."""

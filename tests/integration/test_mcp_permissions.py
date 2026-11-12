@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.role import Role
 from specivo.models.time_entry import TimeEntryActivity
 from specivo.models.user import User
@@ -122,6 +122,9 @@ async def public_project(db_session: AsyncSession) -> Project:
     """Public project used as the default test project."""
     proj = ProjectFactory.build(key="MPUB", name="MCP Permission Public", is_public=True)
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
@@ -132,6 +135,9 @@ async def private_project(db_session: AsyncSession) -> Project:
     """Private project — non-members cannot access any resource here."""
     proj = ProjectFactory.build(key="MPRV", name="MCP Permission Private", is_public=False)
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
