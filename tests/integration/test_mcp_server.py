@@ -12,7 +12,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
@@ -68,6 +68,9 @@ async def priority(db_session: AsyncSession) -> IssuePriority:
 async def project(db_session: AsyncSession) -> Project:
     proj = ProjectFactory.build(key="ACME", identifier="acme-app")
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj

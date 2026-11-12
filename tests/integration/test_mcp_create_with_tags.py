@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.mcp.tools import _create_issue, _create_tag, _create_wiki
 from specivo.models.issue import Issue
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.tag import Tag
 from specivo.models.user import User
@@ -46,6 +46,9 @@ async def tracker(db_session: AsyncSession):
 async def project(db_session: AsyncSession) -> Project:
     proj = ProjectFactory.build(key="MCTG", name="MCP Create Tags", is_public=True)
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj

@@ -233,8 +233,8 @@ async def specivo_whoami() -> str:
 
 @mcp.tool()
 async def specivo_list_projects(
-    offset: Annotated[int, Field(description="Number of projects to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max projects to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of projects to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max projects to return (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     """List all projects visible to the authenticated user.
 
@@ -259,8 +259,8 @@ async def specivo_list_issues(  # noqa: PLR0913
         ),
     ] = "open",
     sort: Annotated[str, Field(description="Sort field:direction, e.g. 'created_at:desc'.")] = "created_at:desc",
-    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).", ge=1, le=100)] = 25,
     sprint_id: Annotated[
         int | None,
         Field(
@@ -584,7 +584,7 @@ async def specivo_search(
     query: Annotated[str, Field(description="Search query.")],
     project_key: Annotated[str | None, Field(description="Limit to this project. Uppercase, e.g. ACME.")] = None,
     scope: Annotated[str, Field(description="'all', 'issues', or 'wiki'.")] = "all",
-    limit: Annotated[int, Field(description="Max results to return (1-50).")] = 10,
+    limit: Annotated[int, Field(description="Max results to return (1-50).", ge=1, le=50)] = 10,
     mode: Annotated[
         str,
         Field(
@@ -1336,8 +1336,8 @@ async def specivo_ai_usage(  # noqa: PLR0913
     ] = None,
     cost_currency: Annotated[str | None, Field(description="update: ISO currency of cost_amount.")] = None,
     comments: Annotated[str | None, Field(description="update: new note ('' clears it).")] = None,
-    offset: Annotated[int, Field(description="list: entries to skip.")] = 0,
-    limit: Annotated[int, Field(description="list: max entries (1-100).")] = 25,
+    offset: Annotated[int, Field(description="list: entries to skip.", ge=0)] = 0,
+    limit: Annotated[int, Field(description="list: max entries (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     sent = {
         "input": input_tokens,
@@ -1488,8 +1488,8 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
     ] = None,
     notes: Annotated[str | None, Field(description="update: new notes ('' clears them).")] = None,
     active_on: Annotated[str | None, Field(description="list: only subscriptions running on this UTC day.")] = None,
-    offset: Annotated[int, Field(description="list: subscriptions to skip.")] = 0,
-    limit: Annotated[int, Field(description="list: max subscriptions (1-200).")] = 50,
+    offset: Annotated[int, Field(description="list: subscriptions to skip.", ge=0)] = 0,
+    limit: Annotated[int, Field(description="list: max subscriptions (1-200).", ge=1, le=200)] = 50,
 ) -> str:
     changes = {
         "plan_key": plan_key,
@@ -1548,8 +1548,8 @@ async def specivo_list_version_issues(
             ),
         ),
     ] = "default",
-    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     """List issues assigned to a version/release, or unversioned issues (version_id=0).
 
@@ -2014,8 +2014,8 @@ async def specivo_list_sprint_issues(
             ),
         ),
     ] = "default",
-    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     """List issues in a specific sprint, or backlog issues (sprint_id=0).
 

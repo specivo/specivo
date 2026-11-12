@@ -518,12 +518,15 @@ async def test_revoked_key_cannot_rehydrate(patch_transport: None, store: RedisS
 
 
 @pytest.mark.unit
-async def test_session_from_unverified_key_is_not_persisted(patch_transport: None, store: RedisSessionStore) -> None:
+async def test_unverified_key_opens_no_session(patch_transport: None, store: RedisSessionStore) -> None:
+    """A well-formed but unusable key is refused before a session slot is taken."""
     manager = _make_manager(store)
+    send = _Sender()
     async with manager.run():
-        await manager._handle_stateful_request(_make_scope(None, key=KEY_REVOKED), _noop_receive, _Sender())
-        session_id = next(iter(manager._server_instances))
-        assert await store.peek(session_id) is None
+        await manager._handle_stateful_request(_make_scope(None, key=KEY_REVOKED), _noop_receive, send)
+        assert manager._server_instances == {}
+    assert send.status == 401
+    assert b"Invalid or expired API key" in send.body
 
 
 @pytest.mark.unit

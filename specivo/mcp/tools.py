@@ -1004,6 +1004,7 @@ async def _read_wiki(
     search: str | None = None,
 ) -> str:
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "view_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     lines = [
@@ -1132,6 +1133,7 @@ async def _list_wiki_pages(
     project_key: str,
 ) -> str:
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "view_wiki")
     pages = await _wiki_svc.list_pages(session, project.id)
     lines = [f"Wiki pages for {project.key} ({len(pages)} total):", ""]
@@ -1152,6 +1154,7 @@ async def _edit_wiki(
     replace_text: str,
 ) -> str:
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
@@ -1293,6 +1296,7 @@ async def _create_wiki(
     tags: list[str] | None = None,
 ) -> str:
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "manage_wiki")
     try:
         tag_names = _clean_tag_names(tags)
@@ -1339,6 +1343,7 @@ async def _delete_wiki(
     cascade_children: bool = False,
 ) -> str:
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "delete_wiki_pages")
     page, _content = await _wiki_svc.get_page(session, project.id, slug)
     deleted_ids = await _wiki_svc.delete_page(session, page.id, user, cascade_children=cascade_children)
@@ -1366,6 +1371,7 @@ async def _restore_wiki(
     from specivo.models.wiki import Wiki, WikiPage
 
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "delete_wiki_pages")
 
     # Find deleted page by slug (without the deleted_at IS NULL filter)
@@ -1419,6 +1425,7 @@ async def _update_wiki_metadata(
         return "Error: at least one of parent_slug, title, or protected must be provided."
 
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, _content = await _wiki_svc.get_page(session, project.id, slug)
 
@@ -1485,6 +1492,7 @@ async def _append_wiki(
     to insert after a specific section.
     """
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
@@ -1554,6 +1562,7 @@ async def _read_wiki_section(
 ) -> str:
     """Read a single section from a wiki page by heading."""
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "view_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     text = content.text or ""
@@ -1614,6 +1623,7 @@ async def _replace_wiki_section(
 ) -> str:
     """Replace a section's body while preserving the heading line."""
     project = await _get_project(session, user, project_key)
+    await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
