@@ -7,7 +7,13 @@ from typing import Any
 
 import pytest
 
-from specivo.mcp.client_context import ClientInfoMiddleware, client_from_request_context, mcp_client_var
+from specivo.mcp.client_context import (
+    ClientInfoMiddleware,
+    client_from_request_context,
+    connection_from_request_context,
+    mcp_client_var,
+    mcp_connection_var,
+)
 from specivo.services.agent_session_service import ClientInfo, parse_user_agent
 
 pytestmark = pytest.mark.unit
@@ -100,6 +106,44 @@ async def test_middleware_leaves_notifications_alone() -> None:
 
     await ClientInfoMiddleware()(_ctx(client_info=("claude-code", "2.1.0"), request_id=None), call_next)
     assert seen == [None]
+
+
+def test_connection_is_the_streamable_http_session_id() -> None:
+    ctx = SimpleNamespace(request=SimpleNamespace(headers={"mcp-session-id": "abc123"}, query_params={}))
+    assert connection_from_request_context(ctx) == "abc123"
+
+
+def test_connection_is_the_legacy_sse_session_id() -> None:
+    # Legacy SSE posts each message to /messages/?session_id=<id>.
+    ctx = SimpleNamespace(request=SimpleNamespace(headers={}, query_params={"session_id": "f00d"}))
+    assert connection_from_request_context(ctx) == "f00d"
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [
+        None,
+        SimpleNamespace(headers={}),
+        SimpleNamespace(headers={"mcp-session-id": "  "}, query_params={}),
+    ],
+)
+def test_no_connection_without_a_session_id(request_: Any) -> None:
+    assert connection_from_request_context(SimpleNamespace(request=request_)) is None
+
+
+async def test_middleware_publishes_the_connection_for_the_request_only() -> None:
+    seen: list[str | None] = []
+
+    async def call_next(ctx: Any) -> dict:
+        seen.append(mcp_connection_var.get())
+        return {}
+
+    ctx = _ctx(client_info=("claude-code", "2.1.0"))
+    ctx.request = SimpleNamespace(headers={"mcp-session-id": "conn-1"}, query_params={})
+    await ClientInfoMiddleware()(ctx, call_next)
+
+    assert seen == ["conn-1"]
+    assert mcp_connection_var.get() is None
 
 
 def test_the_mcp_server_runs_the_middleware() -> None:

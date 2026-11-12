@@ -59,8 +59,13 @@ issue and wiki edits are in their history, not in the audit log.
 
 ## Agent sessions
 
-Specivo also groups each key's calls into **agent sessions**: calls less than 30 minutes apart
-(`AGENT_SESSION_TIMEOUT`, in seconds) belong to the same session. A session records:
+Specivo also groups each key's calls into **agent sessions**. Each MCP connection has sessions of
+its own: when a client connects (a new Claude Code session, for example) it starts a new session
+with no issue, even if another client uses the same key at the same time or stopped a minute ago.
+A client that reconnects with its session id, after a network drop or a server restart, keeps its
+session. Plain REST calls of a key share one session of their own. Calls of one connection less than
+30 minutes apart (`AGENT_SESSION_TIMEOUT`, in seconds) belong to the same session; after a longer
+pause a new one starts. A session records:
 
 - **the client** that made the calls, by the name and version it announces when it connects (for
   example `claude-code` and `2.1.0`), or else the first product in its `User-Agent` header;

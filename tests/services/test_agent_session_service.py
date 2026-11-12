@@ -126,6 +126,65 @@ async def test_session_without_a_client_takes_the_first_one_seen(db_session: Asy
 
 
 # ---------------------------------------------------------------------------
+# Connections: one agent session per MCP connection
+# ---------------------------------------------------------------------------
+
+
+async def test_each_connection_of_a_key_gets_its_own_session(db_session: AsyncSession, world: World) -> None:
+    first = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    await _svc.record_issue(db_session, first.id, world.agent, world.issue)
+
+    # A new connection of the same key, well inside the idle timeout.
+    second = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-b")
+
+    assert second.id != first.id
+    assert second.issue_id is None
+    assert first.issue_id == world.issue.id
+
+
+async def test_the_same_connection_keeps_its_session(db_session: AsyncSession, world: World) -> None:
+    first = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-b")
+
+    again = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    assert again.id == first.id
+
+
+async def test_the_connection_is_stored_hashed(db_session: AsyncSession, world: World) -> None:
+    s = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-secret")
+    assert s.connection_hash is not None
+    assert len(s.connection_hash) == 64
+    assert "conn-secret" not in s.connection_hash
+
+
+async def test_an_idle_connection_starts_a_new_session(db_session: AsyncSession, world: World) -> None:
+    first = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    first.last_activity_at = datetime.now(UTC) - timedelta(hours=2)
+    await db_session.flush()
+
+    again = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    assert again.id != first.id
+
+
+async def test_calls_without_a_connection_share_the_keys_session(db_session: AsyncSession, world: World) -> None:
+    mcp = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+
+    rest = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, user_agent="curl/8")
+    rest_again = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id)
+
+    # REST calls neither join nor extend a connection's session; they keep one of their own.
+    assert rest.id != mcp.id
+    assert rest_again.id == rest.id
+    assert rest.connection_hash is None
+
+
+async def test_a_connection_never_joins_another_keys_session(db_session: AsyncSession, world: World) -> None:
+    mine = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    theirs = await _svc.get_or_create_session(db_session, world.other_key.id, world.other.id, connection="conn-a")
+    assert theirs.id != mine.id
+
+
+# ---------------------------------------------------------------------------
 # record_issue
 # ---------------------------------------------------------------------------
 
