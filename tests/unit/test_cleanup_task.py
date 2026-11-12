@@ -46,16 +46,9 @@ class TestCleanupBeatSchedule:
         assert callable(cleanup_expired_tokens)
 
 
-class _FakeRedis:
-    def lock(self, *_args, **_kwargs):
-        @asynccontextmanager
-        async def held():
-            yield
-
-        return held()
-
-    async def aclose(self) -> None:
-        pass
+@asynccontextmanager
+async def _held_lock(*_args, **_kwargs):
+    yield True
 
 
 class TestCleanupRun:
@@ -73,7 +66,7 @@ class TestCleanupRun:
         repository_purge = AsyncMock(return_value=2)
         webhook_purge = AsyncMock(return_value=5)
         with (
-            patch("specivo.tasks.cleanup.aioredis.from_url", return_value=_FakeRedis()),
+            patch("specivo.tasks.cleanup.beat_lock", _held_lock),
             patch("specivo.tasks._async.task_session", fake_session),
             patch("specivo.services.repository_hooks.purge_old_deliveries", repository_purge),
             patch("specivo.services.webhook_delivery.purge_old_deliveries", webhook_purge),
