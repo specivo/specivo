@@ -39,16 +39,17 @@ async def _project(db_session: AsyncSession) -> Project:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("version_name", [None, "v1.0"], ids=["no-versions", "one-version"])
 async def test_roadmap_page(
     admin_client: AsyncClient,
     db_session: AsyncSession,
     _project: Project,
+    version_name: str | None,
 ):
-    """GET /projects/{key}/roadmap with auth returns 200 and contains 'Roadmap'."""
-    # Seed a version
-    version = VersionFactory.build(project_id=_project.id, name="v1.0")
-    db_session.add(version)
-    await db_session.commit()
+    """GET /projects/{key}/roadmap returns 200 with 'Roadmap', empty or with a version listed."""
+    if version_name:
+        db_session.add(VersionFactory.build(project_id=_project.id, name=version_name))
+        await db_session.commit()
 
     token = admin_client.state.token
     resp = await admin_client.get(
@@ -57,7 +58,8 @@ async def test_roadmap_page(
     )
     assert resp.status_code == 200
     assert "Roadmap" in resp.text
-    assert "v1.0" in resp.text
+    if version_name:
+        assert version_name in resp.text
 
 
 @pytest.mark.integration
@@ -69,22 +71,6 @@ async def test_roadmap_requires_auth(unauth_client: AsyncClient):
     )
     assert resp.status_code == 302
     assert "/login/" in resp.headers["location"]
-
-
-@pytest.mark.integration
-async def test_roadmap_empty(
-    admin_client: AsyncClient,
-    db_session: AsyncSession,
-    _project: Project,
-):
-    """GET /projects/{key}/roadmap with no versions shows empty state."""
-    token = admin_client.state.token
-    resp = await admin_client.get(
-        f"/projects/{_project.key}/roadmap/",
-        cookies={"access_token": token},
-    )
-    assert resp.status_code == 200
-    assert "Roadmap" in resp.text
 
 
 # ---------------------------------------------------------------------------
