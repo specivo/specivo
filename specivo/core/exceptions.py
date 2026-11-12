@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 
 from fastapi import Request, status
@@ -196,7 +197,8 @@ def _render_error_html(
         # Last resort: if template rendering itself fails, return minimal HTML
         logger.exception("Failed to render error template for %s", status_code)
         return HTMLResponse(
-            content=f"<h1>{status_code} — {title}</h1><p>{message}</p>",
+            # The message can echo user input: escape it, the title too.
+            content=f"<h1>{status_code} — {html.escape(str(title))}</h1><p>{html.escape(str(message))}</p>",
             status_code=status_code,
         )
 
