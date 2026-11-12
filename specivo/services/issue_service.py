@@ -15,6 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.i18n import gettext as _
+from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
@@ -1202,9 +1203,11 @@ class IssueService:
         """Move *issue* to ``target_project``.
 
         Preserves history (journals/comments), relations, attachments, watchers,
-        time entries and stored metadata. A new per-project sequence number is
-        assigned in the target; the old ``KEY-N`` keeps resolving via an
-        ``IssueRefAlias``. The internal ``id`` never changes.
+        time entries, AI usage and stored metadata; time entries, running timers
+        and AI usage logged on the issue move to the target project with it.
+        A new per-project sequence number is assigned in the target; the old
+        ``KEY-N`` keeps resolving via an ``IssueRefAlias``. The internal ``id``
+        never changes.
 
         Project-scoped fields that do not carry across projects are cleared:
         fixed version, sprint, category and tag links. Project-derived
@@ -1272,6 +1275,11 @@ class IssueService:
         )
         await session.execute(
             update(ActiveTimer).where(ActiveTimer.issue_id == issue.id).values(project_id=target_project.id)
+        )
+        # AI usage on the issue follows it too: its reports and visibility rules
+        # expect the issue to live in the entry's project.
+        await session.execute(
+            update(AiUsageEntry).where(AiUsageEntry.issue_id == issue.id).values(project_id=target_project.id)
         )
 
         # Record the move in the issue history (notes-only journal entry).
