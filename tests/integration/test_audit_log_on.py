@@ -281,7 +281,8 @@ async def test_oversized_request_id_and_user_agent_keep_the_event(
     [member] = [r for r in members if r.details.get("action") == "user_created"]
     [failure] = await _rows(db_session, AuditEvent.AUTH_FAILURE)
     for row in (member, failure):
-        assert row.request_id == _LONG_REQUEST_ID[:36]
+        # An oversized X-Request-ID is replaced by a fresh UUID4 before it is stored.
+        assert row.request_id != _LONG_REQUEST_ID[:36] and len(row.request_id) == 36
         assert row.user_agent is not None and len(row.user_agent) == 512
 
 
@@ -298,7 +299,8 @@ async def test_login_survives_oversized_request_id_and_user_agent(
 
     [row] = await _rows(db_session, AuditEvent.LOGIN_SUCCESS)
     assert row.user_id == user.id
-    assert row.request_id == _LONG_REQUEST_ID[:36]
+    # An oversized X-Request-ID is replaced by a fresh UUID4 before it is stored.
+    assert row.request_id != _LONG_REQUEST_ID[:36] and len(row.request_id) == 36
     assert row.user_agent is not None and len(row.user_agent) == 512
 
 

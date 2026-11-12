@@ -173,9 +173,6 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
     _docs_url = f"{sp}/docs"
     _redoc_url = f"{sp}/redoc"
 
-    # Request ID — added first so it is outermost (runs before CORS).
-    application.add_middleware(RequestIDMiddleware)
-
     # CSRF — double-submit cookie pattern for state-changing requests.
     application.add_middleware(CSRFMiddleware)
 
@@ -228,6 +225,14 @@ def create_app() -> FastAPI:  # noqa: C901, PLR0915
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Request ID and security headers — added LAST so it is the outermost
+    # middleware: add_middleware inserts at the front of the stack, so the
+    # last one added runs first. Responses made by the middleware inside it
+    # (CSRF 403, TrustedHost 400, CORS preflight) then carry the security
+    # headers too. Starlette's ServerErrorMiddleware (unhandled 500s) always
+    # wraps the whole stack and cannot be reached from here.
+    application.add_middleware(RequestIDMiddleware)
 
     # Plugin system — load plugins and build the process-wide registries
     # (services, features, password hashers). Shared with the import CLI and
