@@ -38,6 +38,9 @@ from specivo.services.webhook_events import emit_issue_created, emit_issue_delet
 
 logger = logging.getLogger(__name__)
 
+# Largest value of an INTEGER column (issue ids and sequence numbers).
+_MAX_INT4 = 2**31 - 1
+
 # Max distinct issue refs resolved per render when validating autolinks. Bounds
 # the DB lookup so text with a huge number of KEY-N tokens cannot turn one page
 # view into an unbounded query. Refs beyond this cap render as plain text.
@@ -748,6 +751,9 @@ class IssueService:
                     seq = int(parts[1])
                 except ValueError:
                     raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
+                if not 0 < seq <= _MAX_INT4:
+                    # Beyond the column's range the query itself would fail.
+                    raise NotFoundError(f"Issue {display_key!r} not found")
 
                 result = await session.execute(
                     select(Issue).where(Issue.project_key == project_key).where(Issue.sequence_number == seq)
@@ -779,6 +785,8 @@ class IssueService:
         When ``user`` is provided, a visibility check is applied.
         Raises ``NotFoundError`` when the issue does not exist or is not visible.
         """
+        if not 0 < issue_id <= _MAX_INT4:
+            raise NotFoundError(f"Issue {issue_id} not found")
         result = await session.execute(select(Issue).where(Issue.id == issue_id))
         issue = result.scalar_one_or_none()
         if issue is None:
@@ -833,6 +841,9 @@ class IssueService:
                     seq = int(parts[1])
                 except ValueError:
                     raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
+                if not 0 < seq <= _MAX_INT4:
+                    # Beyond the column's range the query itself would fail.
+                    raise NotFoundError(f"Issue {display_key!r} not found")
 
                 from sqlalchemy.orm import joinedload
 
@@ -1538,6 +1549,9 @@ class IssueService:
 
         if not order_clauses:
             order_clauses = [Issue.created_at.desc()]
+        # A unique last key: issues equal on the chosen sort (same priority,
+        # same status) keep one order, so pages neither skip nor repeat them.
+        order_clauses.append(Issue.id.asc())
 
         stmt = stmt.order_by(*order_clauses).offset(offset).limit(limit)
 

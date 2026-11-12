@@ -16,6 +16,7 @@ partial, saved filters and the issues API share:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, date, datetime, time
 from typing import Literal
 from urllib.parse import urlencode
 
@@ -146,3 +147,17 @@ def saved_filter_params(definition: Mapping[str, object] | None) -> dict[str, st
         if text:
             out.setdefault(name, text)
     return out
+
+
+def time_bound(value: datetime | date | None, *, end_of_day: bool = False) -> datetime | None:
+    """A date filter value as a timestamp to compare ``created_at``/``updated_at`` with.
+
+    A bare date means its whole day (UTC): the start for an "after" bound,
+    the end for a "before" one. A datetime without a timezone is taken as UTC.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    moment = datetime.combine(value, time.max if end_of_day else time.min)
+    return moment.replace(tzinfo=UTC)
