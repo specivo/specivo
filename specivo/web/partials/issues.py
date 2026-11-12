@@ -121,7 +121,12 @@ async def issue_activity_partial(
 
     from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
 
-    all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
+    all_journals = await _journal_svc.list_for_issue(
+        db,
+        issue.id,
+        include_private=await _journal_svc.can_view_private_notes(db, user, issue.project_id),
+        own_private_of=user.id,
+    )
     # Bare filenames in comments resolve against the issue's own visible attachments.
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 

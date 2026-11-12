@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select, true
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
@@ -549,7 +549,12 @@ async def issue_detail(  # noqa: PLR0915
     # state, so gather breaks integration tests. Left sequential; real
     # wins come from the joinedload/JOIN collapses below and from
     # htmx-deferred tabs.
-    all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
+    all_journals = await _journal_svc.list_for_issue(
+        db,
+        issue.id,
+        include_private=await _journal_svc.can_view_private_notes(db, user, issue.project_id),
+        own_private_of=user.id,
+    )
     lookups = await _get_lookups(db)
 
     # Relations are visibility-filtered in the service, so one pointing at an
@@ -823,8 +828,8 @@ async def _description_change(db: AsyncSession, issue: Issue, journal_id: int, u
     """The description change recorded in *journal_id*, if that journal belongs to *issue*.
 
     The journal id comes from the URL, so it must be checked against the issue
-    whose access was verified; private journals stay hidden from non-admins,
-    as in the activity feed.
+    whose access was verified; private journals need View private notes (or
+    to be the reader's own), as in the activity feed.
     """
     from specivo.models.journal import Journal, JournalDetail
 
@@ -837,8 +842,7 @@ async def _description_change(db: AsyncSession, issue: Issue, journal_id: int, u
             Journal.issue_id == issue.id,
         )
     )
-    if not user.is_admin:
-        stmt = stmt.where(Journal.is_private.is_(False))
+    stmt = stmt.where(await _journal_svc.readable_clause(db, user, issue.project_id))
     return (await db.execute(stmt)).scalars().first()
 
 
@@ -898,7 +902,7 @@ async def issue_description_diff(
             .where(
                 JournalDetail.prop_key == "description",
                 Journal.issue_id == issue.id,
-                true() if user.is_admin else Journal.is_private.is_(False),
+                await _journal_svc.readable_clause(db, user, issue.project_id),
             )
             .order_by(Journal.created_at.desc(), Journal.id.desc())
         )

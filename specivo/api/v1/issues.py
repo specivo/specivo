@@ -460,8 +460,12 @@ async def get_issue(
         children = [_issue_out(c, computed) for c in child_issues]
 
     if "journals" in include_set:
-        include_private = current_user.is_admin
-        raw_journals = await _journal_service.list_for_issue(db, issue.id, include_private=include_private)
+        raw_journals = await _journal_service.list_for_issue(
+            db,
+            issue.id,
+            include_private=await _journal_service.can_view_private_notes(db, current_user, issue.project_id),
+            own_private_of=current_user.id,
+        )
         # Collect resolved_by user IDs and load them in batch
         resolved_by_ids = {j.resolved_by_id for j in raw_journals if j.resolved_by_id is not None}
         resolved_by_map: dict[int, User] = {}
@@ -487,7 +491,6 @@ async def get_issue(
                 id=u.id,
                 login=u.login,
                 display_name=u.display_name,
-                email=u.email,
             )
             for u in watcher_users
         ]
@@ -1070,7 +1073,6 @@ async def list_watchers(
             id=u.id,
             login=u.login,
             display_name=u.display_name,
-            email=u.email,
         )
         for u in watcher_users
     ]
