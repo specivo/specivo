@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from specivo.cli.import_data import parse_args
+from specivo.core.files import open_regular
 from specivo.importers.bundle import BundleInvalidError, BundleSourceAdapter
 from specivo.importers.bundle import adapter as adapter_module
 from specivo.importers.bundle import container as container_module
@@ -315,7 +316,7 @@ class TestOpenRegular:
     def test_a_regular_file_is_read_in_blocking_mode(self, tmp_path):
         path = tmp_path / "data"
         path.write_bytes(b"data")
-        with container_module.open_regular(path) as handle:
+        with open_regular(path) as handle:
             assert os.get_blocking(handle.fileno())
             assert handle.read() == b"data"
 
@@ -325,19 +326,19 @@ class TestOpenRegular:
 
         def open_it():
             with pytest.raises(OSError, match="Not a regular file"):
-                container_module.open_regular(fifo)
+                open_regular(fifo)
 
         within_seconds(5, open_it, fifo)
 
     def test_a_directory_is_refused(self, tmp_path):
         with pytest.raises(OSError, match="Not a regular file"):
-            container_module.open_regular(tmp_path)
+            open_regular(tmp_path)
 
     def test_a_symlink_is_not_followed(self, tmp_path):
         (tmp_path / "target").write_bytes(b"secret")
         os.symlink(tmp_path / "target", tmp_path / "link")
         with pytest.raises(OSError):
-            container_module.open_regular(tmp_path / "link")
+            open_regular(tmp_path / "link")
 
 
 SECRET_HASH = "$2y$10$Q9mWkzVtH3secretvaluexyzAbCdEfGhIjKlMnOpQrStUvWxYz012"

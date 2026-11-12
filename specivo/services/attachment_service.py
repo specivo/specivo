@@ -88,6 +88,19 @@ class AttachmentUpload:
     journal: Journal | None
 
 
+class _NullWriter:
+    """A write target that keeps nothing: a dry run reads the file but stores no copy."""
+
+    def __enter__(self) -> _NullWriter:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def write(self, data: bytes) -> int:
+        return len(data)
+
+
 class AttachmentService:
     """Service layer for file attachment operations."""
 
@@ -112,6 +125,7 @@ class AttachmentService:
         content_type: str | None = None,
         *,
         copy_file: bool = True,
+        expected_sha256: str | None = None,
     ) -> Attachment:
         """Attach a file that already exists on disk.
 
@@ -133,33 +147,48 @@ class AttachmentService:
         trusted from the source's own record, so a file that was truncated or
         replaced underneath the source database is described correctly here.
 
-        Raises ``FileNotFoundError`` when the file is not readable.
+        The file is opened once, as a regular file and never through a link,
+        and hashed while it is copied: what was hashed is what was stored.
+        With *expected_sha256* (a bundle names its stored files by their
+        hash, checked when it was scanned) a file whose bytes no longer match
+        is refused, so one swapped between scan and load is not imported.
+
+        Raises ``FileNotFoundError`` when the file does not exist, and
+        ``OSError`` when it is not a regular file, cannot be read, or does not
+        match *expected_sha256*.
         """
         import hashlib
-        import shutil
+        import os
 
-        if not source_path.is_file():  # noqa: ASYNC240
-            raise FileNotFoundError(f"Attachment file not found: {source_path}")
+        from specivo.core.files import open_regular
 
+        upload_dir = _get_upload_dir()
+        upload_dir.mkdir(parents=True, exist_ok=True)
         digest = hashlib.sha256()
         filesize = 0
-        with source_path.open("rb") as handle:
-            while chunk := handle.read(1024 * 1024):
-                digest.update(chunk)
-                filesize += len(chunk)
-        content_hash = digest.hexdigest()
+        partial = upload_dir / f".import-{uuid.uuid4().hex}.part"
+        try:
+            with open_regular(source_path) as handle:
+                with partial.open("wb") if copy_file else _NullWriter() as out:
+                    while chunk := handle.read(1024 * 1024):
+                        digest.update(chunk)
+                        filesize += len(chunk)
+                        out.write(chunk)
+            content_hash = digest.hexdigest()
+            if expected_sha256 is not None and content_hash != expected_sha256.lower():
+                raise OSError(f"The file's content does not match its sha256 {expected_sha256}")
 
-        _get_upload_dir().mkdir(parents=True, exist_ok=True)
+            filename = original_filename or source_path.name or "attachment"
+            project_id = await self._resolve_project_id(session, container_type, container_id)
+            if project_id is not None:
+                filename = await self._unique_filename_in_project(session, project_id, filename, content_hash)
 
-        filename = original_filename or source_path.name or "attachment"
-        project_id = await self._resolve_project_id(session, container_type, container_id)
-        if project_id is not None:
-            filename = await self._unique_filename_in_project(session, project_id, filename, content_hash)
-
-        disk_filename = self._make_disk_filename(filename)
-        file_path = self._file_path(disk_filename)
-        if copy_file:
-            shutil.copyfile(source_path, file_path)
+            disk_filename = self._make_disk_filename(filename)
+            file_path = self._file_path(disk_filename)
+            if copy_file:
+                os.replace(partial, file_path)
+        finally:
+            partial.unlink(missing_ok=True)
 
         try:
             attachment = Attachment(

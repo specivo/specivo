@@ -268,6 +268,10 @@ class BaseSourceAdapter:
         """
         raise ValueError(f"The {self.source_system} source does not provide attachment files")
 
+    def expected_attachment_sha256(self, attachment: IRAttachment) -> str | None:  # noqa: ARG002
+        """The sha256 *attachment*'s file must have, if the source knows it (``None``: not checked)."""
+        return None
+
 
 def id_map_system(adapter: object) -> str:
     """Return the system *adapter*'s rows go under in the identifier map.
