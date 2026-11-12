@@ -36,7 +36,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
-        "Link graph of an issue or wiki page: backlinks (direction='in'), outgoing links, relations; depth 1-2"
+        "Link graph of an issue or wiki page: what points here (direction='in': backlinks, relations, "
+        "parent, children), outgoing links, relations; depth 1-2"
     ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",

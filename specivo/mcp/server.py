@@ -641,7 +641,13 @@ async def specivo_get_links(
     ],
     direction: Annotated[
         str,
-        Field(description="'in' = what links here (backlinks), 'out' = what it links to, 'both' (default)."),
+        Field(
+            description=(
+                "'in' = what points here: backlinks, relations towards it (and 'relates'), parent and "
+                "children; 'out' = what it links to, all its relations, parent, children, attachments, "
+                "commits and pull requests; 'both' (default)."
+            )
+        ),
     ] = "both",
     depth: Annotated[
         int,
@@ -670,7 +676,9 @@ async def specivo_get_links(
     Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url), ``edges``
     (source, target, kind, direction relative to the root, label, relation_type,
     ``via`` = the comment a link is written in, ``broken`` for a link to
-    something that does not exist) and ``truncated``. Only what you may see is
+    something that does not exist) and ``truncated`` (true only when a neighbour
+    or a second-hop expansion was left out). Each link is listed once, even at
+    depth 2 where both its ends are read. Only what you may see is
     returned: a link to or from an item you cannot see is left out entirely.
     ``specivo_show_issue`` and ``specivo_read_wiki`` already list the direct
     text links and relations inline; call this for depth 2, filters or JSON.

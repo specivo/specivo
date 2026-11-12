@@ -16,7 +16,11 @@ from specivo.services.entity_link_service import ALL_KINDS, EntityLinkService, N
 router = APIRouter(tags=["links"])
 _service = EntityLinkService()
 
-_DIRECTION = Query("both", pattern="^(in|out|both)$", description="in (backlinks), out, or both")
+_DIRECTION = Query(
+    "both",
+    pattern="^(in|out|both)$",
+    description="in (backlinks, relations towards it, parent and children), out, or both",
+)
 _DEPTH = Query(1, ge=1, le=2, description="1, or 2 to expand issue and wiki-page neighbours once more")
 _KINDS = Query(
     None,
