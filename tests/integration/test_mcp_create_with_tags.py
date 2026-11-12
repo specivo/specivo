@@ -2,11 +2,13 @@
 
 The tags are applied in the same tool call as the create, with the rules and
 limits of ``specivo_tag(op="add")``: missing names are created, existing ones
-are reused case-insensitively, and invalid input is an error string that
-leaves nothing behind.
+are reused case-insensitively, and invalid input is refused with an error
+that leaves nothing behind.
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 import pytest_asyncio
@@ -124,8 +126,8 @@ async def test_create_issue_without_tags_adds_none(db_session, project, tracker,
 async def test_create_issue_with_invalid_tags_creates_nothing(
     db_session, project, tracker, admin, names, message
 ) -> None:
-    result = await _create_issue(db_session, admin, project.key, tracker.id, "Refused issue", tags=names)
-    assert result.startswith("Error: ") and message in result
+    with pytest.raises(ValueError, match=re.escape(message)):
+        await _create_issue(db_session, admin, project.key, tracker.id, "Refused issue", tags=names)
     assert await _count(db_session, Issue, Issue.subject == "Refused issue") == 0
     assert await _count(db_session, Tag, Tag.project_id == project.id) == 0
 
@@ -147,7 +149,7 @@ async def test_create_wiki_with_tags_applies_them(db_session, project, admin) ->
 
 @pytest.mark.parametrize(("names", "message"), _INVALID)
 async def test_create_wiki_with_invalid_tags_creates_nothing(db_session, project, admin, names, message) -> None:
-    result = await _create_wiki(db_session, admin, project.key, "Refused page", "Body", tags=names)
-    assert result.startswith("Error: ") and message in result
+    with pytest.raises(ValueError, match=re.escape(message)):
+        await _create_wiki(db_session, admin, project.key, "Refused page", "Body", tags=names)
     assert await _count(db_session, WikiPage, WikiPage.title == "Refused page") == 0
     assert await _count(db_session, Tag, Tag.project_id == project.id) == 0

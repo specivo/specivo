@@ -16,7 +16,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import PermissionDeniedError, ValidationError
 from specivo.models.lookups import IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
@@ -203,8 +203,8 @@ class TestRecurringPatternRoundTrip:
         # Weekly on a non-weekday token combined with a count that can never
         # be satisfied: rely on the engine surfacing an invalid rule. A clearly
         # bad timezone is the simplest reliable invalid-input path.
-        out = await _create(db_session, admin, project, tracker, timezone="Mars/Phobos")
-        assert out.startswith("Error:")
+        with pytest.raises(ValidationError, match="Mars/Phobos"):
+            await _create(db_session, admin, project, tracker, timezone="Mars/Phobos")
 
 
 # ---------------------------------------------------------------------------

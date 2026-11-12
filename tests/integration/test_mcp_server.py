@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import ValidationError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
@@ -326,14 +327,15 @@ class TestMcpListIssuesStatusFilter:
 
         await self._seed_two_statuses(db_session, admin, seed)
 
-        result = await _list_issues(db_session, admin, project_key="ACME", status="Nonexistent")
-        assert result.startswith("Error:")
-        assert "Nonexistent" in result
+        with pytest.raises(ValidationError) as refused:
+            await _list_issues(db_session, admin, project_key="ACME", status="Nonexistent")
+        message = refused.value.message
+        assert "Nonexistent" in message
         # The known status names are listed so the caller can correct the call.
-        assert "In Progress" in result
+        assert "In Progress" in message
         # Crucially, no issues leak through as a "successful" listing.
-        assert "Still new" not in result
-        assert "Being worked on" not in result
+        assert "Still new" not in message
+        assert "Being worked on" not in message
 
 
 class TestMcpListIssuesMetadataFilters:
@@ -419,17 +421,15 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"])
-        assert result.startswith("Error")
-        assert "key=value" in result
+        with pytest.raises(ValueError, match="key=value"):
+            await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"])
 
     async def test_empty_key_returns_error(self, db_session, admin, seed):
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["=value"])
-        assert result.startswith("Error")
-        assert "empty key" in result
+        with pytest.raises(ValueError, match="empty key"):
+            await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["=value"])
 
     async def test_value_with_special_chars_safely_escaped(self, db_session, admin, seed):
         from specivo.mcp.tools import _list_issues
@@ -513,8 +513,8 @@ class TestMcpEditDescription:
         )
         await db_session.commit()
 
-        result = await _edit_description(db_session, admin, issue.display_key, "nonexistent text", "replacement")
-        assert "not found" in result.lower()
+        with pytest.raises(ValidationError, match="search text not found"):
+            await _edit_description(db_session, admin, issue.display_key, "nonexistent text", "replacement")
 
 
 class TestMcpSearch:
@@ -784,16 +784,8 @@ class TestMcpWikiSections:
         await wiki_svc.create_page(db_session, project.id, "No Head", "Some content.", admin)
         await db_session.commit()
 
-        result = await _append_wiki(
-            db_session,
-            admin,
-            "ACME",
-            "no-head",
-            "Extra.",
-            position="after:## Nonexistent",
-        )
-        assert "Error" in result
-        assert "not found" in result
+        with pytest.raises(ValidationError, match="heading '## Nonexistent' not found"):
+            await _append_wiki(db_session, admin, "ACME", "no-head", "Extra.", position="after:## Nonexistent")
 
 
 class TestMcpAddComment:

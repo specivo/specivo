@@ -192,8 +192,7 @@ def _parse_metadata_filters(raw: list[str] | None) -> list[tuple[str, str]]:
 
     Returns an empty list when *raw* is None or empty. Raises ``ValueError``
     with a caller-actionable message when any item is malformed (no ``=``,
-    empty key, etc.) — surfaced to the agent via the standard ``Error: ...``
-    return path in the calling tool.
+    empty key, etc.), which reaches the agent as a tool error.
     """
     if not raw:
         return []
@@ -304,7 +303,7 @@ async def _resolve_list_filters(
     return filters
 
 
-async def _list_issues(  # noqa: C901, PLR0913
+async def _list_issues(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
     project_key: str,
@@ -324,36 +323,23 @@ async def _list_issues(  # noqa: C901, PLR0913
     filters: dict = {"status": status}
     if sprint_id is not None:
         filters["sprint_id"] = sprint_id
-    try:
-        named = await _resolve_list_filters(session, user, project, assignee=assignee, tag=tag, release=release)
-    except ValueError as exc:
-        return f"Error: {exc}"
-    filters.update(named)
+    filters.update(await _resolve_list_filters(session, user, project, assignee=assignee, tag=tag, release=release))
     parent: Issue | None = None
     if parent_ref:
-        try:
-            parent = await _resolve_parent_ref(session, user, parent_ref)
-        except NotFoundError as exc:
-            return f"Error: {exc.message}"
+        parent = await _resolve_parent_ref(session, user, parent_ref)
         filters["parent_id"] = parent.id
-    try:
-        parsed_metadata = _parse_metadata_filters(metadata_filters)
-    except ValueError as exc:
-        return f"Error: {exc}"
+    parsed_metadata = _parse_metadata_filters(metadata_filters)
     if parsed_metadata:
         filters["metadata_filters"] = parsed_metadata
-    try:
-        issues, total = await _issue_svc.list_issues(
-            session,
-            project_id=project.id,
-            filters=filters,
-            sort=sort,
-            offset=offset,
-            limit=limit,
-            user=user,
-        )
-    except ValidationError as exc:
-        return f"Error: {exc.message}"
+    issues, total = await _issue_svc.list_issues(
+        session,
+        project_id=project.id,
+        filters=filters,
+        sort=sort,
+        offset=offset,
+        limit=limit,
+        user=user,
+    )
     scope = f"filter={status}"
     if sprint_id is not None:
         scope += f", sprint_id={sprint_id}"
@@ -639,19 +625,12 @@ async def _create_issue(  # noqa: PLR0913
 ) -> str:
     project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "add_issues")
-    try:
-        tag_names = _clean_tag_names(tags)
-    except ValueError as exc:
-        return f"Error: {exc}"
+    tag_names = _clean_tag_names(tags)
     parent: Issue | None = None
     if parent_ref:
-        # Checked before anything is written: the error string is committed
-        # with the tool call, so a refusal must leave nothing behind.
-        try:
-            parent = await _resolve_parent_ref(session, user, parent_ref, project.id)
-            await _issue_svc.check_parent(session, None, parent)
-        except (NotFoundError, ValidationError) as exc:
-            return f"Error: {exc.message}"
+        # Checked before anything is written. A refusal rolls the tool call back anyway.
+        parent = await _resolve_parent_ref(session, user, parent_ref, project.id)
+        await _issue_svc.check_parent(session, None, parent)
     data = IssueCreate(
         project_key=project_key,
         tracker_id=tracker_id,
@@ -710,13 +689,10 @@ async def _update_issue(  # noqa: PLR0913
     await _require_permission(session, user, issue.project_id, "edit_issues")
     parent: Issue | None = None
     if parent_ref:
-        # Checked before anything is written: the service applies the other
-        # fields first, and the error string is committed with the tool call.
-        try:
-            parent = await _resolve_parent_ref(session, user, parent_ref, issue.project_id)
-            await _issue_svc.check_parent(session, issue, parent)
-        except (NotFoundError, ValidationError) as exc:
-            return f"Error: {exc.message}"
+        # Checked before the service applies the other fields. A refusal
+        # rolls the tool call back anyway.
+        parent = await _resolve_parent_ref(session, user, parent_ref, issue.project_id)
+        await _issue_svc.check_parent(session, issue, parent)
     # Only forward kwargs the caller actually supplied. Pydantic V2 adds every
     # explicit kwarg to ``model_fields_set`` regardless of value, and the
     # service layer uses that set to distinguish "not provided" from
@@ -844,9 +820,9 @@ async def _edit_description(
     await _require_permission(session, user, issue.project_id, "edit_issues")
     current = issue.description or ""
     if search_text not in current:
-        return (
-            f"Error: search text not found in {issue.display_key} description.\n"
-            f"Description length: {len(current)} chars."
+        raise ValidationError(
+            f"search text not found in {issue.display_key} description.\nDescription length: {len(current)} chars.",
+            field="search_text",
         )
     new_description = current.replace(search_text, replace_text, 1)
     # Only set ``description`` — omitting every other field keeps
@@ -1117,7 +1093,10 @@ async def _edit_wiki(
     page, content = await _wiki_svc.get_page(session, project.id, slug)
     current = content.text or ""
     if search_text not in current:
-        return f"Error: search text not found in wiki page '{page.title}'.\nContent length: {len(current)} chars."
+        raise ValidationError(
+            f"search text not found in wiki page '{page.title}'.\nContent length: {len(current)} chars.",
+            field="search_text",
+        )
     new_text = current.replace(search_text, replace_text, 1)
     page, new_content = await _wiki_svc.update_page(session, page.id, new_text, user, lock_version=page.lock_version)
     await session.flush()
@@ -1257,10 +1236,7 @@ async def _create_wiki(
     project = await _get_project(session, user, project_key)
     await _wiki_svc.require_module_enabled(session, project.id)
     await _require_permission(session, user, project.id, "manage_wiki")
-    try:
-        tag_names = _clean_tag_names(tags)
-    except ValueError as exc:
-        return f"Error: {exc}"
+    tag_names = _clean_tag_names(tags)
     page, content = await _wiki_svc.create_page(
         session,
         project.id,
@@ -1365,7 +1341,7 @@ async def _update_wiki_metadata(
 ) -> str:
     """Update wiki page metadata (parent, title, protected) without editing content."""
     if parent_slug is None and title is None and protected is None:
-        return "Error: at least one of parent_slug, title, or protected must be provided."
+        raise ValidationError("at least one of parent_slug, title, or protected must be provided.")
 
     project = await _get_project(session, user, project_key)
     await _wiki_svc.require_module_enabled(session, project.id)
@@ -1446,9 +1422,10 @@ async def _append_wiki(
         sections = split_into_sections(current)
         match = find_section(sections, heading_query)
         if match is None:
-            return (
-                f"Error: heading '{heading_query}' not found in wiki page '{page.title}'.\n"
-                f"Content length: {len(current)} chars."
+            raise ValidationError(
+                f"heading '{heading_query}' not found in wiki page '{page.title}'.\n"
+                f"Content length: {len(current)} chars.",
+                field="position",
             )
         sec_idx, section = match
         sec_level = section["level"]
@@ -1471,7 +1448,7 @@ async def _append_wiki(
             # No next same-level heading; append at end
             new_text = current.rstrip("\n") + "\n\n" + text
     else:
-        return f"Error: invalid position '{position}'. Use 'end' or 'after:## Heading Name'."
+        raise ValidationError(f"invalid position '{position}'. Use 'end' or 'after:## Heading Name'.", field="position")
 
     page, new_content = await _wiki_svc.update_page(
         session,
@@ -1513,9 +1490,10 @@ async def _read_wiki_section(
     sections = split_into_sections(text)
     match = find_section(sections, heading)
     if match is None:
-        return (
-            f"Error: heading '{heading}' not found in wiki page '{page.title}'.\n"
-            f"Available headings: {', '.join(s['heading'] for s in sections if s['heading'])}"
+        raise ValidationError(
+            f"heading '{heading}' not found in wiki page '{page.title}'.\n"
+            f"Available headings: {', '.join(s['heading'] for s in sections if s['heading'])}",
+            field="heading",
         )
 
     sec_idx, section = match
@@ -1575,9 +1553,10 @@ async def _replace_wiki_section(
     sections = split_into_sections(current)
     match = find_section(sections, heading)
     if match is None:
-        return (
-            f"Error: heading '{heading}' not found in wiki page '{page.title}'.\n"
-            f"Available headings: {', '.join(s['heading'] for s in sections if s['heading'])}"
+        raise ValidationError(
+            f"heading '{heading}' not found in wiki page '{page.title}'.\n"
+            f"Available headings: {', '.join(s['heading'] for s in sections if s['heading'])}",
+            field="heading",
         )
 
     sec_idx, section = match
@@ -1807,7 +1786,7 @@ async def _update_metadata_schema(
     if description is not None:
         update_kwargs["description"] = description
     if not update_kwargs:
-        return "Error: no fields provided to update"
+        raise ValidationError("no fields provided to update")
 
     payload = MetadataSchemaUpdate(**update_kwargs)
     updated = await svc.update(session, existing, payload)
@@ -1914,7 +1893,7 @@ def _detect_lossy_number(value: Any) -> str | None:
     return None
 
 
-async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
+async def _metadata(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     user: User,
     target_ref: str,
@@ -1937,9 +1916,9 @@ async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
       removes a single matching element; list removes each matching
       element.  Errors if the existing value is not a list.
 
-    Recoverable errors (bad op, wrong type, stale version, oversize
-    blob) are returned as ``"Error: ..."`` strings.  Hard errors
-    (permission denied, unknown target, missing entity) raise.
+    Every refusal (bad op, wrong type, stale version, oversize blob,
+    permission denied, unknown target, missing entity) raises, so the
+    agent gets a tool error and nothing is written.
     """
     import json
 
@@ -1952,30 +1931,31 @@ async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
     target = registry.get(scheme)
     if target is None:
         known = ", ".join(registry.schemes()) or "(none)"
-        return f"Error: unknown metadata target scheme '{scheme}'. Known schemes: {known}"
+        raise ValidationError(f"unknown metadata target scheme '{scheme}'. Known schemes: {known}", field="target_ref")
 
     if not key:
-        return "Error: key must be a non-empty string"
+        raise ValidationError("key must be a non-empty string", field="key")
 
     valid_ops = {"set", "get", "delete", "append", "remove"}
     if op not in valid_ops:
-        return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
+        raise ValidationError(f"invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}", field="op")
 
     if op in {"set", "append", "remove"}:
         offender = _detect_lossy_number(value)
         if offender is not None:
-            return (
-                f"Error: value {offender} arrived as a number with lost precision "
+            raise ValidationError(
+                f"value {offender} arrived as a number with lost precision "
                 "(scientific notation, inf, or nan). Identifier-like inputs "
                 "(commit hashes, PR ids, tokens) must be passed as JSON strings — "
-                'quote the value, e.g. "4983e31..." instead of 4983e31...'
+                'quote the value, e.g. "4983e31..." instead of 4983e31...',
+                field="value",
             )
 
     # Resolve & permission check
     try:
         entity = await target.resolve(session, ref, user)
     except NotFoundError:
-        return f"Error: {scheme} '{ref}' not found"
+        raise NotFoundError(f"{scheme} '{ref}' not found") from None
     required_permission = target.read_permission if op == "get" else target.permission
     await _require_permission(session, user, target.project_id_of(entity), required_permission)
 
@@ -1992,7 +1972,7 @@ async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
         try:
             return json.dumps(metadata[key], default=str, ensure_ascii=False)
         except TypeError:
-            return f"Error: value at key '{key}' is not JSON-serializable"
+            raise ValidationError(f"value at key '{key}' is not JSON-serializable", field="key") from None
 
     # Apply op to a local copy.
     if op == "set":
@@ -2009,7 +1989,10 @@ async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
             else:
                 existing.append(value)
         else:
-            return f"Error: cannot append to key '{key}': existing value is {type(existing).__name__}, expected array"
+            raise ValidationError(
+                f"cannot append to key '{key}': existing value is {type(existing).__name__}, expected array",
+                field="key",
+            )
     elif op == "remove":
         existing = metadata.get(key)
         if existing is None:
@@ -2019,25 +2002,27 @@ async def _metadata(  # noqa: C901, PLR0911, PLR0912, PLR0915
             drop = value if isinstance(value, list) else [value]
             metadata[key] = [item for item in existing if item not in drop]
         else:
-            return f"Error: cannot remove from key '{key}': existing value is {type(existing).__name__}, expected array"
+            raise ValidationError(
+                f"cannot remove from key '{key}': existing value is {type(existing).__name__}, expected array",
+                field="key",
+            )
 
     # Size cap (serialized JSON, post-op)
     try:
         serialized = json.dumps(metadata, default=str)
     except (TypeError, ValueError) as exc:
-        return f"Error: metadata value is not JSON-serializable: {exc}"
+        raise ValidationError(f"metadata value is not JSON-serializable: {exc}", field="value") from None
     if len(serialized.encode("utf-8")) > _METADATA_MAX_BYTES:
-        return f"Error: metadata blob would exceed {_METADATA_MAX_BYTES} bytes after this operation"
+        raise ValidationError(
+            f"metadata blob would exceed {_METADATA_MAX_BYTES} bytes after this operation", field="value"
+        )
 
-    # Persist through the target.
+    # Persist through the target. A ValidationError or ConflictError from the
+    # target reaches the agent as a tool error as it is.
     try:
         updated_entity = await target.set_metadata(session, entity, metadata, user)
     except StaleDataError:
-        return "Error: issue was modified by another request, retry"
-    except ValidationError as exc:
-        return f"Error: {exc.message}"
-    except ConflictError as exc:
-        return f"Error: {exc.message}"
+        raise ConflictError("issue was modified by another request, retry") from None
     await session.flush()
 
     await _log_tool(
@@ -2120,7 +2105,9 @@ async def _add_relation(
 
     if relation_type not in VALID_RELATION_TYPES:
         valid = ", ".join(sorted(VALID_RELATION_TYPES))
-        return f"Error: invalid relation_type '{relation_type}'. Must be one of: {valid}"
+        raise ValidationError(
+            f"invalid relation_type '{relation_type}'. Must be one of: {valid}", field="relation_type"
+        )
 
     issue_from = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue_from.project_id, "manage_issue_relations")
@@ -2490,7 +2477,7 @@ def _parse_occurrence_at(value: str) -> datetime:
     """Parse an ISO-8601 datetime string into a tz-aware UTC-comparable datetime.
 
     A naive input is interpreted as UTC. Raises ValueError on a bad string,
-    surfaced to the agent via the standard ``Error: ...`` return path.
+    which reaches the agent as a tool error.
     """
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
@@ -2592,7 +2579,7 @@ async def _create_recurring_pattern(  # noqa: PLR0913
             enabled=enabled,
         )
     except ValueError as exc:
-        return f"Error: {exc}"
+        raise ValidationError(str(exc)) from exc
     pattern = await _recurring_pattern_svc.create(session, project, data, user)
     await session.flush()
     await _log_tool(
@@ -2669,7 +2656,7 @@ async def _update_recurring_pattern(  # noqa: C901, PLR0913
     try:
         data = RecurringPatternUpdate(**updates)
     except ValueError as exc:
-        return f"Error: {exc}"
+        raise ValidationError(str(exc)) from exc
     pattern = await _recurring_pattern_svc.update(session, pattern, data, user)
     await session.flush()
     await _log_tool(
@@ -2719,7 +2706,7 @@ async def _skip_recurrence_occurrence(
     try:
         occurrence = _parse_occurrence_at(occurrence_at)
     except ValueError as exc:
-        return f"Error: invalid occurrence_at: {exc}"
+        raise ValidationError(f"invalid occurrence_at: {exc}", field="occurrence_at") from exc
     await _recurring_pattern_svc.skip_occurrence(session, pattern, occurrence)
     await session.flush()
     await _log_tool(
@@ -2935,7 +2922,7 @@ async def _list_sprint_issues(
     await _require_permission(session, user, project.id, "view_issues")
 
     if fields not in ("minimal", "default", "full"):
-        return "Error: fields must be one of: minimal, default, full"
+        raise ValidationError("fields must be one of: minimal, default, full", field="fields")
 
     limit = max(1, min(limit, 100))
 
@@ -3043,7 +3030,7 @@ async def _list_version_issues(
     await _require_permission(session, user, project.id, "view_issues")
 
     if fields not in ("minimal", "default", "full"):
-        return "Error: fields must be one of: minimal, default, full"
+        raise ValidationError("fields must be one of: minimal, default, full", field="fields")
 
     limit = max(1, min(limit, 100))
 
@@ -3156,10 +3143,7 @@ async def _create_tag(
 ) -> str:
     project = await _get_project(session, user, project_key)
     await _require_permission(session, user, project.id, "manage_project")
-    try:
-        tag = await _tag_svc.create(session, project, TagCreate(name=name, color=color))
-    except ConflictError as exc:
-        return f"Error: {exc.message}"
+    tag = await _tag_svc.create(session, project, TagCreate(name=name, color=color))
     await session.flush()
     await _log_tool(
         session,
@@ -3184,12 +3168,9 @@ async def _update_tag(
     await _require_permission(session, user, project.id, "manage_project")
     tag = await _tag_svc.get_by_id(session, tag_id)
     if tag.project_id != project.id:
-        return f"Error: tag {tag_id} not found in project '{project.key}'"
+        raise NotFoundError(f"tag {tag_id} not found in project '{project.key}'")
     data = TagUpdate(name=name) if color is None else TagUpdate(name=name, color=color)
-    try:
-        tag = await _tag_svc.update(session, tag, data)
-    except ConflictError as exc:
-        return f"Error: {exc.message}"
+    tag = await _tag_svc.update(session, tag, data)
     await session.flush()
     await _log_tool(
         session,
@@ -3207,7 +3188,7 @@ async def _delete_tag(session: AsyncSession, user: User, project_key: str, tag_i
     await _require_permission(session, user, project.id, "manage_project")
     tag = await _tag_svc.get_by_id(session, tag_id)
     if tag.project_id != project.id:
-        return f"Error: tag {tag_id} not found in project '{project.key}'"
+        raise NotFoundError(f"tag {tag_id} not found in project '{project.key}'")
     name = tag.name
     await _tag_svc.delete(session, tag)
     await session.flush()
@@ -3307,7 +3288,7 @@ async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str
     return "issue", issue_project, issue.id, issue.display_key
 
 
-async def _tag(  # noqa: C901, PLR0911, PLR0912
+async def _tag(
     session: AsyncSession,
     user: User,
     target_ref: str,
@@ -3321,14 +3302,9 @@ async def _tag(  # noqa: C901, PLR0911, PLR0912
     """
     valid_ops = {"get", "add", "remove", "set"}
     if op not in valid_ops:
-        return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
+        raise ValidationError(f"invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}", field="op")
 
-    try:
-        kind, project, entity_id, display = await _resolve_tag_target(session, user, target_ref, write=op != "get")
-    except NotFoundError as exc:
-        return f"Error: {exc}"
-    except ValueError as exc:
-        return f"Error: {exc}"
+    kind, project, entity_id, display = await _resolve_tag_target(session, user, target_ref, write=op != "get")
 
     if op == "get":
         tags = (
@@ -3348,10 +3324,7 @@ async def _tag(  # noqa: C901, PLR0911, PLR0912
             return f"{display}: (no tags)"
         return f"{display}: " + ", ".join(t.name for t in tags)
 
-    try:
-        names = _clean_tag_names(value)
-    except ValueError as exc:
-        return f"Error: {exc}"
+    names = _clean_tag_names(value)
 
     if op == "set":
         if kind == "issue":
@@ -3383,7 +3356,7 @@ async def _tag(  # noqa: C901, PLR0911, PLR0912
         )
 
     if not names:
-        return "Error: value (tag name) is required for add/remove"
+        raise ValidationError("value (tag name) is required for add/remove", field="value")
 
     changed: list[str] = []
     if op == "add":

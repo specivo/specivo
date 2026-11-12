@@ -1,8 +1,8 @@
 """Setting and changing an issue's parent over MCP, and showing parent and children.
 
 ``specivo_create_issue`` and ``specivo_update_issue`` take a ``parent_ref``
-(a display key, never a database id). Every refusal is an error string and
-leaves the data unchanged: an unknown ref, a parent the caller may not see
+(a display key, never a database id). Every refusal raises, so the agent gets
+a tool error and the data stays unchanged: an unknown ref, a parent the caller may not see
 (with the same message, so nothing leaks), a cycle and the depth limit.
 """
 
@@ -14,10 +14,12 @@ from contextlib import asynccontextmanager
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_HIERARCHY_DEPTH
+from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.mcp import server
 from specivo.mcp.auth import mcp_raw_key_var
 from specivo.mcp.tools import _create_issue, _list_issues, _show_issue, _update_issue
@@ -168,8 +170,8 @@ async def test_create_parent_ref_is_case_insensitive(db_session, project, tracke
 
 async def test_create_with_unknown_parent_ref_creates_nothing(db_session, project, tracker, admin) -> None:
     before = await db_session.scalar(select(func.count()).select_from(Issue).where(Issue.project_id == project.id))
-    result = await _create_issue(db_session, admin, project.key, tracker.id, "Orphan", parent_ref="MPAR-999")
-    assert result == "Error: parent issue 'MPAR-999' not found"
+    with pytest.raises(NotFoundError, match="^parent issue 'MPAR-999' not found$"):
+        await _create_issue(db_session, admin, project.key, tracker.id, "Orphan", parent_ref="MPAR-999")
     after = await db_session.scalar(select(func.count()).select_from(Issue).where(Issue.project_id == project.id))
     assert after == before
 
@@ -177,16 +179,16 @@ async def test_create_with_unknown_parent_ref_creates_nothing(db_session, projec
 async def test_create_refuses_a_numeric_parent_ref(db_session, project, tracker, admin) -> None:
     """Database ids are never accepted where a display key is expected."""
     parent = await _issue(db_session, project, tracker, admin, "Epic")
-    result = await _create_issue(db_session, admin, project.key, tracker.id, "Child", parent_ref=str(parent.id))
-    assert result == f"Error: parent issue '{parent.id}' not found"
+    with pytest.raises(NotFoundError, match=f"^parent issue '{parent.id}' not found$"):
+        await _create_issue(db_session, admin, project.key, tracker.id, "Child", parent_ref=str(parent.id))
 
 
 async def test_create_below_the_depth_limit_is_refused(db_session, project, tracker, admin) -> None:
     deepest = await _issue(db_session, project, tracker, admin, "Level 1")
     for level in range(2, MAX_HIERARCHY_DEPTH + 1):
         deepest = await _issue(db_session, project, tracker, admin, f"Level {level}", parent=deepest)
-    result = await _create_issue(db_session, admin, project.key, tracker.id, "Too deep", parent_ref=deepest.display_key)
-    assert result.startswith("Error: ") and "depth" in result
+    with pytest.raises(ValidationError, match="depth"):
+        await _create_issue(db_session, admin, project.key, tracker.id, "Too deep", parent_ref=deepest.display_key)
     assert await db_session.scalar(select(func.count()).where(Issue.subject == "Too deep")) == 0
     sequence = await db_session.scalar(select(Project.issue_sequence).where(Project.id == project.id))
     assert sequence == MAX_HIERARCHY_DEPTH
@@ -229,8 +231,8 @@ async def test_update_without_parent_ref_keeps_the_parent(db_session, project, t
 
 async def test_update_with_unknown_parent_ref_changes_nothing(db_session, project, tracker, admin) -> None:
     child = await _issue(db_session, project, tracker, admin, "Child")
-    result = await _update_issue(db_session, admin, child.display_key, subject="Changed", parent_ref="MPAR-999")
-    assert result == "Error: parent issue 'MPAR-999' not found"
+    with pytest.raises(NotFoundError, match="^parent issue 'MPAR-999' not found$"):
+        await _update_issue(db_session, admin, child.display_key, subject="Changed", parent_ref="MPAR-999")
     unchanged = await _by_ref(db_session, child.display_key)
     assert unchanged.subject == "Child" and unchanged.parent_id is None
 
@@ -240,13 +242,13 @@ async def test_update_making_an_issue_its_own_ancestor_is_a_cycle(db_session, pr
     middle = await _issue(db_session, project, tracker, admin, "Middle", parent=top)
     bottom = await _issue(db_session, project, tracker, admin, "Bottom", parent=middle)
 
-    result = await _update_issue(db_session, admin, top.display_key, subject="Changed", parent_ref=bottom.display_key)
-    assert result.startswith("Error: ") and "cycle" in result
+    with pytest.raises(ValidationError, match="cycle"):
+        await _update_issue(db_session, admin, top.display_key, subject="Changed", parent_ref=bottom.display_key)
     unchanged = await _by_ref(db_session, top.display_key)
     assert unchanged.subject == "Top" and unchanged.parent_id is None
 
-    itself = await _update_issue(db_session, admin, top.display_key, parent_ref=top.display_key)
-    assert itself.startswith("Error: ") and "own parent" in itself
+    with pytest.raises(ValidationError, match="own parent"):
+        await _update_issue(db_session, admin, top.display_key, parent_ref=top.display_key)
     await _assert_nested_set_valid(db_session, project.id)
 
 
@@ -255,8 +257,8 @@ async def test_update_past_the_depth_limit_is_refused(db_session, project, track
     for level in range(2, MAX_HIERARCHY_DEPTH + 1):
         deepest = await _issue(db_session, project, tracker, admin, f"Level {level}", parent=deepest)
     loose = await _issue(db_session, project, tracker, admin, "Loose")
-    result = await _update_issue(db_session, admin, loose.display_key, parent_ref=deepest.display_key)
-    assert result.startswith("Error: ") and "depth" in result
+    with pytest.raises(ValidationError, match="depth"):
+        await _update_issue(db_session, admin, loose.display_key, parent_ref=deepest.display_key)
     assert (await _by_ref(db_session, loose.display_key)).parent_id is None
     await _assert_nested_set_valid(db_session, project.id)
 
@@ -268,8 +270,8 @@ async def test_update_moving_a_subtree_past_the_depth_limit_is_refused(db_sessio
         deepest = await _issue(db_session, project, tracker, admin, f"Level {level}", parent=deepest)
     loose = await _issue(db_session, project, tracker, admin, "Loose")
     await _issue(db_session, project, tracker, admin, "Loose child", parent=loose)
-    result = await _update_issue(db_session, admin, loose.display_key, parent_ref=deepest.display_key)
-    assert result.startswith("Error: ") and "depth" in result
+    with pytest.raises(ValidationError, match="depth"):
+        await _update_issue(db_session, admin, loose.display_key, parent_ref=deepest.display_key)
     assert (await _by_ref(db_session, loose.display_key)).parent_id is None
     await _assert_nested_set_valid(db_session, project.id)
 
@@ -307,8 +309,8 @@ async def test_list_issues_filters_by_parent_ref(db_session, project, tracker, a
     assert grandchild.display_key not in listed and loose.display_key not in listed
     assert f"parent={epic.display_key}" in listed
 
-    unknown = await _list_issues(db_session, admin, project.key, status="all", parent_ref="MPAR-999")
-    assert unknown == "Error: parent issue 'MPAR-999' not found"
+    with pytest.raises(NotFoundError, match="^parent issue 'MPAR-999' not found$"):
+        await _list_issues(db_session, admin, project.key, status="all", parent_ref="MPAR-999")
 
 
 # ---------------------------------------------------------------------------
@@ -334,12 +336,14 @@ async def test_a_private_parent_reads_as_unknown(db_session, project, tracker, a
     epic = await _issue(db_session, project, tracker, admin, "Secret epic", is_private=True)
     loose = await _issue(db_session, project, tracker, admin, "Loose")
     member = await _member(db_session, project, "mpar_member")
-    expected = f"Error: parent issue '{epic.display_key}' not found"
+    expected = f"^parent issue '{epic.display_key}' not found$"
 
-    created = await _create_issue(db_session, member, project.key, tracker.id, "Sneaky", parent_ref=epic.display_key)
-    assert created == expected
-    assert await _update_issue(db_session, member, loose.display_key, parent_ref=epic.display_key) == expected
-    assert await _list_issues(db_session, member, project.key, status="all", parent_ref=epic.display_key) == expected
+    with pytest.raises(NotFoundError, match=expected):
+        await _create_issue(db_session, member, project.key, tracker.id, "Sneaky", parent_ref=epic.display_key)
+    with pytest.raises(NotFoundError, match=expected):
+        await _update_issue(db_session, member, loose.display_key, parent_ref=epic.display_key)
+    with pytest.raises(NotFoundError, match=expected):
+        await _list_issues(db_session, member, project.key, status="all", parent_ref=epic.display_key)
     assert await db_session.scalar(select(func.count()).where(Issue.subject == "Sneaky")) == 0
     assert (await _by_ref(db_session, loose.display_key)).parent_id is None
 
@@ -373,14 +377,15 @@ async def test_a_parent_outside_the_key_limit_reads_as_unknown(
 
     missing = f"{w.b.key}-999"
     for ref in (b_ref, missing):
-        created = await server.specivo_create_issue(
-            project_key=a_key, tracker_id=w.tracker_id, subject="KMP child", parent_ref=ref
-        )
-        assert created == f"Error: parent issue '{ref}' not found"
-        updated = await server.specivo_update_issue(issue_ref=a_ref, parent_ref=ref)
-        assert updated == f"Error: parent issue '{ref}' not found"
-        listed = await server.specivo_list_issues(project_key=a_key, parent_ref=ref)
-        assert listed == f"Error: parent issue '{ref}' not found"
+        expected = f"^parent issue '{ref}' not found$"
+        with pytest.raises(ToolError, match=expected):
+            await server.specivo_create_issue(
+                project_key=a_key, tracker_id=w.tracker_id, subject="KMP child", parent_ref=ref
+            )
+        with pytest.raises(ToolError, match=expected):
+            await server.specivo_update_issue(issue_ref=a_ref, parent_ref=ref)
+        with pytest.raises(ToolError, match=expected):
+            await server.specivo_list_issues(project_key=a_key, parent_ref=ref)
     assert await db_session.scalar(select(func.count()).where(Issue.subject == "KMP child")) == 0
 
 
@@ -393,12 +398,13 @@ async def test_a_parent_in_another_project_reads_as_unknown(
     a_key, a_ref, b_ref = w.a.key, w.a_issue["key"], w.b_issue["key"]
     mcp_raw_key_var.set(w.open_raw)
 
-    created = await server.specivo_create_issue(
-        project_key=a_key, tracker_id=w.tracker_id, subject="KMX child", parent_ref=b_ref
-    )
-    assert created == f"Error: parent issue '{b_ref}' not found"
-    updated = await server.specivo_update_issue(issue_ref=a_ref, parent_ref=b_ref)
-    assert updated == f"Error: parent issue '{b_ref}' not found"
+    expected = f"^parent issue '{b_ref}' not found$"
+    with pytest.raises(ToolError, match=expected):
+        await server.specivo_create_issue(
+            project_key=a_key, tracker_id=w.tracker_id, subject="KMX child", parent_ref=b_ref
+        )
+    with pytest.raises(ToolError, match=expected):
+        await server.specivo_update_issue(issue_ref=a_ref, parent_ref=b_ref)
     assert await db_session.scalar(select(func.count()).where(Issue.subject == "KMX child")) == 0
     a_issue = await db_session.get(Issue, w.a_issue["id"])
     await db_session.refresh(a_issue)

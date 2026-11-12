@@ -7,7 +7,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
@@ -192,8 +192,8 @@ class TestMcpAddRelation:
         from specivo.mcp.tools import _add_relation
 
         issue1, issue2 = issues
-        result = await _add_relation(db_session, admin_user, issue1.display_key, issue2.display_key, "invalid_type")
-        assert "invalid" in result.lower() or "error" in result.lower()
+        with pytest.raises(ValidationError, match="invalid relation_type 'invalid_type'"):
+            await _add_relation(db_session, admin_user, issue1.display_key, issue2.display_key, "invalid_type")
 
     async def test_add_denied_without_permission(
         self,

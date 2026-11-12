@@ -11,6 +11,7 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import ValidationError
 from specivo.models.metadata_preset import MetadataPreset
 from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.project import Project
@@ -428,9 +429,8 @@ class TestNewValuesAreRefused:
 
         await _schema(db_session, project, RELEASE_SCHEMA)
         issue = await _stored_issue(db_session, project, tracker, writer, {})
-        result = await _metadata(db_session, writer, issue.display_key, "game_year", "set", "soon")
-        assert result.startswith("Error:"), result
-        assert "game_year" in result
+        with pytest.raises(ValidationError, match="game_year"):
+            await _metadata(db_session, writer, issue.display_key, "game_year", "set", "soon")
         await db_session.refresh(issue)
         assert issue.issue_metadata == {}
 
