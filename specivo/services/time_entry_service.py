@@ -314,11 +314,17 @@ class TimeEntryService:
         project_id: int,
         data: TimeEntryCreate,
         user: User,
+        *,
+        allow_inactive_activity: bool = False,
     ) -> TimeEntry:
-        """Create a time entry."""
-        # Validate activity exists and is active
+        """Create a time entry.
+
+        The activity must exist and, unless *allow_inactive_activity*, be
+        active. Only the importer passes that flag: time a source logged
+        against an activity it has since retired is still somebody's time.
+        """
         activity = await session.get(TimeEntryActivity, data.activity_id)
-        if activity is None or not activity.active:
+        if activity is None or (not activity.active and not allow_inactive_activity):
             raise ValidationError(
                 message=f"Activity {data.activity_id} not found or inactive",
                 field="activity_id",

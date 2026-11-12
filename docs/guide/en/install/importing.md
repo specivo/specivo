@@ -102,7 +102,8 @@ carried across. **Back up first**, then import. See [Backup & restore](backup-re
 | `--project-key-map ID=KEY,...` | Choose the Specivo project key for a source project instead of the derived one. |
 | `--merge-duplicate-statuses` | Reuse an existing status, tracker or priority of the same name instead of creating a second one. |
 | `--continue-import` | Add to an earlier import of the same source (see below). |
-| `--resume RUN_ID` | Continue a run that stopped. Each phase commits on its own, so what finished stays. |
+| `--resume RUN_ID` | Continue a run that stopped. Each phase commits on its own, and the long ones (issues, history, attachments, wiki, time) also commit after each project and every `--commit-every` records, so what finished stays. |
+| `--commit-every N` | How many records a long phase writes between commits (default 1000). |
 | `--links-file PATH` | Where to keep the links file. |
 | `--files-path DIR` | Read attachment files from this folder instead of the bundle's own `files/`. |
 | `--import-passwords` | Let imported accounts keep their old password until first sign-in. Needs a matching [password hasher](password-hasher-plugins.md). Administrators always set a new one. |

@@ -72,6 +72,16 @@ def _run_id(value: str) -> uuid.UUID:
         raise argparse.ArgumentTypeError(f"{value!r} is not a run id (expected a UUID)") from None
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        number = 0
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a positive whole number")
+    return number
+
+
 def format_source_list(registry: SourceAdapterRegistry) -> str:
     """Return one line per registered source: name and description."""
     descriptions = registry.descriptions()
@@ -188,6 +198,17 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
     )
     run.add_argument("--batch-size", type=int, default=500, help="Rows read per page from the source (default: 500).")
     run.add_argument(
+        "--commit-every",
+        type=_positive_int,
+        default=1000,
+        metavar="N",
+        help=(
+            "Commit the long phases (issues, history, attachments, wiki, time) after each project and every N "
+            "records within one, so a failure keeps what came before it and --resume continues from there "
+            "(default: 1000)."
+        ),
+    )
+    run.add_argument(
         "--strict",
         action="store_true",
         help="Treat anything that would be reported as a warning as a failure. For testing an import, not running one.",
@@ -254,6 +275,7 @@ def build_options(args: argparse.Namespace, adapter: SourceAdapter) -> ImportOpt
         resume_run_id=args.resume,
         stop_after_phase=args.stop_after_phase,
         batch_size=args.batch_size,
+        commit_every=args.commit_every,
         strict=args.strict,
         project_key_map=args.project_key_map or {},
         flatten_excess_depth=args.flatten_excess_depth,

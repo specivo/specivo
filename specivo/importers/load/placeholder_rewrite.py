@@ -7,14 +7,18 @@ placeholder names may not exist yet: an issue can link to a wiki page, and wiki
 pages are imported after issues. This pass runs once everything is in and
 replaces each placeholder with the Specivo form.
 
-Only rows this source imported are touched, found through the id map, so text
-somebody wrote in Specivo is never rewritten. A placeholder is looked up in the
-id map of the run's scope (its source system and instance), which holds every
-earlier run's records too, so a bundle may name an issue a previous bundle of
-the same source brought in. A placeholder whose record was not imported, in
-this run or an earlier one, is written as plain text, its label or else its
-ref, so a reader never sees the placeholder syntax; they are counted in one
-summary warning.
+Only rows this run imported are touched, found through the id map by the run's
+id, so text somebody wrote in Specivo is never rewritten: not a new comment,
+and not an edit to a record an earlier run of the same source imported. Text
+those earlier runs left waiting is :func:`resolve_pending`'s, which checks it
+was not edited first. Rewriting only this run's rows also keeps the pass in
+proportion to the run, however much the scope imported before. A placeholder is
+looked up in the id map of the run's scope (its source system and instance),
+which holds every earlier run's records too, so a bundle may name an issue a
+previous bundle of the same source brought in. A placeholder whose record was
+not imported, in this run or an earlier one, is written as plain text, its
+label or else its ref, so a reader never sees the placeholder syntax; they are
+counted in one summary warning.
 
 Each text left with such a placeholder is returned as a
 :class:`~specivo.importers.core.links_file.PendingText`, so the import can keep
@@ -102,8 +106,10 @@ class _TextColumn:
         """Return those of *ids* this scope imported: the only rows a links file may lead to.
 
         A description change counts when it is a description change of an issue
-        the scope imported, as the rewrite pass decides (the history entry
-        creating an issue is not itself in the identifier map).
+        the scope imported (the history entry creating an issue is not itself
+        in the identifier map). That is wider than what the rewrite pass
+        touches; :func:`resolve_pending` only writes a text whose column still
+        holds what the import wrote.
         """
 
         def mapped(entity_type: EntityType) -> Select[int]:
@@ -202,8 +208,8 @@ async def _rewrite_column(
     column: _TextColumn,
     pending: list[PendingText],
 ) -> int:
-    """Rewrite one text column of the rows imported as *entity_type*."""
-    ids = sorted((await ctx.id_map.preload(ctx.session, entity_type)).values())
+    """Rewrite one text column of the rows this run imported as *entity_type*."""
+    ids = await ctx.id_map.targets_written_by_run(ctx.session, entity_type)
     changed = 0
     for start in range(0, len(ids), _BATCH):
         stmt = column.rows(ids[start : start + _BATCH])
@@ -224,20 +230,22 @@ async def _rewrite_column(
 async def _rewrite_description_changes(
     ctx: PhaseContext, resolver: PlaceholderResolver, pending: list[PendingText]
 ) -> int:
-    """Rewrite the descriptions recorded in imported issues' history.
+    """Rewrite the descriptions recorded in the history this run imported.
 
-    That includes the one creating an issue records, which holds the
-    description as it was loaded, placeholders and all.
+    That is the history entries this run imported, and the one creating each
+    issue this run created, which holds the description as it was loaded,
+    placeholders and all. That entry is the issue's first (sequence 1), and is
+    not itself in the id map. History written in Specivo is left alone.
     """
-    issue_ids = sorted((await ctx.id_map.preload(ctx.session, EntityType.ISSUE)).values())
+    journal_ids = await _journals_written_by_run(ctx)
     changed = 0
-    for start in range(0, len(issue_ids), _BATCH):
+    for start in range(0, len(journal_ids), _BATCH):
         rows = (
             await ctx.session.execute(
                 select(JournalDetail.id, JournalDetail.old_value, JournalDetail.new_value, Journal.project_id)
                 .join(Journal, Journal.id == JournalDetail.journal_id)
                 .where(
-                    Journal.issue_id.in_(issue_ids[start : start + _BATCH]),
+                    Journal.id.in_(journal_ids[start : start + _BATCH]),
                     JournalDetail.property == "attr",
                     JournalDetail.prop_key == "description",
                     or_(JournalDetail.old_value.contains("{{"), JournalDetail.new_value.contains("{{")),
@@ -258,6 +266,18 @@ async def _rewrite_description_changes(
                 row_changed = True
             changed += row_changed
     return changed
+
+
+async def _journals_written_by_run(ctx: PhaseContext) -> list[int]:
+    """Return the history entries this run wrote: those it imported and those creating its issues."""
+    journal_ids = set(await ctx.id_map.targets_written_by_run(ctx.session, EntityType.JOURNAL))
+    issue_ids = await ctx.id_map.targets_written_by_run(ctx.session, EntityType.ISSUE)
+    for start in range(0, len(issue_ids), _BATCH):
+        baselines = await ctx.session.execute(
+            select(Journal.id).where(Journal.issue_id.in_(issue_ids[start : start + _BATCH]), Journal.sequence == 1)
+        )
+        journal_ids.update(baselines.scalars())
+    return sorted(journal_ids)
 
 
 @dataclass(slots=True)

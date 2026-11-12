@@ -342,6 +342,73 @@ class TestTransactions:
 
 
 @async_test
+class TestCheckpoints:
+    """A long phase commits as it goes, so a failure late in it keeps what came before."""
+
+    async def test_a_failure_after_a_checkpoint_keeps_what_was_committed(self):
+        adapter, factory = FakeAdapter(), FakeSessionFactory()
+        pipeline = _pipeline(factory, adapter)
+
+        async def two_projects(ctx):
+            await ctx.checkpoint()  # the first project is in
+            raise PhaseFailedError("the second project failed")
+
+        pipeline.register(ImportPhase.JOURNALS, two_projects)
+        with pytest.raises(PhaseFailedError):
+            await pipeline.run()
+
+        (session,) = factory.sessions
+        assert (session.commits, session.rollbacks) == (1, 1)
+
+    async def test_records_are_committed_every_commit_every(self):
+        adapter, factory = FakeAdapter(), FakeSessionFactory()
+        pipeline = _pipeline(factory, adapter, commit_every=2)
+        commits: list[int] = []
+
+        async def five_records(ctx):
+            for _ in range(5):
+                await ctx.record_written()
+                commits.append(ctx.session.commits)
+
+        pipeline.register(ImportPhase.TIME_ENTRIES, five_records)
+        await pipeline.run()
+
+        assert commits == [0, 1, 1, 2, 2]
+        # The phase's own commit takes the fifth.
+        assert factory.sessions[0].commits == 3
+
+    async def test_a_dry_run_never_commits_at_a_checkpoint(self):
+        adapter, factory = FakeAdapter(), FakeSessionFactory()
+        pipeline = _pipeline(factory, adapter, dry_run=True, commit_every=1)
+
+        async def handler(ctx):
+            await ctx.record_written()
+            await ctx.checkpoint()
+
+        pipeline.register(ImportPhase.JOURNALS, handler)
+        await pipeline.run()
+
+        assert factory.sessions[0].commits == 0
+
+    async def test_a_phase_with_an_end_hook_commits_once(self):
+        """The hook's work outside the database follows the phase's one commit."""
+        adapter, factory = FakeAdapter(), FakeSessionFactory()
+        pipeline = _pipeline(factory, adapter)
+        seen: list = []
+
+        async def handler(ctx):
+            ctx.at_phase_end(lambda committed: seen.append((ctx.session.commits, committed)))
+            await ctx.checkpoint()
+            raise PhaseFailedError("no")
+
+        pipeline.register(ImportPhase.RELATIONS, handler)
+        with pytest.raises(PhaseFailedError):
+            await pipeline.run()
+
+        assert seen == [(0, False)]
+
+
+@async_test
 class TestPhaseContextWarnings:
     async def test_warn_records_on_the_summary(self):
         adapter, factory = FakeAdapter(), FakeSessionFactory()

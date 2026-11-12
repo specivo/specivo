@@ -140,6 +140,9 @@ async def load_issues(ctx: PhaseContext) -> None:
             if issue is not None and issue.parent_id is not None and ir.parent_ref is not None:
                 parents.add(ir.parent_ref)
         await _restore_parent_timestamps(ctx, parents, updated_at)
+        # Per project only: the parents' timestamps are put back once all of
+        # the project's issues are in, and a resumed run would not do it again.
+        await ctx.checkpoint()
 
 
 async def _restore_parent_timestamps(
@@ -387,6 +390,8 @@ async def load_watchers(ctx: PhaseContext) -> None:
             ctx.session.add(Watcher(issue_id=issue_id, user_id=user_id))
             ctx.summary.record_created(EntityType.WATCHER)
             ctx.tick()
+            await ctx.record_written()
+        await ctx.checkpoint()
     await ctx.session.flush()
 
 
@@ -408,6 +413,8 @@ async def load_journals(ctx: PhaseContext) -> None:
                 ctx.summary.record_skipped(EntityType.JOURNAL)
                 continue
             await _create_journal(ctx, ir, sequences, unresolved, fields)
+            await ctx.record_written()
+        await ctx.checkpoint()
     if unresolved:
         # One warning however many: history routinely names deleted versions and the like.
         ctx.warn(

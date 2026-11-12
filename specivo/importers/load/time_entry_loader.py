@@ -11,6 +11,10 @@ somebody's invoice. Float artefacts are not reported: nobody typed them.
 A source can also record both whose time an entry is and who logged it. Specivo
 keeps only the former, so an entry logged by a manager on someone else's behalf
 keeps the person it belongs to.
+
+An entry keeps its activity even when the source has retired it (the activity
+is imported inactive): new time cannot be logged against it, but the time
+logged before it was retired is kept.
 """
 
 from __future__ import annotations
@@ -57,6 +61,8 @@ async def load_time_entries(ctx: PhaseContext) -> None:
                 ctx.summary.record_skipped(EntityType.TIME_ENTRY)
                 continue
             await _create_entry(ctx, project_id, ir)
+            await ctx.record_written()
+        await ctx.checkpoint()
 
 
 async def _create_entry(ctx: PhaseContext, project_id: int, ir: IRTimeEntry) -> TimeEntry | None:
@@ -99,6 +105,8 @@ async def _create_entry(ctx: PhaseContext, project_id: int, ir: IRTimeEntry) -> 
                 spent_on=ir.spent_on,
             ),
             user,
+            # The source may have retired the activity since; the time was still logged.
+            allow_inactive_activity=True,
         )
     except AppError as exc:
         ctx.warn("Time entry was rejected and skipped", entry=ir.source_ref, reason=str(exc))
