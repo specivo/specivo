@@ -46,6 +46,11 @@ from specivo.services.similar_issues import SIMILAR_ISSUES_PROJECT_KEY
 
 logger = logging.getLogger(__name__)
 
+# Project statuses an update may set (active, closed); archived (9) belongs to
+# the admin archive and unarchive actions.
+_UPDATABLE_STATUSES = frozenset({1, 5})
+_PROJECT_STATUS_ARCHIVED = 9
+
 # Default modules enabled for every new project
 _DEFAULT_MODULES = ("issue_tracking", "wiki", "time_tracking")
 
@@ -466,7 +471,15 @@ class ProjectService:
 
                 await clear_anonymous_permissions_for_private(session, project, actor, request=request)
             project.is_public = data.is_public
-        if data.status is not None:
+        if data.status is not None and data.status != project.status:
+            # Archiving is reversible only through the admin archive and
+            # unarchive actions; an update moves between active and closed.
+            if project.status == _PROJECT_STATUS_ARCHIVED or data.status not in _UPDATABLE_STATUSES:
+                raise AppError(
+                    code="validation_error",
+                    message="status must be 1 (active) or 5 (closed); use the archive actions to archive or unarchive",
+                    status_code=422,
+                )
             project.status = data.status
         if data.color is not None:
             project.color = data.color
@@ -491,6 +504,8 @@ class ProjectService:
             )
 
         if "parent_id" in data.model_fields_set:
+            if data.parent_id is not None and actor is not None:
+                await self._require_parent_manageable(session, data.parent_id, actor)
             project = await self._reparent(session, project, data.parent_id)
             return project  # noqa: RET504
 
@@ -498,6 +513,24 @@ class ProjectService:
         await session.flush()
         await session.refresh(project)
         return project
+
+    async def _require_parent_manageable(self, session: AsyncSession, parent_id: int, actor: User) -> None:
+        """Raise unless *actor* may put a project under project *parent_id*.
+
+        A parent *actor* cannot reach is "not found", word for word as a
+        missing id, so the answer does not reveal which project ids exist;
+        a reachable one also needs ``manage_project`` (admins have it).
+        """
+        parent = await session.get(Project, parent_id)
+        not_found = NotFoundError(f"Parent project with id {parent_id} not found")
+        if parent is None:
+            raise not_found
+        try:
+            await self.require_project_access(session, parent, actor)
+        except (NotFoundError, AnonymousAccessDeniedError):
+            raise not_found from None
+        if not await check_permission(actor, parent.id, Permission.MANAGE_PROJECT, session):
+            raise PermissionDeniedError("You do not have the 'manage_project' permission in the new parent project")
 
     async def _reparent(
         self,

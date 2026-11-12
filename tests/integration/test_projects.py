@@ -831,3 +831,79 @@ async def test_subproject_depth_root_project_always_allowed(
     )
     assert resp.status_code == 201
     assert resp.json()["parent_key"] is None
+
+
+async def _manager_of(db_session: AsyncSession, client: AsyncClient, key: str, login: str) -> tuple[User, str]:
+    """A non-admin with the all-permissions Manager role in project *key*."""
+    from specivo.models.member import Member, MemberRole
+    from specivo.models.project import Project
+
+    project = (await db_session.execute(select(Project).where(Project.key == key))).scalar_one()
+    user = await _make_user(db_session, login=login, status="active")
+    member = Member(user_id=user.id, project_id=project.id)
+    db_session.add(member)
+    await db_session.flush()
+    db_session.add(MemberRole(member_id=member.id, role_id=(await _make_role(db_session)).id))
+    await db_session.commit()
+    return user, await _login(client, login)
+
+
+@pytest.mark.asyncio
+async def test_a_manager_may_close_but_not_archive_or_unarchive(
+    client: AsyncClient, db_session: AsyncSession, admin_token: str
+) -> None:
+    admin = {"Authorization": f"Bearer {admin_token}"}
+    await client.post(
+        "/api/v1/projects/", json={"name": "Status", "identifier": "status-p", "key": "STP"}, headers=admin
+    )
+    _user, token = await _manager_of(db_session, client, "STP", "stp_manager")
+    auth = {"Authorization": f"Bearer {token}"}
+
+    assert (await client.patch("/api/v1/projects/STP/", json={"status": 9}, headers=auth)).status_code == 422
+    assert (await client.patch("/api/v1/projects/STP/", json={"status": 7}, headers=auth)).status_code == 422
+    resp = await client.patch("/api/v1/projects/STP/", json={"status": 5}, headers=auth)
+    assert resp.status_code == 200 and resp.json()["status"] == 5
+
+    # Archived by an admin: only the admin unarchive action brings it back.
+    assert (await client.post("/api/v1/admin/projects/STP/archive/", headers=admin)).status_code == 200
+    assert (await client.patch("/api/v1/projects/STP/", json={"status": 1}, headers=admin)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_a_manager_cannot_move_the_project_under_one_they_cannot_manage(
+    client: AsyncClient, db_session: AsyncSession, admin_token: str
+) -> None:
+    admin = {"Authorization": f"Bearer {admin_token}"}
+    for name, key in (("Mine", "MVM"), ("Hidden", "MVH"), ("Visible", "MVV")):
+        resp = await client.post(
+            "/api/v1/projects/", json={"name": name, "identifier": f"mv-{key.lower()}", "key": key}, headers=admin
+        )
+        assert resp.status_code == 201, resp.text
+    ids = {p["key"]: p["id"] for p in (await client.get("/api/v1/projects/", headers=admin)).json()["items"]}
+    user, token = await _manager_of(db_session, client, "MVM", "mv_manager")
+    auth = {"Authorization": f"Bearer {token}"}
+
+    # A private project they are no member of reads exactly like a missing id.
+    hidden = await client.patch("/api/v1/projects/MVM/", json={"parent_id": ids["MVH"]}, headers=auth)
+    missing = await client.patch("/api/v1/projects/MVM/", json={"parent_id": 987654}, headers=auth)
+    assert (hidden.status_code, missing.status_code) == (404, 404)
+    assert hidden.json()["errors"][0]["message"] == f"Parent project with id {ids['MVH']} not found"
+
+    # A project they can see but not manage is refused.
+    from specivo.models.member import Member, MemberRole
+    from specivo.models.role import Role
+
+    viewer = Role(name="MV Viewer", permissions=["view_issues"], builtin=0)
+    db_session.add(viewer)
+    await db_session.flush()
+    member = Member(user_id=user.id, project_id=ids["MVV"])
+    db_session.add(member)
+    await db_session.flush()
+    db_session.add(MemberRole(member_id=member.id, role_id=viewer.id))
+    await db_session.commit()
+    resp = await client.patch("/api/v1/projects/MVM/", json={"parent_id": ids["MVV"]}, headers=auth)
+    assert resp.status_code == 403, resp.text
+
+    # An admin may still reparent.
+    resp = await client.patch("/api/v1/projects/MVM/", json={"parent_id": ids["MVH"]}, headers=admin)
+    assert resp.status_code == 200, resp.text
