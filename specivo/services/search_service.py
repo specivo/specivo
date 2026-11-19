@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -1490,7 +1491,7 @@ class SearchService:
         )
         return True
 
-    async def semantic_search(  # noqa: C901, PLR0912, PLR0913, PLR0915 - PLR0913: the same parameters as search()
+    async def semantic_search(  # noqa: PLR0913 - the same parameters as search()
         self,
         session: AsyncSession,
         query: str,
@@ -1533,38 +1534,14 @@ class SearchService:
 
         pinned: list[SearchResult] = []
         if resolve_identifiers:
-            identifiers = extract_identifiers(query)
-            source_numbers = extract_source_numbers(query)
-            if identifiers or source_numbers:
-                pinned = await self._identifier_hits(
-                    session,
-                    identifiers,
-                    user,
-                    project_id=project_id,
-                    project_ids=project_ids,
-                    filters=filters,
-                    source_numbers=source_numbers,
-                )
+            pinned = await self._semantic_pinned(session, query, user, project_id, project_ids, filters)
         pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
 
         emb_service = EmbeddingService()
         model = await emb_service.get_default_model(session)
-        if model is None:
+        vec_literal = await _query_vector_literal(emb_service, query, model) if model is not None else None
+        if model is None or vec_literal is None:
             return pinned[pinned_slice], len(pinned)
-
-        from specivo.services.query_embedding_cache import embed_query
-
-        try:
-            # Cached briefly in Redis, so a repeated or paged query does not
-            # run the model again (specivo.services.query_embedding_cache).
-            query_vector = await embed_query(emb_service, query, model)
-        except Exception as exc:  # a broken model turns semantic search off, never a 500  # noqa: BLE001
-            _warn_embedding_failure(model, exc)
-            query_vector = None
-        if query_vector is None:
-            return pinned[pinned_slice], len(pinned)
-        # Format vector as PostgreSQL literal: '[0.1,0.2,...]'
-        vec_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
 
         params: dict[str, Any] = {"model_id": model.id, "query_vector": vec_literal}
         # Nearest neighbours exist for any query, related or not: only chunks at
@@ -1576,18 +1553,112 @@ class SearchService:
             params["min_similarity"] = min_similarity
             score_filter = "AND n.score >= :min_similarity"
             exact_score_filter = "AND (1 - (ce.embedding <=> CAST(:query_vector AS vector))) >= :min_similarity"
-        project_filter = ""
-        if project_ids is not None:
-            project_filter = "AND ss.project_id = ANY(:project_ids)"
-            params["project_ids"] = project_ids
-        elif project_id is not None:
-            project_filter = "AND ss.project_id = :project_id"
-            params["project_id"] = project_id
+        project_filter = _semantic_project_filter(project_id, project_ids, params)
 
         params.update(await self._visibility_params(session, user))
 
         # Visibility filters for semantic search (CTE-optimized)
         cte_prefix = self._visibility_cte_sql(user)
+        branches = self._semantic_branches(user, filters, params, pinned, scope)
+        if branches is None:
+            return [], 0
+        sem_where_or, count_where_or = branches
+
+        # The exact ranking first narrows the rows to the projects in scope and,
+        # for a non-admin, to projects where the user can see something at all
+        # (every visibility rule needs such a ``user_visibility`` row), so the
+        # planner can skip the distance for chunks that could never be shown.
+        # That narrowing stays out of the index rounds: there it makes the
+        # planner drop the index for a join plan (see _nearest_cte).
+        exact_scope = project_filter.replace("ss.", "ss0.")
+        if not user.is_admin:
+            exact_scope += """
+                  AND ss0.project_id IN (SELECT uv0.project_id FROM user_visibility uv0
+                                         WHERE uv0.visibility_level > 0 OR uv0.can_view_wiki)"""
+        ranked_sql = _semantic_ranked_sql(project_filter, score_filter, sem_where_or)
+
+        # Rank the first offset + limit entities; the page is cut in Python.
+        # The one-row ``fetched`` side reports how many candidates the round
+        # read and the lowest score among them, even when none is visible.
+        def semantic_sql(candidates: int | None) -> str:
+            return f"""
+            {_nearest_cte(cte_prefix, exact_scope, exact_score_filter, candidates)}
+            SELECT fetched.n AS candidate_count, fetched.lowest AS lowest_score, page.*
+            FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
+            LEFT JOIN ({ranked_sql}) page ON true
+            ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
+        """  # noqa: S608
+
+        needed = ranked_offset + ranked_limit
+        params["needed"] = needed
+        rows: list[Any] = []
+        if needed > 0:
+            rows = await self._run_semantic_rounds(session, model, params, needed, min_similarity, semantic_sql)
+
+        results = [_semantic_result(row) for row in rows[ranked_offset:]]
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
+
+        # Count total semantic results (skipped when called from hybrid_search)
+        total = 0
+        if not skip_count:
+            count_sql = f"""
+                {cte_prefix}
+                SELECT COUNT(DISTINCT (ss.source_type, ss.entity_id))
+                FROM chunk_embeddings ce
+                JOIN search_chunks sc ON sc.id = ce.chunk_id
+                JOIN search_sources ss ON ss.id = sc.source_id
+                LEFT JOIN attachments att_c ON ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id = ss.entity_id
+                LEFT JOIN issues att_c_iss ON att_c.container_type = 'Issue' AND att_c_iss.id = att_c.container_id
+                LEFT JOIN wiki_pages att_c_wp ON att_c.container_type = 'WikiPage' AND att_c_wp.id = att_c.container_id
+                LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
+                WHERE ce.model_id = :model_id
+                {project_filter}
+                {exact_score_filter}
+                AND {count_where_or}
+            """  # noqa: S608
+            count_result = await session.execute(text(count_sql), params)
+            total = count_result.scalar_one() + len(pinned)
+
+        return results, total
+
+    async def _semantic_pinned(
+        self,
+        session: AsyncSession,
+        query: str,
+        user: User,
+        project_id: int | None,
+        project_ids: list[int] | None,
+        filters: SearchFilters | None,
+    ) -> list[SearchResult]:
+        """The issues *query* names by reference or source ticket number, ranked ahead of the semantic hits."""
+        identifiers = extract_identifiers(query)
+        source_numbers = extract_source_numbers(query)
+        if not identifiers and not source_numbers:
+            return []
+        return await self._identifier_hits(
+            session,
+            identifiers,
+            user,
+            project_id=project_id,
+            project_ids=project_ids,
+            filters=filters,
+            source_numbers=source_numbers,
+        )
+
+    def _semantic_branches(
+        self,
+        user: User,
+        filters: SearchFilters | None,
+        params: dict[str, Any],
+        pinned: list[SearchResult],
+        scope: str,
+    ) -> tuple[str, str] | None:
+        """The ``WHERE`` alternatives per source type for the ranked query and for the count.
+
+        ``None`` when *scope* leaves no source type to search. Fills *params*
+        with the tag filter, pinned issue and issue filter parameters.
+        """
         issue_vis = self._issue_visibility_cte_clause(user, alias="i2")
         wiki_vis = self._wiki_visibility_cte_clause(user, alias="w2")
         comment_vis = self._comment_visibility_clause(user, journal_alias="cj", issue_alias="ci2")
@@ -1657,227 +1728,52 @@ class SearchService:
                 b for kind, b in (("comment", comment_branch), ("att", att_count_branch)) if kind in in_scope
             ]
         if not _result_branches:
-            return [], 0
+            return None
         sem_where_or = "(\n                    " + _or_join.join(_result_branches) + "\n                )"
         count_where_or = "(\n                    " + _or_join.join(_count_branches) + "\n                )"
+        return sem_where_or, count_where_or
 
-        # Two phases: the CTE ``nearest`` picks candidate chunks by cosine
-        # distance alone, then the outer query joins them to their entities,
-        # applies visibility, keeps the best chunk per entity and ranks.
-        #
-        # Through the HNSW index (a partial index on the cast expression, so the
-        # query repeats that expression), ``nearest`` holds the closest
-        # ``candidates`` chunks. Visibility is applied afterwards, so when too
-        # few candidates are visible the round is repeated with a wider set,
-        # and once that grows past SEMANTIC_MAX_INDEX_CANDIDATES (or the index
-        # scan returns fewer rows than asked) every embedding is ranked exactly.
-        # A visible match therefore never drops out because hidden chunks rank
-        # ahead of it. Without the index (another vector size, or a pgvector too
-        # old for iterative scans) the exact ranking is used straight away.
-        #
-        # The exact ranking first narrows the rows to the projects in scope and,
-        # for a non-admin, to projects where the user can see something at all
-        # (every visibility rule needs such a ``user_visibility`` row), so the
-        # planner can skip the distance for chunks that could never be shown.
-        # That narrowing stays out of the index rounds: there it makes the
-        # planner drop the index for a join plan.
-        exact_scope = project_filter.replace("ss.", "ss0.")
-        if not user.is_admin:
-            exact_scope += """
-                  AND ss0.project_id IN (SELECT uv0.project_id FROM user_visibility uv0
-                                         WHERE uv0.visibility_level > 0 OR uv0.can_view_wiki)"""
+    async def _run_semantic_rounds(
+        self,
+        session: AsyncSession,
+        model: EmbeddingModel,
+        params: dict[str, Any],
+        needed: int,
+        min_similarity: float | None,
+        semantic_sql: Callable[[int | None], str],
+    ) -> list[Any]:
+        """The visible ranked rows, widening the index candidates until *needed* rows are visible.
 
-        def nearest_cte(candidates: int | None) -> str:
-            if candidates is None:
-                body = f"""nearest AS MATERIALIZED (
-                SELECT ce.chunk_id,
-                       (1 - (ce.embedding <=> CAST(:query_vector AS vector))) AS score
-                FROM chunk_embeddings ce
-                JOIN search_chunks sc0 ON sc0.id = ce.chunk_id
-                JOIN search_sources ss0 ON ss0.id = sc0.source_id
-                WHERE ce.model_id = :model_id
-                {exact_scope}
-                {exact_score_filter}
-            )"""  # noqa: S608
-            else:
-                dims = SEMANTIC_INDEX_DIMENSIONS
-                distance = f"ce.embedding::vector({dims}) <=> CAST(:query_vector AS vector({dims}))"
-                body = f"""nearest AS MATERIALIZED (
-                SELECT ce.chunk_id, (1 - ({distance})) AS score
-                FROM chunk_embeddings ce
-                WHERE ce.model_id = :model_id
-                  AND vector_dims(ce.embedding) = {dims}
-                ORDER BY {distance}
-                LIMIT :candidates
-            )"""  # noqa: S608
-            # cte_prefix is "WITH user_visibility AS (...)" or empty (admins).
-            return f"{cte_prefix},\n            {body}" if cte_prefix else f"WITH {body}"
-
-        ranked_sql = f"""
-            SELECT result_type, id, title, subtitle, snippet, score, project_key
-            FROM (
-                SELECT DISTINCT ON (ss.source_type, ss.entity_id)
-                    CASE ss.source_type
-                        WHEN '{_SST_WIKI_PAGE}' THEN '{_SRT_WIKI}'
-                        WHEN '{_SST_JOURNAL}' THEN '{_SRT_COMMENT}'
-                        ELSE ss.source_type
-                    END as result_type,
-                    ss.entity_id as id,
-                    CASE
-                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
-                            iss.project_key || '-' || iss.sequence_number
-                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
-                            wp.title
-                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
-                            cmt_iss.project_key || '-' || cmt_iss.sequence_number
-                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
-                            CASE
-                                WHEN att.container_type = 'Issue' THEN
-                                    att_iss.project_key || '-' || CAST(att_iss.sequence_number AS text)
-                                WHEN att.container_type = 'WikiPage' THEN att_wp.title
-                                ELSE CAST(att.container_id AS text)
-                            END
-                        ELSE CAST(ss.entity_id AS text)
-                    END as title,
-                    CASE
-                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
-                            iss.subject
-                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
-                            wp.slug
-                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
-                            left(sc.content, {SEARCH_SNIPPET_MAX_CHARS})
-                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
-                            att.filename
-                        ELSE NULL
-                    END as subtitle,
-                    left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as snippet,
-                    n.score,
-                    CASE
-                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
-                            iss.project_key
-                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
-                            wp_proj.key
-                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
-                            cmt_iss.project_key
-                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
-                            COALESCE(att_iss_p.key, att_wp_p.key)
-                        ELSE ''
-                    END as project_key
-                FROM nearest n
-                JOIN search_chunks sc ON sc.id = n.chunk_id
-                JOIN search_sources ss ON ss.id = sc.source_id
-                LEFT JOIN issues iss ON ss.source_type = '{_SST_ISSUE}' AND iss.id = ss.entity_id
-                LEFT JOIN wiki_pages wp ON ss.source_type = '{_SST_WIKI_PAGE}' AND wp.id = ss.entity_id
-                LEFT JOIN wikis wp_w ON wp_w.id = wp.wiki_id
-                LEFT JOIN projects wp_proj ON wp_proj.id = wp_w.project_id
-                LEFT JOIN journals cmt_j ON ss.source_type = '{_SST_JOURNAL}' AND cmt_j.id = ss.entity_id
-                LEFT JOIN issues cmt_iss ON cmt_iss.id = cmt_j.issue_id
-                LEFT JOIN attachments att ON ss.source_type = '{_SST_ATTACHMENT}' AND att.id = ss.entity_id
-                LEFT JOIN issues att_iss ON att.container_type = 'Issue' AND att_iss.id = att.container_id
-                LEFT JOIN projects att_iss_p ON att_iss_p.id = att_iss.project_id
-                LEFT JOIN wiki_pages att_wp ON att.container_type = 'WikiPage' AND att_wp.id = att.container_id
-                LEFT JOIN wikis att_w ON att_w.id = att_wp.wiki_id
-                LEFT JOIN projects att_wp_p ON att_wp_p.id = att_w.project_id
-                WHERE 1=1
-                {project_filter}
-                {score_filter}
-                AND {sem_where_or}
-                ORDER BY ss.source_type, ss.entity_id, n.score DESC
-            ) deduped
-            ORDER BY score DESC, result_type, id
-            LIMIT :needed
-        """  # noqa: S608
-
-        # Rank the first offset + limit entities; the page is cut in Python.
-        # The one-row ``fetched`` side reports how many candidates the round
-        # read and the lowest score among them, even when none is visible.
-        def semantic_sql(candidates: int | None) -> str:
-            return f"""
-            {nearest_cte(candidates)}
-            SELECT fetched.n AS candidate_count, fetched.lowest AS lowest_score, page.*
-            FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
-            LEFT JOIN ({ranked_sql}) page ON true
-            ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
-        """  # noqa: S608
-
-        needed = ranked_offset + ranked_limit
-        params["needed"] = needed
-        rows: list[Any] = []
-        if needed > 0:
-            candidates: int | None = None
-            if model.dimensions == SEMANTIC_INDEX_DIMENSIONS and await self._prepare_index_scan(session):
-                candidates = needed * get_settings().search_semantic_overfetch
-            while True:
-                if candidates is not None and candidates > SEMANTIC_MAX_INDEX_CANDIDATES:
-                    candidates = None
-                params["candidates"] = candidates
-                fetched = (await session.execute(text(semantic_sql(candidates)), params)).all()
-                rows = [row for row in fetched if row._mapping["result_type"] is not None]
-                logger.debug(
-                    "Semantic search round: %s candidates, %d of %d results",
-                    "all" if candidates is None else candidates,
-                    len(rows),
-                    needed,
-                )
-                if candidates is None or len(rows) >= needed:
-                    break
-                lowest = fetched[0]._mapping["lowest_score"]
-                if min_similarity is not None and lowest is not None and lowest < min_similarity:
-                    # The round already reached chunks below the cut-off; the
-                    # wider rounds would only add chunks further away still.
-                    break
-                if fetched[0]._mapping["candidate_count"] < candidates:
-                    # The index ran out before the limit: the table holds fewer
-                    # rows, or the scan hit pgvector's hnsw.max_scan_tuples.
-                    candidates = None
-                elif rows:
-                    # Widen by at least the share still missing, twice over.
-                    candidates *= max(SEMANTIC_CANDIDATE_GROWTH, math.ceil(2 * needed / len(rows)))
-                else:
-                    candidates *= SEMANTIC_CANDIDATE_GROWTH**2
-
-        results: list[SearchResult] = []
-        for row in rows[ranked_offset:]:
-            m = row._mapping
-            results.append(
-                SearchResult(
-                    result_type=m["result_type"],
-                    id=m["id"],
-                    title=m["title"] or "",
-                    subtitle=m["subtitle"],
-                    # Raw stored content, rendered with ``| safe`` on the search
-                    # page: escape it as the keyword path does. Hybrid search
-                    # reuses these results, so this covers both modes.
-                    snippet=_clean_snippet(m["snippet"]),
-                    score=float(m["score"]) if m["score"] is not None else 0.0,
-                    project_key=m["project_key"] or "",
-                )
+        Through the HNSW index, each round ranks the closest ``candidates``
+        chunks and applies visibility afterwards. When too few are visible the
+        round is repeated with a wider set, and once that grows past
+        SEMANTIC_MAX_INDEX_CANDIDATES (or the index scan returns fewer rows than
+        asked) every embedding is ranked exactly. Without the index the exact
+        ranking is used straight away.
+        """
+        candidates: int | None = None
+        if model.dimensions == SEMANTIC_INDEX_DIMENSIONS and await self._prepare_index_scan(session):
+            candidates = needed * get_settings().search_semantic_overfetch
+        while True:
+            if candidates is not None and candidates > SEMANTIC_MAX_INDEX_CANDIDATES:
+                candidates = None
+            params["candidates"] = candidates
+            fetched = (await session.execute(text(semantic_sql(candidates)), params)).all()
+            rows = [row for row in fetched if row._mapping["result_type"] is not None]
+            logger.debug(
+                "Semantic search round: %s candidates, %d of %d results",
+                "all" if candidates is None else candidates,
+                len(rows),
+                needed,
             )
-        if pinned:
-            results = self._rank_pinned_first(pinned[pinned_slice], results)
-
-        # Count total semantic results (skipped when called from hybrid_search)
-        total = 0
-        if not skip_count:
-            count_sql = f"""
-                {cte_prefix}
-                SELECT COUNT(DISTINCT (ss.source_type, ss.entity_id))
-                FROM chunk_embeddings ce
-                JOIN search_chunks sc ON sc.id = ce.chunk_id
-                JOIN search_sources ss ON ss.id = sc.source_id
-                LEFT JOIN attachments att_c ON ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id = ss.entity_id
-                LEFT JOIN issues att_c_iss ON att_c.container_type = 'Issue' AND att_c_iss.id = att_c.container_id
-                LEFT JOIN wiki_pages att_c_wp ON att_c.container_type = 'WikiPage' AND att_c_wp.id = att_c.container_id
-                LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
-                WHERE ce.model_id = :model_id
-                {project_filter}
-                {exact_score_filter}
-                AND {count_where_or}
-            """  # noqa: S608
-            count_result = await session.execute(text(count_sql), params)
-            total = count_result.scalar_one() + len(pinned)
-
-        return results, total
+            if candidates is None or len(rows) >= needed:
+                return rows
+            lowest = fetched[0]._mapping["lowest_score"]
+            if min_similarity is not None and lowest is not None and lowest < min_similarity:
+                # The round already reached chunks below the cut-off; the
+                # wider rounds would only add chunks further away still.
+                return rows
+            candidates = _next_candidates(candidates, fetched[0]._mapping["candidate_count"], len(rows), needed)
 
     async def hybrid_search(
         self,
@@ -2045,3 +1941,182 @@ class SearchService:
             results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         return results, total, type_counts
+
+
+# ---------------------------------------------------------------------------
+# Semantic search SQL
+# ---------------------------------------------------------------------------
+
+
+async def _query_vector_literal(emb_service: Any, query: str, model: EmbeddingModel) -> str | None:
+    """The query's embedding as a PostgreSQL vector literal (``'[0.1,0.2,...]'``), or ``None``.
+
+    ``None`` when the model cannot embed it: a broken model turns semantic
+    search off, never a 500.
+    """
+    from specivo.services.query_embedding_cache import embed_query
+
+    try:
+        # Cached briefly in Redis, so a repeated or paged query does not
+        # run the model again (specivo.services.query_embedding_cache).
+        query_vector = await embed_query(emb_service, query, model)
+    except Exception as exc:  # a broken model turns semantic search off, never a 500  # noqa: BLE001
+        _warn_embedding_failure(model, exc)
+        return None
+    if query_vector is None:
+        return None
+    return "[" + ",".join(str(v) for v in query_vector) + "]"
+
+
+def _semantic_project_filter(project_id: int | None, project_ids: list[int] | None, params: dict[str, Any]) -> str:
+    """The ``search_sources`` (``ss``) project condition, its parameter added to *params*."""
+    if project_ids is not None:
+        params["project_ids"] = project_ids
+        return "AND ss.project_id = ANY(:project_ids)"
+    if project_id is not None:
+        params["project_id"] = project_id
+        return "AND ss.project_id = :project_id"
+    return ""
+
+
+def _nearest_cte(cte_prefix: str, exact_scope: str, exact_score_filter: str, candidates: int | None) -> str:
+    """The ``WITH`` clause whose ``nearest`` CTE picks the candidate chunks by cosine distance alone.
+
+    Two phases: ``nearest`` picks candidates, then the outer query joins them
+    to their entities, applies visibility, keeps the best chunk per entity and
+    ranks. With *candidates*, ``nearest`` holds the closest ``candidates``
+    chunks through the HNSW index (a partial index on the cast expression, so
+    the query repeats that expression); with ``None`` it ranks every embedding
+    exactly, narrowed by *exact_scope*.
+    """
+    if candidates is None:
+        body = f"""nearest AS MATERIALIZED (
+                SELECT ce.chunk_id,
+                       (1 - (ce.embedding <=> CAST(:query_vector AS vector))) AS score
+                FROM chunk_embeddings ce
+                JOIN search_chunks sc0 ON sc0.id = ce.chunk_id
+                JOIN search_sources ss0 ON ss0.id = sc0.source_id
+                WHERE ce.model_id = :model_id
+                {exact_scope}
+                {exact_score_filter}
+            )"""  # noqa: S608
+    else:
+        dims = SEMANTIC_INDEX_DIMENSIONS
+        distance = f"ce.embedding::vector({dims}) <=> CAST(:query_vector AS vector({dims}))"
+        body = f"""nearest AS MATERIALIZED (
+                SELECT ce.chunk_id, (1 - ({distance})) AS score
+                FROM chunk_embeddings ce
+                WHERE ce.model_id = :model_id
+                  AND vector_dims(ce.embedding) = {dims}
+                ORDER BY {distance}
+                LIMIT :candidates
+            )"""  # noqa: S608
+    # cte_prefix is "WITH user_visibility AS (...)" or empty (admins).
+    return f"{cte_prefix},\n            {body}" if cte_prefix else f"WITH {body}"
+
+
+def _semantic_ranked_sql(project_filter: str, score_filter: str, sem_where_or: str) -> str:
+    """The query ranking the visible ``nearest`` chunks: the best chunk per entity, at most ``:needed`` rows."""
+    return f"""
+            SELECT result_type, id, title, subtitle, snippet, score, project_key
+            FROM (
+                SELECT DISTINCT ON (ss.source_type, ss.entity_id)
+                    CASE ss.source_type
+                        WHEN '{_SST_WIKI_PAGE}' THEN '{_SRT_WIKI}'
+                        WHEN '{_SST_JOURNAL}' THEN '{_SRT_COMMENT}'
+                        ELSE ss.source_type
+                    END as result_type,
+                    ss.entity_id as id,
+                    CASE
+                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
+                            iss.project_key || '-' || iss.sequence_number
+                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
+                            wp.title
+                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
+                            cmt_iss.project_key || '-' || cmt_iss.sequence_number
+                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
+                            CASE
+                                WHEN att.container_type = 'Issue' THEN
+                                    att_iss.project_key || '-' || CAST(att_iss.sequence_number AS text)
+                                WHEN att.container_type = 'WikiPage' THEN att_wp.title
+                                ELSE CAST(att.container_id AS text)
+                            END
+                        ELSE CAST(ss.entity_id AS text)
+                    END as title,
+                    CASE
+                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
+                            iss.subject
+                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
+                            wp.slug
+                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
+                            left(sc.content, {SEARCH_SNIPPET_MAX_CHARS})
+                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
+                            att.filename
+                        ELSE NULL
+                    END as subtitle,
+                    left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as snippet,
+                    n.score,
+                    CASE
+                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
+                            iss.project_key
+                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
+                            wp_proj.key
+                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
+                            cmt_iss.project_key
+                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
+                            COALESCE(att_iss_p.key, att_wp_p.key)
+                        ELSE ''
+                    END as project_key
+                FROM nearest n
+                JOIN search_chunks sc ON sc.id = n.chunk_id
+                JOIN search_sources ss ON ss.id = sc.source_id
+                LEFT JOIN issues iss ON ss.source_type = '{_SST_ISSUE}' AND iss.id = ss.entity_id
+                LEFT JOIN wiki_pages wp ON ss.source_type = '{_SST_WIKI_PAGE}' AND wp.id = ss.entity_id
+                LEFT JOIN wikis wp_w ON wp_w.id = wp.wiki_id
+                LEFT JOIN projects wp_proj ON wp_proj.id = wp_w.project_id
+                LEFT JOIN journals cmt_j ON ss.source_type = '{_SST_JOURNAL}' AND cmt_j.id = ss.entity_id
+                LEFT JOIN issues cmt_iss ON cmt_iss.id = cmt_j.issue_id
+                LEFT JOIN attachments att ON ss.source_type = '{_SST_ATTACHMENT}' AND att.id = ss.entity_id
+                LEFT JOIN issues att_iss ON att.container_type = 'Issue' AND att_iss.id = att.container_id
+                LEFT JOIN projects att_iss_p ON att_iss_p.id = att_iss.project_id
+                LEFT JOIN wiki_pages att_wp ON att.container_type = 'WikiPage' AND att_wp.id = att.container_id
+                LEFT JOIN wikis att_w ON att_w.id = att_wp.wiki_id
+                LEFT JOIN projects att_wp_p ON att_wp_p.id = att_w.project_id
+                WHERE 1=1
+                {project_filter}
+                {score_filter}
+                AND {sem_where_or}
+                ORDER BY ss.source_type, ss.entity_id, n.score DESC
+            ) deduped
+            ORDER BY score DESC, result_type, id
+            LIMIT :needed
+        """  # noqa: S608
+
+
+def _next_candidates(candidates: int, candidate_count: int, visible: int, needed: int) -> int | None:
+    """The candidate count for the next semantic round; ``None`` ranks every embedding exactly."""
+    if candidate_count < candidates:
+        # The index ran out before the limit: the table holds fewer
+        # rows, or the scan hit pgvector's hnsw.max_scan_tuples.
+        return None
+    if visible:
+        # Widen by at least the share still missing, twice over.
+        return candidates * max(SEMANTIC_CANDIDATE_GROWTH, math.ceil(2 * needed / visible))
+    return candidates * SEMANTIC_CANDIDATE_GROWTH**2
+
+
+def _semantic_result(row: Any) -> SearchResult:
+    """A ranked semantic row as a search result."""
+    m = row._mapping
+    return SearchResult(
+        result_type=m["result_type"],
+        id=m["id"],
+        title=m["title"] or "",
+        subtitle=m["subtitle"],
+        # Raw stored content, rendered with ``| safe`` on the search
+        # page: escape it as the keyword path does. Hybrid search
+        # reuses these results, so this covers both modes.
+        snippet=_clean_snippet(m["snippet"]),
+        score=float(m["score"]) if m["score"] is not None else 0.0,
+        project_key=m["project_key"] or "",
+    )
