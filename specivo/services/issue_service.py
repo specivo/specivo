@@ -8,7 +8,7 @@ from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, delete, false, func, or_, select, tuple_, union_all, update
+from sqlalchemy import Select, and_, delete, false, func, or_, select, tuple_, union_all, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -91,6 +91,95 @@ def _set_present_fields(issue: Issue, data: IssueUpdate, names: tuple[str, ...])
         value = getattr(data, name)
         if value is not None:
             setattr(issue, name, value)
+
+
+#: The list filters that compare one issue column with a value; ``"none"``
+#: (NO_VALUE) selects the issues without a value where the column may be empty
+#: (see specivo.services.issue_list_filters).
+_EQUALITY_FILTERS: tuple[tuple[str, Any, bool], ...] = (
+    ("tracker_id", Issue.tracker_id, False),
+    ("assigned_to_id", Issue.assigned_to_id, True),
+    ("priority_id", Issue.priority_id, False),
+    ("category_id", Issue.category_id, False),
+    ("author_id", Issue.author_id, False),
+    ("version_id", Issue.fixed_version_id, True),
+    ("sprint_id", Issue.sprint_id, False),
+)
+#: Date bounds: (filter key, column, True for a lower bound).
+_DATE_FILTERS: tuple[tuple[str, Any, bool], ...] = (
+    ("created_after", Issue.created_at, True),
+    ("created_before", Issue.created_at, False),
+    ("updated_after", Issue.updated_at, True),
+    ("updated_before", Issue.updated_at, False),
+)
+
+
+def _field_conditions(filters: dict) -> list[ColumnElement[bool]]:
+    """WHERE conditions of the FK, tag, parent, subject and date filters, in that order."""
+    conditions: list[ColumnElement[bool]] = []
+    for key, column, nullable in _EQUALITY_FILTERS:
+        value = filters.get(key)
+        if nullable and value == NO_VALUE:
+            conditions.append(column.is_(None))
+        elif value is not None:
+            conditions.append(column == value)
+    if filters.get("tag_id") is not None:
+        conditions.append(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
+    if filters.get("parent_id") is not None:
+        conditions.append(Issue.parent_id == filters["parent_id"])
+    if filters.get("subject_contains"):
+        escaped = filters["subject_contains"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append(Issue.subject.ilike(f"%{escaped}%", escape="\\"))
+    for key, column, lower in _DATE_FILTERS:
+        if filters.get(key) is not None:
+            conditions.append(column >= filters[key] if lower else column <= filters[key])
+    return conditions
+
+
+def _metadata_conditions(pairs: Iterable[tuple[str, Any]] | None) -> list[ColumnElement[bool]]:
+    """One condition per metadata ``key=value`` pair (AND-combined by the caller).
+
+    Each pair matches an issue when either:
+      * issue_metadata->>'key' = value          (scalar equality)
+      * issue_metadata->'key' @> '["value"]'    (array contains the value)
+    so callers don't have to know whether the schema stores the key as a
+    scalar string or as a list of strings.
+    """
+    conditions: list[ColumnElement[bool]] = []
+    for key, value in pairs or ():
+        value_str = str(value)
+        # Build a JSONB array literal `[value]` via a parameterised
+        # jsonb_build_array() so the value is properly escaped even when
+        # it contains quotes, backslashes or unicode.
+        array_literal = func.jsonb_build_array(value_str)
+        conditions.append(
+            or_(
+                Issue.issue_metadata[key].astext == value_str,
+                Issue.issue_metadata[key].op("@>")(array_literal),
+            )
+        )
+    return conditions
+
+
+def _issue_order_by(sort: str) -> list[Any]:
+    """ORDER BY of ``field:direction`` pairs (``created_at:desc`` by default), unknown fields skipped.
+
+    A unique last key: issues equal on the chosen sort (same priority, same
+    status) keep one order, so pages neither skip nor repeat them.
+    """
+    order_clauses = []
+    for raw in (sort or "created_at:desc").split(","):
+        part = raw.strip()
+        field, direction = part.rsplit(":", 1) if ":" in part else (part, "asc")
+        field = field.strip().lower()
+        col = getattr(Issue, field, None) if field in _ALLOWED_SORT_FIELDS else None
+        if col is None:
+            continue
+        order_clauses.append(col.desc() if direction.strip().lower() == "desc" else col.asc())
+    if not order_clauses:
+        order_clauses = [Issue.created_at.desc()]
+    order_clauses.append(Issue.id.asc())
+    return order_clauses
 
 
 class IssueService:
@@ -1406,7 +1495,7 @@ class IssueService:
             field="status",
         )
 
-    async def list_issues(  # noqa: C901, PLR0912, PLR0915
+    async def list_issues(
         self,
         session: AsyncSession,
         project_id: int | None,
@@ -1445,159 +1534,47 @@ class IssueService:
             selectinload(Issue.assigned_to),
             selectinload(Issue.fixed_version),
         )
-
         if project_id is not None:
             stmt = stmt.where(Issue.project_id == project_id)
+        stmt = await self._visibility_where(session, stmt, project_id, user)
+        stmt = await self._apply_filters(session, stmt, filters)
 
-        # ------------------------------------------------------------------
-        # Visibility filter
-        # ------------------------------------------------------------------
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_count = (await session.execute(count_stmt)).scalar_one()
+
+        stmt = stmt.order_by(*_issue_order_by(sort)).offset(offset).limit(limit)
+        issues = list((await session.execute(stmt)).scalars().all())
+        return issues, total_count
+
+    async def _visibility_where(
+        self, session: AsyncSession, stmt: Select[Any], project_id: int | None, user: User
+    ) -> Select[Any]:
+        """*stmt* narrowed to the issues *user* may see (an API key's project limit included; admins see all)."""
         key_limit = scope_clause(Issue.project_id)
         if key_limit is not None:
             stmt = stmt.where(key_limit)
-        if not user.is_admin:
-            if project_id is not None:
-                project = await session.get(Project, project_id)
-                if project is not None:
-                    in_project = await self.project_visible_issues_clause(session, user, project)
-                    if in_project is not None:
-                        stmt = stmt.where(in_project)
-            else:
-                across_projects = await self.visible_issues_clause(session, user)
-                if across_projects is not None:
-                    stmt = stmt.where(across_projects)
+        if user.is_admin:
+            return stmt
+        if project_id is None:
+            across_projects = await self.visible_issues_clause(session, user)
+            return stmt if across_projects is None else stmt.where(across_projects)
+        project = await session.get(Project, project_id)
+        if project is None:
+            return stmt
+        in_project = await self.project_visible_issues_clause(session, user, project)
+        return stmt if in_project is None else stmt.where(in_project)
 
-        # ------------------------------------------------------------------
-        # Status filter
-        # ------------------------------------------------------------------
+    async def _apply_filters(self, session: AsyncSession, stmt: Select[Any], filters: dict) -> Select[Any]:
+        """*stmt* narrowed by the list filters: status, the FK fields, subject text, dates and metadata pairs."""
         status_filter = filters.get("status", "open")
-        if status_filter == "open":
-            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category != "closed")
-        elif status_filter == "closed":
-            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category == "closed")
+        if status_filter in ("open", "closed"):
+            closed = IssueStatus.category == "closed" if status_filter == "closed" else IssueStatus.category != "closed"
+            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(closed)
         elif status_filter not in (None, "all"):
             sid = await self.resolve_status_filter(session, status_filter)
             stmt = stmt.where(Issue.status_id == sid)
-
-        # ------------------------------------------------------------------
-        # Optional FK filters
-        # ------------------------------------------------------------------
-        if filters.get("tracker_id") is not None:
-            stmt = stmt.where(Issue.tracker_id == filters["tracker_id"])
-        # ``"none"`` (NO_VALUE) selects the issues without an assignee / target
-        # version; see specivo.services.issue_list_filters.
-        if filters.get("assigned_to_id") == NO_VALUE:
-            stmt = stmt.where(Issue.assigned_to_id.is_(None))
-        elif filters.get("assigned_to_id") is not None:
-            stmt = stmt.where(Issue.assigned_to_id == filters["assigned_to_id"])
-        if filters.get("priority_id") is not None:
-            stmt = stmt.where(Issue.priority_id == filters["priority_id"])
-        if filters.get("category_id") is not None:
-            stmt = stmt.where(Issue.category_id == filters["category_id"])
-        if filters.get("author_id") is not None:
-            stmt = stmt.where(Issue.author_id == filters["author_id"])
-        if filters.get("version_id") == NO_VALUE:
-            stmt = stmt.where(Issue.fixed_version_id.is_(None))
-        elif filters.get("version_id") is not None:
-            stmt = stmt.where(Issue.fixed_version_id == filters["version_id"])
-        if filters.get("sprint_id") is not None:
-            stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
-        if filters.get("tag_id") is not None:
-            stmt = stmt.where(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
-        if filters.get("parent_id") is not None:
-            stmt = stmt.where(Issue.parent_id == filters["parent_id"])
-
-        # ------------------------------------------------------------------
-        # Text search
-        # ------------------------------------------------------------------
-        if filters.get("subject_contains"):
-            escaped = filters["subject_contains"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            stmt = stmt.where(Issue.subject.ilike(f"%{escaped}%", escape="\\"))
-
-        # ------------------------------------------------------------------
-        # Date range filters
-        # ------------------------------------------------------------------
-        if filters.get("created_after") is not None:
-            stmt = stmt.where(Issue.created_at >= filters["created_after"])
-        if filters.get("created_before") is not None:
-            stmt = stmt.where(Issue.created_at <= filters["created_before"])
-        if filters.get("updated_after") is not None:
-            stmt = stmt.where(Issue.updated_at >= filters["updated_after"])
-        if filters.get("updated_before") is not None:
-            stmt = stmt.where(Issue.updated_at <= filters["updated_before"])
-
-        # ------------------------------------------------------------------
-        # Metadata filters (key=value, AND-combined across pairs)
-        #
-        # Each pair matches an issue when either:
-        #   * issue_metadata->>'key' = value          (scalar equality)
-        #   * issue_metadata->'key' @> '["value"]'    (array contains the value)
-        # so callers don't have to know whether the schema stores the key as a
-        # scalar string or as a list of strings.
-        # ------------------------------------------------------------------
-        metadata_pairs = filters.get("metadata_filters")
-        if metadata_pairs:
-            for key, value in metadata_pairs:
-                value_str = str(value)
-                # Build a JSONB array literal `[value]` via a parameterised
-                # jsonb_build_array() so the value is properly escaped even when
-                # it contains quotes, backslashes or unicode.
-                array_literal = func.jsonb_build_array(value_str)
-                stmt = stmt.where(
-                    or_(
-                        Issue.issue_metadata[key].astext == value_str,
-                        Issue.issue_metadata[key].op("@>")(array_literal),
-                    )
-                )
-
-        # ------------------------------------------------------------------
-        # Total count (before pagination)
-        # ------------------------------------------------------------------
-        count_stmt = select(func.count()).select_from(stmt.subquery())
-        total_result = await session.execute(count_stmt)
-        total_count = total_result.scalar_one()
-
-        # ------------------------------------------------------------------
-        # Sorting
-        # ------------------------------------------------------------------
-        if not sort:
-            sort = "created_at:desc"
-
-        order_clauses = []
-        for part in sort.split(","):
-            part = part.strip()
-            if ":" in part:
-                field, direction = part.rsplit(":", 1)
-            else:
-                field, direction = part, "asc"
-
-            field = field.strip().lower()
-            direction = direction.strip().lower()
-
-            if field not in _ALLOWED_SORT_FIELDS:
-                continue
-
-            col = getattr(Issue, field, None)
-            if col is None:
-                continue
-
-            if direction == "desc":
-                order_clauses.append(col.desc())
-            else:
-                order_clauses.append(col.asc())
-
-        if not order_clauses:
-            order_clauses = [Issue.created_at.desc()]
-        # A unique last key: issues equal on the chosen sort (same priority,
-        # same status) keep one order, so pages neither skip nor repeat them.
-        order_clauses.append(Issue.id.asc())
-
-        stmt = stmt.order_by(*order_clauses).offset(offset).limit(limit)
-
-        result = await session.execute(stmt)
-        issues = list(result.scalars().all())
-
-        return issues, total_count
+        stmt = stmt.where(*_field_conditions(filters))
+        return stmt.where(*_metadata_conditions(filters.get("metadata_filters")))
 
     async def list_attachments(
         self,
