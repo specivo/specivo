@@ -11,9 +11,10 @@ Usage in tests/conftest.py::
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -97,6 +98,45 @@ async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
 
     yield engine
     await engine.dispose()
+
+
+@contextmanager
+def global_engine_on(engine: AsyncEngine) -> Iterator[None]:
+    """Point the process-global database engine at ``engine`` for the block.
+
+    Code that opens its own sessions (the MCP tool calls, API key resolution,
+    anything reached through ``create_app()``) uses the global engine from
+    ``specivo.core.database``. Left alone, that engine is created by whichever
+    test touches it first and stays bound to that test's event loop, so the
+    next test fails with "Event loop is closed" or "attached to a different
+    loop". The previous engine is restored on exit, and the Redis-backed MCP
+    session store is dropped on both sides so it never holds a client from
+    another loop.
+    """
+    from specivo.core import database
+    from specivo.mcp.session_store import reset_mcp_session_store
+
+    saved = database._engine
+    database.set_engine(engine)
+    reset_mcp_session_store()
+    try:
+        yield
+    finally:
+        reset_mcp_session_store()
+        database._engine = saved
+        database._session_factory = None
+
+
+@pytest.fixture
+def tool_engine(db_engine: AsyncEngine) -> Iterator[AsyncEngine]:
+    """Run code that opens its own DB sessions on this test's engine and loop.
+
+    Use it (``pytest.mark.usefixtures("tool_engine")``) in any test that goes
+    through ``create_app()``, the MCP ``Client`` or the MCP HTTP transport, or
+    that calls a helper opening its own session. See ``global_engine_on``.
+    """
+    with global_engine_on(db_engine):
+        yield db_engine
 
 
 # ---------------------------------------------------------------------------

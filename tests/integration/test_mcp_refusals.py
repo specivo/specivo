@@ -9,7 +9,6 @@ the refusal is gone.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -17,7 +16,6 @@ from mcp import Client
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import delete, func, select
 
-from specivo.core import database
 from specivo.core.exceptions import ValidationError
 from specivo.mcp import server as mcp_server_module
 from specivo.mcp.auth import mcp_raw_key_var
@@ -27,16 +25,12 @@ from specivo.models.agent_session import AgentSession
 from specivo.models.security_audit import SecurityAuditLog
 from tests.integration.test_mcp_transport import mcp_key  # noqa: F401
 
-pytestmark = [pytest.mark.integration, pytest.mark.serial, pytest.mark.asyncio(loop_scope="function")]
-
-
-@pytest.fixture(autouse=True)
-def _tool_engine(db_engine) -> Iterator[None]:
-    """Run the tool calls' own sessions on this test's engine and event loop."""
-    saved = database._engine
-    database.set_engine(db_engine)
-    yield
-    database.set_engine(saved)  # type: ignore[arg-type]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.serial,
+    pytest.mark.asyncio(loop_scope="function"),
+    pytest.mark.usefixtures("tool_engine"),
+]
 
 
 async def _audit_rows(db_engine, tool: str) -> int:
