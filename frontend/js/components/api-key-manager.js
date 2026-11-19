@@ -1,5 +1,30 @@
 import { apiKeyProjectPicker } from '../lib/api-key-project-picker';
 
+/* The component's messages: property (and data-* attribute) name, English default. */
+var MESSAGES = [
+    ['msgCreateFailed', 'Failed to create key'],
+    ['msgConnectFailed', 'Unable to connect. Please try again.'],
+    ['msgConfirmDelete', 'Are you sure you want to permanently delete this API key?'],
+    ['msgCopied', 'Copied!'],
+    ['msgCopy', 'Copy'],
+    ['msgCreating', 'Creating...'],
+    ['msgCreate', 'Create key'],
+    ['msgActive', 'Active'],
+    ['msgInactive', 'Inactive'],
+    ['msgDeactivate', 'Deactivate'],
+    ['msgActivate', 'Activate']
+];
+
+/* The project limit picker's messages from the data-* attributes *d*. */
+function limitMessages(d) {
+    return {
+        allHint: d.msgLimitAllHint || 'Nothing ticked: the key reaches every project you can see.',
+        all: d.msgLimitAll || 'All projects',
+        limitedTo: d.msgLimitedTo || 'Limited to: %(projects)s',
+        none: d.msgLimitNone || 'None: its projects were deleted'
+    };
+}
+
 export function apiKeyManager() {
         var component = {
             keys: [],
@@ -25,23 +50,10 @@ export function apiKeyManager() {
                 // Translated strings arrive as data-msg-* attributes rendered by
                 // the template; the English defaults cover a template without them.
                 var d = this.$el.dataset;
-                this.msgCreateFailed = d.msgCreateFailed || 'Failed to create key';
-                this.msgConnectFailed = d.msgConnectFailed || 'Unable to connect. Please try again.';
-                this.msgConfirmDelete = d.msgConfirmDelete || 'Are you sure you want to permanently delete this API key?';
-                this.msgCopied = d.msgCopied || 'Copied!';
-                this.msgCopy = d.msgCopy || 'Copy';
-                this.msgCreating = d.msgCreating || 'Creating...';
-                this.msgCreate = d.msgCreate || 'Create key';
-                this.msgActive = d.msgActive || 'Active';
-                this.msgInactive = d.msgInactive || 'Inactive';
-                this.msgDeactivate = d.msgDeactivate || 'Deactivate';
-                this.msgActivate = d.msgActivate || 'Activate';
-                this.limitI18n = {
-                    allHint: d.msgLimitAllHint || 'Nothing ticked: the key reaches every project you can see.',
-                    all: d.msgLimitAll || 'All projects',
-                    limitedTo: d.msgLimitedTo || 'Limited to: %(projects)s',
-                    none: d.msgLimitNone || 'None: its projects were deleted'
-                };
+                for (var i = 0; i < MESSAGES.length; i++) {
+                    this[MESSAGES[i][0]] = d[MESSAGES[i][0]] || MESSAGES[i][1];
+                }
+                this.limitI18n = limitMessages(d);
                 this.loadKeys();
             },
 

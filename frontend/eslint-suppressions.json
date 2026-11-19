@@ -4,11 +4,6 @@
       "count": 1
     }
   },
-  "js/components/api-key-manager.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "js/components/issue-form.js": {
     "complexity": {
       "count": 2
