@@ -14,16 +14,6 @@
       "count": 2
     }
   },
-  "js/components/issue-metadata-panel.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
-  "js/components/metadata-field-renderer.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "js/components/project-create-modal.js": {
     "complexity": {
       "count": 1
