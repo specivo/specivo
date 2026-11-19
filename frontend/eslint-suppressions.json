@@ -8,10 +8,5 @@
     "complexity": {
       "count": 2
     }
-  },
-  "js/components/project-create-modal.js": {
-    "complexity": {
-      "count": 1
-    }
   }
 }
