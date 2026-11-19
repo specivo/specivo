@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from pydantic import ValidationError as PydanticValidationError
@@ -168,11 +169,76 @@ async def create_issue(
     return _issue_out(issue, computed_values(project.settings))
 
 
+#: Issue list parameters a saved filter fills in when the request leaves them out.
+_SAVED_FILTER_PLAIN_FIELDS = (
+    "tracker_id",
+    "priority_id",
+    "category_id",
+    "author_id",
+    "subject_contains",
+    "created_after",
+    "created_before",
+    "updated_after",
+    "updated_before",
+)
+#: Parameters with a default value: a saved filter overrides the default, not an explicit value.
+_SAVED_FILTER_DEFAULTED_FIELDS = {"status": "open", "sort": "created_at:desc"}
+
+
+def _with_saved_filter_defaults(params: dict[str, Any], fd: dict[str, Any]) -> dict[str, Any]:
+    """*params* with the saved filter definition *fd* filling in what the request left out."""
+    merged = dict(params)
+    for name, default in _SAVED_FILTER_DEFAULTED_FIELDS.items():
+        if merged[name] == default and name in fd:
+            merged[name] = fd[name]
+    for name in _SAVED_FILTER_PLAIN_FIELDS:
+        if merged[name] is None and name in fd:
+            merged[name] = fd[name]
+    if merged["assigned_to_id"] is None and "assigned_to_id" in fd:
+        merged["assigned_to_id"] = str(fd["assigned_to_id"])
+    if merged["version_id"] is None and merged["fixed_version_id"] is None:
+        for name in ("fixed_version_id", "version_id"):
+            if fd.get(name) is not None:
+                merged["fixed_version_id"] = str(fd[name])
+                break
+    if merged["tag_id"] is None and "tag_id" in fd:
+        merged["tag_id"] = parse_id(fd["tag_id"])
+    return merged
+
+
+def _issue_list_filters(params: dict[str, Any], user: User) -> dict[str, Any]:
+    """The ``IssueService.list_issues`` filters for the list parameters *params*."""
+    # "me" stands for the caller (which matches nothing for an anonymous
+    # visitor); "none" selects unassigned issues. Anything unparseable is ignored.
+    resolved_assigned_to = parse_assignee(params["assigned_to_id"], me_id=user.id)
+
+    raw_version = params["fixed_version_id"] if params["fixed_version_id"] is not None else params["version_id"]
+    resolved_version = parse_version(raw_version)
+    if raw_version is not None and raw_version.strip() and resolved_version is None:
+        raise ValidationError("version_id must be a version id or 'none'", field="fixed_version_id")
+
+    return {
+        "status": params["status"],
+        "tracker_id": params["tracker_id"],
+        "assigned_to_id": resolved_assigned_to,
+        "priority_id": params["priority_id"],
+        "category_id": params["category_id"],
+        "version_id": resolved_version,
+        "tag_id": params["tag_id"],
+        "author_id": params["author_id"],
+        "subject_contains": params["subject_contains"],
+        "created_after": time_bound(params["created_after"]),
+        "created_before": time_bound(params["created_before"], end_of_day=True),
+        "updated_after": time_bound(params["updated_after"]),
+        "updated_before": time_bound(params["updated_before"], end_of_day=True),
+    }
+
+
 @router.get(
     "/projects/{project_key}/issues/",
     response_model=IssueListResponse,
 )
-async def list_issues(  # noqa: C901, PLR0912, PLR0913
+async def list_issues(  # noqa: PLR0913
     project_key: str,
     status_filter: str | None = Query(
         default="open",
@@ -224,6 +290,23 @@ async def list_issues(  # noqa: C901, PLR0912, PLR0913
         if saved_filter_id is not None:
             raise AnonymousAccessDeniedError()
 
+    params: dict[str, Any] = {
+        "status": status_filter,
+        "tracker_id": tracker_id,
+        "assigned_to_id": assigned_to_id,
+        "priority_id": priority_id,
+        "category_id": category_id,
+        "version_id": version_id,
+        "fixed_version_id": fixed_version_id,
+        "tag_id": tag_id,
+        "author_id": author_id,
+        "subject_contains": subject_contains,
+        "created_after": created_after,
+        "created_before": created_before,
+        "updated_after": updated_after,
+        "updated_before": updated_before,
+        "sort": sort,
+    }
     # If a saved filter is specified, load it and use its definition as defaults
     if saved_filter_id is not None:
         sf = await _saved_filter_service.get_visible(db, saved_filter_id, project.id, current_user)
@@ -233,62 +316,9 @@ async def list_issues(  # noqa: C901, PLR0912, PLR0913
             fd = SavedFilterDefinition.model_validate(sf.filter_definition).model_dump(exclude_unset=True)
         except PydanticValidationError as exc:
             raise ValidationError(f"Saved filter {sf.id} has an invalid definition: {exc.errors()[0]['msg']}") from None
-        if status_filter == "open" and "status" in fd:
-            status_filter = fd["status"]
-        if tracker_id is None and "tracker_id" in fd:
-            tracker_id = fd["tracker_id"]
-        if assigned_to_id is None and "assigned_to_id" in fd:
-            assigned_to_id = str(fd["assigned_to_id"])
-        if version_id is None and fixed_version_id is None:
-            for name in ("fixed_version_id", "version_id"):
-                if fd.get(name) is not None:
-                    fixed_version_id = str(fd[name])
-                    break
-        if tag_id is None and "tag_id" in fd:
-            tag_id = parse_id(fd["tag_id"])
-        if priority_id is None and "priority_id" in fd:
-            priority_id = fd["priority_id"]
-        if category_id is None and "category_id" in fd:
-            category_id = fd["category_id"]
-        if author_id is None and "author_id" in fd:
-            author_id = fd["author_id"]
-        if subject_contains is None and "subject_contains" in fd:
-            subject_contains = fd["subject_contains"]
-        if created_after is None and "created_after" in fd:
-            created_after = fd["created_after"]
-        if created_before is None and "created_before" in fd:
-            created_before = fd["created_before"]
-        if updated_after is None and "updated_after" in fd:
-            updated_after = fd["updated_after"]
-        if updated_before is None and "updated_before" in fd:
-            updated_before = fd["updated_before"]
-        if sort == "created_at:desc" and "sort" in fd:
-            sort = fd["sort"]
-
-    # "me" stands for the caller (which matches nothing for an anonymous
-    # visitor); "none" selects unassigned issues. Anything unparseable is ignored.
-    resolved_assigned_to = parse_assignee(assigned_to_id, me_id=current_user.id)
-
-    raw_version = fixed_version_id if fixed_version_id is not None else version_id
-    resolved_version = parse_version(raw_version)
-    if raw_version is not None and raw_version.strip() and resolved_version is None:
-        raise ValidationError("version_id must be a version id or 'none'", field="fixed_version_id")
-
-    filters: dict = {
-        "status": status_filter,
-        "tracker_id": tracker_id,
-        "assigned_to_id": resolved_assigned_to,
-        "priority_id": priority_id,
-        "category_id": category_id,
-        "version_id": resolved_version,
-        "tag_id": tag_id,
-        "author_id": author_id,
-        "subject_contains": subject_contains,
-        "created_after": time_bound(created_after),
-        "created_before": time_bound(created_before, end_of_day=True),
-        "updated_after": time_bound(updated_after),
-        "updated_before": time_bound(updated_before, end_of_day=True),
-    }
+        params = _with_saved_filter_defaults(params, fd)
+    filters = _issue_list_filters(params, current_user)
+    sort = params["sort"]
 
     issues, total_count = await _service.list_issues(
         session=db,

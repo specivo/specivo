@@ -114,3 +114,40 @@ async def test_search_reads_the_project_key_in_any_case(client: AsyncClient, wor
         "/api/v1/search/", params={"q": "ILS", "project_key": "ils", "mode": "keyword"}, headers=_auth(admin)
     )
     assert resp.status_code == 200, resp.text
+
+
+async def _saved(db: AsyncSession, admin: User, project: Project, definition: dict) -> int:
+    stored = SavedFilter(
+        name=f"Saved {len(definition)}", user_id=admin.id, project_id=project.id, filter_definition=definition
+    )
+    db.add(stored)
+    await db.commit()
+    return stored.id
+
+
+async def test_a_saved_filter_fills_in_what_the_request_leaves_out(
+    client: AsyncClient, db_session: AsyncSession, world
+) -> None:
+    admin, project = world
+    sf_id = await _saved(
+        db_session,
+        admin,
+        project,
+        {"status": "all", "sort": "created_at:asc", "created_before": "2026-03-01", "assigned_to_id": "none"},
+    )
+
+    async def keys(**params) -> list[str]:
+        resp = await client.get(
+            "/api/v1/projects/ILS/issues/", params={"saved_filter_id": sf_id, **params}, headers=_auth(admin)
+        )
+        assert resp.status_code == 200, resp.text
+        return [i["key"] for i in resp.json()["items"]]
+
+    # The saved status, sort, date bound and assignee apply.
+    assert await keys() == ["ILS-1", "ILS-2", "ILS-3"]
+    # A status or sort equal to the default still takes the saved one.
+    assert await keys(status="open", sort="created_at:desc") == ["ILS-1", "ILS-2", "ILS-3"]
+    # Values the request gives win.
+    assert await keys(sort="created_at:desc", created_before="2026-03-02") == [f"ILS-{n}" for n in range(1, 8)]
+    assert await keys(subject_contains="ILS 2") == ["ILS-2"]
+    assert await keys(assigned_to_id=str(admin.id)) == []
