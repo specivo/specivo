@@ -377,6 +377,52 @@ async def test_update_rejects_secret_with_clear(db_session: AsyncSession, admin:
     assert exc.value.code == "sso_client_secret_conflict"
 
 
+async def test_update_rejects_env_with_clear_or_secret(db_session: AsyncSession, admin: User):
+    provider = await _service.create(db_session, _create(client_secret=SECRET), actor=admin)
+    env = "SPECIVO_SSO_SECRET_IDP"
+    for update in (
+        SsoProviderUpdate(client_secret_env=env, clear_client_secret=True),
+        SsoProviderUpdate(client_secret=SECRET, client_secret_env=env),
+    ):
+        with pytest.raises(AppError) as exc:
+            await _service.update(db_session, provider.id, update, actor=admin)
+        assert exc.value.code == "sso_client_secret_conflict"
+
+
+async def test_secret_changes_name_the_changed_source(
+    db_session: AsyncSession, admin: User, monkeypatch: pytest.MonkeyPatch
+):
+    """Which secret field each update reports as changed, and where the secret comes from after it."""
+    events: list[tuple[str, list[str] | None]] = []
+
+    def record(event: Any, _provider: Any, _actor: Any, fields: list[str] | None = None, **_kw: Any) -> None:
+        events.append((str(event), fields))
+
+    monkeypatch.setattr(_service, "_emit", record)
+    env = "SPECIVO_SSO_SECRET_IDP"
+    provider = await _service.create(db_session, _create(client_secret_env=env), actor=admin)
+
+    async def secret_events(update: SsoProviderUpdate) -> list[list[str] | None]:
+        events.clear()
+        await _service.update(db_session, provider.id, update, actor=admin)
+        return [fields for event, fields in events if "secret" in event]
+
+    # The same env reference again is no change.
+    assert await secret_events(SsoProviderUpdate(client_secret_env=env)) == []
+    # Clearing the env reference with null.
+    assert await secret_events(SsoProviderUpdate(client_secret_env=None)) == [["client_secret_env"]]
+    assert provider.client_secret_env is None
+    # Nothing left to clear.
+    assert await secret_events(SsoProviderUpdate(client_secret_env=None)) == []
+    assert await secret_events(SsoProviderUpdate(clear_client_secret=True)) == []
+    # A stored secret, then clearing it, then an env reference replacing nothing.
+    assert await secret_events(SsoProviderUpdate(client_secret=SECRET)) == [["client_secret"]]
+    assert await secret_events(SsoProviderUpdate(clear_client_secret=True)) == [["client_secret"]]
+    assert await secret_events(SsoProviderUpdate(client_secret_env=env)) == [["client_secret_env"]]
+    assert await secret_events(SsoProviderUpdate(clear_client_secret=True)) == [["client_secret_env"]]
+    assert provider.client_secret_encrypted is None and provider.client_secret_env is None
+
+
 async def test_update_unknown_provider_is_404(db_session: AsyncSession, admin: User):
     with pytest.raises(NotFoundError):
         await _service.update(db_session, 987_654_321, SsoProviderUpdate(display_name="x"), actor=admin)
