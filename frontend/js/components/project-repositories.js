@@ -536,16 +536,8 @@ export function projectRepositories(initial) {
             }
         },
 
-        async save() {
-            if (this.saving) return;
-            this.submitted = true;
-            this.serverErrors = {};
-            if (Object.keys(this.clientErrors).length > 0) {
-                this._focusFirstError();
-                return;
-            }
-            this.saving = true;
-            this.error = '';
+        /* The create or update request body from the form. */
+        _payload() {
             var f = this.form;
             var payload = {
                 repo_full_name: f.repo_full_name.trim(),
@@ -565,6 +557,20 @@ export function projectRepositories(initial) {
                 payload.automation_role_id = idOrNull(f.automation_role_id);
             }
             payload.provider = f.provider;
+            return payload;
+        },
+
+        async save() {
+            if (this.saving) return;
+            this.submitted = true;
+            this.serverErrors = {};
+            if (Object.keys(this.clientErrors).length > 0) {
+                this._focusFirstError();
+                return;
+            }
+            this.saving = true;
+            this.error = '';
+            var payload = this._payload();
             var url = this.editing ? this.base() + this.editing.id + '/' : this.base();
             var previousProvider = this.editing ? this.editing.provider : null;
             try {

@@ -13,10 +13,5 @@
     "complexity": {
       "count": 1
     }
-  },
-  "js/components/project-repositories.js": {
-    "complexity": {
-      "count": 1
-    }
   }
 }
