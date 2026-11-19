@@ -776,3 +776,45 @@ class TestTagFilter:
         """Blank/whitespace tags don't form a filter — empty query then 422s."""
         resp = await _get(authed_client, q="", scope="issues", tag=["", "  "])
         assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("metadata", "message"),
+    [
+        ("{not json", "Invalid JSON in metadata filter"),
+        ("[1, 2]", "Metadata filter must be a JSON object"),
+        ("{" + ", ".join(f'"k{i}": 1' for i in range(11)) + "}", "Metadata filter has too many keys"),
+        ('{"k": "' + "x" * 2100 + '"}', "Metadata filter is too large"),
+    ],
+)
+async def test_a_bad_metadata_filter_is_refused(authed_client: AsyncClient, metadata: str, message: str):
+    resp = await authed_client.get(SEARCH_URL, params={"q": "anything", "metadata": metadata})
+    assert resp.status_code == 422, resp.text
+    error = resp.json()["errors"][0]
+    assert error["field"] == "metadata"
+    assert error["message"] == message
+
+
+@pytest.mark.asyncio
+async def test_a_blank_project_keys_list_searches_everywhere(
+    authed_client: AsyncClient, project: Project, lookups: dict
+):
+    await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Turbine blade inspection")
+    for project_keys in (" , ", ""):
+        data = await _search(authed_client, "turbine", project_keys=project_keys, mode="keyword")
+        assert data["total_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failing_search_audit_does_not_fail_the_search(
+    authed_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    from specivo.api.v1 import search as search_api
+
+    async def broken(**_kwargs):
+        raise RuntimeError("audit store down")
+
+    monkeypatch.setattr(search_api._audit_service, "log_search_query", broken)
+    data = await _search(authed_client, "anything", mode="keyword")
+    assert data["total_count"] == 0

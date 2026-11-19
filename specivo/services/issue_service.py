@@ -64,6 +64,35 @@ _ALLOWED_SORT_FIELDS = frozenset(
 )
 
 
+#: Plain fields an update sets when present (not ``None``), before the category and version ...
+_UPDATE_LEADING_FIELDS: tuple[str, ...] = (
+    "tracker_id",
+    "status_id",
+    "priority_id",
+    "subject",
+    "description",
+    "assigned_to_id",
+)
+#: ... and after them, before the sprint and metadata.
+_UPDATE_TRAILING_FIELDS: tuple[str, ...] = (
+    "start_date",
+    "due_date",
+    "estimated_hours",
+    "original_estimate",
+    "remaining_estimate",
+    "done_ratio",
+    "is_private",
+)
+
+
+def _set_present_fields(issue: Issue, data: IssueUpdate, names: tuple[str, ...]) -> None:
+    """Copy each of *names* that *data* gives a value (not ``None``) onto *issue*."""
+    for name in names:
+        value = getattr(data, name)
+        if value is not None:
+            setattr(issue, name, value)
+
+
 class IssueService:
     """Service layer for issue operations."""
 
@@ -1023,7 +1052,7 @@ class IssueService:
         updated, _journal = await self.update_with_journal(session, issue, data, user, notes, api_key_id)
         return updated
 
-    async def update_with_journal(  # noqa: C901, PLR0912, PLR0915
+    async def update_with_journal(
         self,
         session: AsyncSession,
         issue: Issue,
@@ -1050,113 +1079,19 @@ class IssueService:
         """
         check_markdown_length(data.description, "description")
         check_markdown_length(notes, "notes")
-
-        if data.lock_version != issue.lock_version:
-            raise ConflictError(
-                message=_("Issue was modified by another request. Reload and retry."),
-                details={"current_lock_version": issue.lock_version},
-            )
-
-        # Workflow validation — before applying changes
-        if data.status_id is not None and data.status_id != issue.status_id:
-            await self.workflow_service.validate_transition(session, issue, data.status_id, user)
-        # Field rules apply on every update, for the status the issue ends up in.
-        target_status_id = data.status_id if data.status_id is not None else issue.status_id
-        await self.workflow_service.validate_field_rules(session, issue, data, user, target_status_id)
+        await self._check_update_allowed(session, issue, data, user)
 
         # Snapshot current values BEFORE applying changes
         old_attrs: dict = {attr: getattr(issue, attr) for attr, _ in _JOURNALIZED_ATTRS}
 
-        if data.tracker_id is not None:
-            issue.tracker_id = data.tracker_id
-        if data.status_id is not None:
-            issue.status_id = data.status_id
-        if data.priority_id is not None:
-            issue.priority_id = data.priority_id
-        if data.subject is not None:
-            issue.subject = data.subject
-        if data.description is not None:
-            issue.description = data.description
-        if data.assigned_to_id is not None:
-            issue.assigned_to_id = data.assigned_to_id
-        if data.category_id is not None:
-            await self._validate_category(session, data.category_id, issue.project_id)
-            issue.category_id = data.category_id
-        # fixed_version_id: use model_fields_set to distinguish "not provided"
-        # (None default) from "explicitly set to null" (clear the field).
-        if "fixed_version_id" in data.model_fields_set:
-            if data.fixed_version_id is not None:
-                await self._validate_fixed_version(session, data.fixed_version_id, issue.project_id)
-            issue.fixed_version_id = data.fixed_version_id
-        if data.start_date is not None:
-            issue.start_date = data.start_date
-        if data.due_date is not None:
-            issue.due_date = data.due_date
-        if data.estimated_hours is not None:
-            issue.estimated_hours = data.estimated_hours
-        if data.original_estimate is not None:
-            issue.original_estimate = data.original_estimate
-        if data.remaining_estimate is not None:
-            issue.remaining_estimate = data.remaining_estimate
-        if data.done_ratio is not None:
-            issue.done_ratio = data.done_ratio
-        if data.is_private is not None:
-            issue.is_private = data.is_private
-        # Re-sending the sprint the issue is already in is not a change, so it
-        # passes even when that sprint is completed.
-        if "sprint_id" in data.model_fields_set and data.sprint_id != issue.sprint_id:
-            if data.sprint_id is not None:
-                await self.validate_sprint(session, data.sprint_id, issue.project_id)
-            issue.sprint_id = data.sprint_id
-        if data.metadata is not None:
-            # Strip project-derived (computed) metadata — it is never stored and
-            # cannot be set/overridden by a client (see create()).
-            project_settings = await load_project_settings(session, issue.project_id)
-            stored_metadata = strip_computed(data.metadata, project_settings)
-            # Validate the keys this update changes against the schemas of the
-            # effective tracker (it may change in this same update). Keys left
-            # as they were are not judged, so an old invalid value elsewhere
-            # does not block the write, and a tracker change alone re-validates
-            # nothing.
-            effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
-            await self._metadata_schema_service.validate_metadata(
-                session,
-                issue.project_id,
-                effective_tracker_id,
-                stored_metadata,
-                previous=issue.issue_metadata or {},
-            )
-            issue.issue_metadata = stored_metadata
-
-        # --- Hierarchy move (parent_id provided) ---
-        # Convention: parent_id=0 means "move to root"; parent_id=N means "move to N"
-        old_parent_id = issue.parent_id
-        if data.parent_id is not None:
-            target_parent_id = data.parent_id if data.parent_id != 0 else None
-            new_parent: Issue | None = None
-            if target_parent_id is not None:
-                new_parent = await self.load_parent(session, target_parent_id, issue.project_id, user)
-                await self._nested_set.validate_parent(session, issue, new_parent)
-
-            await self._nested_set.move_to_parent(session, issue, new_parent)
-
-            # Recalculate old parent's attributes (it lost a child)
-            if old_parent_id is not None:
-                old_parent_result = await session.execute(select(Issue).where(Issue.id == old_parent_id))
-                old_parent = old_parent_result.scalar_one_or_none()
-                if old_parent is not None:
-                    await session.refresh(old_parent)
-                    await self._nested_set.recalculate_parent_attributes(session, old_parent)
-
-            # Recalculate new parent's attributes (it gained a child)
-            if new_parent is not None:
-                await session.refresh(new_parent)
-                await self._nested_set.recalculate_parent_attributes(session, new_parent)
-        elif any(
-            field is not None for field in [data.done_ratio, data.start_date, data.due_date, data.estimated_hours]
-        ):
-            # Scalar changes that affect parent derivation
-            await self._nested_set.recalculate_ancestors(session, issue)
+        # The fields are applied in this order, each validation right before
+        # its field, as the queries they run flush what came before.
+        _set_present_fields(issue, data, _UPDATE_LEADING_FIELDS)
+        await self._apply_category_and_version(session, issue, data)
+        _set_present_fields(issue, data, _UPDATE_TRAILING_FIELDS)
+        await self._apply_sprint(session, issue, data)
+        await self._apply_metadata(session, issue, data)
+        await self._apply_hierarchy(session, issue, data, user)
 
         await session.flush()
 
@@ -1190,6 +1125,102 @@ class IssueService:
             user.id,
         )
         return issue, journal
+
+    async def _check_update_allowed(self, session: AsyncSession, issue: Issue, data: IssueUpdate, user: User) -> None:
+        """The optimistic lock, the workflow transition and the field rules of the status the issue ends up in."""
+        if data.lock_version != issue.lock_version:
+            raise ConflictError(
+                message=_("Issue was modified by another request. Reload and retry."),
+                details={"current_lock_version": issue.lock_version},
+            )
+
+        # Workflow validation — before applying changes
+        if data.status_id is not None and data.status_id != issue.status_id:
+            await self.workflow_service.validate_transition(session, issue, data.status_id, user)
+        # Field rules apply on every update, for the status the issue ends up in.
+        target_status_id = data.status_id if data.status_id is not None else issue.status_id
+        await self.workflow_service.validate_field_rules(session, issue, data, user, target_status_id)
+
+    async def _apply_category_and_version(self, session: AsyncSession, issue: Issue, data: IssueUpdate) -> None:
+        """Set the category and the target version, each checked to belong to the issue's project."""
+        if data.category_id is not None:
+            await self._validate_category(session, data.category_id, issue.project_id)
+            issue.category_id = data.category_id
+        # fixed_version_id: use model_fields_set to distinguish "not provided"
+        # (None default) from "explicitly set to null" (clear the field).
+        if "fixed_version_id" in data.model_fields_set:
+            if data.fixed_version_id is not None:
+                await self._validate_fixed_version(session, data.fixed_version_id, issue.project_id)
+            issue.fixed_version_id = data.fixed_version_id
+
+    async def _apply_sprint(self, session: AsyncSession, issue: Issue, data: IssueUpdate) -> None:
+        """Move the issue to the requested sprint (or out of every sprint)."""
+        # Re-sending the sprint the issue is already in is not a change, so it
+        # passes even when that sprint is completed.
+        if "sprint_id" in data.model_fields_set and data.sprint_id != issue.sprint_id:
+            if data.sprint_id is not None:
+                await self.validate_sprint(session, data.sprint_id, issue.project_id)
+            issue.sprint_id = data.sprint_id
+
+    async def _apply_metadata(self, session: AsyncSession, issue: Issue, data: IssueUpdate) -> None:
+        """Store the requested metadata, without computed keys, after validating the keys it changes."""
+        if data.metadata is None:
+            return
+        # Strip project-derived (computed) metadata — it is never stored and
+        # cannot be set/overridden by a client (see create()).
+        project_settings = await load_project_settings(session, issue.project_id)
+        stored_metadata = strip_computed(data.metadata, project_settings)
+        # Validate the keys this update changes against the schemas of the
+        # effective tracker (it may change in this same update). Keys left
+        # as they were are not judged, so an old invalid value elsewhere
+        # does not block the write, and a tracker change alone re-validates
+        # nothing.
+        effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
+        await self._metadata_schema_service.validate_metadata(
+            session,
+            issue.project_id,
+            effective_tracker_id,
+            stored_metadata,
+            previous=issue.issue_metadata or {},
+        )
+        issue.issue_metadata = stored_metadata
+
+    async def _apply_hierarchy(self, session: AsyncSession, issue: Issue, data: IssueUpdate, user: User) -> None:
+        """Move the issue under the requested parent, or refresh its ancestors' derived values.
+
+        Convention: ``parent_id=0`` means "move to root"; ``parent_id=N``
+        means "move under N". Both the old and the new parent recompute
+        their derived attributes.
+        """
+        old_parent_id = issue.parent_id
+        if data.parent_id is None:
+            if any(
+                field is not None for field in [data.done_ratio, data.start_date, data.due_date, data.estimated_hours]
+            ):
+                # Scalar changes that affect parent derivation
+                await self._nested_set.recalculate_ancestors(session, issue)
+            return
+
+        target_parent_id = data.parent_id if data.parent_id != 0 else None
+        new_parent: Issue | None = None
+        if target_parent_id is not None:
+            new_parent = await self.load_parent(session, target_parent_id, issue.project_id, user)
+            await self._nested_set.validate_parent(session, issue, new_parent)
+
+        await self._nested_set.move_to_parent(session, issue, new_parent)
+
+        # Recalculate old parent's attributes (it lost a child)
+        if old_parent_id is not None:
+            old_parent_result = await session.execute(select(Issue).where(Issue.id == old_parent_id))
+            old_parent = old_parent_result.scalar_one_or_none()
+            if old_parent is not None:
+                await session.refresh(old_parent)
+                await self._nested_set.recalculate_parent_attributes(session, old_parent)
+
+        # Recalculate new parent's attributes (it gained a child)
+        if new_parent is not None:
+            await session.refresh(new_parent)
+            await self._nested_set.recalculate_parent_attributes(session, new_parent)
 
     async def move(
         self,

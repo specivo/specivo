@@ -412,3 +412,21 @@ def test_a_history_period_overlapping_a_seed_period_is_skipped() -> None:
     plan = plan_seed([], _snapshot(_price()), [clash])
     assert [p.from_history for p in plan.inserts] == [False]
     assert len(plan.skipped) == 1
+
+
+def test_a_snapshot_inside_a_closed_seed_period_is_skipped() -> None:
+    covering = _stored(_price(input="4"), 1, AS_OF - timedelta(days=10), LATER)
+    plan = plan_seed([covering], _snapshot(_price()))
+    assert plan.inserts == []
+    assert plan.skipped == [f"testprov/alpha-1: a seed period already covers {AS_OF:%Y-%m-%dT%H:%M:%SZ}"]
+
+
+def test_a_history_period_overlapping_a_period_this_run_closes_is_skipped() -> None:
+    current = _stored(_price(input="4"), 1, AS_OF - timedelta(days=100))
+    clash = HistoryPeriod(
+        price=_price(input="5"), effective_from=AS_OF - timedelta(days=50), effective_to=AS_OF - timedelta(days=20)
+    )
+    plan = plan_seed([current], _snapshot(_price()), [clash])
+    assert plan.closes == {1: AS_OF}
+    assert [p.from_history for p in plan.inserts] == [False]
+    assert len(plan.skipped) == 1 and "overlaps a seed period" in plan.skipped[0]

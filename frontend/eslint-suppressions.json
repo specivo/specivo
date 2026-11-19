@@ -4,11 +4,6 @@
       "count": 1
     }
   },
-  "js/components/admin-sso-provider.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "js/components/api-key-manager.js": {
     "complexity": {
       "count": 1
@@ -19,32 +14,12 @@
       "count": 2
     }
   },
-  "js/components/issue-metadata-panel.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
-  "js/components/metadata-field-renderer.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "js/components/project-create-modal.js": {
     "complexity": {
       "count": 1
     }
   },
   "js/components/project-repositories.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
-  "js/components/recurring.js": {
-    "complexity": {
-      "count": 2
-    }
-  },
-  "js/lib/repo-url.js": {
     "complexity": {
       "count": 1
     }

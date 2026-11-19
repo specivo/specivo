@@ -989,7 +989,17 @@ class AiUsageService:
         """Raise the 422 the content of *data* would get (tool, model, dates, tokens, cost, texts); no authorization."""
         await self._validated(session, data, source=source)
 
-    async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:  # noqa: C901
+    async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
+        """Column values for *data*; the checks run in a fixed order, so the first invalid field is reported."""
+        values = await self._validate_identity(session, data, source=source)
+        values |= self._validate_timing(data)
+        values |= await self._validate_counts(session, data)
+        values |= self._validate_meta(data)
+        return values
+
+    @staticmethod
+    async def _validate_identity(session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
+        """The source, tool, provider and model."""
         from specivo.services.ai_subscription_service import AiToolService
 
         if source not in AI_USAGE_SOURCES:
@@ -1002,6 +1012,10 @@ class AiUsageService:
         model = model_name_for(data.model or "", provider or "")
         if not model or len(model) > 200:
             raise _invalid("Enter a model name of at most 200 characters", "model")
+        return {"tool_slug": tool.slug, "provider": provider, "model": model}
+
+    def _validate_timing(self, data: AiUsageInput) -> dict[str, Any]:
+        """The usage day and the optional start and end instants."""
         if not isinstance(data.usage_date, date) or isinstance(data.usage_date, datetime):
             raise _invalid("usage_date must be a date", "usage_date")
         latest = (utcnow() + FUTURE_TOLERANCE).date()
@@ -1013,6 +1027,10 @@ class AiUsageService:
             raise _invalid("started_at must fall on usage_date (a UTC day)", "started_at")
         if started is not None and ended is not None and ended < started:
             raise _invalid("ended_at must not be before started_at", "ended_at")
+        return {"usage_date": data.usage_date, "started_at": started, "ended_at": ended}
+
+    async def _validate_counts(self, session: AsyncSession, data: AiUsageInput) -> dict[str, Any]:
+        """Token buckets, the request count, the cost type and the reported cost."""
         try:
             tokens = check_tokens(dict(data.tokens or {}), "tokens")
             long_context = check_tokens(dict(data.long_context), "long_context") if data.long_context else None
@@ -1030,23 +1048,20 @@ class AiUsageService:
         if data.cost_type is not None and data.cost_type not in AI_USAGE_COST_TYPES:
             raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
         reported = await self._reported_cost(session, data.reported_cost)
-        method = data.attribution_method or ("explicit" if data.project_id is not None else "none")
-        if method not in AI_USAGE_ATTRIBUTION_METHODS:
-            raise _invalid("Unknown attribution method", "attribution_method")
-        values: dict[str, Any] = {
-            "tool_slug": tool.slug,
-            "provider": provider,
-            "model": model,
-            "usage_date": data.usage_date,
-            "started_at": started,
-            "ended_at": ended,
+        return {
             "request_count": count,
             **tokens,
             "long_context": long_context,
             "reported_cost_amount": reported.amount if reported is not None else None,
             "reported_cost_currency": reported.currency if reported is not None else None,
-            "attribution_method": method,
         }
+
+    def _validate_meta(self, data: AiUsageInput) -> dict[str, Any]:
+        """The attribution method, the context texts, the comments and the idempotency key."""
+        method = data.attribution_method or ("explicit" if data.project_id is not None else "none")
+        if method not in AI_USAGE_ATTRIBUTION_METHODS:
+            raise _invalid("Unknown attribution method", "attribution_method")
+        values: dict[str, Any] = {"attribution_method": method}
         for name, max_length in CONTEXT_MAX_LENGTHS.items():
             values[name] = self._text(getattr(data, name), name, max_length)
         values["comments"] = self._text(data.comments, "comments", COMMENTS_MAX_LENGTH)
