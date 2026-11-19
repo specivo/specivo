@@ -80,7 +80,7 @@ from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, exists, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,6 +107,9 @@ from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
 from specivo.services.ai_usage_service import AiUsageService, issue_subtree_clause, unpriced_models
 from specivo.services.api_key_scope import is_global_admin
+
+if TYPE_CHECKING:
+    from specivo.services.exchange_rate_service import ExchangeRateService
 
 #: Dimensions a report can be grouped by, in their canonical order.
 GROUP_BY: tuple[str, ...] = ("user", "project", "issue", "tool", "provider", "model", "cost_type", "branch")
@@ -150,6 +153,20 @@ _SHARE_EXPONENT = Decimal("0.00000001")
 
 def _invalid(message: str, field_name: str) -> AppError:
     return AppError(code="ai_spend_report_invalid", message=message, status_code=422, field=field_name)
+
+
+def _check_report_args(date_from: date, date_to: date, period: str | None, sort: str, filters: ReportFilters) -> None:
+    """422 for a report argument out of range, in the order the fields are checked."""
+    if period is not None and period not in PERIODS:
+        raise _invalid(f"period must be one of {', '.join(PERIODS)}", "period")
+    if sort not in SORTS:
+        raise _invalid(f"sort must be one of {', '.join(SORTS)}", "sort")
+    if date_to < date_from:
+        raise _invalid("The last day cannot be before the first day", "to_date")
+    if (date_to - date_from).days + 1 > MAX_RANGE_DAYS:
+        raise _invalid(f"A report covers at most {MAX_RANGE_DAYS} days", "to_date")
+    if filters.cost_type is not None and filters.cost_type not in AI_USAGE_COST_TYPES:
+        raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
 
 
 def period_start(day: date, period: str | None) -> date | None:
@@ -475,7 +492,7 @@ class AiSpendReportService:
             sort="key",
         )
 
-    async def _report(  # noqa: C901, PLR0912, PLR0913, PLR0915
+    async def _report(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -492,58 +509,18 @@ class AiSpendReportService:
         sort: str,
         projects: Sequence[Project] | None = None,
     ) -> SpendReport:
-        from specivo.services.currency_service import CurrencyService
-        from specivo.services.exchange_rate_service import ExchangeRateService, parse_policy
-        from specivo.services.project_service import ProjectService
+        from specivo.services.exchange_rate_service import ExchangeRateService
 
         filters = filters or ReportFilters()
-        if period is not None and period not in PERIODS:
-            raise _invalid(f"period must be one of {', '.join(PERIODS)}", "period")
-        if sort not in SORTS:
-            raise _invalid(f"sort must be one of {', '.join(SORTS)}", "sort")
-        if date_to < date_from:
-            raise _invalid("The last day cannot be before the first day", "to_date")
-        if (date_to - date_from).days + 1 > MAX_RANGE_DAYS:
-            raise _invalid(f"A report covers at most {MAX_RANGE_DAYS} days", "to_date")
-        if filters.cost_type is not None and filters.cost_type not in AI_USAGE_COST_TYPES:
-            raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
+        _check_report_args(date_from, date_to, period, sort, filters)
         requested_period = period
         period = coarsen_period(date_from, date_to, period)
-
-        project_set: list[Project] | None = None
-        if projects is not None:
-            if project is not None:
-                raise _invalid("Give one project or a set of projects, not both", "project")
-            project_set = list({p.id: p for p in projects}.values())
-            for member in project_set:
-                await ProjectService().require_project_access(session, member, viewer)
-        elif project is None:
-            if not is_global_admin(viewer):
-                raise PermissionDeniedError("Only administrators can see the instance AI spend report")
-        else:
-            await ProjectService().require_project_access(session, project, viewer)
+        project_set = await self._resolve_scope(session, viewer, project, projects)
 
         rates = ExchangeRateService()
-        if isinstance(rate_policy, RatePolicy):
-            policy = rate_policy
-        else:
-            policy = parse_policy(rate_policy, (await rates.get_settings(session)).max_age_days)
-        if currency:
-            target = (await CurrencyService().require_selectable(session, currency, field="currency")).code
-        else:
-            target = await CurrencyService().reporting_currency_for(session, project)
+        policy, target = await self._policy_and_currency(session, rates, project, rate_policy, currency)
 
-        # Who may see seat cost (see the module docstring).
-        if project_set is not None:
-            seats_allowed = True
-            for member in project_set:
-                if not await self.sees_every_entry(session, viewer, member, date_from, date_to):
-                    seats_allowed = False
-                    break
-        elif project is None:
-            seats_allowed = True
-        else:
-            seats_allowed = await self.sees_every_entry(session, viewer, project, date_from, date_to)
+        seats_allowed = await self._seats_allowed(session, viewer, project, project_set, date_from, date_to)
         seat_shown = include_seat_cost and seats_allowed
         unallocated_shown = seat_shown and project is None and project_set is None and not filters.excludes_seats
 
@@ -551,12 +528,7 @@ class AiSpendReportService:
         if project_set is not None:
             conditions.append(await self._set_clause(session, viewer, project_set))
         raw = await self._grouped_rows(session, conditions, dims)
-        visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
-        builder = _RowBuilder(dims, period)
-        for r in raw:
-            if "issue" in dims and r["issue"] is not None and r["issue"] not in visible_issues:
-                r["issue"] = HIDDEN_ISSUE
-            builder.add_usage(r)
+        builder = await self._usage_rows(session, viewer, raw, dims, period)
 
         seat_items: list[tuple[ReportRow, Money, date, bool]] = []
         if seat_shown:
@@ -598,6 +570,88 @@ class AiSpendReportService:
             unpriced_models=missing,
             requested_period=requested_period if requested_period != period else None,
         )
+
+    async def _resolve_scope(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        projects: Sequence[Project] | None,
+    ) -> list[Project] | None:
+        """Check *viewer* may read the report's scope; the de-duplicated project set, or None for one project or all."""
+        from specivo.services.project_service import ProjectService
+
+        if projects is not None:
+            if project is not None:
+                raise _invalid("Give one project or a set of projects, not both", "project")
+            project_set = list({p.id: p for p in projects}.values())
+            for member in project_set:
+                await ProjectService().require_project_access(session, member, viewer)
+            return project_set
+        if project is None:
+            if not is_global_admin(viewer):
+                raise PermissionDeniedError("Only administrators can see the instance AI spend report")
+        else:
+            await ProjectService().require_project_access(session, project, viewer)
+        return None
+
+    @staticmethod
+    async def _policy_and_currency(
+        session: AsyncSession,
+        rates: ExchangeRateService,
+        project: Project | None,
+        rate_policy: str | RatePolicy | None,
+        currency: str | None,
+    ) -> tuple[RatePolicy, str]:
+        """The rate policy (the instance's maximum rate age by default) and the currency the report is in."""
+        from specivo.services.currency_service import CurrencyService
+        from specivo.services.exchange_rate_service import parse_policy
+
+        if isinstance(rate_policy, RatePolicy):
+            policy = rate_policy
+        else:
+            policy = parse_policy(rate_policy, (await rates.get_settings(session)).max_age_days)
+        if currency:
+            target = (await CurrencyService().require_selectable(session, currency, field="currency")).code
+        else:
+            target = await CurrencyService().reporting_currency_for(session, project)
+        return policy, target
+
+    async def _seats_allowed(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        project_set: list[Project] | None,
+        date_from: date,
+        date_to: date,
+    ) -> bool:
+        """Whether *viewer* may see seat cost (see the module docstring): they read every entry of the scope."""
+        if project_set is not None:
+            for member in project_set:
+                if not await self.sees_every_entry(session, viewer, member, date_from, date_to):
+                    return False
+            return True
+        if project is None:
+            return True
+        return await self.sees_every_entry(session, viewer, project, date_from, date_to)
+
+    async def _usage_rows(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        raw: list[dict[str, Any]],
+        dims: tuple[str, ...],
+        period: str | None,
+    ) -> _RowBuilder:
+        """A row builder holding the usage of *raw*, issues *viewer* cannot see folded into one hidden key."""
+        visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
+        builder = _RowBuilder(dims, period)
+        for r in raw:
+            if "issue" in dims and r["issue"] is not None and r["issue"] not in visible_issues:
+                r["issue"] = HIDDEN_ISSUE
+            builder.add_usage(r)
+        return builder
 
     async def _set_clause(self, session: AsyncSession, viewer: User, projects: list[Project]) -> ColumnElement[bool]:
         """Entries of *projects* that *viewer* may read, each project by its own rule (``visible_entries_clause``)."""

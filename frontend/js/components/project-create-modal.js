@@ -1,3 +1,6 @@
+import { apiErrorMessage } from '../lib/api-error';
+import { projectCreateBody } from '../lib/project-form';
+
 export function projectCreateModal(initial) {
         initial = initial || {};
         var i18n = Object.assign({
@@ -32,41 +35,31 @@ export function projectCreateModal(initial) {
                 this.key = this.keyify(this.name);
             },
 
+            /* Wait (at most about 1.5 s) until the new project's page is served, so the redirect never lands on a 404. */
+            async _waitUntilServed(url) {
+                for (var i = 0; i < 5; i++) {
+                    var check = await spFetch(url, {method: 'HEAD'});
+                    if (check.ok) break;
+                    await new Promise(function (r) { setTimeout(r, 300); });
+                }
+            },
+
             async submit() {
                 this.saving = true;
                 this.error = '';
-                var modules = ['issue_tracking'];
-                if (this.moduleWiki) modules.push('wiki');
-                if (this.moduleTime) modules.push('time_tracking');
                 try {
                     var res = await spFetch('/api/v1/projects/', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            name: this.name,
-                            identifier: this.identifier,
-                            key: this.key,
-                            description: this.description || null,
-                            parent_key: this.parentKey || null,
-                            color: this.color || null,
-                            modules: modules
-                        })
+                        body: JSON.stringify(projectCreateBody(this))
                     });
                     if (res.ok) {
                         var data = await res.json();
                         var url = '/projects/' + data.key + '/';
-                        for (var i = 0; i < 5; i++) {
-                            var check = await spFetch(url, {method: 'HEAD'});
-                            if (check.ok) break;
-                            await new Promise(function (r) { setTimeout(r, 300); });
-                        }
+                        await this._waitUntilServed(url);
                         window.location.href = url;
                     } else {
-                        var errData = await res.json();
-                        this.error = (errData.errors && errData.errors[0] && errData.errors[0].message)
-                            || (errData.detail && errData.detail[0] && errData.detail[0].msg)
-                            || errData.detail
-                            || i18n.createFailed;
+                        this.error = apiErrorMessage(await res.json(), i18n.createFailed);
                     }
                 } catch (_e) {
                     this.error = i18n.connectFailed;

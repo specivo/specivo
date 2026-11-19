@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
@@ -489,35 +489,9 @@ async def imported_issue_redirect(
     return RedirectResponse(f"/issue/{issue.display_key}/", status_code=302)
 
 
-@short_router.get("/issue/{issue_ref}/", response_class=HTMLResponse)
-async def issue_detail(  # noqa: PLR0915
-    issue_ref: str,
-    request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),
-    activity_page: int | None = Query(None, ge=1),
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """Render the issue detail page."""
-    if reader is None:
-        return refuse_anonymous_web(request)
-    user = cast("User", reader)
+async def _issue_page_permissions(db: AsyncSession, user: User, project: Project) -> dict[str, bool]:
+    """What the reader may do on the issue page, as template flags (all off for an anonymous visitor)."""
     anonymous = user.is_anonymous
-
-    resolved = await _resolve_issue_project_for_reader(db, issue_ref, user)
-    if resolved is None:
-        return refuse_anonymous_web(request)
-    project, issue = resolved
-    if redirect := _retired_ref_redirect(request, issue_ref, issue):
-        return redirect
-
-    from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
-    from specivo.schemas.metadata_schema import MetadataSchemaOut
-    from specivo.services.metadata_schema_service import MetadataSchemaService
-    from specivo.services.watcher_service import WatcherService
-
-    schema_svc = MetadataSchemaService()
-    watcher_svc = WatcherService()
-
     anon_can_view_wiki = False
     if anonymous:
         anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
@@ -538,7 +512,185 @@ async def issue_detail(  # noqa: PLR0915
         await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
         or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
     )
-    ai_usage_count = await ai_usage_tab_entry_count(db, user, project, issue) if show_ai_usage_tab else 0
+    return {
+        "anon_can_view_wiki": anon_can_view_wiki,
+        "can_manage_relations": can_manage_relations,
+        "can_view_time_entries": can_view_time_entries,
+        "can_log_time": can_log_time,
+        "can_tag_issue": can_tag_issue,
+        "show_ai_usage_tab": show_ai_usage_tab,
+    }
+
+
+async def _issue_sidebar(
+    db: AsyncSession, user: User, project: Project, issue: Issue, *, can_view_time_entries: bool
+) -> dict[str, Any]:
+    """Members, sprints, schemas, time entries, watchers and tags of the sidebar and tabs.
+
+    Everything an anonymous visitor cannot see is not loaded at all, rather
+    than loaded and hidden in the template: members and watchers name people,
+    time entries name people and hours, attachments are outside the anonymous
+    scope, and metadata schemas are project configuration.
+    """
+    from specivo.services.metadata_schema_service import MetadataSchemaService
+    from specivo.services.watcher_service import WatcherService
+
+    if user.is_anonymous:
+        return {
+            "members": [],
+            "current_sprint": None,
+            "active_sprint_id": None,
+            "issue_schemas": [],
+            "tab_ctx": {"time_entries": [], "time_entry_count": 0, "time_logged": 0},
+            "watchers": [],
+            "issue_tags": [],
+        }
+    members = await _project_svc.list_members(db, project)
+    # Load the current sprint (if any) for the sidebar autocomplete to pin it.
+    # Versions and sprints lists are no longer prefetched — the sidebar uses
+    # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
+    # for autocomplete.
+    current_sprint = None
+    if issue.sprint_id is not None:
+        current_sprint = await db.get(Sprint, issue.sprint_id)
+    # Derive the current active sprint for project-wide UI bits (e.g. sprint
+    # badge on activity) with a single targeted query.
+    active_sprint_id_result = await db.execute(
+        select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
+    )
+    active_sprint_id = active_sprint_id_result.scalar_one_or_none()
+    issue_schemas = await MetadataSchemaService().list_for_project(db, project.id)
+    # Attachments are lazy-loaded via htmx when the Attachments tab is opened
+    # (see /partials/issues/{key}/attachments/). Time entries stay eager because
+    # the sidebar displays the time_logged sum derived from the list.
+    time_entries = await _time_svc.list_for_issue(db, issue.id, project, user) if can_view_time_entries else []
+    time_logged = sum((te.hours or 0) for te in time_entries)
+    return {
+        "members": members,
+        "current_sprint": current_sprint,
+        "active_sprint_id": active_sprint_id,
+        "issue_schemas": issue_schemas,
+        "tab_ctx": {
+            "time_entries": time_entries,
+            "time_entry_count": len(time_entries),
+            "time_logged": time_logged,
+        },
+        "watchers": await WatcherService().list_watchers(db, issue, viewer=user),
+        "issue_tags": _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id)),
+    }
+
+
+def _activity_window(user: User, all_journals: list[Any], activity_page: int | None) -> dict[str, Any]:
+    """The page of the activity feed to show, with the paging values the template needs."""
+    from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
+
+    activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
+    if activity_per_page not in ACTIVITY_PER_PAGE_OPTIONS:
+        activity_per_page = ACTIVITY_DEFAULT_PER_PAGE
+
+    activity_total = len(all_journals)
+    activity_total_pages = max(1, (activity_total + activity_per_page - 1) // activity_per_page)
+    # When the caller does not pin a page, default to the LAST one — that's
+    # where the newest journal entry lives in the ascending feed. The
+    # description editor's save() does window.location.reload() with no
+    # query params, so without this default the user would land on page 1
+    # (oldest entries) and conclude that history was not updated.
+    if activity_page is None or activity_page > activity_total_pages:
+        activity_page = activity_total_pages
+
+    activity_start = (activity_page - 1) * activity_per_page
+    return {
+        "journals": all_journals[activity_start : activity_start + activity_per_page],
+        "activity_page": activity_page,
+        "activity_per_page": activity_per_page,
+        "activity_total_pages": activity_total_pages,
+        "activity_total": activity_total,
+        "activity_per_page_options": ACTIVITY_PER_PAGE_OPTIONS,
+    }
+
+
+def _last_activity_at(issue: Issue, all_journals: list[Any]) -> Any:
+    """The most recent of the issue's update and its last journal."""
+    last_activity_at = issue.updated_at
+    last_journal_at = all_journals[-1].created_at if all_journals else None
+    if last_journal_at and (not last_activity_at or last_journal_at > last_activity_at):
+        last_activity_at = last_journal_at
+    return last_activity_at
+
+
+async def _member_controls(
+    db: AsyncSession, user: User, issue: Issue, journals: list[Any], issue_schemas: list[Any]
+) -> dict[str, Any]:
+    """Reactions, the issue's metadata schemas and the move targets: none of them for an anonymous visitor."""
+    from specivo.schemas.metadata_schema import MetadataSchemaOut
+
+    if user.is_anonymous:
+        # Reactions are a control, not content: rendering the row would offer
+        # a button that cannot be pressed.
+        return {"reactions_by_journal": {}, "metadata_schemas_data": [], "move_targets": []}
+    # Load emoji reactions for all journals (paginated subset)
+    journal_ids = [j.id for j in journals]
+    reactions_by_journal_raw = await _reaction_svc.list_reactions_bulk(db, journal_ids, user.id)
+    reactions_by_journal = {
+        jid: [{"emoji": r.emoji, "count": r.count, "reacted_by_me": r.reacted_by_me} for r in groups]
+        for jid, groups in reactions_by_journal_raw.items()
+    }
+    # Filter to applicable schemas (project-wide + issue's tracker)
+    applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+    metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas]
+    # Candidate target projects for the "Move" action (visible to the user,
+    # excluding the issue's current project).
+    visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
+    return {
+        "reactions_by_journal": reactions_by_journal,
+        "metadata_schemas_data": metadata_schemas_data,
+        "move_targets": [p for p in visible_projects if p.id != issue.project_id],
+    }
+
+
+async def _issue_development(db: AsyncSession, user: User, project: Project, issue: Issue) -> dict[str, Any]:
+    """Branch name and development activity. Neither is shown to a visitor without an account:
+    commit authors and forge logins are not theirs to read."""
+    from specivo.web.issue_development import can_edit_development, development_context, load_development
+
+    if user.is_anonymous:
+        return {"branch_name": None, **development_context(None, can_edit=False)}
+    from specivo.services.branch_name import BranchNameSettings, make_branch_name
+
+    branch_name = make_branch_name(
+        BranchNameSettings.from_project_settings(project.settings),
+        tracker_name=issue.tracker.name if issue.tracker else "",
+        display_key=issue.display_key,
+        subject=issue.subject,
+    )
+    development = await load_development(db, issue)
+    can_edit_dev = await can_edit_development(db, user, project.id)
+    return {"branch_name": branch_name, **development_context(development, can_edit=can_edit_dev)}
+
+
+@short_router.get("/issue/{issue_ref}/", response_class=HTMLResponse)
+async def issue_detail(
+    issue_ref: str,
+    request: Request,
+    reader: object | None = Depends(get_web_reader, scope="function"),
+    activity_page: int | None = Query(None, ge=1),
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Render the issue detail page."""
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
+
+    resolved = await _resolve_issue_project_for_reader(db, issue_ref, user)
+    if resolved is None:
+        return refuse_anonymous_web(request)
+    project, issue = resolved
+    if redirect := _retired_ref_redirect(request, issue_ref, issue):
+        return redirect
+
+    flags = await _issue_page_permissions(db, user, project)
+    ai_usage_count = await ai_usage_tab_entry_count(db, user, project, issue) if flags["show_ai_usage_tab"] else 0
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -562,102 +714,11 @@ async def issue_detail(  # noqa: PLR0915
     # list below that an anonymous visitor still gets.
     relations = await _relation_svc.list_for_issue(db, issue, user)
 
-    if anonymous:
-        # Everything an anonymous visitor cannot see is not loaded at all,
-        # rather than loaded and hidden in the template: members and watchers
-        # name people, time entries name people and hours, attachments are
-        # outside the anonymous scope, metadata schemas and the move target
-        # list are project configuration, and reactions belong to a person who
-        # could make them.
-        members: list = []
-        current_sprint: Sprint | None = None
-        active_sprint_id = None
-        issue_schemas: list = []
-        time_entries: list = []
-        tab_ctx = {"time_entries": [], "time_entry_count": 0, "time_logged": 0}
-        watchers: list = []
-        issue_tags: list = []
-    else:
-        members = await _project_svc.list_members(db, project)
-        # Load the current sprint (if any) for the sidebar autocomplete to pin it.
-        # Versions and sprints lists are no longer prefetched — the sidebar uses
-        # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
-        # for autocomplete.
-        current_sprint = None
-        if issue.sprint_id is not None:
-            current_sprint = await db.get(Sprint, issue.sprint_id)
-        # Derive the current active sprint for project-wide UI bits (e.g. sprint
-        # badge on activity) with a single targeted query.
-        active_sprint_id_result = await db.execute(
-            select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
-        )
-        active_sprint_id = active_sprint_id_result.scalar_one_or_none()
-        issue_schemas = await schema_svc.list_for_project(db, project.id)
-        # Attachments are lazy-loaded via htmx when the Attachments tab is opened
-        # (see /partials/issues/{key}/attachments/). Time entries stay eager because
-        # the sidebar displays the time_logged sum derived from the list.
-        time_entries = await _time_svc.list_for_issue(db, issue.id, project, user) if can_view_time_entries else []
-        time_logged = sum((te.hours or 0) for te in time_entries)
-        tab_ctx = {
-            "time_entries": time_entries,
-            "time_entry_count": len(time_entries),
-            "time_logged": time_logged,
-        }
-        watchers = await watcher_svc.list_watchers(db, issue, viewer=user)
-        issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
-
-    # Paginate activity feed
-    activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
-    if activity_per_page not in ACTIVITY_PER_PAGE_OPTIONS:
-        activity_per_page = ACTIVITY_DEFAULT_PER_PAGE
-
-    activity_total = len(all_journals)
-    activity_total_pages = max(1, (activity_total + activity_per_page - 1) // activity_per_page)
-    # When the caller does not pin a page, default to the LAST one — that's
-    # where the newest journal entry lives in the ascending feed. The
-    # description editor's save() does window.location.reload() with no
-    # query params, so without this default the user would land on page 1
-    # (oldest entries) and conclude that history was not updated.
-    if activity_page is None:
-        activity_page = activity_total_pages
-    elif activity_page > activity_total_pages:
-        activity_page = activity_total_pages
-
-    activity_start = (activity_page - 1) * activity_per_page
-    journals = all_journals[activity_start : activity_start + activity_per_page]
-    thread_tree = build_thread_tree(journals)
-
-    # Latest activity: most recent of issue.updated_at and last journal
-    last_activity_at = issue.updated_at
-    last_journal_at = all_journals[-1].created_at if all_journals else None
-    if last_journal_at and (not last_activity_at or last_journal_at > last_activity_at):
-        last_activity_at = last_journal_at
-
-    if anonymous:
-        # Reactions are a control, not content: rendering the row would offer
-        # a button that cannot be pressed.
-        reactions_by_journal: dict = {}
-        metadata_schemas_data: list = []
-        move_targets: list = []
-    else:
-        # Load emoji reactions for all journals (paginated subset)
-        journal_ids = [j.id for j in journals]
-        reactions_by_journal_raw = await _reaction_svc.list_reactions_bulk(db, journal_ids, user.id)
-        reactions_by_journal = {
-            jid: [{"emoji": r.emoji, "count": r.count, "reacted_by_me": r.reacted_by_me} for r in groups]
-            for jid, groups in reactions_by_journal_raw.items()
-        }
-
-        # Filter to applicable schemas (project-wide + issue's tracker)
-        applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
-        metadata_schemas_data = [
-            MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas
-        ]
-
-        # Candidate target projects for the "Move" action (visible to the user,
-        # excluding the issue's current project).
-        visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
-        move_targets = [p for p in visible_projects if p.id != issue.project_id]
+    sidebar = await _issue_sidebar(db, user, project, issue, can_view_time_entries=flags["can_view_time_entries"])
+    members = sidebar["members"]
+    window = _activity_window(user, all_journals, activity_page)
+    journals = window["journals"]
+    controls = await _member_controls(db, user, issue, journals, sidebar["issue_schemas"])
 
     # Resolve which KEY-123 references in the rendered text are issues the
     # reader may see (anonymous visitors by the anonymous rules), so the
@@ -684,33 +745,11 @@ async def issue_detail(  # noqa: PLR0915
 
     # The people and versions the issue's user and version fields hold, named as history names them.
     value_names = (
-        {} if anonymous else await metadata_value_names(db, user, issue_schemas, issue.issue_metadata, members=members)
+        {}
+        if anonymous
+        else await metadata_value_names(db, user, sidebar["issue_schemas"], issue.issue_metadata, members=members)
     )
-
-    # Derive from the already-loaded watchers list (list[User])
-    is_watching = any(w.id == user.id for w in watchers)
-
-    # Relations count (list already loaded via gather above)
-    relation_count = len(relations)
-
-    # Branch name and development activity. Neither is shown to a visitor
-    # without an account: commit authors and forge logins are not theirs to read.
-    from specivo.web.issue_development import can_edit_development, development_context, load_development
-
-    branch_name = None
-    development = None
-    can_edit_dev = False
-    if not anonymous:
-        from specivo.services.branch_name import BranchNameSettings, make_branch_name
-
-        branch_name = make_branch_name(
-            BranchNameSettings.from_project_settings(project.settings),
-            tracker_name=issue.tracker.name if issue.tracker else "",
-            display_key=issue.display_key,
-            subject=issue.subject,
-        )
-        development = await load_development(db, issue)
-        can_edit_dev = await can_edit_development(db, user, project.id)
+    development = await _issue_development(db, user, project, issue)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -720,47 +759,34 @@ async def issue_detail(  # noqa: PLR0915
             "user": user,
             "anonymous": anonymous,
             "anon_can_view_issues": anonymous,
-            "anon_can_view_wiki": anon_can_view_wiki,
             "active_page": "issues",
             "active_project": project,
             "project": project,
             "issue": issue,
-            "journals": journals,
-            "thread_tree": thread_tree,
+            "thread_tree": build_thread_tree(journals),
             "members": members,
             "lookup_maps": lookup_maps,
             "imported_from": issue_imported_from,
-            "reactions_by_journal": reactions_by_journal,
-            **tab_ctx,
-            "relation_count": relation_count,
-            "branch_name": branch_name,
-            **development_context(development, can_edit=can_edit_dev),
-            "current_sprint": current_sprint,
+            **sidebar["tab_ctx"],
+            "relation_count": len(relations),
+            **development,
+            "current_sprint": sidebar["current_sprint"],
             "relations": relations,
-            "can_manage_relations": can_manage_relations,
-            "can_view_time_entries": can_view_time_entries,
-            "can_log_time": can_log_time,
-            "can_tag_issue": can_tag_issue,
-            "show_ai_usage_tab": show_ai_usage_tab,
+            **flags,
             "ai_usage_count": ai_usage_count,
-            "issue_tags": issue_tags,
-            "metadata_schemas_data": metadata_schemas_data,
+            "issue_tags": sidebar["issue_tags"],
+            **controls,
             "metadata_value_names": value_names,
             # Computed metadata is derived from the project's configuration,
             # which is not part of what an anonymous visitor may read.
             "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),
-            "move_targets": move_targets,
             "known_issue_refs": known_issue_refs,
             "attachment_map": attachment_map,
-            "watchers": watchers,
-            "is_watching": is_watching,
-            "last_activity_at": last_activity_at,
-            "activity_page": activity_page,
-            "activity_per_page": activity_per_page,
-            "activity_total_pages": activity_total_pages,
-            "activity_total": activity_total,
-            "activity_per_page_options": ACTIVITY_PER_PAGE_OPTIONS,
-            "active_sprint_id": active_sprint_id,
+            "watchers": sidebar["watchers"],
+            "is_watching": any(w.id == user.id for w in sidebar["watchers"]),
+            "last_activity_at": _last_activity_at(issue, all_journals),
+            **window,
+            "active_sprint_id": sidebar["active_sprint_id"],
             **lookups,
         },
     )

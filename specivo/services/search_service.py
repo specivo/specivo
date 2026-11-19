@@ -17,7 +17,7 @@ import json
 import logging
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -127,20 +127,26 @@ def _role_grants(permission: str, alias: str = "r") -> str:
     return f"(jsonb_exists({alias}.permissions, '{permission}') OR jsonb_exists({alias}.permissions, '*'))"
 
 
-def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int]:
-    """Merge two ranked ID lists using Reciprocal Rank Fusion.
+def rrf_scores[K: Hashable](fts_ids: Sequence[K], sem_ids: Sequence[K], k: int = RRF_K) -> dict[K, float]:
+    """Reciprocal Rank Fusion scores of the items of two ranked lists, in order of first appearance.
 
     RRF score for item i = sum over lists L of: 1 / (k + rank_L(i))
     where rank_L(i) is the 1-based rank in list L (0 if absent).
-
-    Note: hybrid_search uses an inline version for string-keyed dedup.
-    This function is retained for unit test coverage of the RRF algorithm.
     """
-    scores: dict[int, float] = {}
+    scores: dict[K, float] = {}
     for rank_0, item_id in enumerate(fts_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
     for rank_0, item_id in enumerate(sem_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
+    return scores
+
+
+def rrf_fuse[K: Hashable](fts_ids: Sequence[K], sem_ids: Sequence[K], k: int = RRF_K) -> list[K]:
+    """Merge two ranked ID lists using Reciprocal Rank Fusion (:func:`rrf_scores`), best first.
+
+    Items with equal scores keep their order of first appearance.
+    """
+    scores = rrf_scores(fts_ids, sem_ids, k)
     return sorted(scores, key=lambda x: scores[x], reverse=True)
 
 
@@ -363,6 +369,46 @@ def _empty_type_counts(*, include_all: bool = False) -> dict[str, int]:
     if include_all:
         counts["all"] = 0
     return counts
+
+
+#: Keyword-search result types, in the order their parts are joined.
+_FTS_TYPES: tuple[str, ...] = ("issues", "wiki", "comments", "attachments")
+#: Types that cannot carry tags: left out while a tag filter is on.
+_UNTAGGABLE_TYPES = frozenset({"comments", "attachments"})
+
+
+@dataclass
+class _FtsQuery:
+    """The SQL fragments the keyword-search parts and counts of one query share."""
+
+    user: User
+    parsed: _ParsedQuery
+    issue_project_filter: str
+    wiki_project_filter: str
+    comment_project_filter: str
+    issue_visibility: str
+    wiki_visibility: str
+    comment_visibility: str
+    issue_filter_sql: str
+    tsq_i: str
+    tsq_w: str
+    tsq_ci: str
+    pinned_exclusion: str = ""
+    wiki_tag_filter: str = ""
+    tags_active: bool = False
+
+
+def _fts_result(row: Any) -> SearchResult:
+    """A keyword-search row as a result, its snippet cleaned."""
+    return SearchResult(
+        result_type=row._mapping["result_type"],
+        id=row._mapping["id"],
+        title=row._mapping["title"],
+        subtitle=row._mapping["subtitle"],
+        snippet=_clean_snippet(row._mapping["snippet"]),
+        score=float(row._mapping["score"]),
+        project_key=row._mapping["project_key"],
+    )
 
 
 class SearchService:
@@ -915,7 +961,7 @@ class SearchService:
     # Full-text search
     # ------------------------------------------------------------------
 
-    async def search(  # noqa: PLR0912, PLR0913, PLR0915
+    async def search(  # noqa: PLR0913
         self,
         session: AsyncSession,
         query: str,
@@ -953,14 +999,8 @@ class SearchService:
         """
         # Narrow to the authenticating API key's project limit, if any.
         project_id, project_ids = scope_project_ids(project_id, project_ids)
-        parts: list[str] = []
-        # Per-type count SQL fragments, keyed by type name.
-        # Always populated for all 4 types (regardless of scope) so that
-        # a single query can return per-type totals for filter tabs.
-        count_parts: dict[str, str] = {}
         parsed = _ParsedQuery.parse(query)
         params: dict[str, Any] = parsed.bind_params()
-
         params.update(await self._visibility_params(session, user))
 
         # Visibility SQL fragments: CTE-optimized visibility for all modes.
@@ -968,32 +1008,7 @@ class SearchService:
         # so the CTE prefix is required whenever the user is non-admin (even
         # for single-project searches).
         cte_prefix = self._visibility_cte_sql(user)
-        issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
-        wiki_visibility = self._wiki_visibility_cte_clause(user, alias="w")
-        comment_visibility = self._comment_visibility_clause(user, journal_alias="j", issue_alias="ci")
-
-        # Project filtering
-        issue_project_filter = ""
-        wiki_project_filter = ""
-        comment_project_filter = ""
-        if project_ids is not None:
-            # Multi-project: use IN clause
-            issue_project_filter = "AND i.project_id = ANY(:project_ids)"
-            wiki_project_filter = "AND w.project_id = ANY(:project_ids)"
-            comment_project_filter = "AND ci.project_id = ANY(:project_ids)"
-            params["project_ids"] = project_ids
-        elif project_id is not None:
-            issue_project_filter = "AND i.project_id = :project_id"
-            wiki_project_filter = "AND w.project_id = :project_id"
-            comment_project_filter = "AND ci.project_id = :project_id"
-            params["project_id"] = project_id
-
-        # Issue metadata filters
-        issue_filter_sql = self._build_issue_filters(filters, params)
-
-        tsq_i = parsed.tsquery_from_sql("specivo_fts_config(i.project_id)")
-        tsq_w = parsed.tsquery_from_sql("specivo_fts_config(w.project_id)")
-        tsq_ci = parsed.tsquery_from_sql("specivo_fts_config(ci.project_id)")
+        fts = self._fts_query(user, parsed, params, project_id, project_ids, filters)
 
         # Issues the query names by reference lead the results, and are kept
         # out of the ranked issue rows and their count so they appear once.
@@ -1009,162 +1024,18 @@ class SearchService:
                 filters=filters,
                 source_numbers=source_numbers,
             )
-        pinned_exclusion = ""
         if pinned:
-            pinned_exclusion = "AND i.id <> ALL(:pinned_issue_ids)"
+            fts.pinned_exclusion = "AND i.id <> ALL(:pinned_issue_ids)"
             params["pinned_issue_ids"] = [r.id for r in pinned]
         # Real-tag AND filter for wiki pages (issue side is folded into
-        # issue_filter_sql above). When a tag filter is active, only taggable
+        # issue_filter_sql). When a tag filter is active, only taggable
         # entities (issues, wiki pages) can match — comments and attachments are
         # excluded entirely.
-        wiki_tag_filter = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp")
-        tags_active = bool(filters and filters.tag_names)
+        fts.wiki_tag_filter = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp")
+        fts.tags_active = bool(filters and filters.tag_names)
 
-        # --- Result parts: scope-gated (only fetch rows for the active scope) ---
-
-        if scope in ("all", "issues"):
-            issue_sql = f"""
-                SELECT * FROM (
-                    SELECT
-                        '{_SRT_ISSUE}' as result_type,
-                        i.id,
-                        i.project_key || '-' || i.sequence_number as title,
-                        i.subject as subtitle,
-                        ts_headline(specivo_fts_config(i.project_id),
-                            specivo_fts_text(i.description), query,
-                            '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
-                        ts_rank_cd(i.search_vector, query) as score,
-                        i.project_key
-                    FROM issues i
-                    CROSS JOIN LATERAL {tsq_i}
-                    WHERE i.search_vector @@ query
-                    {issue_project_filter}
-                    {issue_visibility}
-                    {issue_filter_sql}
-                    {pinned_exclusion}
-                    ORDER BY score DESC LIMIT :part_limit
-                ) issues_sub
-            """  # noqa: S608
-            parts.append(issue_sql)
-
-        if scope in ("all", "wiki"):
-            wiki_sql = f"""
-                SELECT * FROM (
-                    SELECT
-                        '{_SRT_WIKI}' as result_type,
-                        wp.id,
-                        wp.title,
-                        wp.slug as subtitle,
-                        ts_headline(specivo_fts_config(w.project_id), specivo_fts_text(wc.text), query,
-                            '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
-                        ts_rank_cd(wc.search_vector, query) as score,
-                        p.key as project_key
-                    FROM wiki_contents wc
-                    JOIN wiki_pages wp ON wp.id = wc.page_id
-                    JOIN wikis w ON w.id = wp.wiki_id
-                    JOIN projects p ON p.id = w.project_id
-                    CROSS JOIN LATERAL {tsq_w}
-                    JOIN (
-                        SELECT page_id, MAX(version) as max_ver
-                        FROM wiki_contents
-                        GROUP BY page_id
-                    ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
-                    WHERE wc.search_vector @@ query
-                    AND wp.deleted_at IS NULL
-                    {wiki_project_filter}
-                    {wiki_visibility}
-                    {wiki_tag_filter}
-                    ORDER BY score DESC LIMIT :part_limit
-                ) wiki_sub
-            """  # noqa: S608
-            parts.append(wiki_sql)
-
-        # Comment keyword search: search search_chunks content for source_type='comment'
-        # Comments inherit visibility from their parent issue via journals table.
-        # Skipped when a tag filter is active (comments are not taggable).
-        if scope in ("all", "comments") and not tags_active:
-            comment_sql = f"""
-                SELECT * FROM (
-                    SELECT
-                        '{_SRT_COMMENT}' as result_type,
-                        j.id,
-                        ci.project_key || '-' || ci.sequence_number as title,
-                        left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as subtitle,
-                        ts_headline(specivo_fts_config(ci.project_id), specivo_fts_text(sc.content), query,
-                            '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
-                        ts_rank_cd(sc.search_vector, query) as score,
-                        ci.project_key
-                    FROM search_chunks sc
-                    JOIN search_sources ss ON ss.id = sc.source_id
-                    JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
-                    JOIN issues ci ON ci.id = j.issue_id
-                    CROSS JOIN LATERAL {tsq_ci}
-                    WHERE sc.search_vector @@ query
-                    AND ss.source_type = '{_SST_JOURNAL}'
-                    {comment_project_filter}
-                    {comment_visibility}
-                    ORDER BY score DESC LIMIT :part_limit
-                ) comments_sub
-            """  # noqa: S608
-            parts.append(comment_sql)
-
-        # Attachment keyword search: search search_chunks for source_type='attachment'
-        # Skipped when a tag filter is active (attachments are not taggable).
-        att_pf = issue_project_filter  # same params, different alias handled in helper
-        if scope in ("all", "attachments") and not tags_active:
-            parts.append(self._attachment_fts_sql(user, att_pf, parsed))
-
-        # --- Count parts: ALWAYS build for all 4 types (single-query per-type counts) ---
-
-        count_parts["issues"] = f"""
-            SELECT COUNT(*) as cnt
-            FROM issues i
-            CROSS JOIN LATERAL {tsq_i}
-            WHERE i.search_vector @@ query
-            {issue_project_filter}
-            {issue_visibility}
-            {issue_filter_sql}
-            {pinned_exclusion}
-        """  # noqa: S608
-
-        count_parts["wiki"] = f"""
-            SELECT COUNT(*) as cnt
-            FROM wiki_contents wc
-            JOIN wiki_pages wp ON wp.id = wc.page_id
-            JOIN wikis w ON w.id = wp.wiki_id
-            CROSS JOIN LATERAL {tsq_w}
-            JOIN (
-                SELECT page_id, MAX(version) as max_ver
-                FROM wiki_contents
-                GROUP BY page_id
-            ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
-            WHERE wc.search_vector @@ query
-            AND wp.deleted_at IS NULL
-            {wiki_project_filter}
-            {wiki_visibility}
-            {wiki_tag_filter}
-        """  # noqa: S608
-
-        if tags_active:
-            # Comments/attachments cannot carry tags — report zero for their tabs.
-            count_parts["comments"] = "SELECT 0 as cnt"
-            count_parts["attachments"] = "SELECT 0 as cnt"
-        else:
-            count_parts["comments"] = f"""
-                SELECT COUNT(*) as cnt
-                FROM search_chunks sc
-                JOIN search_sources ss ON ss.id = sc.source_id
-                JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
-                JOIN issues ci ON ci.id = j.issue_id
-                CROSS JOIN LATERAL {tsq_ci}
-                WHERE sc.search_vector @@ query
-                AND ss.source_type = '{_SST_JOURNAL}'
-                {comment_project_filter}
-                {comment_visibility}
-            """  # noqa: S608
-
-            count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf, parsed)
-
+        # Result parts are scope-gated (only fetch rows for the active scope).
+        parts = [sql for sql in (self._fts_part(fts, type_name, scope) for type_name in _FTS_TYPES) if sql]
         if not parts:
             return [], 0, {}
 
@@ -1187,46 +1058,218 @@ class SearchService:
         params["part_limit"] = min(ranked_offset + ranked_limit, _MAX_PART_ROWS)
 
         result = await session.execute(text(full_sql), params)
-
-        results = [
-            SearchResult(
-                result_type=row._mapping["result_type"],
-                id=row._mapping["id"],
-                title=row._mapping["title"],
-                subtitle=row._mapping["subtitle"],
-                snippet=_clean_snippet(row._mapping["snippet"]),
-                score=float(row._mapping["score"]),
-                project_key=row._mapping["project_key"],
-            )
-            for row in result
-        ]
+        results = [_fts_result(row) for row in result]
         if pinned:
             results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         # Per-type counts in a single query (skipped when called from hybrid_search)
-        type_counts: dict[str, int] = {}
-        total = 0
-        if not skip_count:
-            # Build a single SELECT with scalar subqueries for each type.
-            # PostgreSQL can parallelize these subqueries internally.
-            subquery_parts = [f"({count_sql}) as {type_name}_count" for type_name, count_sql in count_parts.items()]
-            combined_count_sql = f"""
+        if skip_count:
+            return results, 0, {}
+        type_counts = await self._fts_type_counts(session, cte_prefix, self._fts_count_parts(fts), params)
+        type_counts["issues"] += len(pinned)
+        type_counts["all"] = sum(type_counts.values())
+        # Total for the current scope: sum of active scope types only
+        total = type_counts["all"] if scope == "all" else type_counts.get(scope, 0)
+        return results, total, type_counts
+
+    def _fts_query(
+        self,
+        user: User,
+        parsed: _ParsedQuery,
+        params: dict[str, Any],
+        project_id: int | None,
+        project_ids: list[int] | None,
+        filters: SearchFilters | None,
+    ) -> _FtsQuery:
+        """The SQL fragments every keyword-search part shares; binds the project and issue filter parameters."""
+        project_filters = {"i": "", "w": "", "ci": ""}
+        if project_ids is not None:
+            # Multi-project: use IN clause
+            project_filters = {alias: f"AND {alias}.project_id = ANY(:project_ids)" for alias in project_filters}
+            params["project_ids"] = project_ids
+        elif project_id is not None:
+            project_filters = {alias: f"AND {alias}.project_id = :project_id" for alias in project_filters}
+            params["project_id"] = project_id
+        return _FtsQuery(
+            user=user,
+            parsed=parsed,
+            issue_project_filter=project_filters["i"],
+            wiki_project_filter=project_filters["w"],
+            comment_project_filter=project_filters["ci"],
+            issue_visibility=self._issue_visibility_cte_clause(user, alias="i"),
+            wiki_visibility=self._wiki_visibility_cte_clause(user, alias="w"),
+            comment_visibility=self._comment_visibility_clause(user, journal_alias="j", issue_alias="ci"),
+            issue_filter_sql=self._build_issue_filters(filters, params),
+            tsq_i=parsed.tsquery_from_sql("specivo_fts_config(i.project_id)"),
+            tsq_w=parsed.tsquery_from_sql("specivo_fts_config(w.project_id)"),
+            tsq_ci=parsed.tsquery_from_sql("specivo_fts_config(ci.project_id)"),
+        )
+
+    def _fts_part(self, q: _FtsQuery, type_name: str, scope: str) -> str | None:
+        """The ranked rows of *type_name* when *scope* covers it (and, for untaggable types, no tag filter is on)."""
+        if scope not in ("all", type_name):
+            return None
+        if type_name in _UNTAGGABLE_TYPES and q.tags_active:
+            return None
+        builders: dict[str, Callable[[_FtsQuery], str]] = {
+            "issues": self._fts_part_issue,
+            "wiki": self._fts_part_wiki,
+            "comments": self._fts_part_comment,
+            "attachments": self._fts_part_attachment,
+        }
+        return builders[type_name](q)
+
+    @staticmethod
+    def _fts_part_issue(q: _FtsQuery) -> str:
+        return f"""
+                SELECT * FROM (
+                    SELECT
+                        '{_SRT_ISSUE}' as result_type,
+                        i.id,
+                        i.project_key || '-' || i.sequence_number as title,
+                        i.subject as subtitle,
+                        ts_headline(specivo_fts_config(i.project_id),
+                            specivo_fts_text(i.description), query,
+                            '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
+                        ts_rank_cd(i.search_vector, query) as score,
+                        i.project_key
+                    FROM issues i
+                    CROSS JOIN LATERAL {q.tsq_i}
+                    WHERE i.search_vector @@ query
+                    {q.issue_project_filter}
+                    {q.issue_visibility}
+                    {q.issue_filter_sql}
+                    {q.pinned_exclusion}
+                    ORDER BY score DESC LIMIT :part_limit
+                ) issues_sub
+            """  # noqa: S608
+
+    @staticmethod
+    def _fts_part_wiki(q: _FtsQuery) -> str:
+        return f"""
+                SELECT * FROM (
+                    SELECT
+                        '{_SRT_WIKI}' as result_type,
+                        wp.id,
+                        wp.title,
+                        wp.slug as subtitle,
+                        ts_headline(specivo_fts_config(w.project_id), specivo_fts_text(wc.text), query,
+                            '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
+                        ts_rank_cd(wc.search_vector, query) as score,
+                        p.key as project_key
+                    FROM wiki_contents wc
+                    JOIN wiki_pages wp ON wp.id = wc.page_id
+                    JOIN wikis w ON w.id = wp.wiki_id
+                    JOIN projects p ON p.id = w.project_id
+                    CROSS JOIN LATERAL {q.tsq_w}
+                    JOIN (
+                        SELECT page_id, MAX(version) as max_ver
+                        FROM wiki_contents
+                        GROUP BY page_id
+                    ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
+                    WHERE wc.search_vector @@ query
+                    AND wp.deleted_at IS NULL
+                    {q.wiki_project_filter}
+                    {q.wiki_visibility}
+                    {q.wiki_tag_filter}
+                    ORDER BY score DESC LIMIT :part_limit
+                ) wiki_sub
+            """  # noqa: S608
+
+    @staticmethod
+    def _fts_part_comment(q: _FtsQuery) -> str:
+        """Comments: search_chunks of source_type ``journal``, visible as their parent issue is."""
+        return f"""
+                SELECT * FROM (
+                    SELECT
+                        '{_SRT_COMMENT}' as result_type,
+                        j.id,
+                        ci.project_key || '-' || ci.sequence_number as title,
+                        left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as subtitle,
+                        ts_headline(specivo_fts_config(ci.project_id), specivo_fts_text(sc.content), query,
+                            '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
+                        ts_rank_cd(sc.search_vector, query) as score,
+                        ci.project_key
+                    FROM search_chunks sc
+                    JOIN search_sources ss ON ss.id = sc.source_id
+                    JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
+                    JOIN issues ci ON ci.id = j.issue_id
+                    CROSS JOIN LATERAL {q.tsq_ci}
+                    WHERE sc.search_vector @@ query
+                    AND ss.source_type = '{_SST_JOURNAL}'
+                    {q.comment_project_filter}
+                    {q.comment_visibility}
+                    ORDER BY score DESC LIMIT :part_limit
+                ) comments_sub
+            """  # noqa: S608
+
+    def _fts_part_attachment(self, q: _FtsQuery) -> str:
+        """Attachments: search_chunks of source_type ``attachment`` (the issue project filter, re-aliased)."""
+        return self._attachment_fts_sql(q.user, q.issue_project_filter, q.parsed)
+
+    def _fts_count_parts(self, q: _FtsQuery) -> dict[str, str]:
+        """COUNT SQL of every type, whatever the scope, so one query gives the filter tabs their totals."""
+        counts = {
+            "issues": f"""
+            SELECT COUNT(*) as cnt
+            FROM issues i
+            CROSS JOIN LATERAL {q.tsq_i}
+            WHERE i.search_vector @@ query
+            {q.issue_project_filter}
+            {q.issue_visibility}
+            {q.issue_filter_sql}
+            {q.pinned_exclusion}
+        """,  # noqa: S608
+            "wiki": f"""
+            SELECT COUNT(*) as cnt
+            FROM wiki_contents wc
+            JOIN wiki_pages wp ON wp.id = wc.page_id
+            JOIN wikis w ON w.id = wp.wiki_id
+            CROSS JOIN LATERAL {q.tsq_w}
+            JOIN (
+                SELECT page_id, MAX(version) as max_ver
+                FROM wiki_contents
+                GROUP BY page_id
+            ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
+            WHERE wc.search_vector @@ query
+            AND wp.deleted_at IS NULL
+            {q.wiki_project_filter}
+            {q.wiki_visibility}
+            {q.wiki_tag_filter}
+        """,  # noqa: S608
+        }
+        if q.tags_active:
+            # Comments/attachments cannot carry tags — report zero for their tabs.
+            counts["comments"] = "SELECT 0 as cnt"
+            counts["attachments"] = "SELECT 0 as cnt"
+            return counts
+        counts["comments"] = f"""
+                SELECT COUNT(*) as cnt
+                FROM search_chunks sc
+                JOIN search_sources ss ON ss.id = sc.source_id
+                JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
+                JOIN issues ci ON ci.id = j.issue_id
+                CROSS JOIN LATERAL {q.tsq_ci}
+                WHERE sc.search_vector @@ query
+                AND ss.source_type = '{_SST_JOURNAL}'
+                {q.comment_project_filter}
+                {q.comment_visibility}
+            """  # noqa: S608
+        counts["attachments"] = self._attachment_fts_count_sql(q.user, q.issue_project_filter, q.parsed)
+        return counts
+
+    @staticmethod
+    async def _fts_type_counts(
+        session: AsyncSession, cte_prefix: str, count_parts: dict[str, str], params: dict[str, Any]
+    ) -> dict[str, int]:
+        """The per-type totals in one SELECT of scalar subqueries (PostgreSQL can run them in parallel)."""
+        subquery_parts = [f"({count_sql}) as {type_name}_count" for type_name, count_sql in count_parts.items()]
+        combined_count_sql = f"""
                 {cte_prefix}
                 SELECT {", ".join(subquery_parts)}
             """
-            count_result = await session.execute(text(combined_count_sql), params)
-            row = count_result.one()
-            for type_name in count_parts:
-                type_counts[type_name] = row._mapping[f"{type_name}_count"]
-            type_counts["issues"] += len(pinned)
-            type_counts["all"] = sum(type_counts.values())
-            # Total for the current scope: sum of active scope types only
-            if scope == "all":  # noqa: SIM108
-                total = type_counts["all"]
-            else:
-                total = type_counts.get(scope, 0)
-
-        return results, total, type_counts
+        row = (await session.execute(text(combined_count_sql), params)).one()
+        return {type_name: row._mapping[f"{type_name}_count"] for type_name in count_parts}
 
     async def filter_issues(
         self,
@@ -1856,91 +1899,104 @@ class SearchService:
         if not fts_results and not sem_results and not pinned:
             return [], 0, _empty_type_counts(include_all=True)
 
-        # The pinned issues lead; drop them from the fused lists.
-        pinned_keys = {f"{r.result_type}:{r.id}" for r in pinned}
-        fts_results = [r for r in fts_results if f"{r.result_type}:{r.id}" not in pinned_keys]
-        sem_results = [r for r in sem_results if f"{r.result_type}:{r.id}" not in pinned_keys]
-
-        # Build ID lists and rank maps for RRF (using composite key: "type:id")
-        fts_keys = [f"{r.result_type}:{r.id}" for r in fts_results]
-        sem_keys = [f"{r.result_type}:{r.id}" for r in sem_results]
-        fts_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(fts_results)}
-        sem_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(sem_results)}
-
-        # Build lookup maps
-        result_map: dict[str, SearchResult] = {}
-        for r in fts_results:
-            key = f"{r.result_type}:{r.id}"
-            result_map[key] = r
-        for r in sem_results:
-            key = f"{r.result_type}:{r.id}"
-            if key not in result_map:
-                result_map[key] = r
-
-        # RRF fusion on string keys
-        scores: dict[str, float] = {}
-        k = RRF_K
-        for rank_0, key in enumerate(fts_keys):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank_0 + 1)
-        for rank_0, key in enumerate(sem_keys):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank_0 + 1)
-
-        sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)
-
-        # Compute per-type counts from the merged RRF results (not FTS alone)
-        _type_to_count_key = {
-            SearchResultType.ISSUE: "issues",
-            SearchResultType.WIKI: "wiki",
-            SearchResultType.COMMENT: "comments",
-            SearchResultType.ATTACHMENT: "attachments",
-        }
-        type_counts: dict[str, int] = _empty_type_counts()
-        for key in sorted_keys:
-            display = SOURCE_TYPE_TO_DISPLAY.get(result_map[key].result_type)
-            if display:
-                count_key = _type_to_count_key.get(display)
-                if count_key:
-                    type_counts[count_key] += 1
-
-        # Apply scope filter to sorted_keys if not "all"
-        if scope != "all":
-            scope_types: dict[str, set[str]] = {
-                "issues": {SearchResultType.ISSUE},
-                "wiki": {SearchResultType.WIKI},
-                "comments": {SearchResultType.COMMENT},
-                "attachments": {SearchResultType.ATTACHMENT},
-            }
-            allowed = scope_types.get(scope, set())
-            sorted_keys = [k for k in sorted_keys if SOURCE_TYPE_TO_DISPLAY.get(result_map[k].result_type) in allowed]
-
+        fused = _Fused.of(fts_results, sem_results, pinned)
+        type_counts = fused.type_counts()
+        ranked_keys = fused.in_scope(scope)
         type_counts["issues"] += len(pinned)
-        total = len(pinned) + len(sorted_keys)
+        total = len(pinned) + len(ranked_keys)
         type_counts["all"] = sum(type_counts.values())
 
         # Apply pagination: the pinned issues take the first places.
         pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
-        page_keys = sorted_keys[ranked_offset : ranked_offset + ranked_limit]
-
-        results = []
-        for key in page_keys:
-            r = result_map[key]
-            results.append(
-                SearchResult(
-                    result_type=r.result_type,
-                    id=r.id,
-                    title=r.title,
-                    subtitle=r.subtitle,
-                    snippet=r.snippet,
-                    score=scores[key],
-                    project_key=r.project_key,
-                    fts_rank=fts_rank_map.get(key),
-                    sem_rank=sem_rank_map.get(key),
-                )
-            )
+        results = [fused.result(key) for key in ranked_keys[ranked_offset : ranked_offset + ranked_limit]]
         if pinned:
             results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         return results, total, type_counts
+
+
+# ---------------------------------------------------------------------------
+# Hybrid fusion
+# ---------------------------------------------------------------------------
+
+#: The type_counts key of each displayed result type.
+_COUNT_KEY_OF_TYPE: dict[str, str] = {
+    SearchResultType.ISSUE: "issues",
+    SearchResultType.WIKI: "wiki",
+    SearchResultType.COMMENT: "comments",
+    SearchResultType.ATTACHMENT: "attachments",
+}
+
+
+def _result_key(result: SearchResult) -> str:
+    """The composite ``type:id`` key that tells results of different types apart."""
+    return f"{result.result_type}:{result.id}"
+
+
+@dataclass
+class _Fused:
+    """The keyword and semantic lists of a hybrid search fused by RRF, pinned issues left out."""
+
+    ranked_keys: list[str]
+    scores: dict[str, float]
+    results: dict[str, SearchResult]
+    fts_ranks: dict[str, int]
+    sem_ranks: dict[str, int]
+
+    @classmethod
+    def of(cls, fts_results: list[SearchResult], sem_results: list[SearchResult], pinned: list[SearchResult]) -> _Fused:
+        # The pinned issues lead; drop them from the fused lists.
+        pinned_keys = {_result_key(r) for r in pinned}
+        fts = [r for r in fts_results if _result_key(r) not in pinned_keys]
+        sem = [r for r in sem_results if _result_key(r) not in pinned_keys]
+        fts_keys = [_result_key(r) for r in fts]
+        sem_keys = [_result_key(r) for r in sem]
+        # A result found by both sides is shown as the keyword side has it.
+        results: dict[str, SearchResult] = {}
+        for r in [*fts, *sem]:
+            results.setdefault(_result_key(r), r)
+        scores = rrf_scores(fts_keys, sem_keys, RRF_K)
+        return cls(
+            ranked_keys=sorted(scores, key=lambda x: scores[x], reverse=True),
+            scores=scores,
+            results=results,
+            fts_ranks={key: i + 1 for i, key in enumerate(fts_keys)},
+            sem_ranks={key: i + 1 for i, key in enumerate(sem_keys)},
+        )
+
+    def _display_type(self, key: str) -> str | None:
+        return SOURCE_TYPE_TO_DISPLAY.get(self.results[key].result_type)
+
+    def type_counts(self) -> dict[str, int]:
+        """Per-type counts of the fused results (not of the keyword side alone), without ``all``."""
+        counts = _empty_type_counts()
+        for key in self.ranked_keys:
+            count_key = _COUNT_KEY_OF_TYPE.get(self._display_type(key) or "")
+            if count_key:
+                counts[count_key] += 1
+        return counts
+
+    def in_scope(self, scope: str) -> list[str]:
+        """The ranked keys of *scope*'s type (all of them for ``all``)."""
+        if scope == "all":
+            return self.ranked_keys
+        allowed = {key for key, count_key in _COUNT_KEY_OF_TYPE.items() if count_key == scope}
+        return [key for key in self.ranked_keys if self._display_type(key) in allowed]
+
+    def result(self, key: str) -> SearchResult:
+        """The result of *key* with its RRF score and its rank on each side."""
+        r = self.results[key]
+        return SearchResult(
+            result_type=r.result_type,
+            id=r.id,
+            title=r.title,
+            subtitle=r.subtitle,
+            snippet=r.snippet,
+            score=self.scores[key],
+            project_key=r.project_key,
+            fts_rank=self.fts_ranks.get(key),
+            sem_rank=self.sem_ranks.get(key),
+        )
 
 
 # ---------------------------------------------------------------------------

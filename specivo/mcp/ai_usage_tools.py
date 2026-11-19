@@ -13,7 +13,7 @@ calling key as their reporting key and the MCP client as their client.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,9 @@ from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, Entr
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent
+
+if TYPE_CHECKING:
+    from specivo.services.ai_spend_report_service import SpendReport
 
 _usage = AiUsageService()
 _issues = IssueService()
@@ -559,6 +562,83 @@ def _report_line(row: Any, report: Any) -> str:
     return f"{head}: " + " ".join(measures)
 
 
+async def _check_report_request(user: User, preset: str | None) -> None:
+    """422 for an unknown preset, then 429 when *user* has asked for too many reports in the last minute."""
+    from specivo.core.ai_report_limits import ai_report_allowed
+    from specivo.services.ai_spend_report_service import PRESETS
+
+    if preset and preset not in PRESETS[:-1]:
+        raise ValidationError(message=f"preset must be one of {', '.join(PRESETS[:-1])}", field="preset")
+    allowed, retry_after = await ai_report_allowed(user)
+    if not allowed:
+        raise AppError(
+            code="rate_limit_exceeded",
+            message=f"Too many AI reports in the last minute. Try again in {retry_after} second(s).",
+            status_code=429,
+            details={"retry_after": retry_after},
+        )
+
+
+async def _report_scope(
+    session: AsyncSession, user: User, project_key: str | None, issue_ref: str | None
+) -> tuple[Project | None, Issue | None]:
+    """The project (None: the instance) and the issue a report covers; an issue alone implies its project."""
+    project = await _project(session, user, project_key) if project_key and project_key.strip() else None
+    if not (issue_ref and issue_ref.strip()):
+        return project, None
+    issue = await _issue(session, user, issue_ref)
+    if project is None:
+        # An issue's report is its project's report narrowed to the issue.
+        project = await session.get(Project, issue.project_id)
+    elif issue.project_id != project.id:
+        raise ValidationError(message=f"Issue {issue.display_key} is not in project {project.key}", field="issue_ref")
+    return project, issue
+
+
+async def _report_user_id(session: AsyncSession, user_login: str | None) -> int | None:
+    """The id to filter a report by *user_login*: None without one, -1 (nobody) for an unknown login."""
+    if not (user_login and user_login.strip()):
+        return None
+    # Like listing: an unknown login matches nothing rather than saying it does not exist.
+    found = await _usage.user_by_login(session, user_login)
+    return found.id if found is not None else -1
+
+
+def _report_text(report: SpendReport, project: Project | None, issue: Issue | None, include_sub_issues: bool) -> str:
+    """*report* as the tool's text: scope line, notes, at most :data:`REPORT_MAX_ROWS` rows and the total."""
+    scope = f"project {project.key}" if project is not None else "the whole instance"
+    if issue is not None:
+        scope = f"issue {issue.display_key}" + (" and its sub-issues" if include_sub_issues else "") + f" in {scope}"
+    lines = [
+        f"AI spend report for {scope}, {report.date_from} to {report.date_to} (UTC days), "
+        f"amounts in {report.currency}, rate policy {report.rate_policy}.",
+        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
+        "api_equivalent = the same tokens at pay-per-use prices, not a bill.",
+    ]
+    if report.seat_cost_hidden:
+        lines.append("Seat cost is left out: you do not read every entry of this project in the period.")
+    elif not report.include_seat_cost:
+        lines.append("Seat cost is left out (include_seat_cost=false).")
+    if report.rate_dates:
+        lines.append("Exchange rates used from: " + ", ".join(d.isoformat() for d in report.rate_dates))
+    lines.append(f"Rows ({len(report.rows)}):")
+    if not report.rows:
+        lines.append("  (none)")
+    lines.extend(f"  {_report_line(row, report)}" for row in report.rows[:REPORT_MAX_ROWS])
+    if len(report.rows) > REPORT_MAX_ROWS:
+        from specivo.services.ai_spend_report_service import fold_rows
+
+        rest = report.rows[REPORT_MAX_ROWS:]
+        summed = fold_rows(rest, report.currency, report.seat_cost_shown)
+        measures = _report_line(summed, report).split(": ", 1)[1]
+        lines.append(
+            f"  ... and {len(rest)} more rows, together: {measures} "
+            "(narrow the period or the grouping, sort=spend for the largest first, or use the CSV export)"
+        )
+    lines.append(f"Total: {_report_line(report.totals, report).split(': ', 1)[1]}")
+    return "\n".join(lines)
+
+
 async def _ai_usage_report(  # noqa: PLR0913
     session: AsyncSession,
     user: User,
@@ -581,42 +661,18 @@ async def _ai_usage_report(  # noqa: PLR0913
     include_sub_issues: bool = False,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
-    from specivo.core.ai_report_limits import ai_report_allowed
     from specivo.services.ai_spend_report_service import (
-        PRESETS,
         AiSpendReportService,
         ReportFilters,
         default_range,
         parse_group_by,
     )
 
-    if preset and preset not in PRESETS[:-1]:
-        raise ValidationError(message=f"preset must be one of {', '.join(PRESETS[:-1])}", field="preset")
-    allowed, retry_after = await ai_report_allowed(user)
-    if not allowed:
-        raise AppError(
-            code="rate_limit_exceeded",
-            message=f"Too many AI reports in the last minute. Try again in {retry_after} second(s).",
-            status_code=429,
-            details={"retry_after": retry_after},
-        )
+    await _check_report_request(user, preset)
     first, last = default_range(preset)
-    project = await _project(session, user, project_key) if project_key and project_key.strip() else None
-    issue: Issue | None = None
-    if issue_ref and issue_ref.strip():
-        issue = await _issue(session, user, issue_ref)
-        if project is None:
-            # An issue's report is its project's report narrowed to the issue.
-            project = await session.get(Project, issue.project_id)
-        elif issue.project_id != project.id:
-            raise ValidationError(
-                message=f"Issue {issue.display_key} is not in project {project.key}", field="issue_ref"
-            )
-    user_id: int | None = None
-    if user_login and user_login.strip():
-        # Like listing: an unknown login matches nothing rather than saying it does not exist.
-        found = await _usage.user_by_login(session, user_login)
-        user_id = found.id if found is not None else -1
+    project, issue = await _report_scope(session, user, project_key, issue_ref)
+    user_id = await _report_user_id(session, user_login)
+    issue_id = issue.id if issue is not None else None
     report = await AiSpendReportService().report(
         session,
         user,
@@ -633,8 +689,8 @@ async def _ai_usage_report(  # noqa: PLR0913
             tool=tool or None,
             model=model or None,
             cost_type=cost_type or None,
-            issue_id=issue.id if issue is not None and not include_sub_issues else None,
-            issue_tree_id=issue.id if issue is not None and include_sub_issues else None,
+            issue_id=None if include_sub_issues else issue_id,
+            issue_tree_id=issue_id if include_sub_issues else None,
         ),
         sort=sort or "key",
     )
@@ -646,35 +702,4 @@ async def _ai_usage_report(  # noqa: PLR0913
         {"op": "report", "project_key": project.key if project is not None else None},
         project_id=project.id if project is not None else None,
     )
-    scope = f"project {project.key}" if project is not None else "the whole instance"
-    if issue is not None:
-        scope = f"issue {issue.display_key}" + (" and its sub-issues" if include_sub_issues else "") + f" in {scope}"
-    lines = [
-        f"AI spend report for {scope}, {report.date_from} to {report.date_to} (UTC days), "
-        f"amounts in {report.currency}, rate policy {report.rate_policy}.",
-        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
-        "api_equivalent = the same tokens at pay-per-use prices, not a bill.",
-    ]
-    if report.seat_cost_hidden:
-        lines.append("Seat cost is left out: you do not read every entry of this project in the period.")
-    elif not report.include_seat_cost:
-        lines.append("Seat cost is left out (include_seat_cost=false).")
-    if report.rate_dates:
-        lines.append("Exchange rates used from: " + ", ".join(d.isoformat() for d in report.rate_dates))
-    lines.append(f"Rows ({len(report.rows)}):")
-    if not report.rows:
-        lines.append("  (none)")
-    for row in report.rows[:REPORT_MAX_ROWS]:
-        lines.append(f"  {_report_line(row, report)}")  # noqa: PERF401
-    if len(report.rows) > REPORT_MAX_ROWS:
-        from specivo.services.ai_spend_report_service import fold_rows
-
-        rest = report.rows[REPORT_MAX_ROWS:]
-        summed = fold_rows(rest, report.currency, report.seat_cost_shown)
-        measures = _report_line(summed, report).split(": ", 1)[1]
-        lines.append(
-            f"  ... and {len(rest)} more rows, together: {measures} "
-            "(narrow the period or the grouping, sort=spend for the largest first, or use the CSV export)"
-        )
-    lines.append(f"Total: {_report_line(report.totals, report).split(': ', 1)[1]}")
-    return "\n".join(lines)
+    return _report_text(report, project, issue, include_sub_issues)
