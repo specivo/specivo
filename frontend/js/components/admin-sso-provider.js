@@ -14,38 +14,44 @@ function linesToList(text) {
     return (text || '').split('\n').map(function (s) { return s.trim(); }).filter(function (s) { return s; });
 }
 
+/* The form's plain fields in order, each with its value for a new provider. */
+var FORM_DEFAULTS = [
+    ['slug', ''],
+    ['display_name', ''],
+    ['enabled', false],
+    ['position', 0],
+    ['issuer', ''],
+    ['discovery_url', ''],
+    ['client_id', ''],
+    ['token_endpoint_auth_method', 'client_secret_basic'],
+    ['scopes', 'openid profile email'],
+    ['use_userinfo', false],
+    ['allow_jit_provisioning', false],
+    ['link_policy', 'manual'],
+    ['trust_email_verified', false],
+    ['sync_admin_flag', false],
+    ['sync_groups', false],
+    ['deactivate_on_access_loss', false],
+    ['rp_logout_enabled', true],
+    ['backchannel_logout_enabled', false],
+    ['backchannel_action', 'revoke_session'],
+    ['verify_session_at_idp', true],
+    ['idp_check_failure', 'allow'],
+    ['session_max_age_hours', 24]
+];
+
 function formFromProvider(p, extraKeys) {
     var claims = (p && p.claim_config) || {};
-    var form = {
-        slug: p ? p.slug : '',
-        display_name: p ? p.display_name : '',
-        enabled: p ? p.enabled : false,
-        position: p ? p.position : 0,
-        issuer: p ? p.issuer : '',
-        discovery_url: (p && p.discovery_url) || '',
-        client_id: p ? p.client_id : '',
-        token_endpoint_auth_method: p ? p.token_endpoint_auth_method : 'client_secret_basic',
-        scopes: p ? p.scopes : 'openid profile email',
-        use_userinfo: !!claims.use_userinfo,
-        allow_jit_provisioning: p ? p.allow_jit_provisioning : false,
-        link_policy: p ? p.link_policy : 'manual',
-        trust_email_verified: p ? p.trust_email_verified : false,
-        sync_admin_flag: p ? p.sync_admin_flag : false,
-        sync_groups: p ? p.sync_groups : false,
-        deactivate_on_access_loss: p ? p.deactivate_on_access_loss : false,
-        rp_logout_enabled: p ? p.rp_logout_enabled : true,
-        backchannel_logout_enabled: p ? p.backchannel_logout_enabled : false,
-        backchannel_action: p ? p.backchannel_action : 'revoke_session',
-        verify_session_at_idp: p ? p.verify_session_at_idp : true,
-        idp_check_failure: p ? p.idp_check_failure : 'allow',
-        session_max_age_hours: p ? p.session_max_age_hours : 24,
-        extra: {}
-    };
+    var form = {};
+    FORM_DEFAULTS.forEach(function (entry) { form[entry[0]] = p ? p[entry[0]] : entry[1]; });
+    // Fields the provider does not hold as they are edited.
+    form.discovery_url = (p && p.discovery_url) || '';
+    form.use_userinfo = !!claims.use_userinfo;
+    form.extra = {};
     CLAIM_FIELDS.forEach(function (f) { form[f] = claims[f] || ''; });
     LIST_FIELDS.forEach(function (f) { form[f] = ((p && p[f]) || []).join('\n'); });
-    (extraKeys || []).forEach(function (k) {
-        form.extra[k] = (p && p.extra_auth_params && p.extra_auth_params[k]) || '';
-    });
+    var extraParams = (p && p.extra_auth_params) || {};
+    (extraKeys || []).forEach(function (k) { form.extra[k] = extraParams[k] || ''; });
     return form;
 }
 

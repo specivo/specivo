@@ -4,11 +4,6 @@
       "count": 1
     }
   },
-  "js/components/admin-sso-provider.js": {
-    "complexity": {
-      "count": 1
-    }
-  },
   "js/components/api-key-manager.js": {
     "complexity": {
       "count": 1
