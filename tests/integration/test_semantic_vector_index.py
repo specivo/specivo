@@ -14,6 +14,12 @@ embedding exactly when the index cannot supply them. These tests check that:
 
 Rows are inserted with plain SQL so that no indexing events fire, and query
 embeddings are fixed vectors, so distances are known in advance.
+
+The index is approximate, and the graph of the shared test database is crowded
+with dead entries from rolled-back tests and with rows other workers have not
+committed. The tests that assert on what an index scan returns therefore run
+against a freshly built index (``private_index_scans``), which needs the table
+to themselves and so runs in the serial pass.
 """
 
 from __future__ import annotations
@@ -22,7 +28,6 @@ import logging
 import math
 import random
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,10 +48,10 @@ from specivo.services.search_service import SearchService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
+from tests.integration.vector_index_helpers import INDEX_NAME, private_index_scans
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
-INDEX_NAME = "ix_chunk_embeddings_hnsw_384"
 DIMS = SEMANTIC_INDEX_DIMENSIONS
 
 
@@ -229,18 +234,6 @@ async def _bulk_random_issues(db: AsyncSession, world: World, project: Project, 
     await db.commit()
 
 
-@asynccontextmanager
-async def _planner_prefers_indexes(db: AsyncSession) -> AsyncIterator[None]:
-    """Make the planner take the HNSW index even for the few rows a test holds."""
-    await db.execute(text("SET LOCAL enable_seqscan = off"))
-    await db.execute(text("SET LOCAL enable_bitmapscan = off"))
-    try:
-        yield
-    finally:
-        await db.execute(text("SET LOCAL enable_seqscan = on"))
-        await db.execute(text("SET LOCAL enable_bitmapscan = on"))
-
-
 async def _search(db: AsyncSession, user: User, limit: int = 10, **kwargs: Any) -> list[tuple[str, int, float]]:
     results, _ = await SearchService().semantic_search(
         db, "vector query", user, limit=limit, skip_count=True, resolve_identifiers=False, **kwargs
@@ -345,6 +338,7 @@ async def test_exact_ranking_does_not_use_the_index(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
 async def test_index_results_equal_exact_ranking(
     db_session: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -355,7 +349,7 @@ async def test_index_results_equal_exact_ranking(
     for user in (world.admin, world.viewer):
         caplog.clear()
         with caplog.at_level(logging.DEBUG, logger=search_module.__name__):
-            async with _planner_prefers_indexes(db_session):
+            async with private_index_scans(db_session):
                 via_index = await _search(db_session, user, limit=25)
         assert _rounds(caplog)[0].startswith("Semantic search round: 100 candidates")
         assert "all candidates" not in _rounds(caplog)[-1]
@@ -372,6 +366,7 @@ async def test_index_results_equal_exact_ranking(
     assert viewer_ids and not viewer_ids & hidden_ids
 
 
+@pytest.mark.serial
 async def test_deeper_pages_and_project_scope_match_exact_ranking(
     db_session: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -379,7 +374,7 @@ async def test_deeper_pages_and_project_scope_match_exact_ranking(
     await _add_issues(db_session, world, world.visible, [_near(_axis(0), 0.08, rng) for _ in range(120)])
     await _add_issues(db_session, world, world.hidden, [_near(_axis(0), 0.08, rng) for _ in range(120)])
 
-    async with _planner_prefers_indexes(db_session):
+    async with private_index_scans(db_session):
         page_two = await _search(db_session, world.admin, limit=10, offset=10)
         scoped = await _search(db_session, world.admin, limit=10, project_id=world.hidden.id)
     assert page_two == await _exact(db_session, monkeypatch, world.admin, limit=10, offset=10)
@@ -397,6 +392,7 @@ async def test_deeper_pages_and_project_scope_match_exact_ranking(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
 async def test_wider_index_round_finds_visible_results_behind_hidden_ones(
     db_session: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -406,7 +402,7 @@ async def test_wider_index_round_finds_visible_results_behind_hidden_ones(
     visible_ids = await _add_issues(db_session, world, world.visible, [_near(_axis(0), 0.08, rng) for _ in range(400)])
 
     with caplog.at_level(logging.DEBUG, logger=search_module.__name__):
-        async with _planner_prefers_indexes(db_session):
+        async with private_index_scans(db_session):
             via_index = await _search(db_session, world.viewer, limit=10)
 
     assert _rounds(caplog) == [
@@ -420,6 +416,7 @@ async def test_wider_index_round_finds_visible_results_behind_hidden_ones(
     assert via_index == await _exact(db_session, monkeypatch, world.viewer, limit=10)
 
 
+@pytest.mark.serial
 async def test_exact_fallback_finds_visible_results_when_the_index_runs_out(
     db_session: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -429,7 +426,7 @@ async def test_exact_fallback_finds_visible_results_when_the_index_runs_out(
     visible_ids = await _add_issues(db_session, world, world.visible, [_near(_axis(0), 0.08, rng) for _ in range(6)])
 
     with caplog.at_level(logging.DEBUG, logger=search_module.__name__):
-        async with _planner_prefers_indexes(db_session):
+        async with private_index_scans(db_session):
             results = await _search(db_session, world.viewer, limit=10)
 
     rounds = _rounds(caplog)
@@ -439,6 +436,7 @@ async def test_exact_fallback_finds_visible_results_when_the_index_runs_out(
     assert results == await _exact(db_session, monkeypatch, world.viewer, limit=10)
 
 
+@pytest.mark.serial
 async def test_candidate_cap_switches_to_exact_ranking(
     db_session: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -448,7 +446,7 @@ async def test_candidate_cap_switches_to_exact_ranking(
     visible_ids = await _add_issues(db_session, world, world.visible, [_near(_axis(0), 0.08, rng) for _ in range(300)])
 
     with caplog.at_level(logging.DEBUG, logger=search_module.__name__):
-        async with _planner_prefers_indexes(db_session):
+        async with private_index_scans(db_session):
             results = await _search(db_session, world.viewer, limit=10)
 
     assert _rounds(caplog) == [
@@ -507,6 +505,7 @@ async def test_pgvector_version_gate(version: str, supported: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
 async def test_hybrid_search_fuses_index_hits_with_keyword_hits(
     db_session: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -521,7 +520,7 @@ async def test_hybrid_search_fuses_index_hits_with_keyword_hits(
         db_session, world, world.visible, [_near(_axis(1), 0.08, rng) for _ in range(3)], subject="Gearbox"
     )
 
-    async with _planner_prefers_indexes(db_session):
+    async with private_index_scans(db_session):
         results, total, _ = await SearchService().hybrid_search(db_session, "gearbox", world.viewer, limit=25)
 
     ids = [r.id for r in results]
