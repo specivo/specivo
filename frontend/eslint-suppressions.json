@@ -23,10 +23,5 @@
     "complexity": {
       "count": 1
     }
-  },
-  "js/components/recurring.js": {
-    "complexity": {
-      "count": 2
-    }
   }
 }
