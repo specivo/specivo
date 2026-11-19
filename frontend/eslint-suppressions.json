@@ -43,10 +43,5 @@
     "complexity": {
       "count": 2
     }
-  },
-  "js/lib/repo-url.js": {
-    "complexity": {
-      "count": 1
-    }
   }
 }
