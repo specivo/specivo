@@ -17,7 +17,7 @@ import json
 import logging
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -127,20 +127,26 @@ def _role_grants(permission: str, alias: str = "r") -> str:
     return f"(jsonb_exists({alias}.permissions, '{permission}') OR jsonb_exists({alias}.permissions, '*'))"
 
 
-def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int]:
-    """Merge two ranked ID lists using Reciprocal Rank Fusion.
+def rrf_scores[K: Hashable](fts_ids: Sequence[K], sem_ids: Sequence[K], k: int = RRF_K) -> dict[K, float]:
+    """Reciprocal Rank Fusion scores of the items of two ranked lists, in order of first appearance.
 
     RRF score for item i = sum over lists L of: 1 / (k + rank_L(i))
     where rank_L(i) is the 1-based rank in list L (0 if absent).
-
-    Note: hybrid_search uses an inline version for string-keyed dedup.
-    This function is retained for unit test coverage of the RRF algorithm.
     """
-    scores: dict[int, float] = {}
+    scores: dict[K, float] = {}
     for rank_0, item_id in enumerate(fts_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
     for rank_0, item_id in enumerate(sem_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
+    return scores
+
+
+def rrf_fuse[K: Hashable](fts_ids: Sequence[K], sem_ids: Sequence[K], k: int = RRF_K) -> list[K]:
+    """Merge two ranked ID lists using Reciprocal Rank Fusion (:func:`rrf_scores`), best first.
+
+    Items with equal scores keep their order of first appearance.
+    """
+    scores = rrf_scores(fts_ids, sem_ids, k)
     return sorted(scores, key=lambda x: scores[x], reverse=True)
 
 
@@ -1856,91 +1862,104 @@ class SearchService:
         if not fts_results and not sem_results and not pinned:
             return [], 0, _empty_type_counts(include_all=True)
 
-        # The pinned issues lead; drop them from the fused lists.
-        pinned_keys = {f"{r.result_type}:{r.id}" for r in pinned}
-        fts_results = [r for r in fts_results if f"{r.result_type}:{r.id}" not in pinned_keys]
-        sem_results = [r for r in sem_results if f"{r.result_type}:{r.id}" not in pinned_keys]
-
-        # Build ID lists and rank maps for RRF (using composite key: "type:id")
-        fts_keys = [f"{r.result_type}:{r.id}" for r in fts_results]
-        sem_keys = [f"{r.result_type}:{r.id}" for r in sem_results]
-        fts_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(fts_results)}
-        sem_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(sem_results)}
-
-        # Build lookup maps
-        result_map: dict[str, SearchResult] = {}
-        for r in fts_results:
-            key = f"{r.result_type}:{r.id}"
-            result_map[key] = r
-        for r in sem_results:
-            key = f"{r.result_type}:{r.id}"
-            if key not in result_map:
-                result_map[key] = r
-
-        # RRF fusion on string keys
-        scores: dict[str, float] = {}
-        k = RRF_K
-        for rank_0, key in enumerate(fts_keys):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank_0 + 1)
-        for rank_0, key in enumerate(sem_keys):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank_0 + 1)
-
-        sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)
-
-        # Compute per-type counts from the merged RRF results (not FTS alone)
-        _type_to_count_key = {
-            SearchResultType.ISSUE: "issues",
-            SearchResultType.WIKI: "wiki",
-            SearchResultType.COMMENT: "comments",
-            SearchResultType.ATTACHMENT: "attachments",
-        }
-        type_counts: dict[str, int] = _empty_type_counts()
-        for key in sorted_keys:
-            display = SOURCE_TYPE_TO_DISPLAY.get(result_map[key].result_type)
-            if display:
-                count_key = _type_to_count_key.get(display)
-                if count_key:
-                    type_counts[count_key] += 1
-
-        # Apply scope filter to sorted_keys if not "all"
-        if scope != "all":
-            scope_types: dict[str, set[str]] = {
-                "issues": {SearchResultType.ISSUE},
-                "wiki": {SearchResultType.WIKI},
-                "comments": {SearchResultType.COMMENT},
-                "attachments": {SearchResultType.ATTACHMENT},
-            }
-            allowed = scope_types.get(scope, set())
-            sorted_keys = [k for k in sorted_keys if SOURCE_TYPE_TO_DISPLAY.get(result_map[k].result_type) in allowed]
-
+        fused = _Fused.of(fts_results, sem_results, pinned)
+        type_counts = fused.type_counts()
+        ranked_keys = fused.in_scope(scope)
         type_counts["issues"] += len(pinned)
-        total = len(pinned) + len(sorted_keys)
+        total = len(pinned) + len(ranked_keys)
         type_counts["all"] = sum(type_counts.values())
 
         # Apply pagination: the pinned issues take the first places.
         pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
-        page_keys = sorted_keys[ranked_offset : ranked_offset + ranked_limit]
-
-        results = []
-        for key in page_keys:
-            r = result_map[key]
-            results.append(
-                SearchResult(
-                    result_type=r.result_type,
-                    id=r.id,
-                    title=r.title,
-                    subtitle=r.subtitle,
-                    snippet=r.snippet,
-                    score=scores[key],
-                    project_key=r.project_key,
-                    fts_rank=fts_rank_map.get(key),
-                    sem_rank=sem_rank_map.get(key),
-                )
-            )
+        results = [fused.result(key) for key in ranked_keys[ranked_offset : ranked_offset + ranked_limit]]
         if pinned:
             results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         return results, total, type_counts
+
+
+# ---------------------------------------------------------------------------
+# Hybrid fusion
+# ---------------------------------------------------------------------------
+
+#: The type_counts key of each displayed result type.
+_COUNT_KEY_OF_TYPE: dict[str, str] = {
+    SearchResultType.ISSUE: "issues",
+    SearchResultType.WIKI: "wiki",
+    SearchResultType.COMMENT: "comments",
+    SearchResultType.ATTACHMENT: "attachments",
+}
+
+
+def _result_key(result: SearchResult) -> str:
+    """The composite ``type:id`` key that tells results of different types apart."""
+    return f"{result.result_type}:{result.id}"
+
+
+@dataclass
+class _Fused:
+    """The keyword and semantic lists of a hybrid search fused by RRF, pinned issues left out."""
+
+    ranked_keys: list[str]
+    scores: dict[str, float]
+    results: dict[str, SearchResult]
+    fts_ranks: dict[str, int]
+    sem_ranks: dict[str, int]
+
+    @classmethod
+    def of(cls, fts_results: list[SearchResult], sem_results: list[SearchResult], pinned: list[SearchResult]) -> _Fused:
+        # The pinned issues lead; drop them from the fused lists.
+        pinned_keys = {_result_key(r) for r in pinned}
+        fts = [r for r in fts_results if _result_key(r) not in pinned_keys]
+        sem = [r for r in sem_results if _result_key(r) not in pinned_keys]
+        fts_keys = [_result_key(r) for r in fts]
+        sem_keys = [_result_key(r) for r in sem]
+        # A result found by both sides is shown as the keyword side has it.
+        results: dict[str, SearchResult] = {}
+        for r in [*fts, *sem]:
+            results.setdefault(_result_key(r), r)
+        scores = rrf_scores(fts_keys, sem_keys, RRF_K)
+        return cls(
+            ranked_keys=sorted(scores, key=lambda x: scores[x], reverse=True),
+            scores=scores,
+            results=results,
+            fts_ranks={key: i + 1 for i, key in enumerate(fts_keys)},
+            sem_ranks={key: i + 1 for i, key in enumerate(sem_keys)},
+        )
+
+    def _display_type(self, key: str) -> str | None:
+        return SOURCE_TYPE_TO_DISPLAY.get(self.results[key].result_type)
+
+    def type_counts(self) -> dict[str, int]:
+        """Per-type counts of the fused results (not of the keyword side alone), without ``all``."""
+        counts = _empty_type_counts()
+        for key in self.ranked_keys:
+            count_key = _COUNT_KEY_OF_TYPE.get(self._display_type(key) or "")
+            if count_key:
+                counts[count_key] += 1
+        return counts
+
+    def in_scope(self, scope: str) -> list[str]:
+        """The ranked keys of *scope*'s type (all of them for ``all``)."""
+        if scope == "all":
+            return self.ranked_keys
+        allowed = {key for key, count_key in _COUNT_KEY_OF_TYPE.items() if count_key == scope}
+        return [key for key in self.ranked_keys if self._display_type(key) in allowed]
+
+    def result(self, key: str) -> SearchResult:
+        """The result of *key* with its RRF score and its rank on each side."""
+        r = self.results[key]
+        return SearchResult(
+            result_type=r.result_type,
+            id=r.id,
+            title=r.title,
+            subtitle=r.subtitle,
+            snippet=r.snippet,
+            score=self.scores[key],
+            project_key=r.project_key,
+            fts_rank=self.fts_ranks.get(key),
+            sem_rank=self.sem_ranks.get(key),
+        )
 
 
 # ---------------------------------------------------------------------------
