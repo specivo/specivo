@@ -632,29 +632,29 @@ async def _mcp_http(db_engine):
     """A client on the real MCP transport; clears the refusals it causes."""
     from sqlalchemy import delete
 
-    from specivo.core.database import set_engine
     from specivo.core.redis import get_redis
     from specivo.main import create_app
     from specivo.mcp.mount import get_mcp_session_manager
+    from specivo.testing.conftest_base import global_engine_on
 
     # Opening a session checks the key on the global engine: use this loop's.
-    set_engine(db_engine)
-    app = create_app()
-    manager = get_mcp_session_manager()
-    assert manager is not None
-    # The throttle remembers refusals for a minute, across tests.
-    redis = await get_redis()
-    async for key in redis.scan_iter(match="audit:auth_failure:*"):
-        await redis.delete(key)
-    try:
-        async with manager.run():
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
-                yield http
-    finally:
-        async with db_engine.begin() as conn:
-            await conn.execute(
-                delete(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AUTH_FAILURE.value)
-            )
+    with global_engine_on(db_engine):
+        app = create_app()
+        manager = get_mcp_session_manager()
+        assert manager is not None
+        # The throttle remembers refusals for a minute, across tests.
+        redis = await get_redis()
+        async for key in redis.scan_iter(match="audit:auth_failure:*"):
+            await redis.delete(key)
+        try:
+            async with manager.run():
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+                    yield http
+        finally:
+            async with db_engine.begin() as conn:
+                await conn.execute(
+                    delete(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AUTH_FAILURE.value)
+                )
 
 
 async def _mcp_initialize(http: AsyncClient, token: str | None) -> Any:

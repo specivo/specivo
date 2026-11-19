@@ -32,6 +32,7 @@ from specivo.testing.conftest_base import (  # noqa: F401
     client,
     db_engine,
     db_session,
+    tool_engine,
     unauth_client,
 )
 from specivo.testing.oidc_mock import mock_idp  # noqa: F401

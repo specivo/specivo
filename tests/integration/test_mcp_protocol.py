@@ -23,7 +23,7 @@ from specivo.mcp import server as mcp_server_module
 from specivo.mcp.server import mcp
 from tests.integration.test_mcp_transport import _INIT_PARAMS, mcp_key  # noqa: F401
 
-pytestmark = [pytest.mark.integration, pytest.mark.serial]
+pytestmark = [pytest.mark.integration, pytest.mark.serial, pytest.mark.usefixtures("tool_engine")]
 
 _ACCEPT = "application/json, text/event-stream"
 
@@ -203,10 +203,7 @@ async def test_app_error_message_reaches_client(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_resolve_key_owner_returns_key_and_user(mcp_key, db_engine) -> None:  # noqa: F811
-    from specivo.core.database import set_engine
     from specivo.mcp.auth import resolve_key_owner
-
-    set_engine(db_engine)  # the resolver opens its own session on this loop's engine
 
     raw_key, user_id, key_id = mcp_key
     assert await resolve_key_owner(raw_key) == (key_id, user_id)
@@ -225,10 +222,8 @@ async def test_resolve_key_owner_returns_key_and_user(mcp_key, db_engine) -> Non
 async def test_resolve_key_owner_refuses_unusable_key(mcp_key, db_engine, statement: str) -> None:  # noqa: F811
     from sqlalchemy import text
 
-    from specivo.core.database import set_engine
     from specivo.mcp.auth import resolve_key_owner
 
-    set_engine(db_engine)
     raw_key, user_id, key_id = mcp_key
     async with db_engine.begin() as conn:
         await conn.execute(text(statement), {"key_id": key_id, "user_id": user_id})

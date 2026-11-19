@@ -10,36 +10,23 @@ api restart (the session is rebuilt from Redis) keeps its agent session.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
-from specivo.core import database
-from specivo.mcp.session_store import reset_mcp_session_store
 from specivo.models.agent_session import AgentSession
 from tests.integration.test_mcp_transport import _INIT_PARAMS, mcp_key  # noqa: F401
 
-pytestmark = [pytest.mark.integration, pytest.mark.serial, pytest.mark.asyncio(loop_scope="function")]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.serial,
+    pytest.mark.asyncio(loop_scope="function"),
+    pytest.mark.usefixtures("tool_engine"),
+]
 
 _ACCEPT = "application/json, text/event-stream"
-
-
-@pytest.fixture(autouse=True)
-def _tool_engine(db_engine) -> Iterator[None]:
-    """Run the tool calls' own sessions on this test's engine and event loop.
-
-    The Redis-backed MCP session store is dropped on both sides, so it never
-    holds a client bound to another test's event loop.
-    """
-    saved = database._engine
-    database.set_engine(db_engine)
-    reset_mcp_session_store()
-    yield
-    reset_mcp_session_store()
-    database.set_engine(saved)  # type: ignore[arg-type]
 
 
 def _sse_json(text: str) -> dict[str, Any]:
