@@ -17,6 +17,8 @@ from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
 from specivo.services.wiki_service import WikiService
 from specivo.web.deps import (
+    ProjectForReader,
+    WebUser,
     get_current_user_optional,
     get_templates,
     get_web_reader,
@@ -129,22 +131,13 @@ async def wiki_all_pages(
 
 @router.get("/projects/{project_key}/wiki/new/", response_class=HTMLResponse)
 async def wiki_new(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     parent: int | None = Query(None),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page creation form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "manage_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -185,21 +178,12 @@ async def wiki_new(
 
 @router.get("/projects/{project_key}/wiki/trash/", response_class=HTMLResponse)
 async def wiki_trash(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki trash (deleted pages) view."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -225,19 +209,11 @@ async def wiki_delete(
     project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Handle wiki page deletion (form POST)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -259,19 +235,11 @@ async def wiki_restore(
     project_key: str,
     page_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a soft-deleted wiki page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -422,22 +390,13 @@ async def wiki_show(
 
 @router.get("/projects/{project_key}/wiki/{slug}/edit/", response_class=HTMLResponse)
 async def wiki_edit(
-    project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page edit form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "manage_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -486,26 +445,16 @@ async def wiki_edit(
 
 @router.get("/projects/{project_key}/wiki/{slug}/diff/", response_class=HTMLResponse)
 async def wiki_diff(
-    project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
     from_version: int = 1,
     to_version: int = 2,
 ) -> Response:
     """Render a side-by-side diff between two wiki page versions."""
     from difflib import unified_diff
-
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -553,22 +502,13 @@ async def wiki_diff(
 
 @router.get("/projects/{project_key}/wiki/{slug}/history/", response_class=HTMLResponse)
 async def wiki_history(
-    project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page history (all versions)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
