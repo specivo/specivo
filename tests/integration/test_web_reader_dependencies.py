@@ -59,7 +59,7 @@ async def world(db_session: AsyncSession) -> World:
     db.add_all([public, secret])
     await db.flush()
     for project in (public, secret):
-        db.add_all([EnabledModule(project_id=project.id, name=m) for m in ("issue_tracking", "time_tracking")])
+        db.add_all([EnabledModule(project_id=project.id, name=m) for m in ("issue_tracking", "time_tracking", "wiki")])
 
     outsider = UserFactory.build(login="rd_outsider", status="active")
     viewer = UserFactory.build(login="rd_viewer", status="active")
@@ -204,3 +204,40 @@ async def test_issue_refusal_does_not_name_the_private_project(client: AsyncClie
     resp = await _get(client, world.outsider, page.format(ref="RDOLD-1"))
     assert resp.status_code == 404
     assert "RDSEC" not in resp.text
+
+
+# Wiki pages. The viewer reaches the public project but holds no wiki permission: 403.
+WIKI_PAGES = [
+    "/projects/{key}/wiki/new/",
+    "/projects/{key}/wiki/trash/",
+    "/projects/{key}/wiki/start/edit/",
+    "/projects/{key}/wiki/start/diff/",
+    "/projects/{key}/wiki/start/history/",
+]
+WIKI_ACTIONS = ["/projects/{key}/wiki/start/delete/", "/projects/{key}/wiki/trash/1/restore/"]
+
+
+@pytest.mark.parametrize("page", WIKI_PAGES)
+async def test_wiki_page_refusals(client: AsyncClient, world: World, page: str) -> None:
+    open_url = page.format(key="RDOPEN")
+
+    signed_out = await _get(client, None, open_url)
+    assert signed_out.status_code == 302
+    assert signed_out.headers["location"] == f"/login/?next={quote(open_url, safe='')}"
+
+    for key in ("RDNONE", "RDSEC", "RDOLD", "rdsec"):
+        assert (await _get(client, world.outsider, page.format(key=key))).status_code == 404
+
+    assert (await _get(client, world.viewer, open_url)).status_code == 403
+
+
+@pytest.mark.parametrize("page", WIKI_ACTIONS)
+async def test_wiki_action_refusals(client: AsyncClient, world: World, page: str) -> None:
+    signed_out = await _post(client, None, page.format(key="RDOPEN"))
+    assert signed_out.status_code == 302
+    assert signed_out.headers["location"] == "/login/"
+
+    for key in ("RDNONE", "RDSEC", "RDOLD"):
+        assert (await _post(client, world.outsider, page.format(key=key))).status_code == 404
+
+    assert (await _post(client, world.viewer, page.format(key="RDOPEN"))).status_code == 403
