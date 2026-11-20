@@ -626,6 +626,14 @@ Task types: email notifications, webhook delivery, embedding generation, wiki li
 
 Web routers use `include_in_schema=False` to exclude from OpenAPI docs. Authentication is optional (via `get_current_user_optional`), with redirect to `/login/` for unauthenticated users on protected pages.
 
+**Reader dependencies.** A signed-in page that names a project or issue in its URL takes them from the shared dependencies in `specivo.web.deps` rather than resolving them inline:
+
+- `WebUser`: the signed-in user; without one, the same redirect `login_redirect` gives (back to the page after a GET, the bare login page after a POST or an htmx partial).
+- `ProjectForReader` (path parameter `{project_key}`) and `ProjectByKeyForReader` (`{key}`): the project the user may reach, a retired key included. A key that names nothing and a project the user cannot reach are both 404 "Project not found", which never names the stored key. `Annotated[Project, Depends(ProjectReader(permission))]` adds a permission check (403, refusal audited).
+- `IssueForReader`: `(project, issue)` for the `{issue_ref}` the user may see, else 404.
+
+Declare `user: WebUser` beside the project or issue parameter when the handler needs the user; FastAPI resolves it once per request. Pages open to anonymous readers (`get_web_reader`) keep their own resolution, because their refusal is `refuse_anonymous_web`, not a 404.
+
 Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme support (resolution: custom theme -> default theme -> shared templates).
 
 ### 16. Testing Conventions
