@@ -82,22 +82,10 @@ from specivo.services.permission_service import ai_usage_visibility
 from specivo.services.project_service import ProjectService
 from specivo.web.deps import get_templates, require_user
 from specivo.web.pages.admin import require_admin
-from specivo.web.pages.ai_usage import (
-    BREAKDOWNS,
-    NONE_VALUE,
-    _charts_view,
-    _filters,
-    _fmt_int,
-    _issue_filter,
-    _money_view,
-    _parse_date,
-    _rows,
-    _tool_names,
-    cached_chart_payload,
-    fold_breakdowns,
-    person_filter_chip,
-    sees_everyone,
-)
+from specivo.web.pages.ai_usage._common import NONE_VALUE, _fmt_int, _parse_date
+from specivo.web.pages.ai_usage.charts import BREAKDOWNS, _charts_view, cached_chart_payload, fold_breakdowns
+from specivo.web.pages.ai_usage.filters import _filters, _issue_filter, person_filter_chip, sees_everyone
+from specivo.web.pages.ai_usage.rows import _money_view, _rows, _tool_names
 
 router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
 
