@@ -306,7 +306,7 @@ stream does not repeat `initialize`.
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and
 `include/`; the router is included after the ingest router so `/ai-usage/ingest/` is matched first. An entry written
 there has the source `api` with an API key and `manual` without one; the MCP tools (`specivo.mcp.ai_usage_tools`, a
-module of its own beside `tools.py`) write `mcp`. Both log through `AiUsageService.create_for`, which resolves
+module of its own beside the `specivo.mcp.tools` package) write `mcp`. Both log through `AiUsageService.create_for`, which resolves
 `on_behalf_of` with `resolve_target`, and render pages with `AiUsageService.references`: users, project keys and the
 issue keys the reader may see in three queries; an issue the reader cannot see shows as no issue. List filters live
 in `AiUsageService.list_entries` (a model filter matches its price aliases; an unknown login filter matches nothing

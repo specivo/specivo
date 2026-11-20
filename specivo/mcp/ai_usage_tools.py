@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import AppError, ValidationError
 from specivo.core.money import Money, format_decimal_plain
 from specivo.mcp.client_context import agent_session_id_var, mcp_api_key_id_var, mcp_client_var
-from specivo.mcp.tools import _log_tool
+from specivo.mcp.tools._common import _log_tool
 from specivo.models.agent_session import AgentSession
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue

@@ -34,64 +34,63 @@ from specivo.mcp.client_context import (
     mcp_connection_var,
 )
 from specivo.mcp.docs import generate_setup_guide
-from specivo.mcp.tools import (
-    _add_comment,
-    _add_relation,
-    _append_wiki,
-    _complete_sprint,
+from specivo.mcp.tools.comments import _add_comment, _list_comments
+from specivo.mcp.tools.issues import (
     _create_issue,
-    _create_metadata_schema,
-    _create_recurring_pattern,
-    _create_sprint,
-    _create_tag,
-    _create_version,
-    _create_wiki,
-    _delete_metadata_schema,
-    _delete_recurring_pattern,
-    _delete_tag,
-    _delete_version,
-    _delete_wiki,
     _edit_description,
-    _edit_wiki,
-    _get_links,
     _issue_development,
-    _list_comments,
     _list_issues,
-    _list_lookups,
-    _list_members,
+    _move_issue,
+    _show_issue,
+    _update_issue,
+)
+from specivo.mcp.tools.links import _get_links
+from specivo.mcp.tools.lookups import _list_lookups, _list_members, _list_projects, _whoami
+from specivo.mcp.tools.metadata import (
+    _create_metadata_schema,
+    _delete_metadata_schema,
     _list_metadata_schemas,
-    _list_projects,
+    _metadata,
+    _update_metadata_schema,
+)
+from specivo.mcp.tools.recurring import (
+    _create_recurring_pattern,
+    _delete_recurring_pattern,
     _list_recurrence_occurrences,
     _list_recurring_patterns,
-    _list_relations,
+    _skip_recurrence_occurrence,
+    _update_recurring_pattern,
+)
+from specivo.mcp.tools.relations import _add_relation, _list_relations, _remove_relation
+from specivo.mcp.tools.search import _search
+from specivo.mcp.tools.sprints import (
+    _complete_sprint,
+    _create_sprint,
     _list_sprint_issues,
     _list_sprints,
-    _list_tags,
+    _start_sprint,
+    _update_sprint,
+)
+from specivo.mcp.tools.tags import _create_tag, _delete_tag, _list_tags, _tag, _update_tag
+from specivo.mcp.tools.time_tracking import _log_time, _timer
+from specivo.mcp.tools.versions import (
+    _create_version,
+    _delete_version,
     _list_version_issues,
     _list_versions,
+    _update_version,
+)
+from specivo.mcp.tools.wiki import (
+    _append_wiki,
+    _create_wiki,
+    _delete_wiki,
+    _edit_wiki,
     _list_wiki_pages,
-    _log_time,
-    _metadata,
-    _move_issue,
     _read_wiki,
     _read_wiki_section,
-    _remove_relation,
     _replace_wiki_section,
     _restore_wiki,
-    _search,
-    _show_issue,
-    _skip_recurrence_occurrence,
-    _start_sprint,
-    _tag,
-    _timer,
-    _update_issue,
-    _update_metadata_schema,
-    _update_recurring_pattern,
-    _update_sprint,
-    _update_tag,
-    _update_version,
     _update_wiki_metadata,
-    _whoami,
 )
 from specivo.services.agent_session_service import AgentSessionService
 from specivo.services.api_key_scope import activate_api_key_scope, end_scope_context, start_scope_context
