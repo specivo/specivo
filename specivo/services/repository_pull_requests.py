@@ -171,14 +171,9 @@ async def _issues(
     return issues
 
 
-async def process_pull_request(session: AsyncSession, integration: RepositoryIntegration, payload: dict):  # noqa: C901, PLR0912
+async def process_pull_request(session: AsyncSession, integration: RepositoryIntegration, payload: dict):
     """Process one accepted pull request delivery; returns a ``ProcessResult``."""
-    from specivo.services.repository_hooks import (
-        ProcessResult,
-        append_metadata,
-        get_git_user,
-        scope_project_keys,
-    )
+    from specivo.services.repository_hooks import ProcessResult, get_git_user, scope_project_keys
 
     event = get_provider(integration.provider).parse_pull_request(payload)
     if event is None:
@@ -186,9 +181,7 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
     if event.default_branch and event.default_branch != integration.default_branch:
         integration.default_branch = event.default_branch[:255]
     label = f"Pull request #{event.number}" if integration.provider != "gitlab" else f"Merge request !{event.number}"
-    # A request from a fork or an outsider is noise until someone with write access merges it.
-    ignore_external = commands.integration_settings(integration).ignore_external_pull_requests
-    if event.external and ignore_external and not is_merge_event(event):
+    if _ignored_as_external(integration, event):
         return ProcessResult(
             DELIVERY_IGNORED, f"{label} ({event.state}) ignored: external_pull_request (from a fork or an outsider)."
         )
@@ -211,22 +204,62 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
     if not applied and not merge_event:
         return ProcessResult(DELIVERY_PROCESSED, f"{label}: the event is older than the stored state; nothing changed.")
 
-    existing = {
-        link.issue_id: link
-        for link in (
-            await session.execute(select(IssuePullRequestLink).where(IssuePullRequestLink.pull_request_id == pr.id))
-        ).scalars()
-    }
-    # A pair someone detached is never linked again.
+    existing = await _existing_links(session, pr)
+    await _drop_detached(session, pr, issues)
+    git_user = await get_git_user(session)
+    new_count = await _link_new_issues(session, integration, pr, label, issues, existing, git_user)
+    _update_closing(issues, existing, merged_before=previous_state == PR_MERGED, merge_event=merge_event)
+    await session.flush()
+
+    outcomes: list[tuple[str, str, str]] = []
+    if commands.merge_applies(integration, pr):
+        outcomes = await _merge_automation(session, integration, pr, existing, git_user, set(scope.values()))
+
+    detail = f"{label} {pr.state}: {len(existing)} linked issue(s), {new_count} new."
+    if outcomes:
+        detail += " Merge automation: " + commands.describe(outcomes) + "."
+    return ProcessResult(DELIVERY_PROCESSED, detail)
+
+
+def _ignored_as_external(integration: RepositoryIntegration, event: PullRequestEvent) -> bool:
+    """A request from a fork or an outsider is noise until someone with write access merges it."""
+    ignore_external = commands.integration_settings(integration).ignore_external_pull_requests
+    return bool(event.external and ignore_external and not is_merge_event(event))
+
+
+async def _existing_links(session: AsyncSession, pr: PullRequest) -> dict[int, IssuePullRequestLink]:
+    """Issue id → the request's stored link."""
+    rows = await session.execute(select(IssuePullRequestLink).where(IssuePullRequestLink.pull_request_id == pr.id))
+    return {link.issue_id: link for link in rows.scalars()}
+
+
+async def _drop_detached(
+    session: AsyncSession, pr: PullRequest, issues: dict[int, tuple[Issue, PullRequestLink]]
+) -> None:
+    """Remove from *issues* the pairs someone detached: they are never linked again."""
     from specivo.services.repository_activity import ITEM_PULL_REQUEST, detached_pairs
 
     for _pr_id, issue_id in await detached_pairs(session, ITEM_PULL_REQUEST, {(pr.id, i) for i in issues}):
         del issues[issue_id]
-    git_user = await get_git_user(session)
+
+
+async def _link_new_issues(
+    session: AsyncSession,
+    integration: RepositoryIntegration,
+    pr: PullRequest,
+    label: str,
+    issues: dict[int, tuple[Issue, PullRequestLink]],
+    existing: dict[int, IssuePullRequestLink],
+    git_user,
+) -> int:
+    """Link the issues not linked yet (journal and metadata each); returns how many were new.
+
+    A link that exists already only gains ``closing``, never loses it here.
+    """
     from specivo.services.journal_service import JournalService
+    from specivo.services.repository_hooks import append_metadata
 
     journals = JournalService()
-    merged_before = previous_state == PR_MERGED
     new_count = 0
     for issue, link in issues.values():
         current = existing.get(issue.id)
@@ -245,6 +278,17 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
         if pr.source_branch:
             additions[BRANCHES_METADATA_KEY] = [pr.source_branch]
         append_metadata(issue, additions)
+    return new_count
+
+
+def _update_closing(
+    issues: dict[int, tuple[Issue, PullRequestLink]],
+    existing: dict[int, IssuePullRequestLink],
+    *,
+    merged_before: bool,
+    merge_event: bool,
+) -> None:
+    """Set each link's ``closing`` and ``merge_qualified_at`` from the event's text."""
     closing_now = {issue_id: link.closing for issue_id, (_issue, link) in issues.items()}
     if not merged_before:
         # Before the merge, closing follows the text as it is now: a dropped
@@ -258,16 +302,6 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
         for issue_id, closing in closing_now.items():
             if closing and existing[issue_id].merge_qualified_at is None:
                 existing[issue_id].merge_qualified_at = now
-    await session.flush()
-
-    outcomes: list[tuple[str, str, str]] = []
-    if commands.merge_applies(integration, pr):
-        outcomes = await _merge_automation(session, integration, pr, existing, git_user, set(scope.values()))
-
-    detail = f"{label} {pr.state}: {len(existing)} linked issue(s), {new_count} new."
-    if outcomes:
-        detail += " Merge automation: " + commands.describe(outcomes) + "."
-    return ProcessResult(DELIVERY_PROCESSED, detail)
 
 
 async def _merge_automation(

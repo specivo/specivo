@@ -428,3 +428,106 @@ async def test_spend_report_periods_are_capped_whoever_asks(client: AsyncClient,
     )
     assert resp.status_code == 200
     assert "Grouped by week instead of day: the range would have too many periods." in resp.text
+
+
+def _fill_snapshot(charts: Any) -> dict[str, Any]:
+    """What ``_fill`` writes, in plain values (days as offsets from DAY, amounts as text)."""
+
+    def plain(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: plain(v) for k, v in sorted(value.items()) if v}
+        if isinstance(value, Decimal):
+            return str(value.normalize())
+        return value
+
+    def share(s: Any) -> tuple:
+        return (s.key, s.label, plain(s.api), plain(s.spend), s.entries, s.groups)
+
+    return {
+        "totals": (charts.entries, charts.unpriced, charts.unconverted),
+        "buckets": [
+            (
+                (b.start - DAY).days,
+                b.entries,
+                b.unpriced,
+                b.unconverted,
+                plain(b.api),
+                plain(b.spend),
+                plain(b.api_by_tool),
+                plain(b.api_by_model),
+                plain(b.api_by_user),
+                plain(b.api_by_project),
+                plain(b.tokens),
+            )
+            for b in charts.buckets
+        ],
+        "stacks": (charts.tools, charts.models, charts.users, charts.projects),
+        "labels": (charts.tool_labels, charts.project_labels),
+        "by_project": [share(s) for s in charts.by_project],
+        "by_model": [share(s) for s in charts.by_model],
+        "by_tool": [share(s) for s in charts.by_tool],
+        "by_user": [share(s) for s in charts.by_user],
+    }
+
+
+async def test_fill_snapshot_of_amounts_conversion_and_labels(db_session: AsyncSession, w: World):
+    """Pins the whole bucket fill: own scope, priced and unpriced, converted and not, tool names given or looked up."""
+    await _log(db_session, w, "alice")
+    await _log(db_session, w, "alice", project=None, day=DAY + timedelta(days=1), tool="codex-cli")
+    await _log(db_session, w, "alice", model="lab-unknown-9", day=DAY + timedelta(days=2))
+    alice = w.users["alice"]
+    project_key = w.a.key
+
+    usd = _fill_snapshot(await _charts.charts(db_session, alice, currency="USD", tool_names={"claude-code": "CC"}))
+    eur = _fill_snapshot(await _charts.charts(db_session, alice, currency="EUR"))
+    unpriced = _fill_snapshot(await _chart(db_session, alice, model="lab-unknown-9"))
+
+    me, pa, none = str(alice.id), str(w.a.id), NO_PROJECT
+    tokens = {"input": 1_000_000, "output": 100_000}
+    empty: dict[str, str] = {}
+    assert usd == {
+        "totals": (3, 1, 0),
+        "buckets": [
+            (0, 1, 0, 0, "3", "3", {"claude-code": "3"}, {"lab-model-1": "3"}, {me: "3"}, {pa: "3"}, tokens),
+            (1, 1, 0, 0, "3", "3", {"codex-cli": "3"}, {"lab-model-1": "3"}, {me: "3"}, {none: "3"}, tokens),
+            (2, 1, 1, 0, "0", "0", empty, empty, empty, empty, tokens),
+        ],
+        "stacks": (["claude-code", "codex-cli"], ["lab-model-1", "lab-unknown-9"], [], []),
+        "labels": ({"claude-code": "CC", "codex-cli": "codex-cli"}, {pa: project_key, none: none}),
+        "by_project": [(none, none, "3", "3", 1, 1), (pa, project_key, "3", "3", 2, 1)],
+        "by_model": [
+            ("lab-model-1", "lab-model-1", "6", "6", 2, 1),
+            ("lab-unknown-9", "lab-unknown-9", "0", "0", 1, 1),
+        ],
+        "by_tool": [],
+        "by_user": [],
+    }
+    # No EUR rates: every amount stays out of the numbers and is counted unconverted.
+    assert eur == {
+        "totals": (3, 1, 4),
+        "buckets": [
+            (0, 1, 0, 2, "0", "0", empty, empty, empty, empty, tokens),
+            (1, 1, 0, 2, "0", "0", empty, empty, empty, empty, tokens),
+            (2, 1, 1, 0, "0", "0", empty, empty, empty, empty, tokens),
+        ],
+        "stacks": (["claude-code", "codex-cli"], ["lab-model-1", "lab-unknown-9"], [], []),
+        "labels": ({"claude-code": "Claude Code", "codex-cli": "codex-cli"}, {pa: project_key, none: none}),
+        "by_project": [(none, none, "0", "0", 1, 1), (pa, project_key, "0", "0", 2, 1)],
+        "by_model": [
+            ("lab-model-1", "lab-model-1", "0", "0", 2, 1),
+            ("lab-unknown-9", "lab-unknown-9", "0", "0", 1, 1),
+        ],
+        "by_tool": [],
+        "by_user": [],
+    }
+    # Nothing priced: nothing to convert.
+    assert unpriced == {
+        "totals": (1, 1, 0),
+        "buckets": [(2, 1, 1, 0, "0", "0", empty, empty, empty, empty, tokens)],
+        "stacks": (["claude-code"], ["lab-unknown-9"], [], []),
+        "labels": ({"claude-code": "Claude Code"}, {pa: project_key}),
+        "by_project": [(pa, project_key, "0", "0", 1, 1)],
+        "by_model": [("lab-unknown-9", "lab-unknown-9", "0", "0", 1, 1)],
+        "by_tool": [],
+        "by_user": [],
+    }
