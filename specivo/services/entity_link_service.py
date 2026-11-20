@@ -705,10 +705,9 @@ class EntityLinkService:
         await reader.describe(graph, root, order)
         return graph
 
-    async def _raw_edges(  # noqa: C901, PLR0912
+    async def _raw_edges(
         self, session: AsyncSession, node: NodeKey, direction: str, kinds: frozenset[str]
     ) -> list[_RawEdge]:
-        node_type, node_id = node
         edges: list[_RawEdge] = []
         text_kinds = kinds & TEXT_LINK_KINDS
         if text_kinds and direction in ("out", "both"):
@@ -718,84 +717,36 @@ class EntityLinkService:
         if direction == "in":
             edges.extend(await self._structured_edges_in(session, node, kinds))
             return edges
+        if node[0] == "issue":
+            edges.extend(await self._issue_edges_out(session, node, kinds))
+        elif node[0] == "wiki_page":
+            edges.extend(await _hierarchy_edges(session, WikiPage, node, kinds))
+            edges.extend(await _attachment_edges(session, "WikiPage", node, kinds))
+        return edges
 
-        if node_type == "issue":
-            if KIND_RELATION in kinds:
-                from specivo.services.relation_service import RELATION_TYPES
+    @staticmethod
+    async def _issue_edges_out(session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
+        """An issue's relations, parent, children, attachments, commits and pull requests, in that order."""
+        edges: list[_RawEdge] = []
+        if KIND_RELATION in kinds:
+            edges.extend(await _relation_edges(session, node))
+        edges.extend(await _hierarchy_edges(session, Issue, node, kinds))
+        edges.extend(await _attachment_edges(session, "Issue", node, kinds))
+        if KIND_COMMIT in kinds or KIND_PULL_REQUEST in kinds:
+            from specivo.models.repository import IssueCommitLink, IssuePullRequestLink
 
-                for rel in (
-                    await session.execute(
-                        select(IssueRelation).where(
-                            or_(IssueRelation.issue_from_id == node_id, IssueRelation.issue_to_id == node_id)
-                        )
-                    )
-                ).scalars():
-                    label: str | None
-                    if rel.issue_from_id == node_id:
-                        other, label = rel.issue_to_id, rel.relation_type
-                    else:
-                        other, label = rel.issue_from_id, RELATION_TYPES[rel.relation_type]["sym"]
-                    edges.append(
-                        _RawEdge(
-                            node,
-                            ("issue", other),
-                            KIND_RELATION,
-                            relation_type=label,
-                            identity=(KIND_RELATION, rel.id),
-                        )
-                    )
-            if KIND_PARENT in kinds:
-                parent_id = await session.scalar(select(Issue.parent_id).where(Issue.id == node_id))
-                if parent_id is not None:
-                    edges.append(_hierarchy_edge("issue", node_id, parent_id, from_child=True))
-            if KIND_CHILD in kinds:
-                for child_id in (await session.execute(select(Issue.id).where(Issue.parent_id == node_id))).scalars():
-                    edges.append(_hierarchy_edge("issue", child_id, node_id, from_child=False))  # noqa: PERF401
-            if KIND_ATTACHMENT in kinds:
-                for attachment_id in (
-                    await session.execute(
-                        select(Attachment.id).where(
-                            Attachment.container_type == "Issue", Attachment.container_id == node_id
-                        )
-                    )
-                ).scalars():
-                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))  # noqa: PERF401
-            if KIND_COMMIT in kinds or KIND_PULL_REQUEST in kinds:
-                from specivo.models.repository import IssueCommitLink, IssuePullRequestLink
-
-                if KIND_COMMIT in kinds:
-                    for commit_id in (
-                        await session.execute(
-                            select(IssueCommitLink.commit_id).where(IssueCommitLink.issue_id == node_id)
-                        )
-                    ).scalars():
-                        edges.append(_RawEdge(node, ("commit", commit_id), KIND_COMMIT))  # noqa: PERF401
-                if KIND_PULL_REQUEST in kinds:
-                    for pr_id in (
-                        await session.execute(
-                            select(IssuePullRequestLink.pull_request_id).where(IssuePullRequestLink.issue_id == node_id)
-                        )
-                    ).scalars():
-                        edges.append(_RawEdge(node, ("pull_request", pr_id), KIND_PULL_REQUEST))  # noqa: PERF401
-        elif node_type == "wiki_page":
-            if KIND_PARENT in kinds:
-                parent_id = await session.scalar(select(WikiPage.parent_id).where(WikiPage.id == node_id))
-                if parent_id is not None:
-                    edges.append(_hierarchy_edge("wiki_page", node_id, parent_id, from_child=True))
-            if KIND_CHILD in kinds:
-                for child_id in (
-                    await session.execute(select(WikiPage.id).where(WikiPage.parent_id == node_id))
-                ).scalars():
-                    edges.append(_hierarchy_edge("wiki_page", child_id, node_id, from_child=False))  # noqa: PERF401
-            if KIND_ATTACHMENT in kinds:
-                for attachment_id in (
-                    await session.execute(
-                        select(Attachment.id).where(
-                            Attachment.container_type == "WikiPage", Attachment.container_id == node_id
-                        )
-                    )
-                ).scalars():
-                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))  # noqa: PERF401
+            if KIND_COMMIT in kinds:
+                stmt = select(IssueCommitLink.commit_id).where(IssueCommitLink.issue_id == node[1])
+                edges.extend(
+                    _RawEdge(node, ("commit", commit_id), KIND_COMMIT)
+                    for commit_id in (await session.execute(stmt)).scalars()
+                )
+            if KIND_PULL_REQUEST in kinds:
+                stmt = select(IssuePullRequestLink.pull_request_id).where(IssuePullRequestLink.issue_id == node[1])
+                edges.extend(
+                    _RawEdge(node, ("pull_request", pr_id), KIND_PULL_REQUEST)
+                    for pr_id in (await session.execute(stmt)).scalars()
+                )
         return edges
 
     async def _structured_edges_in(self, session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
@@ -991,6 +942,56 @@ def _first_sighting(seen: set[tuple[Any, ...]], edge: _RawEdge) -> bool:
         return False
     seen.add(edge.identity)
     return True
+
+
+async def _relation_edges(session: AsyncSession, node: NodeKey) -> list[_RawEdge]:
+    """The issue's relations, each labelled as seen from the issue."""
+    from specivo.services.relation_service import RELATION_TYPES
+
+    node_id = node[1]
+    rows = await session.execute(
+        select(IssueRelation).where(or_(IssueRelation.issue_from_id == node_id, IssueRelation.issue_to_id == node_id))
+    )
+    edges: list[_RawEdge] = []
+    for rel in rows.scalars():
+        label: str | None
+        if rel.issue_from_id == node_id:
+            other, label = rel.issue_to_id, rel.relation_type
+        else:
+            other, label = rel.issue_from_id, RELATION_TYPES[rel.relation_type]["sym"]
+        edges.append(
+            _RawEdge(node, ("issue", other), KIND_RELATION, relation_type=label, identity=(KIND_RELATION, rel.id))
+        )
+    return edges
+
+
+async def _hierarchy_edges(
+    session: AsyncSession, model: type[Issue] | type[WikiPage], node: NodeKey, kinds: frozenset[str]
+) -> list[_RawEdge]:
+    """The parent, then the children, of an issue or a wiki page (*model*), as *kinds* asks."""
+    node_type, node_id = node
+    edges: list[_RawEdge] = []
+    if KIND_PARENT in kinds:
+        parent_id = await session.scalar(select(model.parent_id).where(model.id == node_id))
+        if parent_id is not None:
+            edges.append(_hierarchy_edge(node_type, node_id, parent_id, from_child=True))
+    if KIND_CHILD in kinds:
+        children = (await session.execute(select(model.id).where(model.parent_id == node_id))).scalars()
+        edges.extend(_hierarchy_edge(node_type, child_id, node_id, from_child=False) for child_id in children)
+    return edges
+
+
+async def _attachment_edges(
+    session: AsyncSession, container_type: str, node: NodeKey, kinds: frozenset[str]
+) -> list[_RawEdge]:
+    """The attachments of the issue or page, when *kinds* asks for them."""
+    if KIND_ATTACHMENT not in kinds:
+        return []
+    stmt = select(Attachment.id).where(Attachment.container_type == container_type, Attachment.container_id == node[1])
+    return [
+        _RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT)
+        for attachment_id in (await session.execute(stmt)).scalars()
+    ]
 
 
 def _hierarchy_edge(node_type: str, child_id: int, parent_id: int, *, from_child: bool) -> _RawEdge:
