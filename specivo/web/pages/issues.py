@@ -41,14 +41,16 @@ from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.services.version_service import order_versions
-from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
+    ProjectForReader,
+    WebUser,
     get_current_user_optional,
     get_templates,
     get_web_reader,
     login_redirect,
     refuse_anonymous_web,
 )
+from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.pages.ai_issue_usage import tab_entry_count as ai_usage_tab_entry_count
 from specivo.web.thread_tree import build_thread_tree
 
@@ -390,21 +392,12 @@ async def issues_list(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
 @router.get("/projects/{project_key}/issues/new/", response_class=HTMLResponse)
 async def issue_create_form(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue creation form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
     # The form saves through the API, which needs add_issues: without it the
     # visitor would fill in a form that cannot be saved.
     if not await check_permission(user, project.id, Permission.ADD_ISSUES, db):

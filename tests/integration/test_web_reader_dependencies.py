@@ -188,3 +188,19 @@ async def test_issue_action_refusals(client: AsyncClient, world: World, page: st
 
     # The viewer reaches the issue but may not edit it.
     assert (await _post(client, world.viewer, page.format(ref="RDOPEN-1"), data)).status_code == 403
+
+
+@pytest.mark.parametrize("page", [p for p, _ in PROJECT_PAGES])
+async def test_refusal_does_not_name_the_private_project(client: AsyncClient, world: World, page: str) -> None:
+    """A retired or differently cased key of a private project never brings its current key into the page."""
+    for typed in ("RDOLD", "rdsec"):
+        resp = await _get(client, world.outsider, page.format(key=typed))
+        assert resp.status_code == 404
+        assert "RDSEC" not in resp.text
+
+
+@pytest.mark.parametrize("page", ["/issue/{ref}/edit/", "/issue/{ref}/versions/1/"])
+async def test_issue_refusal_does_not_name_the_private_project(client: AsyncClient, world: World, page: str) -> None:
+    resp = await _get(client, world.outsider, page.format(ref="RDOLD-1"))
+    assert resp.status_code == 404
+    assert "RDSEC" not in resp.text
