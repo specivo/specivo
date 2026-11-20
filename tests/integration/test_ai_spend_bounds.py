@@ -35,7 +35,8 @@ from specivo.services.ai_spend_report_service import AiSpendReportService, Repor
 from specivo.services.ai_usage_chart_service import LEVERAGE_TOP, AiUsageChartService
 from specivo.services.auth_service import _make_access_token
 from specivo.services.permission_service import clear_role_cache
-from specivo.web.pages.ai_spend_reports import DRILL_PERIOD_GROUPS, PEOPLE_TOP
+from specivo.web.pages.ai_spend_reports.drill import DRILL_PERIOD_GROUPS
+from specivo.web.pages.ai_spend_reports.people import PEOPLE_TOP
 from tests.factories.user import UserFactory
 from tests.services.test_ai_spend_reports import World, build_world, entry, rate
 

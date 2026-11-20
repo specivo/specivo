@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from specivo.services.ai_usage_chart_service import NEUTRAL_SLOT, NO_PROJECT, OTHER, color_slots
-from specivo.web.pages.ai_spend_reports import SESSIONS, ReportForm, next_group
+from specivo.web.pages.ai_spend_reports.form import SESSIONS, ReportForm, next_group
 
 pytestmark = pytest.mark.unit
 

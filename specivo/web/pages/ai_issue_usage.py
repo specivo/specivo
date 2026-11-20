@@ -61,7 +61,8 @@ from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, ai_usage_visibility, check_permission
 from specivo.web.deps import get_templates, require_user
-from specivo.web.pages.ai_spend_reports import _initials, _short_int, _version_stmt
+from specivo.web.pages.ai_spend_reports.people import _initials
+from specivo.web.pages.ai_spend_reports.view import _short_int, _version_stmt
 from specivo.web.pages.ai_usage._common import _fmt_int, _project_for
 from specivo.web.pages.ai_usage.charts import _charts_view, cached_chart_payload
 from specivo.web.pages.ai_usage.rows import _money_view, _rows, _tool_names
