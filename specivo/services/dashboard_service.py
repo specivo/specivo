@@ -522,10 +522,20 @@ async def activity_groups(
     if not scope.project_ids:
         return []
     who = who if who in ACTIVITY_FILTERS else "all"
-    events: list[ActivityEvent] = []
     visible_issues = scope.visible_issue_ids()
+    events = await _journal_events(session, scope, who, visible_issues)
+    events += await _time_events(session, scope, who, visible_issues)
+    events += await _created_events(session, who, visible_issues)
+    events += await _commit_events(session, who, visible_issues)
+    events.sort(key=lambda e: e.ts, reverse=True)
+    events = events[:ACTIVITY_EVENTS_LIMIT]
+    return await _fold(session, scope, events, groups_limit)
 
-    # Journals: issue changes and comments, wiki edits.
+
+async def _journal_events(
+    session: AsyncSession, scope: DashboardScope, who: str, visible_issues: Any
+) -> list[ActivityEvent]:
+    """Issue changes and comments, and wiki edits."""
     journal_stmt = (
         select(Journal)
         .join(User, User.id == Journal.user_id)
@@ -552,30 +562,40 @@ async def activity_groups(
         ).all()
     }
     status_names = {str(sid): name for sid, name in (await session.execute(select(IssueStatus.id, IssueStatus.name)))}
+    events: list[ActivityEvent] = []
     for j in journals:
-        target = ("issue", j.issue_id) if j.issue_id is not None else ("wiki", j.wiki_page_id or 0)
+        events.extend(_journal_to_events(j, finished, status_names))
+    return events
 
-        def journal_event(kind: str, text: str = "", j: Journal = j, target: tuple[str, int] = target) -> None:
-            events.append(
-                ActivityEvent(
-                    ts=j.created_at, kind=kind, user_id=j.user_id, via_key=j.api_key_id, target=target, text=text
-                )
-            )
 
-        if target[0] == "wiki":
-            journal_event("wiki")
-            continue
-        status = next((d for d in j.details if d.prop_key == "status_id"), None)
-        if status is not None and status.new_value in finished:
-            journal_event("resolved", finished[status.new_value])
-        elif status is not None:
-            journal_event("status", status_names.get(status.new_value or "", ""))
-        elif j.details:
-            journal_event("updated")
-        if j.notes:
-            journal_event("comment", " ".join(j.notes.split())[:80])
+def _journal_to_events(j: Journal, finished: dict[str, str], status_names: dict[str, str]) -> list[ActivityEvent]:
+    """A wiki edit; or an issue's status change, resolution or update, then its comment."""
+    target = ("issue", j.issue_id) if j.issue_id is not None else ("wiki", j.wiki_page_id or 0)
 
-    # Time logged.
+    def event(kind: str, text: str = "") -> ActivityEvent:
+        return ActivityEvent(
+            ts=j.created_at, kind=kind, user_id=j.user_id, via_key=j.api_key_id, target=target, text=text
+        )
+
+    if target[0] == "wiki":
+        return [event("wiki")]
+    events: list[ActivityEvent] = []
+    status = next((d for d in j.details if d.prop_key == "status_id"), None)
+    if status is not None and status.new_value in finished:
+        events.append(event("resolved", finished[status.new_value]))
+    elif status is not None:
+        events.append(event("status", status_names.get(status.new_value or "", "")))
+    elif j.details:
+        events.append(event("updated"))
+    if j.notes:
+        events.append(event("comment", " ".join(j.notes.split())[:80]))
+    return events
+
+
+async def _time_events(
+    session: AsyncSession, scope: DashboardScope, who: str, visible_issues: Any
+) -> list[ActivityEvent]:
+    """Time logged on visible issues, as far as the viewer may see time entries."""
     te_stmt = (
         select(TimeEntry)
         .join(User, User.id == TimeEntry.user_id)
@@ -591,20 +611,22 @@ async def activity_groups(
     te_visible = await TimeEntryService().visible_entries_clause_any(session, scope.user)
     if te_visible is not None:
         te_stmt = te_stmt.where(te_visible)
-    for te in (await session.execute(te_stmt)).scalars():
-        events.append(  # noqa: PERF401
-            ActivityEvent(
-                ts=te.created_at,
-                kind="time",
-                user_id=te.user_id,
-                via_key=None,
-                target=("issue", te.issue_id or 0),
-                hours=Decimal(te.hours),
-                activity=te.activity.name if te.activity else "",
-            )
+    return [
+        ActivityEvent(
+            ts=te.created_at,
+            kind="time",
+            user_id=te.user_id,
+            via_key=None,
+            target=("issue", te.issue_id or 0),
+            hours=Decimal(te.hours),
+            activity=te.activity.name if te.activity else "",
         )
+        for te in (await session.execute(te_stmt)).scalars()
+    ]
 
-    # Issues created.
+
+async def _created_events(session: AsyncSession, who: str, visible_issues: Any) -> list[ActivityEvent]:
+    """Issues created."""
     created_stmt = (
         select(Issue.id, Issue.author_id, Issue.created_at)
         .join(User, User.id == Issue.author_id)
@@ -612,12 +634,14 @@ async def activity_groups(
         .order_by(Issue.created_at.desc(), Issue.id.desc())
         .limit(ACTIVITY_SOURCE_LIMIT)
     )
-    for issue_id, author_id, created_at in (await session.execute(created_stmt)).all():
-        events.append(
-            ActivityEvent(ts=created_at, kind="created", user_id=author_id, via_key=None, target=("issue", issue_id))
-        )
+    return [
+        ActivityEvent(ts=created_at, kind="created", user_id=author_id, via_key=None, target=("issue", issue_id))
+        for issue_id, author_id, created_at in (await session.execute(created_stmt)).all()
+    ]
 
-    # Commits linked to issues, by the account their author was matched to.
+
+async def _commit_events(session: AsyncSession, who: str, visible_issues: Any) -> list[ActivityEvent]:
+    """Commits linked to issues, by the account their author was matched to."""
     commit_stmt = (
         select(
             IssueCommitLink.issue_id,
@@ -632,6 +656,7 @@ async def activity_groups(
         .order_by(func.coalesce(RepositoryCommit.committed_at, RepositoryCommit.created_at).desc())
         .limit(ACTIVITY_SOURCE_LIMIT)
     )
+    events: list[ActivityEvent] = []
     for issue_id, user_id, ts, sha, message in (await session.execute(commit_stmt)).all():
         if user_id is None:
             continue
@@ -646,10 +671,7 @@ async def activity_groups(
                 text=f"{sha[:7]} {first_line}".strip(),
             )
         )
-
-    events.sort(key=lambda e: e.ts, reverse=True)
-    events = events[:ACTIVITY_EVENTS_LIMIT]
-    return await _fold(session, scope, events, groups_limit)
+    return events
 
 
 _Run = tuple[tuple[int, bool, tuple[str, int]], list[ActivityEvent]]

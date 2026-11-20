@@ -1,21 +1,26 @@
-"""Folding activity events into groups (``dashboard_service._fold``): runs, the limit, labels and dropped targets."""
+"""Grouped dashboard activity: the event sources (``activity_groups``) and folding (``_fold``)."""
 
 from __future__ import annotations
 
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.utils import utcnow
 from specivo.models.agent_session import AgentSession
+from specivo.models.journal import Journal, JournalDetail
+from specivo.models.repository import IssueCommitLink, RepositoryCommit
+from specivo.models.time_entry import TimeEntry, TimeEntryActivity
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.services.api_key_service import ApiKeyService
-from specivo.services.dashboard_service import ActivityEvent, _fold
+from specivo.services.dashboard_service import ActivityEvent, _fold, activity_groups, load_scope
 from tests.factories.issue import IssueFactory
-from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
+from tests.factories.lookups import DoneStatusFactory, PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
-from tests.factories.user import ServiceAccountFactory, UserFactory
+from tests.factories.user import AdminUserFactory, ServiceAccountFactory, UserFactory
+from tests.fixtures.forge_hooks import make_integration
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -131,3 +136,119 @@ async def test_fold_runs_labels_and_dropped_targets(db_session: AsyncSession) ->
     # Only wiki targets, no keys: the issue and key lookups are skipped.
     wiki_only = await _fold(db, None, [events[4]], 5)  # type: ignore[arg-type]
     assert _summary(wiki_only) == [_summary(groups)[2]]
+
+
+async def test_activity_sources_feed_the_groups(db_session: AsyncSession) -> None:
+    """Journals (wiki, status, resolution, update, comment), time, created issues and matched commits, newest first."""
+    db = db_session
+    tracker, status, priority = TrackerFactory.build(), StatusFactory.build(name="Act Open"), PriorityFactory.build()
+    done = DoneStatusFactory.build(name="Act Done")
+    admin = AdminUserFactory.build(login="act_admin", display_name="Act Admin", status="active")
+    dev = UserFactory.build(login="act_dev", display_name="Act Dev", status="active")
+    project = ProjectFactory.build(key="ACT", identifier="act", name="Act")
+    activity = TimeEntryActivity(name="Act Review", position=3)
+    db.add_all([tracker, status, priority, done, admin, dev, project, activity])
+    await db.flush()
+    t0 = utcnow() - timedelta(hours=2)
+    issue = IssueFactory.build(
+        project_id=project.id,
+        project_key=project.key,
+        sequence_number=1,
+        tracker_id=tracker.id,
+        status_id=status.id,
+        priority_id=priority.id,
+        author_id=dev.id,
+        subject="Act subject",
+        created_at=t0,
+    )
+    wiki = Wiki(project_id=project.id)
+    db.add_all([issue, wiki])
+    await db.flush()
+    page = WikiPage(wiki_id=wiki.id, title="Act Page", slug="act-page")
+    db.add(page)
+    await db.flush()
+
+    def journal(minutes: int, user, notes=None, *, details=(), **kw) -> None:
+        j = Journal(
+            issue_id=kw.pop("issue_id", issue.id),
+            project_id=project.id,
+            user_id=user.id,
+            notes=notes,
+            sequence=minutes,
+            created_at=t0 + timedelta(minutes=minutes),
+            **kw,
+        )
+        db.add(j)
+        pending.append((j, details))
+
+    pending: list = []
+    journal(1, dev, details=[("status_id", str(status.id))])
+    journal(2, dev, "  spaced\n  remark  ", details=[("subject", "x")])
+    journal(3, dev, "private remark", is_private=True)
+    journal(4, admin, issue_id=None, wiki_page_id=page.id)
+    journal(5, dev, details=[("status_id", str(done.id))])
+    await db.flush()
+    for j, details in pending:
+        for key, value in details:
+            db.add(JournalDetail(journal_id=j.id, property="attr", prop_key=key, old_value=None, new_value=value))
+    db.add(
+        TimeEntry(
+            project_id=project.id,
+            issue_id=issue.id,
+            user_id=dev.id,
+            activity_id=activity.id,
+            hours=Decimal("0.75"),
+            spent_on=t0.date(),
+            created_at=t0 + timedelta(minutes=6),
+        )
+    )
+    integration = await make_integration(db, project)
+    for minutes, sha, message, matched in (
+        (7, "a" * 40, "First line\nmore", dev.id),
+        (8, "b" * 40, "  ", dev.id),
+        (9, "c" * 40, "Unmatched", None),
+    ):
+        row = RepositoryCommit(
+            integration_id=integration.id,
+            sha=sha,
+            message=message,
+            matched_user_id=matched,
+            committed_at=t0 + timedelta(minutes=minutes),
+        )
+        db.add(row)
+        await db.flush()
+        db.add(IssueCommitLink(commit_id=row.id, issue_id=issue.id, source="message"))
+    await db.flush()
+
+    scope = await load_scope(db, admin)
+    groups = await activity_groups(db, scope)
+
+    def summary(gs) -> list[tuple]:
+        return [(g.actor, g.target_key, [(e.kind, e.text, str(e.hours), e.activity) for e in g.events]) for g in gs]
+
+    assert summary(groups) == [
+        (
+            "Act Dev",
+            "ACT-1",
+            [
+                ("commit", "bbbbbbb", "0", ""),
+                ("commit", "aaaaaaa First line", "0", ""),
+                ("time", "", "0.75", "Act Review"),
+                ("resolved", "Act Done", "0", ""),
+            ],
+        ),
+        ("Act Admin", "ACT", [("wiki", "", "0", "")]),
+        (
+            "Act Dev",
+            "ACT-1",
+            [
+                ("comment", "private remark", "0", ""),
+                ("updated", "", "0", ""),
+                ("comment", "spaced remark", "0", ""),
+                ("status", "Act Open", "0", ""),
+                ("created", "", "0", ""),
+            ],
+        ),
+    ]
+    assert summary(await activity_groups(db, scope, "agents")) == []
+    assert summary(await activity_groups(db, scope, "bogus")) == summary(groups)
