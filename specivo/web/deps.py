@@ -1017,24 +1017,15 @@ async def readable_issue(db: AsyncSession, user: User, issue_ref: str) -> Reader
     return ReaderIssue(project, issue)
 
 
-class IssueReader:
+async def issue_for_reader(issue_ref: str, user: WebUser, db: AsyncSession = DB_SESSION) -> ReaderIssue:
     """Dependency: the issue in the URL's ``{issue_ref}`` (and its project) that the signed-in user may see.
 
     Signed out: :func:`require_web_user`'s redirect. Unknown or not visible:
-    404 (:func:`readable_issue`). With *permission*, an issue in a project
-    where the user lacks it: 403.
+    404 (:func:`readable_issue`). Permission checks stay in the route: the
+    routes that check one do it without auditing the refusal.
     """
-
-    def __init__(self, permission: str | None = None) -> None:
-        self.permission = permission
-
-    async def __call__(
-        self, request: Request, issue_ref: str, user: WebUser, db: AsyncSession = DB_SESSION
-    ) -> ReaderIssue:
-        found = await readable_issue(db, user, issue_ref)
-        await _require_permission(request, db, user, found.project, self.permission)
-        return found
+    return await readable_issue(db, user, issue_ref)
 
 
 #: The ``{issue_ref}`` issue the signed-in user may see.
-IssueForReader = Annotated[ReaderIssue, Depends(IssueReader())]
+IssueForReader = Annotated[ReaderIssue, Depends(issue_for_reader)]

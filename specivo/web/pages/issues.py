@@ -42,12 +42,12 @@ from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.services.version_service import order_versions
 from specivo.web.deps import (
+    IssueForReader,
     ProjectForReader,
     WebUser,
-    get_current_user_optional,
     get_templates,
     get_web_reader,
-    login_redirect,
+    readable_issue,
     refuse_anonymous_web,
 )
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
@@ -80,29 +80,6 @@ def _tags_to_dicts(tags: list) -> list[dict]:
     return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
 
-async def _resolve_issue_project(
-    db: AsyncSession,
-    issue_ref: str,
-    user: User,
-) -> tuple:
-    """Resolve project from issue_ref (e.g. 'PROJ-42') and verify access.
-
-    Returns (project, issue).
-    """
-    try:
-        issue = await _issue_svc.get_by_display_key_with_relations(db, issue_ref, user=user)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Issue not found")  # noqa: B904
-
-    try:
-        project = await _project_svc.get_by_key(db, issue.project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
-
-    return project, issue
-
-
 async def _resolve_issue_project_for_reader(
     db: AsyncSession,
     issue_ref: str,
@@ -116,11 +93,11 @@ async def _resolve_issue_project_for_reader(
     caller turns all three into the one refusal every page produces, so the
     URL cannot be used to find out which issues exist.
 
-    Signed-in users are untouched and keep the 404 ``_resolve_issue_project``
-    has always raised.
+    Signed-in users are untouched and keep the 404 ``readable_issue``
+    (``specivo.web.deps``) raises.
     """
     if not user.is_anonymous:
-        return await _resolve_issue_project(db, issue_ref, user)
+        return await readable_issue(db, user, issue_ref)
 
     from specivo.core.exceptions import AnonymousAccessDeniedError
 
@@ -789,15 +766,12 @@ async def issue_detail(
 async def issue_edit_form(
     issue_ref: str,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue edit form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
+    project, issue = reader_issue
     if redirect := _retired_ref_redirect(request, issue_ref, issue, "edit/"):
         return redirect
     if not await check_permission(user, project.id, Permission.EDIT_ISSUES, db):
@@ -870,17 +844,14 @@ async def issue_description_diff(
     issue_ref: str,
     journal_id: int,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a description diff page for a specific journal entry."""
     import difflib
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
+    project, issue = reader_issue
 
     detail = await _description_change(db, issue, journal_id, user)
     if detail is None:
@@ -1015,16 +986,13 @@ async def restore_description_version(
     issue_ref: str,
     journal_id: int,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a previous description version by PATCHing the issue."""
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
+    project, issue = reader_issue
 
     if not await check_permission(user, issue.project_id, "edit_issues", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -1049,6 +1017,8 @@ async def restore_description_version(
 async def move_issue_form(
     issue_ref: str,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     target_project_key: str = Form(...),
     notes: str | None = Form(None),
     db: AsyncSession = DB_SESSION,
@@ -1056,12 +1026,7 @@ async def move_issue_form(
     """Move an issue to another project from the web UI, then redirect to it."""
     from specivo.core.exceptions import ValidationError
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    _project, issue = await _resolve_issue_project(db, issue_ref, user)
+    _project, issue = reader_issue
     if not await check_permission(user, issue.project_id, "edit_issues", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
