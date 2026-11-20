@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from specivo.web.pages.ai_spend_reports import display_rate
+from specivo.web.pages.ai_spend_reports.view import display_rate
 
 pytestmark = pytest.mark.unit
 

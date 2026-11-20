@@ -38,7 +38,7 @@ from specivo.core.ai_subscriptions import PLAN_PRESETS, PlanPreset
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.core.money import Money, format_decimal_plain
-from specivo.mcp.tools import _log_tool
+from specivo.mcp.tools._common import _log_tool
 from specivo.models.ai_subscription import AiSubscription, AiTool
 from specivo.models.user import User
 from specivo.services.ai_subscription_service import AiSubscriptionService, SubscriptionInput

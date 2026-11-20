@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
@@ -19,10 +19,10 @@ from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.sprint_service import SprintService, count_done
-from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
+from specivo.web.deps import ProjectForReader, WebUser, get_templates
 
 if TYPE_CHECKING:
-    from specivo.models.user import User
+    pass
 
 router = APIRouter(tags=["web-sprints"], include_in_schema=False)
 
@@ -33,21 +33,12 @@ _issue_svc = IssueService()
 
 @router.get("/projects/{project_key}/sprints/", response_class=HTMLResponse)
 async def sprints_list(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the sprints list page showing all sprints grouped by status."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     all_sprints = await _sprint_svc.list_for_project(db, project.id)
 
@@ -111,23 +102,14 @@ async def sprints_list(
 
 @router.get("/projects/{project_key}/backlog/", response_class=HTMLResponse)
 async def sprint_backlog(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
     """Render the sprint backlog page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     # Load all sprints for this project
     sprints = await _sprint_svc.list_for_project(db, project.id)
@@ -228,23 +210,14 @@ async def sprint_backlog(
 
 @router.get("/projects/{project_key}/sprints/{sprint_id}/board/", response_class=HTMLResponse)
 async def sprint_board(
-    project_key: str,
     sprint_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
     board_per_col: int = Query(10, ge=1, le=50),
 ) -> Response:
     """Render the sprint board page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     try:
         sprint = await _sprint_svc.get_by_id(db, sprint_id)
@@ -309,22 +282,13 @@ async def sprint_board(
 
 @router.get("/projects/{project_key}/sprints/{sprint_id}/edit/", response_class=HTMLResponse)
 async def sprint_edit(
-    project_key: str,
     sprint_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the sprint edit page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     can_manage = user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
     if not can_manage:
@@ -380,21 +344,12 @@ async def sprint_edit(
 
 @router.get("/projects/{project_key}/sprints/analytics/", response_class=HTMLResponse)
 async def sprint_analytics(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the sprint analytics page with velocity charts and history."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     all_sprints = await _sprint_svc.list_for_project(db, project.id)
 
@@ -501,22 +456,13 @@ async def sprint_analytics(
 # otherwise FastAPI would try to parse "analytics" as int and fail validation.
 @router.get("/projects/{project_key}/sprints/{sprint_id}/", response_class=HTMLResponse)
 async def sprint_detail(
-    project_key: str,
     sprint_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a single sprint's detail page: header, metrics, and issue list."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
 
     try:
         sprint = await _sprint_svc.get_by_id(db, sprint_id)

@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import NotFoundError
+from specivo.models.project import Project
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.time_entry_service import TimeEntryService
-from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
+from specivo.web.deps import ProjectReader, WebUser, get_templates
 
 if TYPE_CHECKING:
-    from specivo.models.user import User
+    pass
 
 router = APIRouter(tags=["web-time"], include_in_schema=False)
 
@@ -27,8 +27,9 @@ _time_svc = TimeEntryService()
 
 @router.get("/projects/{project_key}/time-entries/", response_class=HTMLResponse)
 async def time_entries_list(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: Annotated[Project, Depends(ProjectReader(Permission.VIEW_TIME_ENTRIES))],
     db: AsyncSession = DB_SESSION,
     user_id: str = Query(""),
     from_date: date | None = Query(None),
@@ -38,19 +39,6 @@ async def time_entries_list(
 ) -> Response:
     """Render the time entries list page for a project."""
     from specivo.core.utils import safe_int
-
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
-    if not await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db, request=request):
-        raise HTTPException(status_code=403, detail="Permission denied")
 
     entries, total = await _time_svc.list_for_project(
         db,
@@ -105,23 +93,12 @@ async def time_entries_list(
 
 @router.get("/projects/{project_key}/time-entries/new/", response_class=HTMLResponse)
 async def time_entry_form(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: Annotated[Project, Depends(ProjectReader(Permission.LOG_TIME))],
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the log-time form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _project_svc.require_project_access(db, project, user)
-    if not await check_permission(user, project.id, Permission.LOG_TIME, db, request=request):
-        raise HTTPException(status_code=403, detail="Permission denied")
 
     activities = await _time_svc.list_activities(db)
 

@@ -29,7 +29,7 @@ from specivo.services.ai_spend_report_service import AiSpendReportService
 from specivo.services.ai_usage_chart_service import MAX_BUCKETS, NO_PROJECT, OTHER, TOP_N, AiUsageChartService
 from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
 from specivo.services.auth_service import _make_access_token
-from specivo.web.pages.ai_usage import _charts_view, fold_breakdowns
+from specivo.web.pages.ai_usage.charts import _charts_view, fold_breakdowns
 from tests.integration.test_ai_usage_api import World, build_world
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]

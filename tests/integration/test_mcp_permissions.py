@@ -1,7 +1,7 @@
 """TDD red-phase tests for MCP tool permission enforcement.
 
 These tests FAIL until ``_require_permission`` is implemented in
-``specivo/mcp/tools.py`` and wired into each mutating tool function.
+``specivo/mcp/tools/_common.py`` and wired into each mutating tool function.
 
 The contract under test:
 - Every write/manage tool checks the caller's project-scoped permissions.

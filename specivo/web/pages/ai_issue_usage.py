@@ -20,7 +20,7 @@ part of the spend only for a reader who sees every entry of the project in
 the range (``sees_every_entry``), otherwise it is left out and the tab says
 so. The totals are SQL sums over all entries, never over the page shown. The
 summary is cached per reader like the report charts
-(:func:`~specivo.web.pages.ai_usage.cached_chart_payload`: keyed by the issue,
+(:func:`~specivo.web.pages.ai_usage.charts.cached_chart_payload`: keyed by the issue,
 the switch, the reader and what they may see, and the project's data version);
 each request spends one AI report from the reader's budget
 (:func:`~specivo.core.ai_report_limits.enforce_ai_report_rate_limit`).
@@ -61,16 +61,11 @@ from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, ai_usage_visibility, check_permission
 from specivo.web.deps import get_templates, require_user
-from specivo.web.pages.ai_spend_reports import _initials, _short_int, _version_stmt
-from specivo.web.pages.ai_usage import (
-    _charts_view,
-    _fmt_int,
-    _money_view,
-    _project_for,
-    _rows,
-    _tool_names,
-    cached_chart_payload,
-)
+from specivo.web.pages.ai_spend_reports.people import _initials
+from specivo.web.pages.ai_spend_reports.view import _short_int, _version_stmt
+from specivo.web.pages.ai_usage._common import _fmt_int, _project_for
+from specivo.web.pages.ai_usage.charts import _charts_view, cached_chart_payload
+from specivo.web.pages.ai_usage.rows import _money_view, _rows, _tool_names
 
 router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
 

@@ -8,10 +8,10 @@ import subprocess
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
-from typing import overload
+from typing import Annotated, NamedTuple, overload
 from urllib.parse import quote
 
-from fastapi import Request, Response
+from fastapi import Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
@@ -24,6 +24,8 @@ from specivo.core.middleware import (
     ROBOTS_NOINDEX_FOLLOW,
     ROBOTS_STATE_KEY,
 )
+from specivo.models.issue import Issue
+from specivo.models.project import Project
 from specivo.models.user import User
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "themes"
@@ -895,3 +897,135 @@ def _search_engine_context(request: Request) -> dict[str, object]:
     from specivo.core.config import get_settings
 
     return {"canonical_url": f"{get_settings().app_url.rstrip('/')}{request.url.path}"}
+
+
+# ---------------------------------------------------------------------------
+# Shared reader dependencies: the signed-in user, and the project or issue
+# named in the URL that they may read
+# ---------------------------------------------------------------------------
+
+PROJECT_NOT_FOUND = "Project not found"
+ISSUE_NOT_FOUND = "Issue not found"
+PERMISSION_DENIED = "Permission denied"
+
+
+async def require_web_user(request: Request, db: AsyncSession = DB_SESSION) -> User:
+    """Dependency: the signed-in user, or a redirect to log in and come back (:func:`login_redirect`).
+
+    The page counterpart of ``require_user``: a GET of a full page returns to
+    it after login, a form POST or an htmx partial goes to the bare login
+    page. Resolving the user through :func:`get_current_user_optional` keeps
+    its side effects (the user's locale, the forced password change, the
+    header timer).
+    """
+    from fastapi import HTTPException
+
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        raise HTTPException(status_code=302, headers={"Location": login_redirect(request).headers["location"]})
+    return user_obj  # type: ignore[return-value]
+
+
+WebUser = Annotated[User, Depends(require_web_user)]
+
+
+async def _require_permission(
+    request: Request, db: AsyncSession, user: User, project: Project, permission: str | None
+) -> None:
+    from fastapi import HTTPException
+
+    from specivo.services.permission_service import check_permission
+
+    if permission is not None and not await check_permission(user, project.id, permission, db, request=request):
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED)
+
+
+async def readable_project(db: AsyncSession, user: User, key: str) -> Project:
+    """The project *key* names (a retired key too), if *user* may reach it; else a 404.
+
+    A key that names nothing and a project the user cannot reach get the same
+    answer, which never names the stored key: echoing it would tell an outsider
+    that a private project exists, or what a retired key was renamed to.
+    """
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.project_service import ProjectService
+
+    projects = ProjectService()
+    try:
+        project = await projects.get_by_key(db, key)
+        await projects.require_project_access(db, project, user)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=PROJECT_NOT_FOUND) from None
+    return project
+
+
+class ProjectReader:
+    """Dependency: the project in the URL's ``{project_key}`` that the signed-in user may read.
+
+    Signed out: :func:`require_web_user`'s redirect. Unknown or unreachable:
+    404 (:func:`readable_project`). With *permission*, a reachable project
+    where the user lacks it: 403.
+    """
+
+    def __init__(self, permission: str | None = None) -> None:
+        self.permission = permission
+
+    async def __call__(
+        self, request: Request, project_key: str, user: WebUser, db: AsyncSession = DB_SESSION
+    ) -> Project:
+        project = await readable_project(db, user, project_key)
+        await _require_permission(request, db, user, project, self.permission)
+        return project
+
+
+class ProjectReaderByKey(ProjectReader):
+    """:class:`ProjectReader` for routes whose path names the key ``{key}``."""
+
+    async def __call__(self, request: Request, key: str, user: WebUser, db: AsyncSession = DB_SESSION) -> Project:
+        return await super().__call__(request, key, user, db)
+
+
+#: The ``{project_key}`` project the signed-in user may read.
+ProjectForReader = Annotated[Project, Depends(ProjectReader())]
+#: The ``{key}`` project the signed-in user may read.
+ProjectByKeyForReader = Annotated[Project, Depends(ProjectReaderByKey())]
+
+
+class ReaderIssue(NamedTuple):
+    project: Project
+    issue: Issue
+
+
+async def readable_issue(db: AsyncSession, user: User, issue_ref: str) -> ReaderIssue:
+    """The issue *issue_ref* names, with its project, if *user* may see it; else a 404.
+
+    The issue is loaded with its relations. A reference that names nothing, an
+    issue the user may not see and an unreachable project are all 404.
+    """
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.issue_service import IssueService
+
+    try:
+        issue = await IssueService().get_by_display_key_with_relations(db, issue_ref, user=user)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=ISSUE_NOT_FOUND) from None
+    project = await readable_project(db, user, issue.project_key)
+    return ReaderIssue(project, issue)
+
+
+async def issue_for_reader(issue_ref: str, user: WebUser, db: AsyncSession = DB_SESSION) -> ReaderIssue:
+    """Dependency: the issue in the URL's ``{issue_ref}`` (and its project) that the signed-in user may see.
+
+    Signed out: :func:`require_web_user`'s redirect. Unknown or not visible:
+    404 (:func:`readable_issue`). Permission checks stay in the route: the
+    routes that check one do it without auditing the refusal.
+    """
+    return await readable_issue(db, user, issue_ref)
+
+
+#: The ``{issue_ref}`` issue the signed-in user may see.
+IssueForReader = Annotated[ReaderIssue, Depends(issue_for_reader)]

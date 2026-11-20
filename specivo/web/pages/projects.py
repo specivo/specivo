@@ -28,10 +28,10 @@ from specivo.services.version_service import (
     normalize_version_sort,
 )
 from specivo.web.deps import (
-    get_current_user_optional,
+    ProjectByKeyForReader,
+    WebUser,
     get_templates,
     get_web_reader,
-    login_redirect,
     refuse_anonymous_web,
 )
 
@@ -240,8 +240,9 @@ def _version_sort_for(user: User, requested: str | None = None) -> str:
 
 @router.get("/projects/{key}/roadmap/", response_class=HTMLResponse)
 async def project_roadmap(
-    key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
     db: AsyncSession = DB_SESSION,
     show: str = Query("open"),
     sort: str | None = Query(None),
@@ -252,18 +253,6 @@ async def project_roadmap(
     are hidden unless ``show=all``, and then follow in their own section.
     ``sort`` overrides the viewer's saved version sort for this request.
     """
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    from specivo.core.exceptions import NotFoundError
-
-    try:
-        project = await _svc.get_by_key(db, key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _svc.require_project_access(db, project, user)
 
     version_sort = _version_sort_for(user, sort)
     entries = await _version_svc.roadmap(db, project, user, version_sort)
@@ -542,23 +531,12 @@ async def _settings_instance_switches(db: AsyncSession, project: Project, user: 
 
 @router.get("/projects/{key}/settings/", response_class=HTMLResponse)
 async def project_settings(
-    key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render project settings page (admin only)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
-    from specivo.core.exceptions import NotFoundError
-
-    try:
-        project = await _svc.get_by_key(db, key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _svc.require_project_access(db, project, user)
 
     if not user.is_admin and not await check_permission(user, project.id, "manage_project", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -603,21 +581,12 @@ async def version_detail(
     key: str,
     version_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the version detail page with issues, progress, and time stats."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return login_redirect(request)
-    user = cast("User", user_obj)
-
     from specivo.core.exceptions import NotFoundError
-
-    try:
-        project = await _svc.get_by_key(db, key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
-    await _svc.require_project_access(db, project, user)
 
     try:
         version = await _version_svc.get_by_id(db, version_id)

@@ -31,7 +31,7 @@ from specivo.services.ai_spend_report_service import ReportRow
 from specivo.services.notification_service import NotificationService
 from specivo.services.project_service import ProjectService
 from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
-from specivo.web.pages.ai_usage import _money_view
+from specivo.web.pages.ai_usage.rows import _money_view
 
 logger = logging.getLogger(__name__)
 
