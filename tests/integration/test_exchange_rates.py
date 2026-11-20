@@ -517,6 +517,92 @@ async def test_csv_empty_and_not_utf8(db_session: AsyncSession, admin: User) -> 
     assert [e.code for e in latin.errors] == ["csv_encoding"]
 
 
+async def test_csv_limits_on_size_and_rows(db_session: AsyncSession, admin: User, monkeypatch) -> None:
+    import specivo.services.exchange_rate_service as module
+
+    monkeypatch.setattr(module, "CSV_MAX_BYTES", 40)
+    too_large = await _service.import_csv(db_session, "2026-11-05,USD,THB,32\n" * 3, actor=admin)
+    assert (too_large.rows, [(e.line, e.code, e.message) for e in too_large.errors]) == (
+        0,
+        [(0, "csv_too_large", "The file is larger than 0 MB")],
+    )
+
+    monkeypatch.setattr(module, "CSV_MAX_BYTES", 2 * 1024 * 1024)
+    monkeypatch.setattr(module, "CSV_MAX_ROWS", 3)
+    content = "\n".join(
+        [
+            "# a comment",
+            "date,base,quote,rate",
+            "2026-11-03,USD,THB,32",
+            "",
+            "2026-11-04,USD,THB,x",
+            "2026-11-05,USD,THB,33",
+            "2026-11-06,USD,THB,34",
+            "2026-11-07,USD,THB,35",
+        ]
+    )
+    many = await _service.import_csv(db_session, content, actor=admin)
+    assert many.rows == 4
+    assert [(e.line, e.code) for e in many.errors] == [(5, "exchange_rate_invalid"), (7, "csv_too_many_rows")]
+    assert [(r.line, r.action) for r in many.preview] == [(3, "create"), (6, "create")]
+    assert many.applied is False
+    assert await _count(db_session) == 0
+
+
+async def test_csv_a_header_after_a_rate_is_a_bad_line(db_session: AsyncSession, admin: User) -> None:
+    result = await _service.import_csv(
+        db_session, "2026-11-05,USD,THB,32\ndate,base,quote,rate\n", actor=admin, dry_run=True
+    )
+    assert [(e.line, e.code) for e in result.errors] == [(2, "csv_date")]
+    assert (result.rows, result.dry_run, result.applied) == (2, True, False)
+
+
+async def test_csv_import_in_chunks_counts_and_writes_every_action(
+    db_session: AsyncSession, admin: User, monkeypatch
+) -> None:
+    import specivo.services.exchange_rate_service as module
+
+    monkeypatch.setattr(module, "_WRITE_CHUNK", 2)
+    monkeypatch.setattr(module, "CSV_PREVIEW_ROWS", 3)
+    await _add(db_session, date(2026, 11, 2), "USD", "THB", "31", source="csv")
+    await _add(db_session, date(2026, 11, 3), "USD", "THB", "32", source="csv")
+    await _add(db_session, date(2026, 11, 4), "USD", "THB", "99", source="manual")
+    content = "\n".join(
+        f"2026-11-0{d},USD,THB,{r}" for d, r in ((2, "31"), (3, "32.5"), (4, "33"), (5, "34"), (6, "35"))
+    )
+
+    dry = await _service.import_csv(db_session, content, actor=admin, dry_run=True)
+    result = await _service.import_csv(db_session, content, actor=admin)
+
+    for res in (dry, result):
+        assert (res.rows, res.created, res.updated, res.unchanged, res.errors) == (5, 3, 1, 1, [])
+        assert [(r.line, r.rate_date.day, r.rate, r.action) for r in res.preview] == [
+            (1, 2, Decimal("31"), "unchanged"),
+            (2, 3, Decimal("32.5"), "update"),
+            (3, 4, Decimal("33"), "create"),
+        ]
+    assert (dry.applied, result.applied) == (False, True)
+    rows = (
+        await db_session.execute(
+            select(ExchangeRate.rate_date, ExchangeRate.rate, ExchangeRate.source, ExchangeRate.created_by_id).order_by(
+                ExchangeRate.source, ExchangeRate.rate_date
+            )
+        )
+    ).all()
+    assert [(d.day, r, s, by) for d, r, s, by in rows] == [
+        (2, Decimal("31"), "csv", None),
+        (3, Decimal("32.5"), "csv", admin.id),
+        (4, Decimal("33"), "csv", admin.id),
+        (5, Decimal("34"), "csv", admin.id),
+        (6, Decimal("35"), "csv", admin.id),
+        (4, Decimal("99"), "manual", None),
+    ]
+    audit = await _audit_rows(db_session, AuditEvent.EXCHANGE_RATES_IMPORTED)
+    assert [a.details for a in audit] == [
+        {"rows": 5, "created": 3, "updated": 1, "unchanged": 1, "date_from": "2026-11-02", "date_to": "2026-11-06"}
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------

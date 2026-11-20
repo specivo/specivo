@@ -521,46 +521,46 @@ class ExchangeRateService:
         replaced. With *dry_run* nothing is written either way.
         """
         result = CsvImportResult(dry_run=dry_run)
-        raw = content.encode() if isinstance(content, str) else content
-        if len(raw) > CSV_MAX_BYTES:
-            result.errors.append(
-                CsvLineError(0, "csv_too_large", f"The file is larger than {CSV_MAX_BYTES // (1024 * 1024)} MB")
-            )
+        text = _decode_csv(content, result)
+        if text is None:
             return result
-        try:
-            text = raw.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            result.errors.append(CsvLineError(0, "csv_encoding", "The file is not UTF-8 text"))
-            return result
-
         currencies = {c.code: c.is_active for c in (await session.execute(select(Currency))).scalars().all()}
-        rows: list[CsvRow] = []
-        seen: dict[tuple[date, str, str], int] = {}
-        for line_no, fields in enumerate(csv.reader(io.StringIO(text)), start=1):
-            cells = [c.strip() for c in fields]
-            if not any(cells) or cells[0].startswith("#"):
-                continue
-            if not rows and not result.errors and tuple(c.lower() for c in cells) == CSV_HEADER:
-                continue
-            if len(rows) + len(result.errors) >= CSV_MAX_ROWS:
-                result.errors.append(CsvLineError(line_no, "csv_too_many_rows", f"More than {CSV_MAX_ROWS} lines"))
-                break
-            row_or_error = _parse_csv_line(line_no, cells, currencies)
-            if isinstance(row_or_error, CsvLineError):
-                result.errors.append(row_or_error)
-                continue
-            key = (row_or_error.rate_date, row_or_error.base, row_or_error.quote)
-            if key in seen:
-                result.errors.append(CsvLineError(line_no, "csv_duplicate", f"Same day and pair as line {seen[key]}"))
-                continue
-            seen[key] = line_no
-            rows.append(row_or_error)
-
+        rows = _parse_csv(text, currencies, result)
         result.rows = len(rows) + len(result.errors)
         if not rows and not result.errors:
             result.errors.append(CsvLineError(0, "csv_empty", "The file holds no rates"))
             return result
 
+        classified = await self._classify_csv_rows(session, rows, result)
+        if result.errors or dry_run:
+            return result
+        await self._write_csv_rates(session, [r for r in classified if r.action != "unchanged"], actor)
+        await session.flush()
+        result.applied = True
+        dates = [r.rate_date for r in classified]
+        await self._audit(
+            session,
+            AuditEvent.EXCHANGE_RATES_IMPORTED,
+            actor,
+            request,
+            {
+                "rows": len(classified),
+                "created": result.created,
+                "updated": result.updated,
+                "unchanged": result.unchanged,
+                "date_from": min(dates).isoformat(),
+                "date_to": max(dates).isoformat(),
+            },
+        )
+        return result
+
+    async def _classify_csv_rows(
+        self, session: AsyncSession, rows: Sequence[CsvRow], result: CsvImportResult
+    ) -> list[CsvRow]:
+        """Mark each row ``create``, ``update`` or ``unchanged`` against the stored imported rates.
+
+        The counts and the preview go to *result*.
+        """
         existing = await self._existing_csv_rates(session, rows)
         classified: list[CsvRow] = []
         for row in rows:
@@ -571,10 +571,11 @@ class ExchangeRateService:
         result.updated = sum(1 for r in classified if r.action == "update")
         result.unchanged = sum(1 for r in classified if r.action == "unchanged")
         result.preview = classified[:CSV_PREVIEW_ROWS]
-        if result.errors or dry_run:
-            return result
+        return classified
 
-        to_write = [r for r in classified if r.action != "unchanged"]
+    @staticmethod
+    async def _write_csv_rates(session: AsyncSession, to_write: Sequence[CsvRow], actor: User) -> None:
+        """Upsert the rows as ``csv`` rates, in chunks."""
         for start in range(0, len(to_write), _WRITE_CHUNK):
             chunk = to_write[start : start + _WRITE_CHUNK]
             stmt = pg_insert(ExchangeRate).values(
@@ -595,24 +596,6 @@ class ExchangeRateService:
                 set_={"rate": stmt.excluded.rate, "created_by_id": stmt.excluded.created_by_id},
             )
             await session.execute(stmt)
-        await session.flush()
-        result.applied = True
-        dates = [r.rate_date for r in classified]
-        await self._audit(
-            session,
-            AuditEvent.EXCHANGE_RATES_IMPORTED,
-            actor,
-            request,
-            {
-                "rows": len(classified),
-                "created": result.created,
-                "updated": result.updated,
-                "unchanged": result.unchanged,
-                "date_from": min(dates).isoformat(),
-                "date_to": max(dates).isoformat(),
-            },
-        )
-        return result
 
     async def _existing_csv_rates(
         self, session: AsyncSession, rows: Sequence[CsvRow]
@@ -836,6 +819,60 @@ def _rate_details(row: ExchangeRate) -> dict[str, Any]:
         "rate": format_decimal_plain(Decimal(row.rate).normalize()) if row.rate is not None else None,
         "source": row.source,
     }
+
+
+def _decode_csv(content: str | bytes, result: CsvImportResult) -> str | None:
+    """The file as text; None (with the error in *result*) when it is too large or not UTF-8."""
+    raw = content.encode() if isinstance(content, str) else content
+    if len(raw) > CSV_MAX_BYTES:
+        result.errors.append(
+            CsvLineError(0, "csv_too_large", f"The file is larger than {CSV_MAX_BYTES // (1024 * 1024)} MB")
+        )
+        return None
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        result.errors.append(CsvLineError(0, "csv_encoding", "The file is not UTF-8 text"))
+        return None
+
+
+def _parse_csv(text: str, currencies: dict[str, bool], result: CsvImportResult) -> list[CsvRow]:
+    """The good lines of the file; each bad line goes to ``result.errors``.
+
+    Blank and ``#`` lines are skipped, and the header too when it is the first
+    line that counts. Past :data:`CSV_MAX_ROWS` counted lines the parse stops.
+    """
+    rows: list[CsvRow] = []
+    seen: dict[tuple[date, str, str], int] = {}
+    for line_no, fields in enumerate(csv.reader(io.StringIO(text)), start=1):
+        cells = [c.strip() for c in fields]
+        if not any(cells) or cells[0].startswith("#"):
+            continue
+        if not rows and not result.errors and tuple(c.lower() for c in cells) == CSV_HEADER:
+            continue
+        if len(rows) + len(result.errors) >= CSV_MAX_ROWS:
+            result.errors.append(CsvLineError(line_no, "csv_too_many_rows", f"More than {CSV_MAX_ROWS} lines"))
+            break
+        row_or_error = _csv_line_or_duplicate(line_no, cells, currencies, seen)
+        if isinstance(row_or_error, CsvLineError):
+            result.errors.append(row_or_error)
+        else:
+            rows.append(row_or_error)
+    return rows
+
+
+def _csv_line_or_duplicate(
+    line_no: int, cells: list[str], currencies: dict[str, bool], seen: dict[tuple[date, str, str], int]
+) -> CsvRow | CsvLineError:
+    """One parsed line; a second line for the same day and pair is an error. Records good lines in *seen*."""
+    row_or_error = _parse_csv_line(line_no, cells, currencies)
+    if isinstance(row_or_error, CsvLineError):
+        return row_or_error
+    key = (row_or_error.rate_date, row_or_error.base, row_or_error.quote)
+    if key in seen:
+        return CsvLineError(line_no, "csv_duplicate", f"Same day and pair as line {seen[key]}")
+    seen[key] = line_no
+    return row_or_error
 
 
 def _parse_csv_line(line_no: int, cells: list[str], currencies: dict[str, bool]) -> CsvRow | CsvLineError:
