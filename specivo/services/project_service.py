@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from fastapi import Request
 from sqlalchemy import CursorResult, and_, delete, exists, false, func, or_, select, text, union
@@ -35,6 +35,7 @@ from specivo.services.anonymous_user_service import real_users_clause, refuse_an
 from specivo.services.api_key_scope import is_global_admin, project_in_scope, scope_clause
 from specivo.services.branch_name import BRANCH_NAME_SETTINGS_KEY
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
+from specivo.services.entity_link_nodes import GRAPH_METADATA_KEYS_SETTING
 from specivo.services.permission_service import (
     Permission,
     anonymous_role,
@@ -143,6 +144,20 @@ class Principal:
         if self.kind == "user":
             return Member.user_id == self.id
         return Member.group_id == self.id
+
+
+def _settings_changes(data: ProjectUpdate) -> dict[str, Any]:
+    """The ``project.settings`` entries a partial update replaces."""
+    changes: dict[str, Any] = {}
+    if data.computed_metadata is not None:
+        changes[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
+    if data.branch_name is not None:
+        changes[BRANCH_NAME_SETTINGS_KEY] = data.branch_name.model_dump()
+    if data.similar_issues is not None:
+        changes[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
+    if data.graph_metadata_keys is not None:
+        changes[GRAPH_METADATA_KEYS_SETTING] = data.graph_metadata_keys
+    return changes
 
 
 class ProjectService:
@@ -483,19 +498,10 @@ class ProjectService:
             project.status = data.status
         if data.color is not None:
             project.color = data.color
-        if data.computed_metadata is not None:
+        settings_changes = _settings_changes(data)
+        if settings_changes:
             # Reassign a new dict so SQLAlchemy marks the JSONB column dirty.
-            new_settings = dict(project.settings or {})
-            new_settings[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
-            project.settings = new_settings
-        if data.branch_name is not None:
-            new_settings = dict(project.settings or {})
-            new_settings[BRANCH_NAME_SETTINGS_KEY] = data.branch_name.model_dump()
-            project.settings = new_settings
-        if data.similar_issues is not None:
-            new_settings = dict(project.settings or {})
-            new_settings[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
-            project.settings = new_settings
+            project.settings = {**(project.settings or {}), **settings_changes}
         if "reporting_currency_code" in data.model_fields_set:
             from specivo.services.currency_service import CurrencyService
 

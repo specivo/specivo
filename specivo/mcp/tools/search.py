@@ -13,6 +13,8 @@ from specivo.core.exceptions import (
 )
 from specivo.mcp.tools._common import _log_tool, _project_svc, _search_svc
 from specivo.models.user import User
+from specivo.services.entity_link_query import compact_edges, expand_hits
+from specivo.services.entity_link_service import LinkGraph
 from specivo.services.security_audit_service import AuditEvent
 
 SEARCH_MODES = ("hybrid", "keyword", "semantic")
@@ -26,6 +28,7 @@ async def _search(
     scope: str = "all",
     limit: int = 10,
     mode: str = "hybrid",
+    expand: int = 0,
 ) -> str:
     if mode not in SEARCH_MODES:
         raise ValidationError(f"Invalid mode '{mode}'. Must be one of: {', '.join(SEARCH_MODES)}")
@@ -62,11 +65,14 @@ async def _search(
             session, query, user=user, project_id=project_id, scope=scope, limit=limit
         )
 
+    context = await expand_hits(session, user, results) if expand else {}
     lines = [f"Search results for '{query}' [mode={mode}] ({total} total):", ""]
-    for r in results:
+    for index, r in enumerate(results):
         lines.append(f"  [{r.result_type}] {r.title}  —  {r.subtitle or ''}")
         if r.snippet:
             lines.append(f"    {r.snippet[:SEARCH_SNIPPET_MAX_CHARS]}")
+        if index in context:
+            lines.extend(_context_lines(context[index]))
     if not results:
         lines.append("  (no results)")
     await _log_tool(
@@ -74,6 +80,15 @@ async def _search(
         user,
         AuditEvent.SEARCH_QUERY,
         "search",
-        {"query": query, "scope": scope, "mode": mode, "result_count": total},
+        {"query": query, "scope": scope, "mode": mode, "result_count": total, "expand": expand},
     )
     return "\n".join(lines)
+
+
+def _context_lines(graph: LinkGraph) -> list[str]:
+    """The links of one hit, indented under it: its ref, then one line per edge."""
+    root = graph.root.ref if graph.root else "?"
+    if not graph.edges:
+        return [f"    links of {root}: none"]
+    more = " (more left out)" if graph.truncated else ""
+    return [f"    links of {root}{more}:", *(f"      {line}" for line in compact_edges(graph))]

@@ -494,12 +494,13 @@ async def _settings_integrations(db: AsyncSession, project: Project, user: User)
 
 
 async def _settings_instance_switches(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
-    """Anonymous access and similar issues as the instance has them, and the reporting currency choices."""
+    """Anonymous access and similar issues as the instance has them, the reporting currency choices and graph keys."""
     from specivo.core.i18n import get_locale
     from specivo.core.money import currency_display_name
     from specivo.models.setting import Setting
     from specivo.services.anonymous_access_service import is_anonymous_access_enabled
     from specivo.services.currency_service import CurrencyService
+    from specivo.services.entity_link_nodes import graph_metadata_keys
     from specivo.services.similar_issues import (
         SIMILAR_ISSUES_SETTING_KEY,
         instance_setting_enabled,
@@ -524,6 +525,7 @@ async def _settings_instance_switches(db: AsyncSession, project: Project, user: 
         "anonymous_access_enabled": anonymous_access_enabled,
         "similar_issues": project_setting_enabled(project.settings),
         "similar_issues_instance": similar_issues_instance,
+        "graph_metadata_keys": list(graph_metadata_keys(project.settings)),
         "currency_choices": currency_choices,
         "instance_reporting_currency": await currency_svc.get_instance_reporting_currency(db),
     }

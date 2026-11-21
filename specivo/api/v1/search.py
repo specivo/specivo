@@ -28,7 +28,9 @@ from specivo.core.security import (
 )
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.schemas.links import LinkGraphOut
 from specivo.schemas.search import SearchFilters, SearchResponse, SearchResult
+from specivo.services.entity_link_query import expand_hits
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
@@ -301,6 +303,15 @@ async def search(  # noqa: PLR0913
     updated_before: datetime | None = Query(None, description="Issues updated before"),
     metadata: str | None = Query(None, description="JSONB containment filter (JSON string)"),
     tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),
+    expand: int = Query(
+        0,
+        ge=0,
+        le=1,
+        description=(
+            "1 to add `links` to the top 5 issue and wiki page hits: their neighbours in the link graph, "
+            "one hop, at most 10 each, only what you may see"
+        ),
+    ),
     user: User = Depends(get_reader, scope="function"),
     _budget: None = Depends(_search_budget),
     db: AsyncSession = DB_SESSION,
@@ -313,6 +324,10 @@ async def search(  # noqa: PLR0913
     - hybrid: RRF fusion of keyword + semantic results
 
     Results are sorted by relevance score (descending).
+    With ``expand=1`` the top 5 issue and wiki page hits also carry ``links``:
+    what each is linked to and from in the link graph, one hop (the shape of
+    ``GET /issues/{ref}/links/``, at most 10 neighbours, tags, versions and
+    other structured nodes as leaves), filtered for the caller.
     Access control enforces per-project visibility rules.
 
     Every caller is metered per client address, in every mode (429 with
@@ -408,6 +423,10 @@ async def search(  # noqa: PLR0913
             result_count=total_count,
             type_counts=type_counts,
         )
+
+    if expand:
+        for index, graph in (await expand_hits(db, user, items)).items():
+            items[index].links = LinkGraphOut.model_validate(graph.as_dict())
 
     return SearchResponse(
         total_count=total_count,

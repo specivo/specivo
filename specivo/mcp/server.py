@@ -604,6 +604,18 @@ async def specivo_search(
             )
         ),
     ] = "hybrid",
+    expand: Annotated[
+        int,
+        Field(
+            description=(
+                "1 to list, under each of the top 5 issue and wiki page hits, what it is linked to in the link "
+                "graph (links, backlinks, relations, parent, children, tags, version, assignee), one line per "
+                "link. 0 (default) for hits only."
+            ),
+            ge=0,
+            le=1,
+        ),
+    ] = 0,
 ) -> str:
     """Search across issues and wiki pages.
 
@@ -617,10 +629,12 @@ async def specivo_search(
     Returns results with type, title, subtitle, and snippet.
     Use project_key to narrow results to a single project.
     To see what a hit is connected to (links, backlinks, relations, parent
-    and children), follow the link graph with specivo_get_links.
+    and children), pass expand=1: the top 5 issue and wiki page hits each get
+    up to 10 neighbours from the link graph, as ``SRC -kind-> DST "title"``
+    lines, only what you may see. Follow it further with specivo_get_links.
     """
     async with _get_session_and_user() as (session, user):
-        return await _search(session, user, query, project_key, scope, limit, mode)
+        return await _search(session, user, query, project_key, scope, limit, mode, expand)
 
 
 @mcp.tool()
@@ -668,7 +682,15 @@ async def specivo_get_links(
     ] = "both",
     depth: Annotated[
         int,
-        Field(description="1 (default), or 2 to also expand the linked issues and wiki pages once.", ge=1, le=2),
+        Field(
+            description=(
+                "1 (default), or 2 to also expand the linked issues and wiki pages once. From a tag, component, "
+                "metadata, version, sprint or user ref, up to 3 (for example version -> issues -> tags -> pages "
+                'with types=["tagged"]).'
+            ),
+            ge=1,
+            le=3,
+        ),
     ] = 1,
     types: Annotated[
         list[str] | None,
@@ -682,6 +704,36 @@ async def specivo_get_links(
         ),
     ] = None,
     limit: Annotated[int, Field(description="Neighbour nodes at most (1-200).", ge=1, le=200)] = 50,
+    to: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Another ref: return the shortest path from ref to it instead of the neighbours (at most 4 "
+                "hops, over links you may see). Steps through issues and wiki pages; through tags, versions "
+                "and other structured nodes only when types names their kind."
+            )
+        ),
+    ] = None,
+    filter: Annotated[
+        dict[str, str | list[str]] | None,
+        Field(
+            description=(
+                'Keep only the issues whose properties match every key, e.g. {"status": "open", '
+                '"component": "importer"}. Keys: status (open, closed or a status name), tracker, '
+                "version, assignee (a login or me), component or another metadata key in graph_metadata_keys. "
+                "A list means any of them. The root is always kept; wiki pages are dropped."
+            )
+        ),
+    ] = None,
+    format: Annotated[
+        str,
+        Field(
+            description=(
+                "'json' (default) or 'compact': one line per edge, SRC -kind-> DST \"title\", after a header "
+                "line with the root and whether the result was truncated."
+            )
+        ),
+    ] = "json",
 ) -> str:
     """Navigate the link graph: backlinks and links of an issue or wiki page, or the members of a tag, version, etc.
 
@@ -714,9 +766,18 @@ async def specivo_get_links(
     left out entirely, and degrees count only what you may see.
     ``specivo_show_issue`` and ``specivo_read_wiki`` already list the direct
     text links and relations inline; call this for depth 2, hubs, filters or JSON.
+
+    ``to=<ref>`` answers "how is A connected to B": the shortest path, as
+    JSON ``path`` (``hops``, ordered ``nodes`` and ``edges``), or ``path: null``
+    with ``reason`` ``no_path_within_4_hops`` or ``budget_exhausted`` (the
+    search stops after 500 nodes). It never passes through an item you cannot
+    see. ``filter`` keeps the issues that match after the read (for example
+    ``version:ACME/1.2`` with ``{"component": "importer"}``); tags, versions and
+    other structured nodes stay while they are linked to a kept issue.
+    ``format="compact"`` saves tokens: one line per edge, titles written once.
     """
     async with _get_session_and_user() as (session, user):
-        return await _get_links(session, user, ref, direction, depth, types, limit)
+        return await _get_links(session, user, ref, direction, depth, types, limit, to, filter, format)
 
 
 @mcp.tool()
