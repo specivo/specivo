@@ -19,6 +19,12 @@ Each source is rebuilt and committed on its own
 never holds one long transaction, and the queued per-source rebuilds that
 saves trigger meanwhile interleave safely: both take the source's own lock
 before reading its text, and whichever runs last reads the latest text.
+
+A run that gets through every source stamps ``projects.links_rebuilt_at``
+(every project for an instance-wide run). A project where it is ``NULL`` was
+never fully indexed (an upgraded instance, a restored dump), and the hourly
+``queue_link_graph_backfill`` task queues a rebuild for it
+(``queue_backfill_rebuilds``).
 """
 
 from __future__ import annotations
@@ -26,16 +32,18 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from sqlalchemy import and_, false, func, or_, select, true
+from sqlalchemy import and_, false, func, or_, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from specivo.models.attachment import Attachment
 from specivo.models.entity_link import EntityLink
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
+from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiPage
@@ -50,6 +58,14 @@ LINK_REBUILD_LOCK_TTL = 300
 LINK_REBUILD_BATCH = 100
 #: Unresolved targets listed in the stats.
 STATS_TOP_UNRESOLVED = 5
+#: ``triggered_by`` of a rebuild the backfill task queued.
+BACKFILL_TRIGGER = "automatic backfill"
+#: Seconds the per-project "backfill queued" marker lives: no second backfill
+#: rebuild is queued for the project meanwhile. Long enough to cover a queue
+#: backlog; if the run fails, the project is queued again once it expires.
+LINK_BACKFILL_MARKER_TTL = 6 * 3600
+#: Projects queued per backfill tick at most; the rest wait for the next tick.
+LINK_BACKFILL_BATCH = 50
 
 _UNRESOLVED = and_(
     EntityLink.target_issue_id.is_(None),
@@ -61,6 +77,11 @@ _UNRESOLVED = and_(
 def rebuild_lock_key(project_id: int | None) -> str:
     """Redis key of the run lock for a project, or the instance."""
     return "linkgraph:rebuild:all" if project_id is None else f"linkgraph:rebuild:{project_id}"
+
+
+def backfill_marker_key(project_id: int) -> str:
+    """Redis key set while a backfill rebuild of the project is queued or running."""
+    return f"linkgraph:backfill:{project_id}"
 
 
 def last_result_key(project_id: int | None) -> str:
@@ -139,8 +160,80 @@ async def run_full_rebuild(
             "unresolved": stats["unresolved"],
         }
         await store_last_result(session, project_id, summary)
+        # Every source was read (failures are in the summary), so the project
+        # counts as indexed and the backfill task leaves it alone.
+        await mark_rebuilt(session, project_id)
         await session.commit()
     return summary
+
+
+async def mark_rebuilt(session: AsyncSession, project_id: int | None) -> None:
+    """Stamp ``links_rebuilt_at`` on the project, or on every project for an instance-wide run."""
+    stmt = update(Project).values(links_rebuilt_at=func.now())
+    if project_id is not None:
+        stmt = stmt.where(Project.id == project_id)
+    await session.execute(stmt.execution_options(synchronize_session=False))
+
+
+async def is_rebuilt(session: AsyncSession, project_id: int) -> bool:
+    """Whether the project's link graph was fully rebuilt (or the project was created indexed)."""
+    stamp = await session.scalar(select(Project.links_rebuilt_at).where(Project.id == project_id))
+    return stamp is not None
+
+
+async def unindexed_project_ids(session: AsyncSession, limit: int = LINK_BACKFILL_BATCH) -> list[int]:
+    """Projects never fully indexed (``links_rebuilt_at IS NULL``), oldest first."""
+    stmt = select(Project.id).where(Project.links_rebuilt_at.is_(None)).order_by(Project.id).limit(limit)
+    return list((await session.execute(stmt)).scalars())
+
+
+def _task_state(task_id: str) -> str:
+    """Celery state of the task holding a run lock (a finished one's lock is stale)."""
+    from celery.result import AsyncResult
+
+    from specivo.tasks import celery_app
+
+    return str(AsyncResult(task_id, app=celery_app).state)
+
+
+async def queue_backfill_rebuilds(session: AsyncSession) -> list[int]:
+    """Queue a full rebuild of every project never fully indexed; return the ids queued.
+
+    A project is skipped while its backfill marker (``backfill_marker_key``,
+    ``SET NX`` with ``LINK_BACKFILL_MARKER_TTL``) is set, i.e. a backfill
+    rebuild is already queued or running, and while its run lock is held, i.e.
+    a rebuild started from settings is running (that one stamps the project
+    when it ends). The task takes the run lock under its own id first, as a
+    rebuild started from settings does, so the settings card shows it running.
+    Raises ``LockUnavailableError`` when Redis cannot be asked.
+    """
+    from specivo.core.locks import TokenLock, acquire_run_lock
+    from specivo.core.redis import get_redis
+    from specivo.tasks.entity_links import rebuild_link_graph_task
+
+    redis = await get_redis()
+    queued: list[int] = []
+    for project_id in await unindexed_project_ids(session):
+        task_id = str(uuid.uuid4())
+        marker = backfill_marker_key(project_id)
+        if not await redis.set(marker, task_id, nx=True, ex=LINK_BACKFILL_MARKER_TTL):
+            continue
+        lock = TokenLock(redis, rebuild_lock_key(project_id))
+        if not await acquire_run_lock(lock, task_id, LINK_REBUILD_LOCK_TTL, _task_state):
+            # A rebuild started from settings is running; look again next tick.
+            await redis.delete(marker)
+            continue
+        try:
+            rebuild_link_graph_task.apply_async(args=[project_id, BACKFILL_TRIGGER, True], task_id=task_id)
+        except Exception:
+            await lock.release(task_id)
+            await redis.delete(marker)
+            logger.exception("Could not queue the link graph backfill of project %s", project_id)
+            continue
+        queued.append(project_id)
+    if queued:
+        logger.info("Queued link graph backfill for %d project(s): %s", len(queued), queued)
+    return queued
 
 
 async def store_last_result(session: AsyncSession, project_id: int | None, summary: dict[str, Any]) -> None:
@@ -190,7 +283,7 @@ async def visible_targets_clause(session: AsyncSession, user: User, project_id: 
     An attachment named by id has no project and counts for global admins
     only.
     """
-    from specivo.models.project import EnabledModule, Project
+    from specivo.models.project import EnabledModule
     from specivo.services.api_key_scope import is_global_admin
     from specivo.services.permission_service import Permission, projects_granting
 
@@ -303,7 +396,6 @@ async def top_unresolved(
     (``visible_targets_clause``), so the list never tells which issues or
     projects exist where the viewer cannot look.
     """
-    from specivo.models.project import Project
     from specivo.services.api_key_scope import admin_reaches, is_global_admin
     from specivo.services.issue_service import IssueService
     from specivo.services.permission_service import Permission, projects_granting
@@ -369,4 +461,12 @@ async def project_stats(session: AsyncSession, user: User, project_id: int | Non
         "structured": await structured_counts(session, project_id),
         "top_unresolved": await top_unresolved(session, user, project_id, targets),
         "last_rebuild": await last_result(session, project_id),
+        "links_rebuilt_at": await _rebuilt_at(session, project_id),
     }
+
+
+async def _rebuilt_at(session: AsyncSession, project_id: int | None) -> str | None:
+    if project_id is None:
+        return None
+    stamp = await session.scalar(select(Project.links_rebuilt_at).where(Project.id == project_id))
+    return stamp.isoformat() if stamp is not None else None

@@ -66,6 +66,7 @@
 .sp-link-graph-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-space-md); flex-wrap: wrap; }
 .sp-link-graph-title { font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs); }
 .sp-link-graph-intro { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md); max-width: 52ch; }
+.sp-link-graph-rebuilt { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin: 0 0 var(--sp-space-sm); }
 .sp-link-graph-stats {
   display: grid;
   grid-template-columns: max-content 1fr;

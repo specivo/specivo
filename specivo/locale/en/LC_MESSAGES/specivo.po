@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-07 23:18+0100\n"
+"POT-Creation-Date: 2026-11-21 09:37+0100\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -78,19 +78,19 @@ msgstr ""
 msgid "Password reset request"
 msgstr ""
 
-#: specivo/mcp/ai_subscription_tools.py:145
+#: specivo/mcp/ai_subscription_tools.py:146
 msgid ""
 "AI subscriptions belong to your account, not to a project: connect with "
 "an unlimited personal API key to manage them."
 msgstr ""
 
-#: specivo/mcp/ai_subscription_tools.py:152
+#: specivo/mcp/ai_subscription_tools.py:153
 msgid ""
 "AI subscriptions belong to people, not to service accounts: connect with "
 "your personal API key, or ask an administrator to record them."
 msgstr ""
 
-#: specivo/mcp/ai_subscription_tools.py:163
+#: specivo/mcp/ai_subscription_tools.py:164
 msgid "Only administrators manage other people's AI subscriptions."
 msgstr ""
 
@@ -376,83 +376,95 @@ msgstr ""
 msgid "If you did not expect this, contact an administrator of %(brand)s."
 msgstr ""
 
-#: specivo/services/issue_service.py:98
+#: specivo/services/issue_service.py:220
 msgid "No issue statuses found; run seed data first"
 msgstr ""
 
-#: specivo/services/issue_service.py:138
+#: specivo/services/issue_service.py:260
 msgid "You do not have permission to set issue privacy"
 msgstr ""
 
-#: specivo/services/issue_service.py:140
+#: specivo/services/issue_service.py:262
 msgid ""
 "Issues of this tracker are private by default; you do not have permission"
 " to change that"
 msgstr ""
 
-#: specivo/services/issue_service.py:160
+#: specivo/services/issue_service.py:282
 msgid "No issue priorities found; run seed data first"
 msgstr ""
 
-#: specivo/services/issue_service.py:180
+#: specivo/services/issue_service.py:302
 #, python-format
 msgid "Version %(id)s not found"
 msgstr ""
 
-#: specivo/services/issue_service.py:186
+#: specivo/services/issue_service.py:308
 msgid "Version does not belong to this project"
 msgstr ""
 
-#: specivo/services/issue_service.py:192
+#: specivo/services/issue_service.py:314
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr ""
 
-#: specivo/services/issue_service.py:211
+#: specivo/services/issue_service.py:330
+#, python-format
+msgid "Category %(id)s not found in this project"
+msgstr ""
+
+#: specivo/services/issue_service.py:367
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr ""
 
-#: specivo/services/issue_service.py:217
+#: specivo/services/issue_service.py:373
 msgid "Sprint does not belong to this project"
 msgstr ""
 
-#: specivo/services/issue_service.py:223
+#: specivo/services/issue_service.py:379
 msgid "Cannot assign issues to a completed sprint"
 msgstr ""
 
-#: specivo/services/issue_service.py:1008
+#: specivo/services/issue_service.py:1222
 #: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 
-#: specivo/services/issue_service.py:1175
+#: specivo/services/issue_service.py:1342
 msgid "Issue is already in this project."
 msgstr ""
 
-#: specivo/services/issue_service.py:1184
+#: specivo/services/issue_service.py:1351
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr ""
 
-#: specivo/services/issue_service.py:1235
+#: specivo/services/issue_service.py:1407
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr ""
 
-#: specivo/services/issue_service.py:1309
+#: specivo/services/issue_service.py:1446
+#, python-format
+msgid ""
+"%(key)s has %(count)d subtask(s). Delete them or move them to another "
+"parent first."
+msgstr ""
+
+#: specivo/services/issue_service.py:1493
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
 "id, or one of: {known}"
 msgstr ""
 
-#: specivo/services/journal_service.py:313
+#: specivo/services/journal_service.py:314
 msgid "The history entry does not belong to this issue."
 msgstr ""
 
-#: specivo/services/journal_service.py:464
+#: specivo/services/journal_service.py:465
 msgid "Cannot reply to a journal on a different issue"
 msgstr ""
 
@@ -461,7 +473,7 @@ msgstr ""
 msgid "Text is too long ({length} characters); the limit is {limit}."
 msgstr ""
 
-#: specivo/services/markdown_service.py:396
+#: specivo/services/markdown_service.py:432
 msgid "This text is too complex to format, so it is shown as plain text."
 msgstr ""
 
@@ -646,7 +658,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/components/header.html:35
 #: specivo/templates/themes/default/pages/_fts_i18n.html:9
-#: specivo/templates/themes/default/pages/_link_graph_card.html:6
+#: specivo/templates/themes/default/pages/_link_graph_card.html:9
 #: specivo/templates/themes/default/pages/admin/projects.html:16
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:14
@@ -1266,28 +1278,28 @@ msgid "%(count)s chunks"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:18
-#: specivo/templates/themes/default/pages/_link_graph_card.html:30
-#: specivo/web/deps.py:225
+#: specivo/templates/themes/default/pages/_link_graph_card.html:33
+#: specivo/web/deps.py:233
 msgid "just now"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:19
-#: specivo/templates/themes/default/pages/_link_graph_card.html:31
+#: specivo/templates/themes/default/pages/_link_graph_card.html:34
 #: specivo/templates/themes/default/pages/admin/user_detail.html:23
 #: specivo/templates/themes/default/pages/admin/users.html:27
-#: specivo/web/deps.py:228
+#: specivo/web/deps.py:236
 #, python-format
 msgid "%(count)s min ago"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:20
-#: specivo/templates/themes/default/pages/_link_graph_card.html:32
+#: specivo/templates/themes/default/pages/_link_graph_card.html:35
 #, python-format
 msgid "%(count)s h ago"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:21
-#: specivo/templates/themes/default/pages/_link_graph_card.html:33
+#: specivo/templates/themes/default/pages/_link_graph_card.html:36
 #, python-format
 msgid "%(count)s d ago"
 msgstr ""
@@ -1305,7 +1317,7 @@ msgid "items indexed"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_reindex.html:23
-#: specivo/templates/themes/default/pages/_link_graph_card.html:57
+#: specivo/templates/themes/default/pages/_link_graph_card.html:60
 msgid "Starting..."
 msgstr ""
 
@@ -1313,164 +1325,172 @@ msgstr ""
 msgid "Last reindex failed."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:7
+#: specivo/templates/themes/default/pages/_link_graph_card.html:10
 msgid "Rebuild started."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:8
+#: specivo/templates/themes/default/pages/_link_graph_card.html:11
 msgid "A rebuild is already running."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:9
+#: specivo/templates/themes/default/pages/_link_graph_card.html:12
 msgid "Failed to start the rebuild."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:10
+#: specivo/templates/themes/default/pages/_link_graph_card.html:13
 msgid "Rebuild complete."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:11
-msgid "Rebuild failed."
-msgstr ""
-
-#: specivo/templates/themes/default/pages/_link_graph_card.html:12
-#, python-format
-msgid "%(count)s wiki links"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/_link_graph_card.html:13
-#, python-format
-msgid "%(count)s mentions"
-msgstr ""
-
 #: specivo/templates/themes/default/pages/_link_graph_card.html:14
-#, python-format
-msgid "%(count)s attachment links"
+msgid "Rebuild failed."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:15
 #, python-format
-msgid "%(count)s from wiki pages"
+msgid "%(count)s wiki links"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:16
 #, python-format
-msgid "%(count)s from issue descriptions"
+msgid "%(count)s mentions"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:17
 #, python-format
-msgid "%(count)s from comments"
+msgid "%(count)s attachment links"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:18
 #, python-format
-msgid "%(count)s relations"
+msgid "%(count)s from wiki pages"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:19
 #, python-format
-msgid "%(count)s parent links"
+msgid "%(count)s from issue descriptions"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:20
 #, python-format
-msgid "%(count)s attachments"
+msgid "%(count)s from comments"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:21
 #, python-format
-msgid "%(count)s sources"
+msgid "%(count)s relations"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:22
 #, python-format
-msgid "%(count)s links"
+msgid "%(count)s parent links"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:23
 #, python-format
-msgid "%(count)s unresolved"
+msgid "%(count)s attachments"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:24
 #, python-format
-msgid "%(count)s failed"
+msgid "%(count)s sources"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:25
 #, python-format
-msgid "%(count)s s"
+msgid "%(count)s links"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:26
 #, python-format
-msgid "by %(user)s"
+msgid "%(count)s unresolved"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:27
-msgid "OK"
+#, python-format
+msgid "%(count)s failed"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:28
-msgid "Partly failed"
+#, python-format
+msgid "%(count)s s"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:29
+#, python-format
+msgid "by %(user)s"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:30
+msgid "OK"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:31
+msgid "Partly failed"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:32
 #: specivo/templates/themes/default/pages/issues/_development_macros.html:53
 #: specivo/templates/themes/default/pages/projects/settings.html:1078
 #: specivo/templates/themes/default/pages/projects/settings.html:1313
 msgid "Failed"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:40
+#: specivo/templates/themes/default/pages/_link_graph_card.html:43
 msgid "Link graph"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:42
+#: specivo/templates/themes/default/pages/_link_graph_card.html:45
 msgid ""
 "Links written in wiki pages, issue descriptions and comments, kept up to "
 "date as they change. Rebuild after an import, or when links look out of "
 "date."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:48
+#: specivo/templates/themes/default/pages/_link_graph_card.html:51
 msgid "Rebuild link graph"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:49
+#: specivo/templates/themes/default/pages/_link_graph_card.html:52
 msgid "Rebuilding..."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:56
+#: specivo/templates/themes/default/pages/_link_graph_card.html:59
 msgid "sources processed"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:62
-msgid "No links indexed yet — run a rebuild."
-msgstr ""
-
-#: specivo/templates/themes/default/pages/_link_graph_card.html:66
-msgid "Text links"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/_link_graph_card.html:68
-msgid "By source"
+#: specivo/templates/themes/default/pages/_link_graph_card.html:67
+msgid "Last rebuilt:"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:70
-msgid "Structured links"
+msgid "Not indexed yet — rebuild queued"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:72
-msgid "Unresolved links"
+#: specivo/templates/themes/default/pages/_link_graph_card.html:77
+msgid "No links indexed yet — run a rebuild."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_link_graph_card.html:81
-msgid "Last update"
+#: specivo/templates/themes/default/pages/_link_graph_card.html:82
+msgid "Text links"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:84
+msgid "By source"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_link_graph_card.html:86
+msgid "Structured links"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:88
+msgid "Unresolved links"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:97
+msgid "Last update"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_link_graph_card.html:102
 msgid "Last full rebuild:"
 msgstr ""
 
@@ -1736,14 +1756,14 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:35
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:47
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
-#: specivo/web/pages/ai_usage.py:366
+#: specivo/web/pages/ai_usage/charts.py:45
 msgid "Input"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:36
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:48
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
-#: specivo/web/pages/ai_usage.py:367
+#: specivo/web/pages/ai_usage/charts.py:46
 msgid "Output"
 msgstr ""
 
@@ -1762,7 +1782,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:39
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:51
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:36
-#: specivo/web/pages/ai_usage.py:369
+#: specivo/web/pages/ai_usage/charts.py:48
 msgid "Cache read"
 msgstr ""
 
@@ -1772,7 +1792,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:40
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:71
-#: specivo/web/pages/ai_usage.py:368
+#: specivo/web/pages/ai_usage/charts.py:47
 msgid "Reasoning"
 msgstr ""
 
@@ -1807,8 +1827,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:23
-#: specivo/web/pages/ai_spend_reports.py:491
-#: specivo/web/pages/ai_spend_reports.py:1265
+#: specivo/web/pages/ai_spend_reports/form.py:406
+#: specivo/web/pages/ai_spend_reports/people.py:60
 msgid "Local model"
 msgstr ""
 
@@ -1907,12 +1927,12 @@ msgid "Bundled"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
-#: specivo/web/pages/ai_usage.py:370
+#: specivo/web/pages/ai_usage/charts.py:49
 msgid "Cache write 5m"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
-#: specivo/web/pages/ai_usage.py:371
+#: specivo/web/pages/ai_usage/charts.py:50
 msgid "Cache write 1h"
 msgstr ""
 
@@ -5104,7 +5124,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:25
 #: specivo/templates/themes/default/pages/admin/users.html:29
-#: specivo/web/deps.py:254
+#: specivo/web/deps.py:262
 msgid "Yesterday"
 msgstr ""
 
@@ -5158,7 +5178,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:25
-#: specivo/web/pages/ai_spend_reports.py:1067
+#: specivo/web/pages/ai_spend_reports/drill.py:325
 msgid "All projects"
 msgstr ""
 
@@ -5475,7 +5495,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
-#: specivo/web/pages/ai_usage.py:536
+#: specivo/web/pages/ai_usage/charts.py:213
 msgid "Total"
 msgstr ""
 
@@ -5613,7 +5633,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/report.html:427
 #: specivo/templates/themes/default/pages/ai_usage/report.html:451
 #: specivo/templates/themes/default/pages/ai_usage/report.html:470
-#: specivo/web/pages/ai_usage.py:521
+#: specivo/web/pages/ai_usage/charts.py:198
 msgid "Spend"
 msgstr ""
 
@@ -5645,7 +5665,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/report.html:453
 #: specivo/templates/themes/default/pages/ai_usage/report.html:472
 #: specivo/templates/themes/default/pages/dashboard/_spend.html:64
-#: specivo/web/pages/ai_usage.py:522
+#: specivo/web/pages/ai_usage/charts.py:199
 msgid "API-equivalent value"
 msgstr ""
 
@@ -5946,19 +5966,19 @@ msgid "How usage is attributed to an issue"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:21
-#: specivo/web/pages/ai_spend_reports.py:489
-#: specivo/web/pages/ai_spend_reports.py:1264
+#: specivo/web/pages/ai_spend_reports/form.py:404
+#: specivo/web/pages/ai_spend_reports/people.py:59
 msgid "Subscription"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:22
-#: specivo/web/pages/ai_spend_reports.py:490
+#: specivo/web/pages/ai_spend_reports/form.py:405
 msgid "API (pay per use)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:24
-#: specivo/web/pages/ai_spend_reports.py:492
-#: specivo/web/pages/ai_spend_reports.py:1265
+#: specivo/web/pages/ai_spend_reports/form.py:407
+#: specivo/web/pages/ai_spend_reports/people.py:60
 msgid "Free"
 msgstr ""
 
@@ -5967,7 +5987,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/_activity.html:119
 #: specivo/templates/themes/default/pages/issues/detail.html:476
 #: specivo/templates/themes/default/pages/wiki/history.html:52
-#: specivo/web/pages/ai_spend_reports.py:493
+#: specivo/web/pages/ai_spend_reports/form.py:408
 msgid "Unknown"
 msgstr ""
 
@@ -6354,7 +6374,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/report.html:425
 #: specivo/templates/themes/default/pages/ai_usage/report.html:449
 #: specivo/templates/themes/default/pages/ai_usage/report.html:468
-#: specivo/web/pages/ai_usage.py:526
+#: specivo/web/pages/ai_usage/charts.py:203
 msgid "Seat cost"
 msgstr ""
 
@@ -6436,9 +6456,10 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/list.html:61
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
-#: specivo/web/pages/ai_spend_reports.py:435
-#: specivo/web/pages/ai_spend_reports.py:590 specivo/web/pages/ai_usage.py:428
-#: specivo/web/pages/ai_usage.py:472 specivo/web/pages/issues.py:186
+#: specivo/web/pages/ai_spend_reports/form.py:350
+#: specivo/web/pages/ai_spend_reports/view.py:134
+#: specivo/web/pages/ai_usage/charts.py:105
+#: specivo/web/pages/ai_usage/charts.py:149 specivo/web/pages/issues.py:169
 msgid "Unassigned"
 msgstr ""
 
@@ -6470,16 +6491,16 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:25
 #: specivo/templates/themes/default/pages/ai_usage/report.html:66
-#: specivo/web/pages/ai_spend_reports.py:445
-#: specivo/web/pages/ai_spend_reports.py:590
+#: specivo/web/pages/ai_spend_reports/form.py:360
+#: specivo/web/pages/ai_spend_reports/view.py:134
 msgid "No issue"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:29
 #: specivo/templates/themes/default/pages/ai_usage/project.html:76
 #: specivo/templates/themes/default/pages/ai_usage/report.html:66
-#: specivo/web/pages/ai_spend_reports.py:470
-#: specivo/web/pages/ai_spend_reports.py:590
+#: specivo/web/pages/ai_spend_reports/form.py:385
+#: specivo/web/pages/ai_spend_reports/view.py:134
 msgid "No branch"
 msgstr ""
 
@@ -6714,17 +6735,20 @@ msgid "Spend by branch"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:50
-#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
+#: specivo/web/pages/ai_spend_reports/view.py:185
+#: specivo/web/pages/ai_usage/filters.py:117
 msgid "Day"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:51
-#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
+#: specivo/web/pages/ai_spend_reports/view.py:185
+#: specivo/web/pages/ai_usage/filters.py:117
 msgid "Week"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:52
-#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
+#: specivo/web/pages/ai_spend_reports/view.py:185
+#: specivo/web/pages/ai_usage/filters.py:117
 msgid "Month"
 msgstr ""
 
@@ -6748,12 +6772,12 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/report.html:64
 #: specivo/templates/themes/default/pages/ai_usage/report.html:268
 #: specivo/templates/themes/default/pages/ai_usage/report.html:420
-#: specivo/web/pages/ai_spend_reports.py:586
+#: specivo/web/pages/ai_spend_reports/view.py:130
 msgid "Unallocated seat cost"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:65
-#: specivo/web/pages/ai_spend_reports.py:588
+#: specivo/web/pages/ai_spend_reports/view.py:132
 msgid "An issue you cannot see"
 msgstr ""
 
@@ -6855,7 +6879,7 @@ msgid "Subscription fees carried by this usage"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:270
-#: specivo/web/pages/ai_spend_reports.py:996
+#: specivo/web/pages/ai_spend_reports/drill.py:254
 msgid "Fees of subscriptions without priced usage"
 msgstr ""
 
@@ -6912,7 +6936,7 @@ msgid "Share"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:420
-#: specivo/web/pages/ai_spend_reports.py:1092
+#: specivo/web/pages/ai_spend_reports/drill.py:350
 msgid "All usage"
 msgstr ""
 
@@ -9173,7 +9197,7 @@ msgid "Assignee…"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/list.html:61
-#: specivo/web/pages/issues.py:188
+#: specivo/web/pages/issues.py:171
 msgid "Me"
 msgstr ""
 
@@ -9195,7 +9219,7 @@ msgid "Release…"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/list.html:80
-#: specivo/web/pages/issues.py:206
+#: specivo/web/pages/issues.py:189
 msgid "No release"
 msgstr ""
 
@@ -12106,35 +12130,35 @@ msgstr ""
 msgid "No deleted pages."
 msgstr ""
 
-#: specivo/web/deps.py:231
+#: specivo/web/deps.py:239
 #, python-format
 msgid "%(num)d hr ago"
 msgid_plural "%(num)d hrs ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/deps.py:234
+#: specivo/web/deps.py:242
 #, python-format
 msgid "%(num)d day ago"
 msgid_plural "%(num)d days ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/deps.py:237
+#: specivo/web/deps.py:245
 #, python-format
 msgid "%(num)d week ago"
 msgid_plural "%(num)d weeks ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/deps.py:240
+#: specivo/web/deps.py:248
 #, python-format
 msgid "%(num)d month ago"
 msgid_plural "%(num)d months ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/deps.py:242
+#: specivo/web/deps.py:250
 #, python-format
 msgid "%(num)d year ago"
 msgid_plural "%(num)d years ago"
@@ -12209,96 +12233,94 @@ msgstr ""
 msgid "The IP address is too long."
 msgstr ""
 
-#: specivo/web/pages/ai_spend_reports.py:641 specivo/web/pages/ai_usage.py:623
-msgid "Auto"
-msgstr ""
-
-#: specivo/web/pages/ai_spend_reports.py:983
+#: specivo/web/pages/ai_spend_reports/drill.py:241
 #, python-format
 msgid "%(num)d person"
 msgid_plural "%(num)d people"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_spend_reports.py:1038
+#: specivo/web/pages/ai_spend_reports/drill.py:296
 #, python-format
 msgid "%(num)d group."
 msgid_plural "%(num)d groups."
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_spend_reports.py:1040
+#: specivo/web/pages/ai_spend_reports/drill.py:298
 #, python-format
 msgid "Largest: %(name)s with %(amount)s (%(share)s)."
 msgstr ""
 
-#: specivo/web/pages/ai_spend_reports.py:1047
+#: specivo/web/pages/ai_spend_reports/drill.py:305
 #, python-format
 msgid "%(num)d more in the table."
 msgid_plural "%(num)d more in the table."
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_spend_reports.py:1138
+#: specivo/web/pages/ai_spend_reports/drill.py:396
 #, python-format
 msgid "%(num)d entry"
 msgid_plural "%(num)d entries"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_spend_reports.py:1139
+#: specivo/web/pages/ai_spend_reports/drill.py:397
 #, python-format
 msgid "%(num)d day"
 msgid_plural "%(num)d days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_spend_reports.py:1140
+#: specivo/web/pages/ai_spend_reports/drill.py:398
 #, python-format
 msgid "%(num)d model"
 msgid_plural "%(num)d models"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_spend_reports.py:1141
+#: specivo/web/pages/ai_spend_reports/drill.py:399
 #, python-format
 msgid "%(entries)s over %(days)s, %(models)s."
 msgstr ""
 
-#: specivo/web/pages/ai_spend_reports.py:1262
+#: specivo/web/pages/ai_spend_reports/people.py:57
 msgid "Subscription seat"
 msgstr ""
 
-#: specivo/web/pages/ai_spend_reports.py:1265
+#: specivo/web/pages/ai_spend_reports/people.py:60
 msgid "Pay-per-use API"
 msgstr ""
 
-#: specivo/web/pages/ai_usage.py:387
+#: specivo/web/pages/ai_spend_reports/view.py:185
+#: specivo/web/pages/ai_usage/filters.py:117
+msgid "Auto"
+msgstr ""
+
+#: specivo/web/pages/ai_usage/charts.py:66
 #, python-format
 msgid "Week of %(date)s"
 msgstr ""
 
-#: specivo/web/pages/ai_usage.py:393
+#: specivo/web/pages/ai_usage/charts.py:72
 #, python-format
 msgid "%(num)d entry without a price"
 msgid_plural "%(num)d entries without a price"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_usage.py:399
+#: specivo/web/pages/ai_usage/charts.py:78
 #, python-format
 msgid "%(num)d amount without an exchange rate"
 msgid_plural "%(num)d amounts without an exchange rate"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/ai_usage.py:414 specivo/web/pages/ai_usage.py:424
-#: specivo/web/pages/ai_usage.py:451
+#: specivo/web/pages/ai_usage/charts.py:93
+#: specivo/web/pages/ai_usage/charts.py:102
+#: specivo/web/pages/ai_usage/charts.py:128
 msgid "Other"
-msgstr ""
-
-#: specivo/web/pages/ai_usage.py:798 specivo/web/pages/issues.py:195
-msgid "Unknown person"
 msgstr ""
 
 #: specivo/web/pages/auth.py:211
@@ -12400,11 +12422,15 @@ msgid ""
 "minutes."
 msgstr ""
 
-#: specivo/web/pages/issues.py:202
+#: specivo/web/pages/ai_usage/filters.py:147 specivo/web/pages/issues.py:178
+msgid "Unknown person"
+msgstr ""
+
+#: specivo/web/pages/issues.py:185
 msgid "Unknown tag"
 msgstr ""
 
-#: specivo/web/pages/issues.py:209
+#: specivo/web/pages/issues.py:192
 msgid "Unknown release"
 msgstr ""
 
