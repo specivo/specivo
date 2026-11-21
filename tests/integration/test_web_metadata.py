@@ -30,7 +30,7 @@ async def _create_project(
 ) -> object:
     """Create a project via the service layer and commit."""
     data = ProjectCreate(name=name, identifier=identifier, key=key, is_public=is_public)
-    project = await _svc.create(db_session, data, user)
+    project = await _svc.create(db_session, data)
     await db_session.commit()
     await db_session.refresh(project)
     return project

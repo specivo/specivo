@@ -181,7 +181,6 @@ async def _create_project(
             is_public=ir.is_public,
             modules=ir.modules or None,
         ),
-        creator_user=await ensure_import_account(ctx),
     )
 
     # ProjectCreate has no status field: a closed or archived project can only

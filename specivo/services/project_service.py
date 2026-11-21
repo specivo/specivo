@@ -206,13 +206,14 @@ class ProjectService:
         self,
         session: AsyncSession,
         data: ProjectCreate,
-        creator_user: User,  # noqa: ARG002
     ) -> Project:
         """Create a root or child project.
 
         - Resolves ``parent_key`` to a ``parent_id`` and builds the ltree path.
-        - Adds the creator as a Manager member (role builtin=0, name=Manager).
         - Enables default modules.
+
+        No membership is added: only global admins create projects, and they
+        can reach every project without one.
         """
         parent: Project | None = None
         if data.parent_key:
@@ -706,18 +707,6 @@ class ProjectService:
             )
         await session.delete(project)
         await session.flush()
-
-    async def create_child(
-        self,
-        session: AsyncSession,
-        parent: Project,
-        data: ProjectCreate,
-        creator: User,
-    ) -> Project:
-        """Convenience wrapper: creates a child project under *parent*."""
-        # Override parent_key to ensure the correct parent is used
-        data_with_parent = data.model_copy(update={"parent_key": parent.key})
-        return await self.create(session, data_with_parent, creator)
 
     # -----------------------------------------------------------------------
     # Membership
