@@ -59,6 +59,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import absolute_url
 from specivo.core.config import get_settings
 from specivo.core.constants import CREDENTIAL_TOKEN_ENTROPY_BYTES
 from specivo.core.exceptions import AppError, ConflictError, ValidationError
@@ -246,8 +247,7 @@ def mask_email(address: str) -> str:
 
 
 def _url(path: str) -> str:
-    settings = get_settings()
-    return f"{settings.app_url.rstrip('/')}{settings.stealth_prefix.rstrip('/')}{path}"
+    return absolute_url(path)
 
 
 def _language(language: str | None) -> AbstractContextManager[str]:

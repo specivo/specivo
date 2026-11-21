@@ -47,6 +47,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import base_path
 from specivo.core.auth_cookies import set_auth_cookies
 from specivo.core.client_ip import get_client_ip, rate_limit_subject
 from specivo.core.config import Settings, get_settings
@@ -138,7 +139,7 @@ def sso_error_message(code: str | None) -> str | None:
 
 
 def _prefix(settings: Settings) -> str:
-    return settings.stealth_prefix.rstrip("/")
+    return base_path(settings)
 
 
 def sso_login_path(slug: str, next_path: str = "") -> str:

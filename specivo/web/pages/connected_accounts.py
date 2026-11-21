@@ -23,7 +23,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.config import get_settings
+from specivo.core.app_url import base_path
 from specivo.core.database import DbSession
 from specivo.core.exceptions import NotFoundError
 from specivo.core.i18n import gettext as _
@@ -41,7 +41,7 @@ PROFILE_PATH = "/my/profile/"
 
 
 def _prefix() -> str:
-    return get_settings().stealth_prefix.rstrip("/")
+    return base_path()
 
 
 async def profile_connected_accounts(

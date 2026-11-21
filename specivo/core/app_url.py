@@ -9,6 +9,11 @@ pages then offer addresses that no forge or identity provider can reach.
 :func:`app_url_notice` is what the shared warning box on those admin pages
 shows; :func:`log_app_url_warning` is the one log line at start-up.
 
+:func:`base_path` and :func:`prefixed` are the one place the ``STEALTH_PREFIX``
+is read: every route is mounted under it, and every root-relative URL the
+application hands out (page links, redirects, static assets, API calls made
+by the pages) carries it. Without a prefix they change nothing.
+
 The request's ``Host`` header is only ever compared with ``APP_URL`` for the
 "you are looking at this instance under another name" note. It is never used
 to build a URL that is shown for copying or sent anywhere: it can be forged.
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlsplit
 
@@ -32,6 +38,73 @@ logger = logging.getLogger(__name__)
 APP_URL_GUIDE_URL = "https://specivo.io/docs/specivo/install/configuration/#public-address-app_url"
 
 AppUrlProblem = Literal["unset", "local"]
+
+# One path segment of STEALTH_PREFIX: the unreserved URL characters only, so
+# the prefix needs no escaping wherever it is written (HTML attributes, JS
+# string literals in templates, Location headers, cookie paths).
+_PREFIX_SEGMENT_RE = re.compile(r"[A-Za-z0-9._~-]+")
+
+
+def normalize_prefix(raw: str | None) -> str:
+    """``STEALTH_PREFIX`` as ``""`` or ``"/one/or/more"``: one leading slash, none trailing.
+
+    Raises ``ValueError`` for a segment with characters other than letters,
+    digits and ``.``, ``_``, ``~``, ``-``, or a ``.``/``..`` segment.
+    """
+    value = (raw or "").strip().strip("/")
+    if not value:
+        return ""
+    segments = value.split("/")
+    for segment in segments:
+        if not _PREFIX_SEGMENT_RE.fullmatch(segment) or segment in {".", ".."}:
+            raise ValueError(
+                f"STEALTH_PREFIX: {raw!r} must be path segments of letters, digits, '.', '_', '~' and '-' only"
+            )
+    return "/" + "/".join(segments)
+
+
+def base_path(settings: Settings | None = None) -> str:
+    """The URL prefix every route of this instance lives under: ``""`` or ``"/prefix"``.
+
+    *settings* defaults to the application's.
+    """
+    if settings is None:
+        from specivo.core.config import get_settings
+
+        settings = get_settings()
+    return normalize_prefix(settings.stealth_prefix)
+
+
+def prefixed(path: str, settings: Settings | None = None) -> str:
+    """*path*, an application path such as ``/projects/``, as the browser must request it.
+
+    Not idempotent on purpose: pass a path that does not carry the prefix
+    yet. Paths taken from the request (``request.url.path``, a ``next``
+    parameter) already carry it and must not go through here again.
+    """
+    if not path.startswith("/"):
+        raise ValueError(f"prefixed() takes a root-relative path, got {path!r}")
+    return base_path(settings) + path
+
+
+def is_under_base(path: str) -> bool:
+    """Whether the root-relative *path* lies under the URL prefix (always true without one)."""
+    base = base_path()
+    if not base:
+        return path.startswith("/")
+    return path == base or path.startswith((base + "/", base + "?", base + "#"))
+
+
+def strip_base(path: str) -> str:
+    """*path* without the URL prefix, the application path a route was declared with.
+
+    A path outside the prefix comes back unchanged.
+    """
+    base = base_path()
+    if base and is_under_base(path):
+        rest = path[len(base) :]
+        return rest if rest.startswith("/") else "/" + rest
+    return path
 
 
 def _normalized_host(host: str | None) -> str:
@@ -153,4 +226,18 @@ def public_url(path: str) -> str | None:
     settings = get_settings()
     if app_url_problem(settings.app_url) == "unset":
         return None
-    return f"{settings.app_url.strip().rstrip('/')}{settings.stealth_prefix.rstrip('/')}{path}"
+    return absolute_url(path, settings)
+
+
+def absolute_url(path: str, settings: Settings | None = None) -> str:
+    """``APP_URL`` + ``STEALTH_PREFIX`` + *path*, whatever ``APP_URL`` holds.
+
+    For URLs another system is configured with (identity provider redirect
+    URIs, SCIM base URLs, repository webhook URLs), which are shown even when
+    ``APP_URL`` still needs fixing. *settings* defaults to the application's.
+    """
+    if settings is None:
+        from specivo.core.config import get_settings
+
+        settings = get_settings()
+    return f"{settings.app_url.strip().rstrip('/')}{base_path(settings)}{path}"

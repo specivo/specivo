@@ -211,12 +211,9 @@ _NON_PAGE_PREFIXES = ("/api/", "/mcp", "/scim/", "/hooks/", "/health")
 
 def _is_page_request(request: Request) -> bool:
     """Whether *request* is for a web page (or an htmx partial of one), not the API."""
-    from specivo.core.config import get_settings
+    from specivo.core.app_url import strip_base
 
-    path = request.url.path
-    stealth = get_settings().stealth_prefix.rstrip("/")
-    if stealth and path.startswith(stealth + "/"):
-        path = path[len(stealth) :]
+    path = strip_base(request.url.path)
     if path.startswith(_NON_PAGE_PREFIXES):
         return False
     return request.headers.get("hx-request") == "true" or _wants_html(request)

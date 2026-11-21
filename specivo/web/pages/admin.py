@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import prefixed
 from specivo.core.config import get_settings
 from specivo.core.database import DB_SESSION
 from specivo.models.user import User
@@ -263,8 +264,7 @@ async def _target_or_404(db: AsyncSession, user_id: int) -> User:
 
 
 def _user_page_redirect(user_id: int, account: str) -> RedirectResponse:
-    prefix = get_settings().stealth_prefix.rstrip("/")
-    return RedirectResponse(f"{prefix}/admin/users/{user_id}/?account={account}", status_code=303)
+    return RedirectResponse(prefixed(f"/admin/users/{user_id}/?account={account}"), status_code=303)
 
 
 @router.post("/admin/users/{user_id}/deactivate/", response_model=None)

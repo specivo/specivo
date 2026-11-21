@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.config import get_settings
+from specivo.core.app_url import base_path
 from specivo.core.database import DbSession
 from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
@@ -42,7 +42,7 @@ _confirm_rate_limit = rate_limit("web_confirm_email", max_requests=20, window_se
 
 
 def _prefix() -> str:
-    return get_settings().stealth_prefix.rstrip("/")
+    return base_path()
 
 
 def _back(**query: str) -> RedirectResponse:
