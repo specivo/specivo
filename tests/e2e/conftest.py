@@ -14,6 +14,7 @@ from specivo.testing.e2e_base import (  # noqa: F401
     _admin_auth,
     _flush_redis,
     _login_and_get_token,
+    _prefixed_admin_auth,
     _run_migrations,
     _seed_lookups,
     _user_auth,
@@ -23,8 +24,11 @@ from specivo.testing.e2e_base import (  # noqa: F401
     auth_context,
     auth_page,
     e2e_base_url,
+    e2e_prefixed_server,
     e2e_seed_data,
     e2e_server,
+    prefixed_admin_page,
+    prefixed_api,
 )
 
 # ---------------------------------------------------------------------------
