@@ -227,7 +227,9 @@ indexed (see [Search engines](#search-engines)).
   value. Keep `APP_URL` without the prefix: Specivo adds it.
 - **Reverse proxy.** Pass the path through unchanged. The proxy forwards
   `https://specivo.example.com/x7k2-tracker/...` to Specivo as `/x7k2-tracker/...`; it must not
-  strip the prefix or rewrite it. The bundled nginx already does this.
+  strip the prefix or rewrite it. The bundled nginx already does this, and reads the same
+  `STEALTH_PREFIX` from `.env` for its cache, health check and MCP streaming rules. Write it
+  there without a trailing slash.
 - **Changing it.** Restart after a change. Bookmarks, an installed app, MCP client settings,
   repository webhooks and the addresses registered at an identity provider all hold the old
   path and must be updated. Links stored in Markdown keep working: Specivo adds the prefix when
