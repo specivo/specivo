@@ -60,6 +60,17 @@ see. Two people reading the same completed sprint can therefore see different nu
 issues are [private](../issues/creating.md#private-by-default) or hidden by their role. The REST API and
 MCP return the counts, never the ids of the issues behind them.
 
+## Time and AI spend
+
+A sprint's page shows its **time logged** and **estimated** time next to an **AI spend** card. All
+three count the sprint's issues plus the sub-issues that have no sprint of their own. A sub-issue
+counts toward the sprint of its nearest parent that has one. Only the issues and entries you may see
+count, and time logged appears only if you may see time entries in the project.
+
+The **AI spend** card shows the sprint's spend, API-equivalent value, tokens and the number of
+people. **Open the AI spend report** opens the project's
+[spend report](ai-spend-reports.md#release-and-sprint) narrowed to the sprint.
+
 ## The backlog
 
 The **backlog** is the pool of issues that aren't yet committed to a sprint. This is where you plan:
