@@ -308,6 +308,7 @@ BASE_PATH = _BasePath()
 def _prefixed_filter(value: object) -> object:
     """Template filter: an application path (``/data/avatars/...``) with the URL prefix.
 
+    Like :func:`prefixed`, a path already under the prefix is left as it is.
     Anything that is not a root-relative path (an absolute URL, ``""``,
     ``None``) is returned as it is, so stored values that may hold either
     can go through it.
@@ -803,6 +804,18 @@ def _csrf_token(ctx) -> str:
     if request is None:
         return ""
     return str(getattr(request.state, CSRF_STATE_KEY, "") or "")
+
+
+def redirect_to(url: str, status_code: int = 302) -> RedirectResponse:
+    """A redirect to *url*, the one way the web layer sends a browser elsewhere.
+
+    A root-relative path gets the stealth prefix (:func:`prefixed`, so a path
+    that already carries it, such as a ``next`` value, is left as it is); an
+    absolute URL (an identity provider) and a query-only URL go unchanged.
+    """
+    if url.startswith("/") and not url.startswith(("//", "/\\")):
+        url = prefixed(url)
+    return RedirectResponse(url, status_code=status_code)
 
 
 def login_redirect(request: Request) -> RedirectResponse:

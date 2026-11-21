@@ -103,15 +103,15 @@
         <tbody>
           <template x-for="issue in filtered" :key="issue.key">
             <tr>
-              <td><a class="issue-key" :href="issue.url" x-text="issue.key"></a></td>
-              <td><div class="issue-subject"><a :href="issue.url" x-text="issue.subject"></a></div></td>
+              <td><a class="issue-key" :href="spUrl(issue.url)" x-text="issue.key"></a></td>
+              <td><div class="issue-subject"><a :href="spUrl(issue.url)" x-text="issue.subject"></a></div></td>
               <td><span class="badge-tracker" :class="issue.tracker_class" x-text="issue.tracker"></span></td>
               <td><span class="badge-status" :class="issue.status_class" x-text="issue.status"></span></td>
               <td><span class="badge-priority" :class="issue.priority"></span></td>
               <td>
                 <div class="td-assignee" x-show="issue.assignee">
                   <template x-if="issue.assignee_avatar_url">
-                    <img :src="issue.assignee_avatar_url" class="avatar-sm avatar-img" :alt="assigneeInitials(issue)">
+                    <img :src="spUrl(issue.assignee_avatar_url)" class="avatar-sm avatar-img" :alt="assigneeInitials(issue)">
                   </template>
                   <template x-if="!issue.assignee_avatar_url">
                     <span class="avatar-sm" x-text="assigneeInitials(issue)"></span>

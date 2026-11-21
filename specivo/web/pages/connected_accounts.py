@@ -30,7 +30,7 @@ from specivo.core.i18n import gettext as _
 from specivo.models.sso import SsoProvider
 from specivo.models.user import User
 from specivo.services.sso.identity_service import IdentityService, LastSignInMethodError
-from specivo.web.deps import require_user
+from specivo.web.deps import redirect_to, require_user
 from specivo.web.pages.admin import require_admin
 from specivo.web.pages.sso import sso_error_message
 
@@ -91,7 +91,7 @@ def _redirect(path: str, **query: str) -> RedirectResponse:
     target = f"{_prefix()}{path}"
     if query:
         target += "?" + urlencode(query)
-    return RedirectResponse(target, status_code=303)
+    return redirect_to(target, status_code=303)
 
 
 @router.post("/my/identities/{identity_id}/unlink/", response_model=None)

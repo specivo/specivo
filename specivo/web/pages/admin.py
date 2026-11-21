@@ -31,7 +31,7 @@ from specivo.services.security_audit_service import (
 from specivo.services.settings_service import SettingsService
 from specivo.services.version_service import VersionService
 from specivo.services.workflow_service import WorkflowService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, redirect_to
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 
@@ -59,7 +59,7 @@ async def require_admin(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        raise HTTPException(status_code=307, headers={"Location": "/login/"})
+        raise HTTPException(status_code=307, headers={"Location": prefixed("/login/")})
     if not isinstance(user_obj, User) or not is_global_admin(user_obj):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user_obj
@@ -264,7 +264,7 @@ async def _target_or_404(db: AsyncSession, user_id: int) -> User:
 
 
 def _user_page_redirect(user_id: int, account: str) -> RedirectResponse:
-    return RedirectResponse(prefixed(f"/admin/users/{user_id}/?account={account}"), status_code=303)
+    return redirect_to(prefixed(f"/admin/users/{user_id}/?account={account}"), status_code=303)
 
 
 @router.post("/admin/users/{user_id}/deactivate/", response_model=None)
@@ -606,7 +606,7 @@ async def admin_role_update(
     if ai_usage_visibility in AI_USAGE_VISIBILITY_VALUES:
         role.ai_usage_visibility = ai_usage_visibility
     await db.commit()
-    return RedirectResponse("/admin/roles/", status_code=303)
+    return redirect_to("/admin/roles/", status_code=303)
 
 
 @router.get("/admin/trackers/", response_class=HTMLResponse)
@@ -647,7 +647,7 @@ async def admin_tracker_update(
     await db.commit()
     # The issue form reads trackers from the process-local lookup cache.
     invalidate_lookups()
-    return RedirectResponse("/admin/trackers/", status_code=303)
+    return redirect_to("/admin/trackers/", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -727,7 +727,7 @@ async def admin_currencies(
 def _currencies_redirect(show: str, q: str, error: str = "") -> RedirectResponse:
     params = {k: v for k, v in (("show", show), ("q", q.strip()), ("error", error)) if v and v != "all"}
     url = "/admin/currencies/" + (f"?{urlencode(params)}" if params else "")
-    return RedirectResponse(url, status_code=303)
+    return redirect_to(url, status_code=303)
 
 
 @router.post("/admin/currencies/reporting/", response_model=None)
@@ -931,7 +931,7 @@ async def admin_settings_defaults(
         if "default_language" in to_set:
             set_default_language_override(to_set["default_language"])
 
-    return RedirectResponse("/admin/settings/", status_code=303)
+    return redirect_to("/admin/settings/", status_code=303)
 
 
 @router.post("/admin/settings/search-engines/", response_model=None)
@@ -952,7 +952,7 @@ async def admin_settings_search_engines(
     if search_engine_indexing in ("true", "false"):
         await _settings_svc.set_many(db, {SEARCH_ENGINE_INDEXING_SETTING_KEY: search_engine_indexing})
         await db.commit()
-    return RedirectResponse("/admin/settings/", status_code=303)
+    return redirect_to("/admin/settings/", status_code=303)
 
 
 def _render_anonymous_access_confirm(
@@ -1004,11 +1004,11 @@ async def admin_settings_anonymous_access(
             request=request,
         )
     except AnonymousAccessConfirmationRequiredError:
-        return RedirectResponse("/admin/settings/anonymous-access/confirm/", status_code=303)
+        return redirect_to("/admin/settings/anonymous-access/confirm/", status_code=303)
     except AnonymousAccessConfirmationStaleError as exc:
         return _render_anonymous_access_confirm(request, user, exc.projects, stale=True, status_code=409)
     await db.commit()
-    return RedirectResponse("/admin/settings/", status_code=303)
+    return redirect_to("/admin/settings/", status_code=303)
 
 
 @router.get("/admin/settings/anonymous-access/confirm/", response_class=HTMLResponse)
@@ -1024,7 +1024,7 @@ async def admin_settings_anonymous_access_confirm(
     )
 
     if await is_anonymous_access_enabled(db):
-        return RedirectResponse("/admin/settings/", status_code=303)
+        return redirect_to("/admin/settings/", status_code=303)
     return _render_anonymous_access_confirm(request, user, await list_projects_with_anonymous_permissions(db))
 
 

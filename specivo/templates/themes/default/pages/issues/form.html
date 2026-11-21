@@ -437,7 +437,7 @@
       {% if mode != 'edit' %}
       <button class="sp-btn sp-btn-ghost" :disabled="!canSubmit" @click="submitForm(true)">{% trans %}+ Create and Continue{% endtrans %}</button>
       {% endif %}
-      <a href="{{ base }}/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}/"
+      <a href="{{ base }}{% if mode == 'edit' %}/issue/{{ issue.display_key }}/{% else %}/projects/{{ project.key }}/issues/{% endif %}"
          class="cancel-link">{% trans %}Cancel{% endtrans %}</a>
     </div>
   </form>

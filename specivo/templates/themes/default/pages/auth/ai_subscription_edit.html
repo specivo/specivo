@@ -10,7 +10,7 @@
   {% if admin_mode %}
   <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="{{ back_url }}">{% trans %}AI subscriptions{% endtrans %}</a>
+  <a href="{{ back_url | prefixed }}">{% trans %}AI subscriptions{% endtrans %}</a>
   {% else %}
   <a href="{{ base }}/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %}</a>
   {% endif %}
@@ -31,7 +31,7 @@
 <div class="card sp-card-pad" data-testid="delete-subscription-card">
   <h3 class="sp-card-h3">{% trans %}Delete this subscription{% endtrans %}</h3>
   <p class="sp-text-muted sp-mb-md">{% trans %}To record that a plan ended, set its last day instead: deleting removes it from past spend reports too.{% endtrans %}</p>
-  <form method="post" action="{{ delete_action }}">
+  <form method="post" action="{{ delete_action | prefixed }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="sp-btn-sm sp-btn-danger">{% trans %}Delete{% endtrans %}</button>
   </form>

@@ -63,7 +63,7 @@ from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_
 from specivo.services.sso.log import logger
 from specivo.services.sso.login import LINK_RETURN_PATH, SsoLinkResult, SsoLoginService, SsoReauthResult
 from specivo.services.sso.logout import backchannel_logout, release_logout_jti
-from specivo.web.deps import get_current_user_optional, require_user, safe_next_path
+from specivo.web.deps import get_current_user_optional, redirect_to, require_user, safe_next_path
 
 router = APIRouter(prefix="/auth/oidc", tags=["web-sso"], include_in_schema=False)
 _service = SsoLoginService()
@@ -166,7 +166,7 @@ def _refuse(code: str, settings: Settings, *, intent: str = "login", status_code
     """Redirect a refusal to the login page, or to the profile for a link or a reauth."""
     query = urlencode({"sso_error": _PUBLIC_CODES.get(code, code)})
     page = LINK_RETURN_PATH if intent in _PROFILE_INTENTS else "/login/"
-    response = RedirectResponse(f"{_prefix(settings)}{page}?{query}", status_code=status_code)
+    response = redirect_to(f"{_prefix(settings)}{page}?{query}", status_code=status_code)
     _clear_tx_cookie(response, settings)
     return response
 
@@ -217,7 +217,7 @@ async def sso_login_start(
         logger.warning("sso.login.start_failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
         return _refuse(exc.code, settings)
 
-    response = RedirectResponse(authorization.url, status_code=302)
+    response = redirect_to(authorization.url, status_code=302)
     _set_tx_cookie(response, authorization.binding_token, settings)
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -255,7 +255,7 @@ async def sso_link_start(
         )
         return _refuse(exc.code, settings, intent="link", status_code=303)
 
-    response = RedirectResponse(authorization.url, status_code=303)
+    response = redirect_to(authorization.url, status_code=303)
     _set_tx_cookie(response, authorization.binding_token, settings)
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -293,7 +293,7 @@ async def sso_reauth_start(
         )
         return _refuse(exc.code, settings, intent="reauth", status_code=303)
 
-    response = RedirectResponse(authorization.url, status_code=303)
+    response = redirect_to(authorization.url, status_code=303)
     _set_tx_cookie(response, authorization.binding_token, settings)
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -313,7 +313,7 @@ async def _finish_reauth(
     if not await mark_recent_reauth(result.user_id, session_id):
         return _refuse("sso_unavailable", settings, intent="reauth")
     target = f"{_prefix(settings)}{LINK_RETURN_PATH}?{urlencode({'email_reauth': '1'})}"
-    response = RedirectResponse(target, status_code=302)
+    response = redirect_to(target, status_code=302)
     _clear_tx_cookie(response, settings)
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -367,7 +367,7 @@ async def sso_callback(
     if isinstance(result, SsoLinkResult):
         await db.commit()
         target = f"{_prefix(settings)}{LINK_RETURN_PATH}?{urlencode({'sso_linked': result.provider_slug})}"
-        response = RedirectResponse(target, status_code=302)
+        response = redirect_to(target, status_code=302)
         _clear_tx_cookie(response, settings)
         response.headers["Cache-Control"] = "no-store"
         return response
@@ -390,7 +390,7 @@ async def sso_callback(
 
     # ``next_path`` was checked before it was stored with the transaction;
     # checking it again here keeps the redirect safe whatever the store held.
-    response = RedirectResponse(safe_next_path(result.next_path) or f"{_prefix(settings)}/", status_code=302)
+    response = redirect_to(safe_next_path(result.next_path) or f"{_prefix(settings)}/", status_code=302)
     remaining = int((result.absolute_expires_at - utcnow()).total_seconds())
     set_auth_cookies(
         response,

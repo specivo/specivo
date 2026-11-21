@@ -16,7 +16,7 @@
     {% for item in data["items"] %}
     <li>
       <div class="sp-dash-breakdown-row">
-        <span class="sp-dash-breakdown-label{{ ' sp-dash-muted' if item.kind != 'value' else '' }}">{% if item.url %}<a href="{{ item.url }}">{{ item.label }}</a>{% else %}{{ item.label }}{% endif %}</span>
+        <span class="sp-dash-breakdown-label{{ ' sp-dash-muted' if item.kind != 'value' else '' }}">{% if item.url %}<a href="{{ item.url | prefixed }}">{{ item.label }}</a>{% else %}{{ item.label }}{% endif %}</span>
         <span class="sp-dash-num">{% if item.spend %}{{ item.spend.total }}{% endif %}{% if item.unpriced %} <span class="sp-dash-text-warning">{% trans count=item.unpriced %}+ {{ count }} unpriced{% pluralize %}+ {{ count }} unpriced{% endtrans %}</span>{% endif %}</span>
       </div>
       <progress class="sp-dash-bar sp-dash-bar--thin" max="100" value="{{ item.percent }}" aria-hidden="true"></progress>
@@ -24,7 +24,7 @@
     {% endfor %}
   </ul>
   {% if data.more %}
-  {% if url %}<a class="sp-dash-more-link" href="{{ url }}">{% trans count=data.more %}and {{ count }} more in the report{% pluralize %}and {{ count }} more in the report{% endtrans %} &rarr;</a>
+  {% if url %}<a class="sp-dash-more-link" href="{{ url | prefixed }}">{% trans count=data.more %}and {{ count }} more in the report{% pluralize %}and {{ count }} more in the report{% endtrans %} &rarr;</a>
   {% else %}<span class="sp-dash-more-link sp-dash-muted">{% trans count=data.more %}and {{ count }} more{% pluralize %}and {{ count }} more{% endtrans %}</span>{% endif %}
   {% endif %}
   {% else %}
@@ -106,6 +106,6 @@
       {% else %}{% trans count=spend.managed %}AI usage and hours of the project where you see everyone's AI usage. Agent time is time logged by service accounts.{% pluralize %}AI usage and hours of the {{ count }} projects where you see everyone's AI usage. Agent time is time logged by service accounts.{% endtrans %}{% endif %}
       {% if spend.seat_hidden %}<span data-testid="dash-spend-seat-hidden">{% trans %}Seat cost is left out: some entries of these projects are hidden from you.{% endtrans %}</span>{% endif %}
     </span>
-    {% if spend.report_url %}<a href="{{ spend.report_url }}" data-testid="dash-spend-report">{% trans %}Full spend report{% endtrans %} &rarr;</a>{% endif %}
+    {% if spend.report_url %}<a href="{{ spend.report_url | prefixed }}" data-testid="dash-spend-report">{% trans %}Full spend report{% endtrans %} &rarr;</a>{% endif %}
   </div>
 </section>

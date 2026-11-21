@@ -157,7 +157,7 @@
 {%- if links %}
 <nav class="sp-aiu-chart-switch" aria-label="{{ _('Groups shown') }}" data-testid="aiu-chart-show-{{ name }}">
   {%- for l in links %}
-  <a class="sp-aiu-chart-switch-option{{ ' active' if l.active }}" href="{{ l.url }}"{% if l.active %} aria-current="true"{% endif %} data-show="{{ l.value }}">{{ l.value }}</a>
+  <a class="sp-aiu-chart-switch-option{{ ' active' if l.active }}" href="{{ l.url | prefixed }}"{% if l.active %} aria-current="true"{% endif %} data-show="{{ l.value }}">{{ l.value }}</a>
   {%- endfor %}
 </nav>
 {%- endif %}
@@ -200,7 +200,7 @@
       {%- if bucket_links %}
       <nav class="sp-aiu-chart-switch" aria-label="{{ _('Time buckets') }}" data-testid="aiu-chart-buckets">
         {%- for b in bucket_links %}
-        <a class="sp-aiu-chart-switch-option{{ ' active' if b.active }}" href="{{ b.url }}"{% if b.active %} aria-current="true"{% endif %} data-bucket="{{ b.value or 'auto' }}">{{ b.label }}</a>
+        <a class="sp-aiu-chart-switch-option{{ ' active' if b.active }}" href="{{ b.url | prefixed }}"{% if b.active %} aria-current="true"{% endif %} data-bucket="{{ b.value or 'auto' }}">{{ b.label }}</a>
         {%- endfor %}
       </nav>
       {%- endif %}

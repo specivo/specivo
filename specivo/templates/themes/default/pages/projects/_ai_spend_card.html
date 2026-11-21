@@ -32,6 +32,6 @@
     {% if card.truncated %}{% trans %}Only the latest three years are counted.{% endtrans %}{% endif %}
   </p>
   {% endif %}
-  <a class="sp-ai-spend-card-link" href="{{ card.url }}" data-testid="ai-spend-card-link">{% trans %}Open the AI spend report{% endtrans %} &rarr;</a>
+  <a class="sp-ai-spend-card-link" href="{{ card.url | prefixed }}" data-testid="ai-spend-card-link">{% trans %}Open the AI spend report{% endtrans %} &rarr;</a>
 </div>
 {%- endmacro %}

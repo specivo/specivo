@@ -12,7 +12,7 @@
     <ul class="sp-backlinks-list">
       {% for row in rows %}
       <li class="sp-backlinks-row">
-        <a class="sp-backlinks-ref" href="{{ row.url }}">{{ row.via if row.via else row.ref }}</a>
+        <a class="sp-backlinks-ref" href="{{ row.url | prefixed }}">{{ row.via if row.via else row.ref }}</a>
         <span class="sp-backlinks-title">{{ row.title }}</span>
         {% if row.status %}<span class="badge-status sp-backlinks-status">{{ row.status }}</span>{% endif %}
         {% if row.label %}<span class="sp-backlinks-label">&ldquo;{{ row.label }}&rdquo;</span>{% endif %}

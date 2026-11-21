@@ -22,7 +22,9 @@ Pipeline:
              never touched; issue refs and URLs stay out of link text too)
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
-      -> nh3.clean(...)            HTML sanitizer with our allowlist
+      -> nh3.clean(...)            HTML sanitizer with our allowlist; behind a
+                                   STEALTH_PREFIX it also prefixes root-relative
+                                   href/src values (issue, wiki and attachment links)
       -> markupsafe.Markup
 
 ``markdown.markdown`` also runs under a cooperative deadline, and a render
@@ -52,6 +54,7 @@ from markdown.treeprocessors import InlineProcessor as InlineTreeprocessor
 from markdown.treeprocessors import Treeprocessor
 from markdown.util import HTML_PLACEHOLDER_RE, AtomicString
 
+from specivo.core.app_url import base_path, prefixed, strip_base
 from specivo.core.i18n import gettext as _
 from specivo.services import markdown_budget
 from specivo.services.markdown_budget import (
@@ -386,6 +389,24 @@ def find_issue_ref_candidates(text: str | None) -> set[str]:
     return {m.group(1) for m in _ISSUE_REF_RE.finditer(text)}
 
 
+def _prefix_root_relative(base: str):
+    """An nh3 ``attribute_filter`` giving root-relative ``href``/``src`` values the URL prefix.
+
+    Issue and wiki links, attachment URLs and root-relative links typed by
+    hand (``[x](/issue/ACME-1/)``) all leave the renderer as application
+    paths; behind a stealth prefix this is where they get it. A value that
+    already carries it (a link copied from the address bar) is left alone.
+    Applied after sanitizing, so it also covers raw HTML in the source.
+    """
+
+    def _filter(_tag: str, attribute: str, value: str) -> str:
+        if attribute in ("href", "src") and value.startswith("/") and not value.startswith(("//", "/\\")):
+            return prefixed(value)
+        return value
+
+    return _filter if base else None
+
+
 def _sanitize_html(html_str: str) -> str:
     return nh3.clean(
         html_str,
@@ -393,6 +414,7 @@ def _sanitize_html(html_str: str) -> str:
         attributes=_ALLOWED_ATTRIBUTES,
         link_rel="noopener noreferrer",
         url_schemes={"http", "https", "mailto"},
+        attribute_filter=_prefix_root_relative(base_path()),
     )
 
 
@@ -640,7 +662,9 @@ def classify_link_target(target: str, instance_origin: str | None = None) -> Fou
         origin = _origin(target.strip())
         if origin is None or instance_origin is None or origin != _origin(instance_origin):
             return None
-    path = unquote(parts.path)
+    # A link copied from the address bar of an instance behind a stealth
+    # prefix carries it; the routes below are matched without it.
+    path = strip_base(unquote(parts.path))
     if m := _ISSUE_PATH_RE.match(path):
         return FoundLink("issue", m.group(1))
     if m := _WIKI_PATH_RE.match(path):

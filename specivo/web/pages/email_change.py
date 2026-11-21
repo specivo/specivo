@@ -32,7 +32,7 @@ from specivo.core.rate_limit import rate_limit
 from specivo.core.security import request_session, request_session_id
 from specivo.models.user import User
 from specivo.services.email_change_service import EmailChangeService, email_change_error_message
-from specivo.web.deps import get_templates, require_user
+from specivo.web.deps import get_templates, redirect_to, require_user
 
 router = APIRouter(tags=["web-auth"], include_in_schema=False)
 _service = EmailChangeService()
@@ -48,7 +48,7 @@ def _prefix() -> str:
 def _back(**query: str) -> RedirectResponse:
     from urllib.parse import urlencode
 
-    return RedirectResponse(f"{_prefix()}{PROFILE_PATH}?{urlencode(query)}", status_code=303)
+    return redirect_to(f"{_prefix()}{PROFILE_PATH}?{urlencode(query)}", status_code=303)
 
 
 def _outcome_messages() -> dict[str, str]:

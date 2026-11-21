@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="sp-base" content="{{ base }}">
   <title>{% block title %}{{ brand_name }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ base }}/static/img/favicon.svg">
   <link rel="manifest" href="{{ base }}/manifest.json">
@@ -19,7 +20,7 @@
   <link rel="stylesheet" href="{{ base }}/static/dist/css/{{ versioned['specivo.min.css'] }}">
   {% block plugin_css %}
   {% for css_url in plugin_css_files %}
-  <link rel="stylesheet" href="{{ css_url }}">
+  <link rel="stylesheet" href="{{ css_url | prefixed }}">
   {% endfor %}
   {% endblock %}
   {% if canonical_url %}
@@ -105,7 +106,7 @@
   <script src="{{ base }}/static/vendor/bootstrap.bundle.5.3.6.min.js"></script>
   {% block plugin_js %}
   {% for js_url in plugin_js_files %}
-  <script src="{{ js_url }}"></script>
+  <script src="{{ js_url | prefixed }}"></script>
   {% endfor %}
   {% endblock %}
   {% block chart_js %}{% endblock %}

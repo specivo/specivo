@@ -45,11 +45,49 @@ AppUrlProblem = Literal["unset", "local"]
 _PREFIX_SEGMENT_RE = re.compile(r"[A-Za-z0-9._~-]+")
 
 
+# The first path segment of every route the application serves. A prefix may
+# not start with one of them: a path under the prefix could then not be told
+# apart from an application path, and ``prefixed`` could not be idempotent.
+# ``tests/unit/test_app_url.py`` checks that the list covers every route.
+RESERVED_FIRST_SEGMENTS = frozenset(
+    {
+        "admin",
+        "ai-usage",
+        "api",
+        "auth",
+        "confirm-email",
+        "data",
+        "docs",
+        "forgot-password",
+        "health",
+        "hooks",
+        "imported",
+        "issue",
+        "login",
+        "logout",
+        "manifest.json",
+        "mcp",
+        "my",
+        "partials",
+        "projects",
+        "redoc",
+        "reset-password",
+        "robots.txt",
+        "scim",
+        "search",
+        "sitemap.xml",
+        "sitemaps",
+        "static",
+    }
+)
+
+
 def normalize_prefix(raw: str | None) -> str:
     """``STEALTH_PREFIX`` as ``""`` or ``"/one/or/more"``: one leading slash, none trailing.
 
     Raises ``ValueError`` for a segment with characters other than letters,
-    digits and ``.``, ``_``, ``~``, ``-``, or a ``.``/``..`` segment.
+    digits and ``.``, ``_``, ``~``, ``-``, a ``.``/``..`` segment, or a first
+    segment that is one of the application's own (``/api``, ``/projects``...).
     """
     value = (raw or "").strip().strip("/")
     if not value:
@@ -60,6 +98,8 @@ def normalize_prefix(raw: str | None) -> str:
             raise ValueError(
                 f"STEALTH_PREFIX: {raw!r} must be path segments of letters, digits, '.', '_', '~' and '-' only"
             )
+    if segments[0].lower() in RESERVED_FIRST_SEGMENTS:
+        raise ValueError(f"STEALTH_PREFIX: {raw!r} must not start with /{segments[0]}, a path Specivo itself serves")
     return "/" + "/".join(segments)
 
 
@@ -78,13 +118,21 @@ def base_path(settings: Settings | None = None) -> str:
 def prefixed(path: str, settings: Settings | None = None) -> str:
     """*path*, an application path such as ``/projects/``, as the browser must request it.
 
-    Not idempotent on purpose: pass a path that does not carry the prefix
-    yet. Paths taken from the request (``request.url.path``, a ``next``
-    parameter) already carry it and must not go through here again.
+    Idempotent: a path that already lies under the prefix (taken from the
+    request, such as a ``next`` parameter) comes back unchanged. That is
+    unambiguous because a prefix may not start with a segment the application
+    serves (:data:`RESERVED_FIRST_SEGMENTS`).
     """
-    if not path.startswith("/"):
+    if not path.startswith("/") or path.startswith("//"):
         raise ValueError(f"prefixed() takes a root-relative path, got {path!r}")
-    return base_path(settings) + path
+    base = base_path(settings)
+    if not base or _under(path, base):
+        return path
+    return base + path
+
+
+def _under(path: str, base: str) -> bool:
+    return path == base or path.startswith((base + "/", base + "?", base + "#"))
 
 
 def is_under_base(path: str) -> bool:
@@ -92,7 +140,7 @@ def is_under_base(path: str) -> bool:
     base = base_path()
     if not base:
         return path.startswith("/")
-    return path == base or path.startswith((base + "/", base + "?", base + "#"))
+    return _under(path, base)
 
 
 def strip_base(path: str) -> str:

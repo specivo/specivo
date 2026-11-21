@@ -25,7 +25,7 @@
         <span class="sp-dash-group-line">
           <span class="sp-dash-strong">{{ g.actor }}</span>{% if g.via_client is not none %} <span class="sp-dash-muted">{% if g.via_client %}{% trans client=g.via_client %}via {{ client }}{% endtrans %}{% else %}{% trans %}via an API key{% endtrans %}{% endif %}</span>{% endif %}
           {% if g.target_kind == "issue" %}{% trans %}worked on{% endtrans %}{% else %}{% trans %}edited wiki page{% endtrans %}{% endif %}
-          {% if g.target_kind == "issue" %}<a class="sp-dash-key" href="{{ g.target_url }}">{{ g.target_key }}</a> <span class="sp-dash-group-title">&ldquo;{{ g.target_title }}&rdquo;</span>{% else %}<a class="sp-dash-group-title" href="{{ g.target_url }}">&ldquo;{{ g.target_title }}&rdquo;</a> <span class="sp-dash-muted">{{ g.target_key }}</span>{% endif %}
+          {% if g.target_kind == "issue" %}<a class="sp-dash-key" href="{{ g.target_url | prefixed }}">{{ g.target_key }}</a> <span class="sp-dash-group-title">&ldquo;{{ g.target_title }}&rdquo;</span>{% else %}<a class="sp-dash-group-title" href="{{ g.target_url | prefixed }}">&ldquo;{{ g.target_title }}&rdquo;</a> <span class="sp-dash-muted">{{ g.target_key }}</span>{% endif %}
           {% if v.summary %}<span class="sp-dash-group-counts">&middot; {{ v.summary }}</span>{% endif %}
         </span>
         <span class="sp-dash-group-meta">

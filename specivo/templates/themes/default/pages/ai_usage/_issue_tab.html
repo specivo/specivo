@@ -13,7 +13,7 @@
 {% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note with context %}
 
 {% macro tab_link(link, cls="", focus="", label="", current=False, testid="") -%}
-<a class="{{ cls }}" href="{{ link.href }}" hx-get="{{ link.hx }}" hx-push-url="false"
+<a class="{{ cls }}" href="{{ link.href | prefixed }}" hx-get="{{ link.hx | prefixed }}" hx-push-url="false"
    {%- if focus %} data-aiu-focus="{{ focus }}"{% endif %}
    {%- if label %} aria-label="{{ label }}"{% endif %}
    {%- if current %} aria-current="true"{% endif %}
@@ -48,9 +48,9 @@
   <div class="sp-aiu-issue-head">
     <h2 class="sp-aiu-issue-title" id="aiu-issue-title" tabindex="-1">{% trans %}What this issue cost in AI{% endtrans %}</h2>
     <div class="sp-aiu-issue-actions">
-      {% if can_log %}<a class="sp-btn sp-btn-sm sp-btn-primary" href="{{ log_url }}" data-testid="aiu-issue-log">{% trans %}Log AI usage{% endtrans %}</a>{% endif %}
-      <a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ list_url }}" data-testid="aiu-issue-list">{% trans %}Open in project AI usage{% endtrans %}</a>
-      {% if report_url %}<a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ report_url }}" data-testid="aiu-issue-report">{% trans %}Spend report{% endtrans %}</a>{% endif %}
+      {% if can_log %}<a class="sp-btn sp-btn-sm sp-btn-primary" href="{{ log_url | prefixed }}" data-testid="aiu-issue-log">{% trans %}Log AI usage{% endtrans %}</a>{% endif %}
+      <a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ list_url | prefixed }}" data-testid="aiu-issue-list">{% trans %}Open in project AI usage{% endtrans %}</a>
+      {% if report_url %}<a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ report_url | prefixed }}" data-testid="aiu-issue-report">{% trans %}Spend report{% endtrans %}</a>{% endif %}
     </div>
   </div>
 
@@ -89,7 +89,7 @@
     {% if state.sub %}{% trans %}Includes the usage logged on its sub-issues.{% endtrans %}{% endif %}
     {% if summary.clipped %}<span data-testid="aiu-issue-clipped">{% trans %}Only the last three years of usage are counted.{% endtrans %}</span>{% endif %}
     {% if summary.seat_hidden %}<span data-testid="aiu-issue-seat-hidden">{% trans %}Seat cost is left out: subscription fees are shown only to administrators and to people who can see every entry of this project in the period.{% endtrans %}</span>{% endif %}
-    {% if excluded %}<a href="{{ excluded_url }}" data-testid="aiu-issue-excluded">{% trans count=excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}</a>{% endif %}
+    {% if excluded %}<a href="{{ excluded_url | prefixed }}" data-testid="aiu-issue-excluded">{% trans count=excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}</a>{% endif %}
   </p>
   {{ unpriced_note(summary.unpriced, summary.entries, summary.unpriced_models) }}
 
@@ -213,7 +213,7 @@
   <div class="card sp-aiu-issue-empty" data-testid="aiu-empty">
     <p class="sp-aiu-issue-empty-title">{% if state.sub %}{% trans %}No AI usage logged on this issue or its sub-issues yet.{% endtrans %}{% else %}{% trans %}No AI usage logged on this issue yet.{% endtrans %}{% endif %}</p>
     <p class="sp-text-muted-xs">{% trans %}Usage counts for an issue when its reporter names the issue (for example with the SPECIVO_ISSUE environment variable), when the agent marks the issue it works on through Specivo's MCP server, when the session's commits are linked to it, or when the branch name holds its key. You can also log usage by hand or move entries here from My AI usage.{% endtrans %}</p>
-    <p class="sp-text-muted-xs"><a href="{{ guide_url }}" target="_blank" rel="noopener" data-testid="aiu-issue-guide">{% trans %}How usage is attributed to an issue{% endtrans %}</a>{% if excluded %} · <a href="{{ excluded_url }}" data-testid="aiu-issue-excluded">{% trans count=excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}</a>{% endif %}</p>
+    <p class="sp-text-muted-xs"><a href="{{ guide_url }}" target="_blank" rel="noopener" data-testid="aiu-issue-guide">{% trans %}How usage is attributed to an issue{% endtrans %}</a>{% if excluded %} · <a href="{{ excluded_url | prefixed }}" data-testid="aiu-issue-excluded">{% trans count=excluded %}{{ count }} excluded entry not counted{% pluralize %}{{ count }} excluded entries not counted{% endtrans %}</a>{% endif %}</p>
   </div>
   {% endif %}
 </div>

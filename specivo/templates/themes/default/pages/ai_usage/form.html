@@ -33,7 +33,7 @@
 {% endif %}
 
 <div class="card sp-card-pad sp-aiu-form-card">
-  <form method="post" action="{{ form_action }}" class="sp-aiu-form" data-testid="aiu-form">
+  <form method="post" action="{{ form_action | prefixed }}" class="sp-aiu-form" data-testid="aiu-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ next_url }}">
 
@@ -158,7 +158,7 @@
     </div>
 
     <div class="sp-aiu-form-actions sp-aiu-wide">
-      <a href="{{ back_url }}" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
+      <a href="{{ back_url | prefixed }}" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
       <button type="submit" class="sp-btn sp-btn-primary" data-testid="aiu-form-submit">{% if entry %}{% trans %}Save{% endtrans %}{% else %}{% trans %}Log AI usage{% endtrans %}{% endif %}</button>
     </div>
   </form>

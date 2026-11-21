@@ -102,7 +102,7 @@
     {% if sso_buttons %}
     <div class="sp-sso-providers">
       {% for button in sso_buttons %}
-      <a class="sp-sso-provider-btn" href="{{ button.url }}">{% trans name=button.display_name %}Sign in with {{ name }}{% endtrans %}</a>
+      <a class="sp-sso-provider-btn" href="{{ button.url | prefixed }}">{% trans name=button.display_name %}Sign in with {{ name }}{% endtrans %}</a>
       {% endfor %}
     </div>
     {% endif %}

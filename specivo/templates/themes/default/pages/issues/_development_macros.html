@@ -88,6 +88,6 @@
 
 {# A link to the forge when *url* is a web address, else the text alone. #}
 {% macro forge_link(url, text, cls="") -%}
-{%- if url and url.startswith(("http://", "https://")) %}<a{% if cls %} class="{{ cls }}"{% endif %} href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ text }}</a>
+{%- if url and url.startswith(("http://", "https://")) %}<a{% if cls %} class="{{ cls }}"{% endif %} href="{{ url | prefixed }}" target="_blank" rel="noopener noreferrer">{{ text }}</a>
 {%- else %}<span{% if cls %} class="{{ cls }}"{% endif %}>{{ text }}</span>{% endif -%}
 {%- endmacro %}

@@ -16,7 +16,7 @@
   <div class="card" style="padding: var(--sp-space-xl);">
     <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
       {% if user.avatar_url %}
-      <img src="{{ user.avatar_url }}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;" alt="{{ user.login[:2] | upper }}">
+      <img src="{{ user.avatar_url | prefixed }}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;" alt="{{ user.login[:2] | upper }}">
       {% else %}
       <div class="header-user-avatar" style="width: 56px; height: 56px; font-size: 20px;{% if user.preferences.avatar_color|default('') %}background:{{ user.preferences.avatar_color }};{% endif %}">{{ user.login[:2] | upper }}</div>
       {% endif %}
