@@ -21,6 +21,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded AI spend reports: grouping, conversion, seat allocation and who sees seat cost (§4), and the route order of `/ai-usage/report/` (§4).
 **Revised:** 2026-11-06 — recorded that notifications and mail are rendered per recipient, in their language and timezone, with links built from `APP_URL` (§6).
 **Revised:** 2026-11-07 — recorded the AI spend report drill-down: URL state, narrowing filters and bounds (§4).
+**Revised:** 2026-11-21 — recorded AI spend by release and sprint: the nearest-ancestor lookup, its visibility and its query shape (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -332,13 +333,22 @@ range hidden from them); no report names a plan or shows a fee as such. The quer
 The REST routes (`/projects/{key}/ai-usage/report/`, `/ai-usage/report/`, `format=csv`) are included **before**
 the entries router so `/ai-usage/report/` is not read as an entry id; CSV cells that could start a spreadsheet
 formula are prefixed with `'`. The report pages are a drill-down whose whole state is in the URL
-(`group`, incl. `sessions`, and the filters `project`, `user_id`, `issue`, `tool`, `model`, `provider`,
-`cost_type`, `branch`; `-` for none): keys are resolved within what the reader may see, an unknown project or an
+(`group`, incl. `sessions`, and the filters `project`, `version`, `sprint`, `user_id`, `issue`, `tool`,
+`model`, `provider`, `cost_type`, `branch`; `-` for none): keys are resolved within what the reader may see, an unknown project or an
 issue they cannot see matches nothing (`ReportFilters.project_id` / `issue_id` = -1), a project report ignores
 `project`, and the project, issue and branch filters leave unallocated seat cost out (`excludes_seats`). A level
 shows at most 30 rows (the rest folded into one "other" row, `fold_rows`); the sessions level pages the entries and
 prices only that page (`entry_spend`, an internal per-entry grouping). Group colours are palette slots by rank of the
 chart on the same page (`color_slots`), so tables, cards and charts agree.
+The release (`version`) and `sprint` dimensions are the entry's issue's value now, else the value of
+its nearest ancestor that has one (`specivo.services.ai_spend_planning.planning_lookup`): the issue
+joined once to its ancestors on `root_id`/`lft`/`rgt`, never a recursive query. Grouping uses it as a
+`LEFT JOIN LATERAL` (memoized per issue by PostgreSQL), filters as a scalar subquery behind an
+`= ANY(ARRAY(candidates))` index prefilter; building it sets `SET LOCAL jit = off` once per transaction,
+because the planner's per-row estimate otherwise triggers JIT that costs more than the query. Visibility
+is inside the lookup (a hidden issue, a hidden ancestor and a version or sprint of a project the reader
+cannot open all give none), so a "none" filter matches exactly the "none" row and no row names what the
+reader may not see. A version of another project than the report's is labelled `KEY name`.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
