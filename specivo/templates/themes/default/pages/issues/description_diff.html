@@ -5,10 +5,10 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
-  {"label": issue.display_key, "url": "/issue/" ~ issue.display_key},
+  {"label": "Home", "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": "Issues", "url": base ~ "/projects/" ~ project.key ~ "/issues"},
+  {"label": issue.display_key, "url": base ~ "/issue/" ~ issue.display_key},
   {"label": "Description Changes"}
 ]) }}
 
@@ -82,7 +82,7 @@
             <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
               {% if v.journal_id %}
               <input type="checkbox" name="compare" value="{{ v.journal_id }}" style="margin:0;">
-              <a href="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);font-weight:600;">#{{ v.num }}</a>
+              <a href="{{ base }}/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);font-weight:600;">#{{ v.num }}</a>
               {% else %}
               <span style="color:var(--sp-text-muted);font-weight:600;">#{{ v.num }}</span>
               {% endif %}
@@ -103,9 +103,9 @@
           <td style="color:var(--sp-text-muted);">{% if v.get('is_synthetic') %}{% trans %}Initial description{% endtrans %}{% endif %}</td>
           <td>
             {% if v.journal_id %}
-            <a href="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">{% trans %}View{% endtrans %}</a>
+            <a href="{{ base }}/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">{% trans %}View{% endtrans %}</a>
             {% if not v.is_current %}
-            <form method="POST" action="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/restore/" style="display:inline;margin-left:var(--sp-space-sm);">
+            <form method="POST" action="{{ base }}/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/restore/" style="display:inline;margin-left:var(--sp-space-sm);">
               <button type="submit" style="background:none;border:none;color:var(--sp-text-secondary);cursor:pointer;font-size:inherit;font-family:inherit;padding:0;" data-confirm="{{ _('Restore this version of the description?') }}">{% trans %}Restore{% endtrans %}</button>
             </form>
             {% endif %}
@@ -120,6 +120,6 @@
 {% endif %}
 
 <div style="margin-top:var(--sp-space-xl);">
-  <a href="/issue/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">{% trans %}← Back to issue{% endtrans %}</a>
+  <a href="{{ base }}/issue/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">{% trans %}← Back to issue{% endtrans %}</a>
 </div>
 {% endblock %}

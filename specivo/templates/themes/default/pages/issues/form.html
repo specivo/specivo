@@ -6,17 +6,17 @@
 {% block content %}
 {% if mode == 'edit' %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
-  {"label": issue.display_key, "url": "/issue/" ~ issue.display_key},
+  {"label": "Home", "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": "Issues", "url": base ~ "/projects/" ~ project.key ~ "/issues"},
+  {"label": issue.display_key, "url": base ~ "/issue/" ~ issue.display_key},
   {"label": "Edit"}
 ]) }}
 {% else %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
+  {"label": "Home", "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": "Issues", "url": base ~ "/projects/" ~ project.key ~ "/issues"},
   {"label": "New Issue"}
 ]) }}
 {% endif %}
@@ -74,7 +74,7 @@
           <ul class="sp-similar-issues-list">
             <template x-for="item in similarIssues" :key="item.key">
               <li class="sp-similar-issues-row" data-testid="similar-issue">
-                <a class="sp-similar-issues-link" :href="'/issue/' + item.key + '/'" target="_blank" rel="noopener">
+                <a class="sp-similar-issues-link" :href="'{{ base }}/issue/' + item.key + '/'" target="_blank" rel="noopener">
                   <span class="sp-similar-issues-key" x-text="item.key"></span>
                   <span class="sp-similar-issues-subject" x-text="item.subject"></span>
                 </a>
@@ -314,7 +314,7 @@
     <div class="form-group">
       <label class="modal-label">{% trans %}Tags{% endtrans %}</label>
       <div class="sp-tag-field"
-           x-data='tagField({ endpoint: "/api/v1/projects/{{ project.key }}/tags/search/", saveUrl: "", tags: pendingTags, canEdit: true, placeholder: {{ _("Add tags...") | tojson }}, placeholderMore: {{ _("Add more...") | tojson }} })'>
+           x-data='tagField({ endpoint: "{{ base }}/api/v1/projects/{{ project.key }}/tags/search/", saveUrl: "", tags: pendingTags, canEdit: true, placeholder: {{ _("Add tags...") | tojson }}, placeholderMore: {{ _("Add more...") | tojson }} })'>
         <div class="sp-meta-tags" @click="$refs.formTagInput.focus()">
           <template x-for="(tag, i) in tags" :key="i">
             <span class="sp-meta-tag">
@@ -437,7 +437,7 @@
       {% if mode != 'edit' %}
       <button class="sp-btn sp-btn-ghost" :disabled="!canSubmit" @click="submitForm(true)">{% trans %}+ Create and Continue{% endtrans %}</button>
       {% endif %}
-      <a href="/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}/"
+      <a href="{{ base }}/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}/"
          class="cancel-link">{% trans %}Cancel{% endtrans %}</a>
     </div>
   </form>

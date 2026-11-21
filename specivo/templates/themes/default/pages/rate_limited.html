@@ -31,9 +31,9 @@
         {% trans %}Try again{% endtrans %}
       </a>
       {% if is_search %}
-      <a href="/search/" class="sp-btn sp-btn-ghost">{% trans %}Back to search{% endtrans %}</a>
+      <a href="{{ base }}/search/" class="sp-btn sp-btn-ghost">{% trans %}Back to search{% endtrans %}</a>
       {% else %}
-      <a href="/" class="sp-btn sp-btn-ghost">{% trans %}Home{% endtrans %}</a>
+      <a href="{{ base }}/" class="sp-btn sp-btn-ghost">{% trans %}Home{% endtrans %}</a>
       {% endif %}
     </div>
   </div>

@@ -43,8 +43,8 @@
     </div>
     <div class="sp-dash-segmented" role="group" aria-label="{{ _('Reporting period') }}">
       {% for p in spend.periods %}
-      <a class="sp-dash-segment" role="button" href="/?period={{ p }}#sp-dash-spend"
-         hx-get="/partials/dashboard/spend/?period={{ p }}" hx-target="#sp-dash-spend" hx-swap="outerHTML"
+      <a class="sp-dash-segment" role="button" href="{{ base }}/?period={{ p }}#sp-dash-spend"
+         hx-get="{{ base }}/partials/dashboard/spend/?period={{ p }}" hx-target="#sp-dash-spend" hx-swap="outerHTML"
          aria-pressed="{{ 'true' if p == spend.period else 'false' }}" data-testid="dash-period-{{ p }}">{{ period_label(p) }}</a>
       {% endfor %}
     </div>

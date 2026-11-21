@@ -4,18 +4,18 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/">{{ project.name }}</a>
   <span class="sep">/</span>
-  <a href="/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
   <span class="sep">/</span>
   <span>{% trans %}Trash{% endtrans %}</span>
 </div>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-space-lg);">
   <h1 style="font-size:var(--sp-font-size-xl);font-weight:700;">{% trans %}Deleted Wiki Pages{% endtrans %}</h1>
-  <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">{% trans %}Back to Wiki{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">{% trans %}Back to Wiki{% endtrans %}</a>
 </div>
 
 {% if deleted_pages %}
@@ -35,7 +35,7 @@
         {{ page.deleted_at | localtime(user.timezone) if page.deleted_at else '' }}
       </td>
       <td>
-        <form method="POST" action="/projects/{{ project.key }}/wiki/trash/{{ page.id }}/restore/" style="display:inline;">
+        <form method="POST" action="{{ base }}/projects/{{ project.key }}/wiki/trash/{{ page.id }}/restore/" style="display:inline;">
           <button type="submit" class="sp-btn sp-btn-sm sp-btn-primary">{% trans %}Restore{% endtrans %}</button>
         </form>
       </td>

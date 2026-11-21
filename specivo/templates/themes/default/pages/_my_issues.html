@@ -41,9 +41,9 @@
     {% set flags = issue_flags[issue.id] if issue_flags is defined and issue.id in issue_flags else {} %}
     <tr>
       <td class="sp-dash-issues-prio"><span class="badge-priority {{ issue.priority.name | lower | replace(' ', '-') if issue.priority else 'normal' }}" title="{{ issue.priority.name if issue.priority else '' }}"></span></td>
-      <td data-label="{{ _('Key') }}"><a class="issue-key" href="/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
+      <td data-label="{{ _('Key') }}"><a class="issue-key" href="{{ base }}/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
       <td class="issue-subject sp-dash-issues-subject">
-        <a class="sp-dash-issues-link" href="/issue/{{ issue.display_key }}/">{{ issue.subject }}</a>
+        <a class="sp-dash-issues-link" href="{{ base }}/issue/{{ issue.display_key }}/">{{ issue.subject }}</a>
         {% if flags.agent %}<span class="sp-dash-flag sp-dash-flag--agent" data-testid="dash-flag-agent">{% trans %}Agent active{% endtrans %}</span>{% endif %}
         {% if flags.blocked %}<span class="sp-dash-flag sp-dash-flag--danger" data-testid="dash-flag-blocked">{% trans %}Blocked{% endtrans %}</span>{% endif %}
         {% if flags.overdue %}<span class="sp-dash-flag sp-dash-flag--warning" data-testid="dash-flag-overdue">{% trans %}Overdue{% endtrans %}</span>{% endif %}
@@ -65,7 +65,7 @@
 <div class="sp-issues-pager">
   {% if current_page > 1 %}
     <a href="#"
-       hx-get="/partials/dashboard/my-issues/?offset={{ (current_page - 2) * limit }}&limit={{ limit }}"
+       hx-get="{{ base }}/partials/dashboard/my-issues/?offset={{ (current_page - 2) * limit }}&limit={{ limit }}"
        hx-target="#my-issues-container"
        hx-swap="innerHTML"
        class="sp-page-link">&laquo;</a>
@@ -75,7 +75,7 @@
       <span class="sp-page-link active">{{ page }}</span>
     {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
       <a href="#"
-         hx-get="/partials/dashboard/my-issues/?offset={{ (page - 1) * limit }}&limit={{ limit }}"
+         hx-get="{{ base }}/partials/dashboard/my-issues/?offset={{ (page - 1) * limit }}&limit={{ limit }}"
          hx-target="#my-issues-container"
          hx-swap="innerHTML"
          class="sp-page-link">{{ page }}</a>
@@ -85,7 +85,7 @@
   {% endfor %}
   {% if current_page < total_pages %}
     <a href="#"
-       hx-get="/partials/dashboard/my-issues/?offset={{ current_page * limit }}&limit={{ limit }}"
+       hx-get="{{ base }}/partials/dashboard/my-issues/?offset={{ current_page * limit }}&limit={{ limit }}"
        hx-target="#my-issues-container"
        hx-swap="innerHTML"
        class="sp-page-link">&raquo;</a>

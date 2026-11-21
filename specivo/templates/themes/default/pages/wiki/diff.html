@@ -5,11 +5,11 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
-  {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
-  {"label": _("History"), "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/history"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Wiki"), "url": base ~ "/projects/" ~ project.key ~ "/wiki"},
+  {"label": wiki_page.title, "url": base ~ "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
+  {"label": _("History"), "url": base ~ "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/history"},
   {"label": _("Diff")}
 ]) }}
 
@@ -17,7 +17,7 @@
   <h1 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-xl);font-weight:700;">
     {% trans from_version=from_version, to_version=to_version %}Comparing version %(from_version)s → %(to_version)s{% endtrans %}
   </h1>
-  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">{% trans %}Back to history{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">{% trans %}Back to history{% endtrans %}</a>
 </div>
 
 {% if diff_lines %}

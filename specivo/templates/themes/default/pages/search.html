@@ -5,7 +5,7 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
+  {"label": _("Home"), "url": base ~ "/"},
   {"label": _("Search")}
 ]) }}
 
@@ -14,7 +14,7 @@
 </div>
 
 {# Search box #}
-<form method="get" action="/search/" id="search-form" x-data="{ submitting: false }" @submit="submitting = true">
+<form method="get" action="{{ base }}/search/" id="search-form" x-data="{ submitting: false }" @submit="submitting = true">
   <input type="hidden" name="mode" value="{{ mode }}" x-ref="modeInput">
   <input type="hidden" name="scope" value="{{ scope }}" x-ref="scopeInput">
   {% if project_key %}<input type="hidden" name="project_key" value="{{ project_key }}">{% endif %}
@@ -78,7 +78,7 @@
 {% if not anonymous %}
 <div class="search-tag-filter sp-tag-field"
      x-data='tagFilter({
-       endpoint: "/api/v1/tags/search/",
+       endpoint: "{{ base }}/api/v1/tags/search/",
        tags: {{ (tags if tags is defined else []) | tojson }},
        placeholder: {{ _("Filter by tag...") | tojson }},
        placeholderMore: {{ _("Add tag...") | tojson }},
@@ -191,7 +191,7 @@
     {% if r.result_type in ('comment', 'journal') %}
     <div class="comment-header">
       {{ icon_comment | safe }}
-      <a class="result-title" href="/issue/{{ r.title }}/">{% trans title=r.title %}Comment on %(title)s{% endtrans %}</a>
+      <a class="result-title" href="{{ base }}/issue/{{ r.title }}/">{% trans title=r.title %}Comment on %(title)s{% endtrans %}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
@@ -202,7 +202,7 @@
     {% elif r.result_type == 'issue' and scope == 'issues' %}
     <div class="result-header">
       {{ icon_issue | safe }}
-      <a class="issue-key" href="/issue/{{ r.title }}/">{{ r.title }}</a>
+      <a class="issue-key" href="{{ base }}/issue/{{ r.title }}/">{{ r.title }}</a>
       {% if r.subtitle %}
       <span class="result-subject">{{ r.subtitle }}</span>
       {% endif %}
@@ -212,7 +212,7 @@
     {% elif r.result_type == 'issue' %}
     <div class="result-header">
       {{ icon_issue | safe }}
-      <a class="result-title" href="/issue/{{ r.title }}/">{{ r.title }}{% if r.subtitle %}: {{ r.subtitle }}{% endif %}</a>
+      <a class="result-title" href="{{ base }}/issue/{{ r.title }}/">{{ r.title }}{% if r.subtitle %}: {{ r.subtitle }}{% endif %}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
@@ -223,7 +223,7 @@
     {% elif r.result_type in ('wiki', 'wiki_page') and scope == 'wiki' %}
     <div class="result-header">
       {{ icon_wiki | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or r.result_type }}</a>
+      <a class="result-title" href="{{ base }}/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or r.result_type }}</a>
       <span class="project-key" style="font-size:var(--sp-font-size-xs)">{{ r.project_key }}</span>
     </div>
 
@@ -231,7 +231,7 @@
     {% elif r.result_type in ('wiki', 'wiki_page') %}
     <div class="result-header">
       {{ icon_wiki | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or _('Wiki Page') }}</a>
+      <a class="result-title" href="{{ base }}/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or _('Wiki Page') }}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
@@ -285,7 +285,7 @@
 {% if project_key %}{% set ns.params = ns.params + [("project_key", project_key)] %}{% endif %}
 {% if mf %}{% set ns.params = ns.params + [("mf", mf), ("mv", mv), ("ma", ma)] %}{% endif %}
 {% for t in tags or [] %}{% set ns.params = ns.params + [("tag", t.name)] %}{% endfor %}
-{% set pbase = "/search/?" ~ (ns.params | urlencode) %}
+{% set pbase = base ~ "/search/?" ~ (ns.params | urlencode) %}
 <div class="sp-pagination">
   <div class="sp-pagination-info">{% trans start=offset + 1, end=[offset + limit, total] | min, total=total %}%(start)s–%(end)s of %(total)s{% endtrans %}</div>
   {% if total_pages > 1 %}

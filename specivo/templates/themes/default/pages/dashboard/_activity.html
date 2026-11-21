@@ -10,8 +10,8 @@
     <h2 id="sp-dash-activity-title">{% trans %}Recent activity{% endtrans %}</h2>
     <div class="sp-dash-chips" role="group" aria-label="{{ _('Show activity of') }}">
       {% for f in activity.filters %}
-      <a class="sp-dash-chip" role="button" href="/?who={{ f }}#sp-dash-activity"
-         hx-get="/partials/dashboard/activity/?who={{ f }}" hx-target="#sp-dash-activity" hx-swap="outerHTML"
+      <a class="sp-dash-chip" role="button" href="{{ base }}/?who={{ f }}#sp-dash-activity"
+         hx-get="{{ base }}/partials/dashboard/activity/?who={{ f }}" hx-target="#sp-dash-activity" hx-swap="outerHTML"
          aria-pressed="{{ 'true' if f == activity.who else 'false' }}" data-testid="dash-activity-{{ f }}">{{ filter_label(f) }}</a>
       {% endfor %}
     </div>

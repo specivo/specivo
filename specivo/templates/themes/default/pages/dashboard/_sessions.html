@@ -21,7 +21,7 @@
       </div>
       <div class="sp-dash-session-issue">
         {% if s.issue_key %}
-        <div class="sp-dash-session-subject"><a class="sp-dash-key" href="/issue/{{ s.issue_key }}/">{{ s.issue_key }}</a> {{ s.issue_subject }}</div>
+        <div class="sp-dash-session-subject"><a class="sp-dash-key" href="{{ base }}/issue/{{ s.issue_key }}/">{{ s.issue_key }}</a> {{ s.issue_subject }}</div>
         <div class="sp-dash-session-state">
           <span class="badge-status {{ s.status_name | lower | replace(' ', '-') }}">{{ s.status_name }}</span>
           {% if s.timer_elapsed %}<span class="sp-dash-timer" title="{{ _('Running timer') }}">{% trans elapsed=s.timer_elapsed %}Timer {{ elapsed }}{% endtrans %}</span>{% endif %}

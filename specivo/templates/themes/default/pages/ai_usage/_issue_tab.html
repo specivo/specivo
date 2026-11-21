@@ -44,7 +44,7 @@
 
 <div class="sp-drill sp-aiu-issue" id="aiu-issue" data-testid="aiu-issue-tab"
      hx-target="#issue-ai-usage-tab" hx-swap="innerHTML show:none"
-     {%- if summary and summary.chart %} data-sp-chart-src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}"{% endif %}>
+     {%- if summary and summary.chart %} data-sp-chart-src="{{ base }}/static/dist/js/{{ versioned['spend-chart.min.js'] }}"{% endif %}>
   <div class="sp-aiu-issue-head">
     <h2 class="sp-aiu-issue-title" id="aiu-issue-title" tabindex="-1">{% trans %}What this issue cost in AI{% endtrans %}</h2>
     <div class="sp-aiu-issue-actions">
@@ -175,9 +175,9 @@
           <td class="sp-aiu-num sp-aiu-s-tokens" data-label="{{ _('Tokens') }}" title="{{ r.total_tokens }}: {{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}">{{ r.tokens_short }}</td>
           <td class="sp-aiu-s-type" data-label="{{ _('Cost type') }}"><span class="sp-drill-tag sp-drill-tag--{{ r.cost_type }}">{{ cost_type_label(r.cost_type) }}</span></td>
           <td class="sp-aiu-num sp-aiu-s-spend" data-label="{{ _('Spend') }}"><strong>{{ r.spend }}</strong></td>
-          {% if sessions.show_issue %}<td class="sp-aiu-s-issue" data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+          {% if sessions.show_issue %}<td class="sp-aiu-s-issue" data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="{{ base }}/issue/{{ r.issue_key }}/">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
           <td class="sp-aiu-s-branch" data-label="{{ _('Branch') }}">{% if r.branch %}<code class="sp-drill-branch" title="{{ r.branch }}">{{ r.branch }}</code>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
-          <td class="sp-aiu-actions sp-aiu-s-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" aria-label="{{ _('Edit') }} {{ r.usage_date }} {{ r.user_name }}" data-testid="aiu-issue-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
+          <td class="sp-aiu-actions sp-aiu-s-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="{{ base }}/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" aria-label="{{ _('Edit') }} {{ r.usage_date }} {{ r.user_name }}" data-testid="aiu-issue-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

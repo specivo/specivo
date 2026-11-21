@@ -5,19 +5,19 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
   {"label": _("Sprints")}
 ]) }}
 
 <div class="page-header">
   <h1>{% trans %}Sprints{% endtrans %}</h1>
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       {% trans %}Analytics{% endtrans %}
     </a>
-    <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       {% trans %}Backlog{% endtrans %}
     </a>
@@ -79,8 +79,8 @@
     <div class="sprint-list-goal">"{{ sprint.goal }}"</div>
     {% endif %}
     <div class="sprint-list-footer">
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/">{% trans %}Details{% endtrans %} &rarr;</a>
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" style="margin-left:var(--sp-space-md)">{% trans %}Open board{% endtrans %} &rarr;</a>
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/">{% trans %}Details{% endtrans %} &rarr;</a>
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" style="margin-left:var(--sp-space-md)">{% trans %}Open board{% endtrans %} &rarr;</a>
     </div>
   </div>
   {% endfor %}
@@ -113,9 +113,9 @@
     <div class="sprint-list-goal">"{{ sprint.goal }}"</div>
     {% endif %}
     <div class="sprint-list-footer">
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/">{% trans %}Details{% endtrans %} &rarr;</a>
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/">{% trans %}Details{% endtrans %} &rarr;</a>
       {% if can_manage_sprint %}
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" style="margin-left:var(--sp-space-md)">{% trans %}Edit{% endtrans %} &rarr;</a>
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" style="margin-left:var(--sp-space-md)">{% trans %}Edit{% endtrans %} &rarr;</a>
       {% endif %}
     </div>
   </div>
@@ -153,7 +153,7 @@
       <div class="sprint-list-progress-bar"><div class="sprint-list-progress-fill" style="width:{{ pct }}%;background:{% if pct >= 90 %}var(--sp-success){% elif pct >= 70 %}var(--sp-accent){% else %}var(--sp-warning){% endif %}"></div></div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span class="sprint-list-progress-text">{% trans pct=pct %}%(pct)s%% complete{% endtrans %}</span>
-        <a href="/projects/{{ project.key }}/sprints/analytics/" style="display:inline-flex;align-items:center;gap:var(--sp-space-xs);font-size:var(--sp-font-size-xs);color:var(--sp-accent);font-weight:600;text-decoration:none">
+        <a href="{{ base }}/projects/{{ project.key }}/sprints/analytics/" style="display:inline-flex;align-items:center;gap:var(--sp-space-xs);font-size:var(--sp-font-size-xs);color:var(--sp-accent);font-weight:600;text-decoration:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           {% trans count=counts.get('completed', 0) %}%(count)s velocity{% endtrans %}
         </a>
@@ -161,7 +161,7 @@
     </div>
     {% endif %}
     <div class="sprint-list-footer">
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/">{% trans %}Details{% endtrans %} &rarr;</a>
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/">{% trans %}Details{% endtrans %} &rarr;</a>
     </div>
   </div>
   {% endfor %}
@@ -187,8 +187,8 @@
 <div class="lightbox" id="create-sprint-modal" style="display:none" data-modal-backdrop>
   <div class="att-delete-modal" style="max-width:480px">
     <h3>{% trans %}New Sprint{% endtrans %}</h3>
-    <form method="post" action="/api/v1/projects/{{ project.key }}/sprints/"
-          hx-post="/api/v1/projects/{{ project.key }}/sprints/"
+    <form method="post" action="{{ base }}/api/v1/projects/{{ project.key }}/sprints/"
+          hx-post="{{ base }}/api/v1/projects/{{ project.key }}/sprints/"
           hx-ext="json-enc"
           hx-swap="none"
           data-hx-reload>

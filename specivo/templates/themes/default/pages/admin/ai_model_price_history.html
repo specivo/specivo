@@ -5,11 +5,11 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/ai-model-prices/">{% trans %}AI model prices{% endtrans %}</a>
+  <a href="{{ base }}/admin/ai-model-prices/">{% trans %}AI model prices{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{{ model }}</span>
 </div>
@@ -30,7 +30,7 @@
 <div class="card sp-card-pad sp-mb-md" data-testid="recompute-offer">
   <h3 class="sp-card-h3">{% trans %}Recompute past usage{% endtrans %}</h3>
   <p class="sp-text-muted sp-mb-md">{% trans count=recompute_offer.entries, start=recompute_offer.from, end=recompute_offer.to %}The new price covers a past period. {{ count }} usage entry was priced between {{ start }} and {{ end }} and keeps its old cost until you recompute it. Each entry is priced again with the price valid at its own time.{% pluralize %}The new price covers a past period. {{ count }} usage entries were priced between {{ start }} and {{ end }} and keep their old costs until you recompute them. Each entry is priced again with the price valid at its own time.{% endtrans %}</p>
-  <form method="post" action="/admin/ai-model-prices/recompute/">
+  <form method="post" action="{{ base }}/admin/ai-model-prices/recompute/">
     <input type="hidden" name="provider" value="{{ recompute_offer.provider }}">
     <input type="hidden" name="model" value="{{ recompute_offer.model }}">
     <input type="hidden" name="from" value="{{ recompute_offer.from_input }}">
@@ -80,22 +80,22 @@
                 {% endif %}
                 {% if p.is_local %}<dt>{% trans %}Local model{% endtrans %}</dt><dd>{{ p.baseline_model or '–' }}</dd>{% endif %}
               </dl>
-              <form method="post" action="/admin/ai-model-prices/{{ p.id }}/details/" class="sp-mp-inline">
+              <form method="post" action="{{ base }}/admin/ai-model-prices/{{ p.id }}/details/" class="sp-mp-inline">
                 <label>{% trans %}Aliases{% endtrans %}<input type="text" name="aliases" class="form-input" value="{{ p.aliases|join(' ') }}"></label>
                 <label>{% trans %}Note{% endtrans %}<input type="text" name="note" class="form-input" maxlength="1000" value="{{ p.note }}"></label>
                 <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save{% endtrans %}</button>
               </form>
-              <form method="post" action="/admin/ai-model-prices/{{ p.id }}/end/" class="sp-mp-inline">
+              <form method="post" action="{{ base }}/admin/ai-model-prices/{{ p.id }}/end/" class="sp-mp-inline">
                 <label>{% trans %}Valid until (UTC){% endtrans %}<input type="datetime-local" step="1" name="effective_to" class="form-input" value="{{ p.to_input }}"></label>
                 <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Save end{% endtrans %}</button>
               </form>
               <div class="sp-mp-inline">
-                <form method="post" action="/admin/ai-model-prices/{{ p.id }}/active/">
+                <form method="post" action="{{ base }}/admin/ai-model-prices/{{ p.id }}/active/">
                   <input type="hidden" name="active" value="{{ '0' if p.is_active else '1' }}">
                   <button type="submit" class="sp-btn-sm">{% if p.is_active %}{% trans %}Deactivate{% endtrans %}{% else %}{% trans %}Activate{% endtrans %}{% endif %}</button>
                 </form>
                 {% if p.source == 'admin' and not in_use[p.id] %}
-                <form method="post" action="/admin/ai-model-prices/{{ p.id }}/delete/">
+                <form method="post" action="{{ base }}/admin/ai-model-prices/{{ p.id }}/delete/">
                   <button type="submit" class="sp-btn-sm">{% trans %}Delete{% endtrans %}</button>
                 </form>
                 {% endif %}

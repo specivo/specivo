@@ -66,10 +66,10 @@
 {% endfor %}
 {% set shown = page.offset + page.items | length %}
 {% if shown < page.total_count %}
-{% set base = "/partials/issues/" ~ issue.display_key ~ "/development/timeline/" %}
+{% set timeline_url = base ~ "/partials/issues/" ~ issue.display_key ~ "/development/timeline/" %}
 <li class="sp-dev-more-row">
   <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost sp-dev-more" data-testid="development-more"
-          hx-get="{{ base }}?offset={{ shown }}{% for k in dev_kinds %}&amp;kinds={{ k }}{% endfor %}"
+          hx-get="{{ timeline_url }}?offset={{ shown }}{% for k in dev_kinds %}&amp;kinds={{ k }}{% endfor %}"
           hx-target="closest li" hx-swap="outerHTML">{% trans count=[dev_page_size, page.total_count - shown] | min %}Show %(count)s more{% endtrans %}</button>
 </li>
 {% elif not page.items %}

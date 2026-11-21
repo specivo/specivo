@@ -5,8 +5,8 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
   {"label": _("Time Entries")}
 ]) }}
 
@@ -14,7 +14,7 @@
   <h1>{% trans %}Time Entries{% endtrans %}</h1>
   {% if can_log_time %}
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/time-entries/new/" class="sp-btn sp-btn-primary">
+    <a href="{{ base }}/projects/{{ project.key }}/time-entries/new/" class="sp-btn sp-btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}Log Time{% endtrans %}
     </a>
@@ -23,7 +23,7 @@
 </div>
 
 {# Filters #}
-<form method="get" action="/projects/{{ project.key }}/time-entries/" class="filter-bar">
+<form method="get" action="{{ base }}/projects/{{ project.key }}/time-entries/" class="filter-bar">
   <span class="filter-label">{% trans %}From{% endtrans %}</span>
   <input type="date" name="from_date" value="{{ filters.from_date or '' }}" class="filter-input">
   <span class="filter-label">{% trans %}To{% endtrans %}</span>

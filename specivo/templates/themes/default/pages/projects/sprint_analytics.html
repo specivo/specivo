@@ -5,16 +5,16 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Sprints"), "url": "/projects/" ~ project.key ~ "/sprints/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Sprints"), "url": base ~ "/projects/" ~ project.key ~ "/sprints/"},
   {"label": _("Analytics")}
 ]) }}
 
 <div class="page-header">
   <h1>{% trans %}Sprint Analytics{% endtrans %}</h1>
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
       {% trans %}Back to Sprints{% endtrans %}
     </a>
@@ -119,7 +119,7 @@
         {% if loop.index <= 5 %}
         <tr>
           <td>
-            <a href="/projects/{{ project.key }}/sprints/{{ s.sprint_id }}/board/" class="velocity-table-link">{{ s.name }}</a>
+            <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ s.sprint_id }}/board/" class="velocity-table-link">{{ s.name }}</a>
           </td>
           <td>
             {% if s.get('active') %}

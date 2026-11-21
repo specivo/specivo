@@ -5,9 +5,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Projects"), "url": "/projects/"},
-  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
-  {"label": _("Recurring tasks"), "url": "/projects/" ~ project.key ~ "/recurring-patterns/"},
+  {"label": _("Projects"), "url": base ~ "/projects/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": _("Recurring tasks"), "url": base ~ "/projects/" ~ project.key ~ "/recurring-patterns/"},
   {"label": _("Edit") if mode == 'edit' else _("New pattern")}
 ]) }}
 

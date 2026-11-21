@@ -5,8 +5,8 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": _("Admin"), "url": "/admin/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": _("Admin"), "url": base ~ "/admin/"},
   {"label": _("Audit log")}
 ]) }}
 
@@ -19,7 +19,7 @@
   {% trans zone=zone %}Times are shown in your timezone (%(zone)s).{% endtrans %}
 </p>
 
-<form method="get" action="/admin/audit-log/" class="card sp-audit-filters">
+<form method="get" action="{{ base }}/admin/audit-log/" class="card sp-audit-filters">
   <label class="sp-audit-field">
     <span class="form-label">{% trans %}Category{% endtrans %}</span>
     <select name="category" class="filter-select">
@@ -61,7 +61,7 @@
   <input type="hidden" name="limit" value="{{ limit }}">
   <div class="sp-audit-actions">
     <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Filter{% endtrans %}</button>
-    <a href="/admin/audit-log/" class="sp-btn sp-btn-ghost">{% trans %}Reset{% endtrans %}</a>
+    <a href="{{ base }}/admin/audit-log/" class="sp-btn sp-btn-ghost">{% trans %}Reset{% endtrans %}</a>
   </div>
 </form>
 
@@ -99,7 +99,7 @@
             {% else %}<span class="sp-audit-missing">&mdash;</span>{% endif %}
           </td>
           <td>
-            {% if row.project_key %}<a href="/projects/{{ row.project_key }}/" class="sp-audit-code">{{ row.project_key }}</a>
+            {% if row.project_key %}<a href="{{ base }}/projects/{{ row.project_key }}/" class="sp-audit-code">{{ row.project_key }}</a>
             {% elif row.project_id is not none %}<span class="sp-audit-missing">#{{ row.project_id }}</span>
             {% else %}<span class="sp-audit-missing">&mdash;</span>{% endif %}
           </td>
@@ -123,7 +123,7 @@
     </table>
   </div>
 </div>
-{{ pagination(total, offset, limit, "/admin/audit-log/", page_query) }}
+{{ pagination(total, offset, limit, base ~ "/admin/audit-log/", page_query) }}
 {% elif not errors %}
 <div class="card">
   {{ empty_state(_("No events match these filters"), _("Widen the dates or clear a filter.")) }}

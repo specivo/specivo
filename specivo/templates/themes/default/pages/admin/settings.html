@@ -4,9 +4,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}Settings{% endtrans %}</span>
 </div>
@@ -15,12 +15,12 @@
 
 {% from "pages/_fts_i18n.html" import fts_i18n %}
 <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;"
-     x-data='ftsReindex({ baseUrl: "/api/v1/admin/search", isProject: false, canManage: true, language: {{ fts_language | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }}, i18n: {{ fts_i18n() }} })'>
+     x-data='ftsReindex({ baseUrl: "{{ base }}/api/v1/admin/search", isProject: false, canManage: true, language: {{ fts_language | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }}, i18n: {{ fts_i18n() }} })'>
   <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Defaults{% endtrans %}</h2>
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
     {% trans %}Workspace-wide fallbacks for anonymous visitors and users without their own saved preference.{% endtrans %}
   </p>
-  <form method="post" action="/admin/settings/defaults/">
+  <form method="post" action="{{ base }}/admin/settings/defaults/">
     <div class="form-group">
       <label class="form-label" for="default_language">{% trans %}Language{% endtrans %}</label>
       <select id="default_language" name="default_language" class="form-input">
@@ -79,11 +79,11 @@
   {% if anonymous_access_projects %}
   <ul class="sp-mb-md">
     {% for p in anonymous_access_projects %}
-    <li><a href="/projects/{{ p.key }}/settings/">{{ p.name }}</a> <span class="sp-mono-key">{{ p.key }}</span></li>
+    <li><a href="{{ base }}/projects/{{ p.key }}/settings/">{{ p.name }}</a> <span class="sp-mono-key">{{ p.key }}</span></li>
     {% endfor %}
   </ul>
   {% endif %}
-  <form method="post" action="/admin/settings/anonymous-access/">
+  <form method="post" action="{{ base }}/admin/settings/anonymous-access/">
     {% if anonymous_access_enabled %}
     <input type="hidden" name="enabled" value="0">
     <button type="submit" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Turn off{% endtrans %}</button>
@@ -92,7 +92,7 @@
     <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Turn on{% endtrans %}</button>
     {% endif %}
   </form>
-  <form method="post" action="/admin/settings/search-engines/" style="margin-top: var(--sp-space-lg);" data-testid="search-engine-indexing-form">
+  <form method="post" action="{{ base }}/admin/settings/search-engines/" style="margin-top: var(--sp-space-lg);" data-testid="search-engine-indexing-form">
     <div class="form-group">
       <input type="hidden" name="search_engine_indexing" value="false">
       <label class="checkbox-row" for="search_engine_indexing">
@@ -109,12 +109,12 @@
   <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Authentication{% endtrans %}</h2>
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);">
     {% trans %}How people sign in. Identity providers are configured under Single sign-on.{% endtrans %}
-    <a href="/admin/sso/">{% trans %}Single sign-on{% endtrans %} &rarr;</a>
+    <a href="{{ base }}/admin/sso/">{% trans %}Single sign-on{% endtrans %} &rarr;</a>
   </p>
   {% if sso_force_local_login %}
   <p class="sp-badge-warning sp-mb-md">{% trans %}SSO_FORCE_LOCAL_LOGIN is on: the password form is always shown and nobody is redirected automatically.{% endtrans %}</p>
   {% endif %}
-  <form method="post" action="/admin/settings/authentication/">
+  <form method="post" action="{{ base }}/admin/settings/authentication/">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="sp-sso-check">
       <input type="checkbox" name="hide_local_login" value="1" {{ 'checked' if auth_settings.hide_local_login else '' }}>

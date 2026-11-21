@@ -5,9 +5,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Backlog"), "url": "/projects/" ~ project.key ~ "/backlog/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Backlog"), "url": base ~ "/projects/" ~ project.key ~ "/backlog/"},
   {"label": sprint.name}
 ]) }}
 
@@ -33,12 +33,12 @@
     </div>
   </div>
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
       {% trans %}Backlog{% endtrans %}
     </a>
     {% if can_manage_sprint %}
-    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       {% trans %}Edit{% endtrans %}
     </a>
@@ -71,11 +71,11 @@
               <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);">
                 <button type="button" class="sp-btn sp-btn-ghost" @click="showComplete = false">{% trans %}Cancel{% endtrans %}</button>
                 <button type="button" class="sp-btn sp-btn-primary"
-                        hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
+                        hx-post="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
                         :hx-vals="getHxVals()"
                         hx-headers='{"Content-Type": "application/json"}'
                         hx-swap="none"
-                        data-hx-redirect="/projects/{{ project.key }}/backlog/">
+                        data-hx-redirect="{{ base }}/projects/{{ project.key }}/backlog/">
                   {% trans %}Complete{% endtrans %}
                 </button>
               </div>
@@ -159,7 +159,7 @@
       </div>
       <div class="kanban-cards">
         {% for issue in col_shown %}
-        <a href="/issue/{{ issue.display_key }}/" class="kanban-card">
+        <a href="{{ base }}/issue/{{ issue.display_key }}/" class="kanban-card">
           <div class="kanban-card-key">
             {{ issue.display_key }}
             {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}

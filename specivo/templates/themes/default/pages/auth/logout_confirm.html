@@ -31,11 +31,11 @@
       {% trans name=(user.display_name or user.login) %}You are signed in as {{ name }}. Signing out ends this session on this browser.{% endtrans %}
     </p>
 
-    <form class="sp-signout-form" method="post" action="/logout/">
+    <form class="sp-signout-form" method="post" action="{{ base }}/logout/">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="sp-btn-login" data-testid="logout-confirm">{% trans %}Sign out{% endtrans %}</button>
     </form>
-    <a href="/" class="sp-btn-signout" style="margin-top:var(--sp-space-sm);">{% trans %}Cancel{% endtrans %}</a>
+    <a href="{{ base }}/" class="sp-btn-signout" style="margin-top:var(--sp-space-sm);">{% trans %}Cancel{% endtrans %}</a>
   </div>
 </div>
 {% endblock %}

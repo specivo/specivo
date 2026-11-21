@@ -3,13 +3,13 @@
 <tr class="sp-row-hover">
   <td style="padding: var(--sp-space-sm); width: 24px;">{{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}</td>
   <td style="padding: var(--sp-space-sm);">
-    <a href="/issue/{{ issue.display_key }}/"
+    <a href="{{ base }}/issue/{{ issue.display_key }}/"
        style="font-family: var(--sp-font-mono, 'JetBrains Mono', monospace); font-size: var(--sp-font-size-sm); text-decoration: none; color: var(--sp-accent);">
       {{ issue.display_key }}
     </a>
   </td>
   <td style="padding: var(--sp-space-sm);">
-    <a href="/issue/{{ issue.display_key }}/"
+    <a href="{{ base }}/issue/{{ issue.display_key }}/"
        style="text-decoration: none; color: inherit; font-weight: 500;">
       {{ issue.subject }}
     </a>

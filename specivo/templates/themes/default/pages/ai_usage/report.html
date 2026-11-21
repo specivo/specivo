@@ -71,7 +71,7 @@
 {%- elif c.kind == "hidden" %}<span class="sp-text-muted">{% trans %}An issue you cannot see{% endtrans %}</span>
 {%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% else %}–{% endif %}</span>
 {%- elif c.dim == "cost_type" %}{{ cost_type_label(c.value) }}
-{%- elif c.dim == "issue" %}<a class="issue-key" href="/issue/{{ c.label }}/">{{ c.label }}</a>
+{%- elif c.dim == "issue" %}<a class="issue-key" href="{{ base }}/issue/{{ c.label }}/">{{ c.label }}</a>
 {%- elif c.dim in ("model", "branch") %}<span class="sp-aiu-model">{{ c.label }}</span>
 {%- else %}{{ c.label }}{% endif %}
 {%- endmacro %}
@@ -85,15 +85,15 @@
 {% block content %}
 {% if project %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
-  {"label": _("AI usage"), "url": "/projects/" ~ project.key ~ "/ai-usage/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": _("AI usage"), "url": base ~ "/projects/" ~ project.key ~ "/ai-usage/"},
   {"label": _("Spend report")}
 ]) }}
 {% else %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": _("Admin"), "url": "/admin/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": _("Admin"), "url": base ~ "/admin/"},
   {"label": _("AI spend")}
 ]) }}
 {% endif %}
@@ -349,9 +349,9 @@
             <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ r.total_tokens }}: {{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}">{{ r.tokens_short }}</td>
             <td data-label="{{ _('Cost type') }}"><span class="sp-drill-tag sp-drill-tag--{{ r.cost_type }}">{{ cost_type_label(r.cost_type) }}</span></td>
             <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ r.spend }}</strong></td>
-            {% if sessions.show_issue %}<td data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/" hx-boost="false">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+            {% if sessions.show_issue %}<td data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="{{ base }}/issue/{{ r.issue_key }}/" hx-boost="false">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
             <td data-label="{{ _('Branch') }}">{% if r.branch %}<code class="sp-drill-branch">{{ r.branch }}</code>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
-            <td class="sp-aiu-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" hx-boost="false" data-testid="spend-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
+            <td class="sp-aiu-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="{{ base }}/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" hx-boost="false" data-testid="spend-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -552,4 +552,4 @@
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
-{% block chart_js %}{% if report and charts and not charts.too_long %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}
+{% block chart_js %}{% if report and charts and not charts.too_long %}<script src="{{ base }}/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}
