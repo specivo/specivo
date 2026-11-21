@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import (
     ENTITY_LINKS_DEFAULT_LIMIT,
+    ENTITY_LINKS_HUB_MAX_DEPTH,
     ENTITY_LINKS_MAX_EXPANDED,
     ENTITY_LINKS_MAX_LIMIT,
     ENTITY_LINKS_MAX_PER_SOURCE,
@@ -660,6 +661,7 @@ class EntityLinkService:
         limit: int = ENTITY_LINKS_DEFAULT_LIMIT,
         default_kinds: frozenset[str] = ALL_KINDS,
         count_attachments: bool = False,
+        reader: _Reader | None = None,
     ) -> LinkGraph:
         """Return the neighbours of *root* that *user* may see.
 
@@ -674,7 +676,8 @@ class EntityLinkService:
           a hub, its members) or ``both``. ``in`` and ``out`` together give
           the neighbours of ``both``.
         - ``depth``: 1, or 2 to expand the issue and wiki-page neighbours once
-          more (at most ``ENTITY_LINKS_MAX_EXPANDED`` of them). A link met from
+          more (at most ``ENTITY_LINKS_MAX_EXPANDED`` of them); 3 only from a
+          hub root, so version -> issues -> tags -> pages is one read. A link met from
           both of its ends is listed once, as first met. A hub neighbour is
           expanded only when its edge kind is in *kinds*; otherwise it is a
           leaf with its ``degree``.
@@ -685,13 +688,15 @@ class EntityLinkService:
           more were left out.
         - ``count_attachments``: give each issue and wiki page node the number
           of files attached to it.
+        - ``reader``: a ``_Reader`` to share between several reads by the same
+          user (its visibility answers are cached).
         """
-        wanted, explicit = _check_read(direction, depth, kinds, default_kinds)
+        wanted, explicit = _check_read(direction, depth, kinds, default_kinds, hub_root=root[0] in HUB_TYPES)
         if root[0] in HUB_TYPES:
             wanted |= {HUB_KIND_OF[root[0]]}
         limit = max(1, min(limit, ENTITY_LINKS_MAX_LIMIT))
 
-        reader = _Reader(session, user)
+        reader = reader or _Reader(session, user)
         walk = _Walk(root, limit)
         frontier: list[NodeKey] = [root]
         for hop in range(depth):
@@ -926,13 +931,26 @@ class EntityLinkService:
 
 
 def _check_read(
-    direction: str, depth: int, kinds: Iterable[str] | None, default_kinds: frozenset[str]
+    direction: str,
+    depth: int,
+    kinds: Iterable[str] | None,
+    default_kinds: frozenset[str],
+    *,
+    hub_root: bool = False,
 ) -> tuple[frozenset[str], frozenset[str]]:
-    """Validate a read; return the kinds to read and those asked for explicitly (which expand hubs)."""
+    """Validate a read; return the kinds to read and those asked for explicitly (which expand hubs).
+
+    A hub root (tag, component, metadata, version, sprint, user) may read
+    three hops deep; an issue or wiki page at most two.
+    """
     if direction not in DIRECTIONS:
         raise ValueError(f"direction must be one of {', '.join(DIRECTIONS)}")
-    if depth not in (1, 2):
-        raise ValueError("depth must be 1 or 2")
+    if depth == ENTITY_LINKS_HUB_MAX_DEPTH and not hub_root:
+        raise ValueError(
+            f"depth={ENTITY_LINKS_HUB_MAX_DEPTH} is only for a tag, component, metadata, version, sprint or user root"
+        )
+    if depth not in range(1, ENTITY_LINKS_HUB_MAX_DEPTH + 1):
+        raise ValueError(f"depth must be 1 or 2 (up to {ENTITY_LINKS_HUB_MAX_DEPTH} from a hub root)")
     explicit = frozenset() if kinds is None else frozenset(kinds)
     wanted = explicit or default_kinds
     unknown = wanted - ALL_KINDS
@@ -1115,6 +1133,8 @@ class LinkGraph:
     edges: list[LinkEdge] = field(default_factory=list)
     truncated: bool = False
     raw_edges: list[tuple[_RawEdge, bool]] = field(default_factory=list)
+    # Node ref -> node key, for the root and every node: lets a caller filter or format by key.
+    keys: dict[str, NodeKey] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1440,6 +1460,7 @@ class _Reader:
                 refs[item].attachments = count
         graph.root = refs.get(root)
         graph.nodes = [refs[n] for n in nodes if n != root and n in refs]
+        graph.keys = {node.ref: key for key, node in refs.items()}
         journal_refs = await self._journal_refs({e.via_journal_id for e, _ in graph.raw_edges if e.via_journal_id})
         broken_projects = await self._project_keys({e.broken_project_id for e, _ in graph.raw_edges if e.broken_ref})
         root_ref = graph.root.ref if graph.root else None

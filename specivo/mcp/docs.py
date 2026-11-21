@@ -32,12 +32,14 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_edit_description": "Search-and-replace in issue description (token-efficient)",
     "specivo_add_comment": "Add a journal comment to an issue",
     "specivo_list_comments": "List comments on an issue, paginated; include_changes=true adds named field changes",
-    "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
+    "specivo_search": (
+        "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'; expand=1 adds each top hit's links"
+    ),
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
         "Link graph of an issue, wiki page, tag, version, sprint, component or user: backlinks, links, "
-        "relations, members; depth 1-2"
+        "relations, members; depth 1-2 (3 from a hub); to= finds a path; filter=; format='compact'"
     ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
@@ -148,7 +150,21 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    `metadata:ACME/<key>/<value>`). It lists the members; `depth=2` with
    `types=["targets_version", "assigned_to", "tagged", "in_component"]` adds their assignees, tags and
    components. Away from the root these nodes are leaves with `degree` (items you may see that point
-   at them); naming their kind in `types` expands them.
+   at them); naming their kind in `types` expands them. From such a node `depth=3` is allowed, so
+   `version:ACME/1.2` with `depth=3, types=["tagged"]` gives the issues, their tags and the pages
+   with those tags in one call.
+7. Narrow the result with `filter`: `specivo_get_links("version:ACME/1.2",
+   filter={{"component": "importer", "status": "open"}})` keeps only the matching issues.
+   Keys: `status` (`open`, `closed` or a status name), `tracker`, `version`, `assignee` (a login or
+   `me`), `component` or another key in `graph_metadata_keys`; a list value means any of them. The
+   filter runs after the read: the root is always kept, wiki pages are dropped, and tags, versions and
+   the like stay while linked to a kept issue.
+8. How are two things connected? `specivo_get_links("ACME-12", to="wiki:ACME/<slug>")` returns the
+   shortest path (at most 4 hops, only through items you may see) as ordered `nodes` and `edges`, or
+   `path: null` with `reason` = `no_path_within_4_hops` or `budget_exhausted`. It does not pass through
+   tags, versions and other structured nodes unless `types` names their kind.
+9. Save tokens with `format="compact"`: one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook
+   "Runbook"`, titles written once, after a header line with the root and whether it was truncated.
 
 ### Connecting issues and pages (the link graph)
 - Issue to issue: add a relation with `specivo_add_relation` (`blocks`, `relates`, `duplicates`, ...)
@@ -169,6 +185,10 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 - Issue references (`ACME-42`) work in any mode: the issue itself comes
   first, followed by issues, comments and wiki pages that mention it.
 - `limit` is clamped to 1-50; the tool has no offset.
+- `expand=1` lists under each of the top 5 issue and wiki page hits what it is linked to (links,
+  backlinks, relations, parent, children, tags, version, assignee; at most 10 each, only what you
+  may see), so one call gives the answer and its context. The REST search takes `expand=1` too and
+  returns them as `links` on those hits.
 
 ### Create an issue
 1. `specivo_list_lookups()` -- get tracker_id, priority_id

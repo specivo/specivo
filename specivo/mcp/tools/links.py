@@ -80,6 +80,9 @@ async def _link_lines(session: AsyncSession, user: User, root: tuple[str, int]) 
     return lines
 
 
+GET_LINKS_FORMATS = ("json", "compact")
+
+
 async def _get_links(
     session: AsyncSession,
     user: User,
@@ -88,12 +91,37 @@ async def _get_links(
     depth: int = 1,
     types: list[str] | None = None,
     limit: int = 50,
+    to: str | None = None,
+    filter: dict[str, Any] | None = None,
+    format: str = "json",
 ) -> str:
     import json
 
+    from specivo.core.constants import ENTITY_LINKS_MAX_LIMIT
+    from specivo.services.entity_link_query import (
+        apply_filter,
+        cap_nodes,
+        compact_graph,
+        compact_path,
+        find_path,
+        parse_filter,
+    )
     from specivo.services.entity_link_service import AGENT_DEFAULT_KINDS, resolve_root
 
+    if format not in GET_LINKS_FORMATS:
+        raise ValueError(f"format must be one of: {', '.join(GET_LINKS_FORMATS)}")
+    flt = parse_filter(filter)
     root = await resolve_root(session, user, ref, hubs=True)
+    event = AuditEvent.WIKI_READ if root[0] == "wiki_page" else AuditEvent.ISSUE_READ
+    if to is not None:
+        if flt:
+            raise ValueError("filter cannot be combined with to=; a path is the shortest one, whatever it passes")
+        goal = await resolve_root(session, user, to, hubs=True)
+        path = await find_path(session, user, root, goal, types=types)
+        await _log_tool(session, user, event, "get_links", {"ref": ref, "to": to})
+        if format == "compact":
+            return compact_path(path)
+        return json.dumps(path.as_dict(), ensure_ascii=False, indent=1)
     graph = await _link_svc.get_links(
         session,
         user,
@@ -101,10 +129,14 @@ async def _get_links(
         direction=direction,
         depth=depth,
         kinds=types or None,
-        limit=limit,
+        # A filter drops nodes after the read: read as many as allowed, then cut to the limit.
+        limit=ENTITY_LINKS_MAX_LIMIT if flt else limit,
         default_kinds=AGENT_DEFAULT_KINDS,
         count_attachments=True,
     )
-    event = AuditEvent.WIKI_READ if root[0] == "wiki_page" else AuditEvent.ISSUE_READ
+    if flt:
+        cap_nodes(await apply_filter(session, user, graph, flt), limit)
     await _log_tool(session, user, event, "get_links", {"ref": ref, "direction": direction})
+    if format == "compact":
+        return compact_graph(graph)
     return json.dumps(graph.as_dict(), ensure_ascii=False, indent=1)

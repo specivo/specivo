@@ -176,3 +176,91 @@ def test_the_tool_documents_structured_nodes():
     assert "version:ACME/<name>" in guide
     doc = server.specivo_get_links.__doc__ or ""
     assert "degree" in doc and "attachments" in doc
+
+
+async def test_get_links_to_finds_a_path_and_hides_a_private_bridge(db_session, world):
+    from specivo.models.relation import IssueRelation
+
+    start = await issue(db_session, world, world.home, "Start")
+    bridge = await issue(db_session, world, world.home, "Private bridge", private=True)
+    end = await issue(db_session, world, world.home, "End")
+    for a, b in ((start, bridge), (bridge, end)):
+        db_session.add(IssueRelation(issue_from_id=a.id, issue_to_id=b.id, relation_type="relates"))
+    await db_session.commit()
+
+    hidden = json.loads(await _get_links(db_session, world.reader, start.display_key, to=end.display_key))
+    assert hidden["path"] is None
+    assert hidden["reason"] == "no_path_within_4_hops"
+    assert hidden["to"]["ref"] == end.display_key
+    assert "Private bridge" not in json.dumps(hidden)
+
+    seen = json.loads(await _get_links(db_session, world.admin, start.display_key, to=end.display_key))
+    assert [n["ref"] for n in seen["path"]["nodes"]] == [start.display_key, bridge.display_key, end.display_key]
+    compact = await _get_links(db_session, world.admin, start.display_key, to=end.display_key, format="compact")
+    assert compact.splitlines()[0] == f"path: {start.display_key} -> {end.display_key}, 2 hops"
+
+    with pytest.raises(ValueError, match="cannot be combined"):
+        await _get_links(db_session, world.admin, start.display_key, to=end.display_key, filter={"status": "open"})
+
+
+async def test_get_links_filter_and_compact_format(db_session, world):
+    from specivo.models.version import Version
+
+    key = world.home.key
+    match = await issue(db_session, world, world.home, "Importer task")
+    other = await issue(db_session, world, world.home, "Search task")
+    match.issue_metadata = {"component": "importer"}
+    other.issue_metadata = {"component": "search"}
+    version = Version(project_id=world.home.id, name="0.14.0", sharing="none")
+    db_session.add(version)
+    await db_session.flush()
+    match.fixed_version_id = other.fixed_version_id = version.id
+    await db_session.commit()
+
+    data = json.loads(
+        await _get_links(db_session, world.reader, f"version:{key}/0.14.0", filter={"component": "importer"})
+    )
+    assert [n["ref"] for n in data["nodes"]] == [match.display_key]
+
+    text = await _get_links(
+        db_session, world.reader, f"version:{key}/0.14.0", filter={"component": "importer"}, format="compact"
+    )
+    assert text.splitlines() == [
+        f"root: version:{key}/0.14.0 [open] (degree 2) (1 nodes, 1 edges)",
+        f'{match.display_key} "Importer task" [EMC New] -targets_version-> version:{key}/0.14.0',
+    ]
+    with pytest.raises(ValueError, match="format must be"):
+        await _get_links(db_session, world.reader, match.display_key, format="xml")
+    with pytest.raises(ValueError, match="Unknown filter key"):
+        await _get_links(db_session, world.reader, match.display_key, filter={"colour": "red"})
+
+
+async def test_search_expand_lists_the_links_of_the_top_hits(db_session, world):
+    from specivo.mcp.tools import _search
+
+    secret = await issue(db_session, world, world.hidden, "Quokka secret")
+    doc = await page(db_session, world, world.home, "Quokka Habitat", "Notes about quokkas")
+    root = await issue(
+        db_session, world, world.home, "Quokka census", f"See [[Quokka Habitat]] and {secret.display_key}"
+    )
+    await rebuild(db_session, root)
+
+    plain = await _search(db_session, world.reader, "quokka", mode="keyword")
+    assert "links of" not in plain
+    expanded = await _search(db_session, world.reader, "quokka", mode="keyword", expand=1)
+    assert f"    links of {root.display_key}:" in expanded
+    assert (
+        f'      {root.display_key} -wiki_link-> {wiki_ref(world.home, "quokka-habitat")} "Quokka Habitat"' in expanded
+    )
+    assert f"    links of {wiki_ref(world.home, 'quokka-habitat')}:" in expanded
+    assert "secret" not in expanded.lower()
+    assert doc.id
+
+
+def test_the_tools_document_expand_paths_filters_and_compact():
+    guide = generate_setup_guide(fmt="generic", mcp_server=server.mcp)
+    for needle in ("expand=1", 'to="wiki:ACME/<slug>"', "filter=", 'format="compact"', "depth=3"):
+        assert needle in guide
+    doc = server.specivo_get_links.__doc__ or ""
+    assert "to=<ref>" in doc and "no_path_within_4_hops" in doc and "compact" in doc
+    assert "expand=1" in (server.specivo_search.__doc__ or "")

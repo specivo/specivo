@@ -102,6 +102,8 @@ HUB_KIND_OF = {
 HUB_TYPES = frozenset(HUB_KIND_OF)
 
 COMPONENT_KEY = "component"
+# The ``project.settings`` entry listing the metadata keys whose values are nodes.
+GRAPH_METADATA_KEYS_SETTING = "graph_metadata_keys"
 DEFAULT_GRAPH_METADATA_KEYS: tuple[str, ...] = (COMPONENT_KEY,)
 COMMITS_KEY = "commits"
 
@@ -112,7 +114,7 @@ HUB_REF_SCHEMES = (*_PROJECT_REF_SCHEMES, NODE_USER)
 
 def graph_metadata_keys(settings: dict[str, Any] | None) -> tuple[str, ...]:
     """The issue metadata keys whose values are graph nodes in a project with these *settings*."""
-    raw = (settings or {}).get("graph_metadata_keys")
+    raw = (settings or {}).get(GRAPH_METADATA_KEYS_SETTING)
     if not isinstance(raw, list):
         return DEFAULT_GRAPH_METADATA_KEYS
     return tuple(dict.fromkeys(k.strip() for k in raw if isinstance(k, str) and k.strip() and "/" not in k))
@@ -167,38 +169,96 @@ async def item_hub_edges(
     return edges
 
 
+_FIELD_COLUMNS = (
+    Issue.id,
+    Issue.project_id,
+    Issue.fixed_version_id,
+    Issue.sprint_id,
+    Issue.assigned_to_id,
+    Issue.issue_metadata,
+    Project.settings,
+)
+
+
 async def _issue_field_edges(
     session: AsyncSession, node: NodeKey, kinds: frozenset[str], linked_commits: set[Any]
 ) -> list[_RawEdge]:
     row = (
         await session.execute(
-            select(Issue.project_id, Issue.fixed_version_id, Issue.sprint_id, Issue.assigned_to_id)
-            .add_columns(Issue.issue_metadata, Project.settings)
-            .join(Project, Project.id == Issue.project_id)
-            .where(Issue.id == node[1])
+            select(*_FIELD_COLUMNS).join(Project, Project.id == Issue.project_id).where(Issue.id == node[1])
         )
     ).one_or_none()
     if row is None:
         return []
-    project_id, version_id, sprint_id, assignee_id, metadata, settings = row
-    metadata = metadata or {}
+    edges = _field_edges(row, kinds)
+    if "commit" in kinds:
+        metadata = row.issue_metadata or {}
+        edges.extend(
+            await _metadata_commit_edges(session, node, row.project_id, metadata.get(COMMITS_KEY), linked_commits)
+        )
+    return edges
+
+
+def _field_edges(row: Any, kinds: frozenset[str]) -> list[_RawEdge]:
+    """The version, sprint, assignee and metadata-value edges of one issue row (``_FIELD_COLUMNS``)."""
+    node: NodeKey = ("issue", row.id)
+    metadata = row.issue_metadata or {}
     edges: list[_RawEdge] = []
     for kind, node_type, target_id in (
-        (KIND_TARGETS_VERSION, NODE_VERSION, version_id),
-        (KIND_IN_SPRINT, NODE_SPRINT, sprint_id),
-        (KIND_ASSIGNED_TO, NODE_USER, assignee_id),
+        (KIND_TARGETS_VERSION, NODE_VERSION, row.fixed_version_id),
+        (KIND_IN_SPRINT, NODE_SPRINT, row.sprint_id),
+        (KIND_ASSIGNED_TO, NODE_USER, row.assigned_to_id),
     ):
         if kind in kinds and target_id is not None:
             edges.append(_hub_edge(node, (node_type, target_id), kind))
-    for key in graph_metadata_keys(settings):
+    for key in graph_metadata_keys(row.settings):
         hub_kind = KIND_IN_COMPONENT if key == COMPONENT_KEY else KIND_IN_METADATA
         if hub_kind in kinds:
             edges.extend(
-                _hub_edge(node, metadata_node(project_id, key, v), hub_kind) for v in metadata_values(metadata.get(key))
+                _hub_edge(node, metadata_node(row.project_id, key, v), hub_kind)
+                for v in metadata_values(metadata.get(key))
             )
-    if "commit" in kinds:
-        edges.extend(await _metadata_commit_edges(session, node, project_id, metadata.get(COMMITS_KEY), linked_commits))
     return edges
+
+
+async def hub_edges_of(
+    session: AsyncSession, issues: set[int], pages: set[int], kinds: frozenset[str], limit: int
+) -> tuple[list[_RawEdge], bool]:
+    """The hub edges of many issues and pages at once (no commits): two queries, *limit* rows each.
+
+    Returns the edges and whether a query hit *limit* (so some were left out).
+    """
+    edges: list[_RawEdge] = []
+    hit = False
+    if KIND_TAGGED in kinds and (issues or pages):
+        conditions = [TagLink.issue_id.in_(issues)] if issues else []
+        conditions += [TagLink.wiki_page_id.in_(pages)] if pages else []
+        rows = (
+            await session.execute(
+                select(TagLink.tag_id, TagLink.issue_id, TagLink.wiki_page_id)
+                .where(or_(*conditions))
+                .order_by(TagLink.tag_id)
+                .limit(limit)
+            )
+        ).all()
+        hit = len(rows) >= limit
+        for tag_id, issue_id, page_id in rows:
+            item: NodeKey = ("issue", issue_id) if issue_id is not None else ("wiki_page", page_id)
+            edges.append(_hub_edge(item, (NODE_TAG, tag_id), KIND_TAGGED))
+    if issues and kinds & (HUB_KINDS - {KIND_TAGGED}):
+        rows = (
+            await session.execute(
+                select(*_FIELD_COLUMNS)
+                .join(Project, Project.id == Issue.project_id)
+                .where(Issue.id.in_(issues))
+                .order_by(Issue.id)
+                .limit(limit)
+            )
+        ).all()
+        hit = hit or len(rows) >= limit
+        for row in rows:
+            edges.extend(_field_edges(row, kinds))
+    return edges, hit
 
 
 async def _metadata_commit_edges(
