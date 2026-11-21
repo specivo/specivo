@@ -8,7 +8,11 @@
 - ``GET /projects/{key}/ai-usage/report/models/`` and ``GET /ai-usage/report/models/``:
   a page of model names for the report's model filter.
 
-Both reports take ``format=csv`` for a CSV file of every row; the JSON answer
+Both reports group by any of ``GROUP_BY`` (``version`` is the release and
+``sprint`` the sprint of the entry's issue, or of its nearest ancestor that
+has one) and narrow to one release or sprint with ``version`` / ``sprint``
+(an id, or a name on a project report; ``-`` for none). Both take
+``format=csv`` for a CSV file of every row; the JSON answer
 is a page of the rows (``offset``, ``limit``) with the totals of all of them. Included before the
 AI usage router, so ``/ai-usage/report/`` is matched before
 ``/ai-usage/{entry_id}/``. See :mod:`specivo.services.ai_spend_report_service`
@@ -31,6 +35,7 @@ from specivo.models.user import User
 from specivo.schemas.ai_spend_report import SpendModelSuggestionOut, SpendReportOut
 from specivo.schemas.ai_usage import AiUsageCostType
 from specivo.schemas.project import AssigneeSuggestionOut
+from specivo.services.ai_spend_planning import resolve_planning
 from specivo.services.ai_spend_report_service import (
     AiSpendReportService,
     ReportFilters,
@@ -46,7 +51,7 @@ router = APIRouter(tags=["ai-usage"])
 _service = AiSpendReportService()
 _projects = ProjectService()
 
-#: A filter value selecting entries without a project, issue or branch.
+#: A filter value selecting entries without a project, issue, branch, release or sprint.
 NONE_VALUE = "-"
 
 Period = Literal["day", "week", "month"]
@@ -61,7 +66,10 @@ _LIMIT = Query(JSON_ROWS_DEFAULT, ge=1, le=JSON_ROWS_MAX, description="JSON: row
 
 _GROUP_BY = Query(
     "user",
-    description="Comma-separated: user, project, issue, tool, provider, model, cost_type, branch (may be empty)",
+    description=(
+        "Comma-separated: version (the release), sprint, user, project, issue, tool, provider, model, cost_type, "
+        "branch (may be empty)"
+    ),
 )
 
 
@@ -90,12 +98,15 @@ async def _report(  # noqa: PLR0913
     project_filter: str | None = None,
     issue: str | None = None,
     branch: str | None = None,
+    version: str | None = None,
+    sprint: str | None = None,
     offset: int = 0,
     limit: int = JSON_ROWS_DEFAULT,
 ) -> SpendReportOut | Response:
     await enforce_ai_report_rate_limit(request, response, user)
     first, last = default_range(preset)
-    narrowing = await _narrowing(db, user, project, project_filter, issue, branch)
+    narrowing, selected = await _narrowing(db, user, project, project_filter, issue, branch)
+    narrowing.update(await _planning_narrowing(db, user, project or selected, version, sprint))
     report = await _service.report(
         db,
         user,
@@ -130,11 +141,12 @@ async def _narrowing(
     project_filter: str | None,
     issue: str | None,
     branch: str | None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], Project | None]:
     """The project (instance report), issue and branch filters; ``-`` selects entries without one.
 
     An unknown project, or an issue the caller cannot see (or of another
-    project), matches nothing.
+    project), matches nothing. Also returns the project the project filter
+    names, if any.
     """
     out: dict[str, Any] = {}
     selected: Project | None = None
@@ -164,11 +176,38 @@ async def _narrowing(
             out["without_branch"] = True
         else:
             out["branch"] = branch.strip()
+    return out, selected
+
+
+async def _planning_narrowing(
+    db: DbSession, user: User, project: Project | None, version: str | None, sprint: str | None
+) -> dict[str, Any]:
+    """The release and sprint filters; ``-`` selects entries without one.
+
+    An id, or a name within *project* (a version visible from it, a sprint of
+    it). One the caller may not see, or an unknown name, matches nothing.
+    """
+    out: dict[str, Any] = {}
+    for dim, value in (("version", version), ("sprint", sprint)):
+        if not value or not value.strip():
+            continue
+        if value.strip() == NONE_VALUE:
+            out[f"without_{dim}"] = True
+        else:
+            out[f"{dim}_id"] = (await resolve_planning(db, user, dim, value, project)).id
     return out
 
 
 _ISSUE = Query(None, max_length=50, description="An issue key, or '-' for entries without an issue")
 _BRANCH = Query(None, max_length=255, description="A git branch, or '-' for entries without one")
+_VERSION = Query(
+    None,
+    max_length=255,
+    description="A release: a version id, or a name on a project report; '-' for entries without a release",
+)
+_SPRINT = Query(
+    None, max_length=255, description="A sprint id, or a name on a project report; '-' for entries without a sprint"
+)
 
 
 @router.get(
@@ -198,6 +237,8 @@ async def project_ai_spend_report(  # noqa: PLR0913
     cost_type: AiUsageCostType | None = Query(None),
     issue: str | None = _ISSUE,
     branch: str | None = _BRANCH,
+    version: str | None = _VERSION,
+    sprint: str | None = _SPRINT,
     sort: Literal["key", "spend"] = Query("key", description="By the grouping key (default), or by total spend"),
     format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
@@ -235,6 +276,8 @@ async def project_ai_spend_report(  # noqa: PLR0913
         fmt=format,
         issue=issue,
         branch=branch,
+        version=version,
+        sprint=sprint,
         offset=offset,
         limit=limit,
     )
@@ -265,6 +308,8 @@ async def instance_ai_spend_report(  # noqa: PLR0913
     project: str | None = Query(None, max_length=50, description="A project key, or '-' for unassigned entries"),
     issue: str | None = _ISSUE,
     branch: str | None = _BRANCH,
+    version: str | None = _VERSION,
+    sprint: str | None = _SPRINT,
     sort: Literal["key", "spend"] = Query("key"),
     format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
@@ -300,6 +345,8 @@ async def instance_ai_spend_report(  # noqa: PLR0913
         project_filter=project,
         issue=issue,
         branch=branch,
+        version=version,
+        sprint=sprint,
         offset=offset,
         limit=limit,
     )

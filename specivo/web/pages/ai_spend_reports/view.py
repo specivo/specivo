@@ -70,6 +70,11 @@ def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
         params["issue"] = row.labels.get("issue") or NONE_VALUE
     if "branch" in key:
         params["branch"] = key["branch"] or NONE_VALUE
+    for dim in ("version", "sprint"):
+        if dim in key:
+            params[dim] = str(key[dim]) if key[dim] is not None else NONE_VALUE
+        elif getattr(form, dim):
+            params[dim] = getattr(form, dim)
     params["status"] = "counted"
     if report.project is not None:
         return f"/projects/{report.project.key}/ai-usage/?" + urlencode(params)
@@ -131,7 +136,13 @@ def _cell_text(cell: dict[str, Any]) -> str:
     if kind == "hidden":
         return _("An issue you cannot see")
     if kind == "none":
-        return {"project": _("Unassigned"), "issue": _("No issue"), "branch": _("No branch")}.get(dim, "–")
+        return {
+            "project": _("Unassigned"),
+            "issue": _("No issue"),
+            "branch": _("No branch"),
+            "version": _("No release"),
+            "sprint": _("No sprint"),
+        }.get(dim, "–")
     if dim == "cost_type":
         return _cost_type_text(cell["value"])
     return str(cell["label"])
@@ -343,6 +354,8 @@ def _entries_url(report: SpendReport, form: ReportForm) -> str:
         "provider": form.provider,
         "issue": form.issue,
         "branch": form.branch,
+        "version": form.version,
+        "sprint": form.sprint,
         "status": "counted",
     }
     if report.project is not None:

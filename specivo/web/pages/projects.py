@@ -587,8 +587,9 @@ async def version_detail(
     project: ProjectByKeyForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """Render the version detail page with issues, progress, and time stats."""
+    """Render the version detail page with issues, progress, time stats and the release's AI spend."""
     from specivo.core.exceptions import NotFoundError
+    from specivo.web.pages.ai_spend_card import ai_spend_card
 
     try:
         version = await _version_svc.get_by_id(db, version_id)
@@ -696,6 +697,7 @@ async def version_detail(
             "time_logged": float(time_logged),
             "can_view_time_entries": can_view_time_entries,
             "estimated_hours": float(estimated_hours),
+            "ai_spend": await ai_spend_card(db, user, project, "version", version.id),
             "days_diff": days_diff,
             "due_class": due_class,
         },

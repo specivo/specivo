@@ -1482,21 +1482,27 @@ async def specivo_ai_usage(  # noqa: PLR0913
     description=(
         "AI spend report: AI usage grouped and totalled in one reporting currency. With project_key, the "
         "project's entries you may read; without it, the whole instance (administrators only). group_by is a "
-        "comma list of user, project, issue, tool, provider, model, cost_type, branch (default 'user'; '' for "
-        "one total); period adds day, week or month buckets. Dates are UTC days (date_from, date_to) or a "
-        "preset: 7d, 30d (default), this_month, last_month. Each row: entries, tokens, spend (marginal spend "
-        "plus seat cost: subscription fees spread over the entries that used them, weighted by API-equivalent "
-        "value), API-equivalent value (the same tokens at pay-per-use prices, not a bill) and leverage. "
-        "Amounts without an exchange rate are listed apart, never dropped. Seat cost shows only to "
-        "administrators and to whoever reads every entry of the project. Rows are sorted by the grouping key; "
-        "sort='spend' orders by spend. issue_ref narrows the report to one issue (its project's report; "
-        "include_sub_issues adds the issues below it), e.g. for the spend total of a closing note."
+        "comma list of version (the release), sprint, user, project, issue, tool, provider, model, cost_type,"
+        " branch (default 'user'; '' for one total); an entry's release and sprint are its issue's, or those "
+        "of the nearest parent issue that has one. period adds day, week or month buckets. Dates are UTC days"
+        " (date_from, date_to) or a preset: 7d, 30d (default), this_month, last_month. Each row: entries, "
+        "tokens, spend (marginal spend plus seat cost: subscription fees spread over the entries that used "
+        "them, weighted by API-equivalent value), API-equivalent value (the same tokens at pay-per-use "
+        "prices, not a bill) and leverage. Amounts without an exchange rate are listed apart, never dropped. "
+        "Seat cost shows only to administrators and to whoever reads every entry of the project. Rows are "
+        "sorted by the grouping key; sort='spend' orders by spend. issue_ref narrows the report to one issue "
+        "(its project's report; include_sub_issues adds the issues below it), e.g. for the spend total of a "
+        "closing note. release and sprint narrow it to one release or sprint (a name in project_key, or an "
+        "id; 'none' for entries without one), e.g. release='1.0' for what a release cost."
     )
 )
 async def specivo_ai_usage_report(  # noqa: PLR0913
     project_key: Annotated[str | None, Field(description="Uppercase project key; omit for the instance.")] = None,
     group_by: Annotated[
-        str | None, Field(description="Comma list: user, project, issue, tool, provider, model, cost_type, branch.")
+        str | None,
+        Field(
+            description="Comma list: version, sprint, user, project, issue, tool, provider, model, cost_type, branch."
+        ),
     ] = None,
     period: Annotated[
         str | None, Field(description="day, week or month buckets; coarsened when the range would need over 120.")
@@ -1520,6 +1526,12 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
     include_sub_issues: Annotated[
         bool, Field(description="With issue_ref: also the usage of the issues below it.")
     ] = False,
+    release: Annotated[
+        str | None, Field(description="Only this release: a version name (in project_key) or id, or 'none'.")
+    ] = None,
+    sprint: Annotated[
+        str | None, Field(description="Only this sprint: a sprint name (in project_key) or id, or 'none'.")
+    ] = None,
 ) -> str:
     async with _get_session_and_user() as (session, user):
         return await _ai_usage_report(
@@ -1541,6 +1553,8 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
             sort=sort,
             issue_ref=issue_ref,
             include_sub_issues=include_sub_issues,
+            release=release,
+            sprint=sprint,
         )
 
 

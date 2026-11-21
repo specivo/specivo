@@ -462,7 +462,14 @@ async def sprint_detail(
     project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """Render a single sprint's detail page: header, metrics, and issue list."""
+    """Render a single sprint's detail page: header, metrics, time, AI spend and issue list.
+
+    Logged and estimated time and the AI spend count the sprint's issues and
+    the issues below them without a sprint of their own (the nearest ancestor
+    with a sprint decides), as the reader may see them.
+    """
+    from specivo.services.sprint_service import sprint_time
+    from specivo.web.pages.ai_spend_card import ai_spend_card
 
     try:
         sprint = await _sprint_svc.get_by_id(db, sprint_id)
@@ -518,6 +525,7 @@ async def sprint_detail(
             grouped["todo"].append(issue)
 
     can_manage = user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
+    can_view_time = await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -539,6 +547,8 @@ async def sprint_detail(
             "duration_days": duration_days,
             "days_left": days_left,
             "avg_velocity": avg_velocity,
+            "sprint_time": await sprint_time(db, sprint, user, can_view_time=can_view_time),
+            "ai_spend": await ai_spend_card(db, user, project, "sprint", sprint.id),
             "can_manage_sprint": can_manage,
             "active_sprint_id": sprint.id if sprint.status == "active" else None,
             "today": date.today(),

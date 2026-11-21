@@ -106,8 +106,8 @@ def _row_dims(report: SpendReport, row: ReportRow) -> dict[str, str] | None:
             if value == HIDDEN_ISSUE:
                 return None
             values["issue"] = row.labels.get("issue") or NONE_VALUE if value is not None else NONE_VALUE
-        elif dim == "branch":
-            values["branch"] = value or NONE_VALUE
+        elif dim in ("branch", "version", "sprint"):
+            values[dim] = str(value) if value else NONE_VALUE
         elif value is None or value == "":
             return None
         else:
@@ -158,9 +158,15 @@ def _crumbs(base_url: str, form: ReportForm, scope: Scope, instance: bool, root:
 
 
 def _tabs(base_url: str, form: ReportForm, instance: bool) -> list[dict[str, Any]]:
-    """The group-by switch: project (instance only), person, feature, tool, model and the sessions."""
+    """The group-by switch: project, release, sprint, person, feature, tool, model and the sessions.
+
+    Project on the instance report only; release and sprint within one project
+    (a project's report, or the instance report narrowed to a project).
+    """
     filtered = set(form.filtered())
-    dims = (["project"] if instance else []) + ["user", "issue", "tool", "model", SESSIONS]
+    in_project = not instance or (bool(form.project) and form.project != NONE_VALUE)
+    dims = (["project"] if instance else []) + (["version", "sprint"] if in_project else [])
+    dims += ["user", "issue", "tool", "model", SESSIONS]
     return [
         {
             "group": dim,
@@ -429,6 +435,7 @@ async def _sessions(
             provider=f.provider,
             branch=f.branch,
             without_branch=f.without_branch,
+            planning=f.planning,
             excluded=False,
             unassigned=True if f.unassigned else None,
             offset=form.offset,

@@ -105,27 +105,27 @@ async def _child(db: AsyncSession, parent: Issue, child: Issue) -> Issue:
     return child
 
 
-@pytest_asyncio.fixture
-async def rl(db_session: AsyncSession) -> Release:
-    db = db_session
-    status = StatusFactory.build(name="rl Open")
+async def build_release(db: AsyncSession, prefix: str = "rl") -> Release:
+    """The world above; *prefix* keeps keys and logins unique to the calling module (``RLA``, ``rl_mgr``)."""
+    key = prefix.upper()
+    status = StatusFactory.build(name=f"{prefix} Open")
     db.add(status)
     await db.flush()
-    tracker = TrackerFactory.build(name="rl Task", default_status_id=status.id)
-    priority = PriorityFactory.build(name="rl Normal")
-    p = ProjectFactory.build(key="RLA", identifier="rla", is_public=False)
-    q = ProjectFactory.build(key="RLB", identifier="rlb", is_public=False)
-    h = ProjectFactory.build(key="RLH", identifier="rlh", is_public=False)
+    tracker = TrackerFactory.build(name=f"{prefix} Task", default_status_id=status.id)
+    priority = PriorityFactory.build(name=f"{prefix} Normal")
+    p = ProjectFactory.build(key=f"{key}A", identifier=f"{prefix}a", is_public=False)
+    q = ProjectFactory.build(key=f"{key}B", identifier=f"{prefix}b", is_public=False)
+    h = ProjectFactory.build(key=f"{key}H", identifier=f"{prefix}h", is_public=False)
     db.add_all([tracker, priority, p, q, h])
     await db.flush()
 
-    users = {name: UserFactory.build(login=f"rl_{name}", status="active") for name in ("mgr", "alice", "carol")}
-    users["admin"] = AdminUserFactory.build(login="rl_admin", status="active")
+    users = {name: UserFactory.build(login=f"{prefix}_{name}", status="active") for name in ("mgr", "alice", "carol")}
+    users["admin"] = AdminUserFactory.build(login=f"{prefix}_admin", status="active")
     db.add_all(users.values())
     await db.flush()
-    mgr_role = await _role(db, "rl Manager", ["*"], "all")
+    mgr_role = await _role(db, f"{prefix} Manager", ["*"], "all")
     viewer_role = await _role(
-        db, "rl Viewer", ["view_issues", "view_ai_usage", "log_ai_usage", "view_time_entries"], "all"
+        db, f"{prefix} Viewer", ["view_issues", "view_ai_usage", "log_ai_usage", "view_time_entries"], "all"
     )
     for project in (p, q):
         await _member(db, project, users["mgr"], mgr_role)
@@ -179,6 +179,11 @@ async def rl(db_session: AsyncSession) -> Release:
     await db.commit()
     clear_role_cache(db)
     return Release(p=p, q=q, h=h, users=users, versions=versions, sprints=sprints, issues=i)
+
+
+@pytest_asyncio.fixture
+async def rl(db_session: AsyncSession) -> Release:
+    return await build_release(db_session)
 
 
 async def run(db: AsyncSession, viewer: User, project: Project | None, **kw: Any) -> SpendReport:

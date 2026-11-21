@@ -42,3 +42,30 @@ def test_color_slots_rank_and_keep_grey_for_the_rest() -> None:
     slots = color_slots(keys)
     assert [slots[k] for k in ("a", "b", "c", "d", "e", "f", "g")] == [0, 1, 2, 3, 4, 5, 6]
     assert slots["h"] == slots[OTHER] == slots[NO_PROJECT] == NEUTRAL_SLOT
+
+
+def test_release_and_sprint_in_the_drill_state() -> None:
+    from urllib.parse import parse_qs
+
+    from specivo.web.pages.ai_spend_reports.drill import _tabs
+    from specivo.web.pages.ai_spend_reports.form import DRILL_ORDER
+
+    form = ReportForm.read(group="user", version="12", sprint="-")
+    assert (form.version, form.sprint) == ("12", "-")
+    assert form.filtered() == ["version", "sprint"]
+    assert DRILL_ORDER.index("project") < DRILL_ORDER.index("version") < DRILL_ORDER.index("user")
+    query = parse_qs(form.query())
+    assert query["version"] == ["12"] and query["sprint"] == ["-"]
+    # Anything but an id or "-" is no filter.
+    assert ReportForm.read(version="1.0", sprint="12abc").version == ""
+    assert ReportForm.read(sprint="12abc").sprint == ""
+    assert next_group("version", {"version"}, instance=False) == "user"
+    assert next_group("sprint", {"sprint", "user"}, instance=False) == "issue"
+    # Release and sprint buttons within one project only.
+    groups = lambda tabs: [t["group"] for t in tabs]  # noqa: E731
+    assert "version" in groups(_tabs("/r/", ReportForm.read(group="user"), instance=False))
+    assert "version" not in groups(_tabs("/r/", ReportForm.read(group="project"), instance=True))
+    assert "sprint" in groups(_tabs("/r/", ReportForm.read(group="user", project="RDA"), instance=True))
+    assert "sprint" not in groups(_tabs("/r/", ReportForm.read(group="user", project="-"), instance=True))
+    tabs = {t["group"]: t for t in _tabs("/r/", form, instance=False)}
+    assert tabs["version"]["disabled"] and tabs["sprint"]["disabled"]

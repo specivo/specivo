@@ -44,8 +44,9 @@ class ReportRowOut(BaseModel):
     """One group of the report.
 
     ``key`` holds the grouping values (user and project ids, issue ids with
-    ``0`` for an issue you cannot see, slugs and names; ``null`` for none),
-    ``labels`` how to show them.
+    ``0`` for an issue you cannot see, version and sprint ids, slugs and
+    names; ``null`` for none), ``labels`` how to show them (a release or
+    sprint of another project than the report's is ``KEY name``).
     """
 
     key: dict[str, Any]

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
+{% from "pages/projects/_ai_spend_card.html" import ai_spend_card %}
 
 {% block title %}{{ sprint.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -112,6 +113,25 @@
     {% endif %}
     {% endif %}
   </div>
+</div>
+
+{# ============ TIME AND AI SPEND ============ #}
+<div class="sp-sprint-plan" data-testid="sprint-plan">
+  <div class="card vd-info-card" data-testid="sprint-time">
+    <h3>{% trans %}Time{% endtrans %}</h3>
+    {% if sprint_time.logged is not none %}
+    <div class="vd-info-row">
+      <span class="vd-info-label">{% trans %}Time logged{% endtrans %}</span>
+      <span class="vd-info-value"><span class="mono" data-testid="sprint-time-logged">{{ "%.1f"|format(sprint_time.logged | float) }}h</span></span>
+    </div>
+    {% endif %}
+    <div class="vd-info-row">
+      <span class="vd-info-label">{% trans %}Estimated{% endtrans %}</span>
+      <span class="vd-info-value"><span class="mono" data-testid="sprint-time-estimated">{{ "%.1f"|format(sprint_time.estimated | float) }}h</span></span>
+    </div>
+    <p class="sp-text-muted-xs sp-ai-spend-card-note">{% trans %}Counts the sprint's issues and the sub-issues that have no sprint of their own.{% endtrans %}</p>
+  </div>
+  {{ ai_spend_card(ai_spend, "sprint") }}
 </div>
 
 {# ============ ISSUE LIST ============ #}
