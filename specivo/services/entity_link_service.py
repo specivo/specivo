@@ -1006,8 +1006,9 @@ class _RawEdge:
     # What the edge stands for, the same from either end: a relation, a text link or a parent/child
     # pair. None for edges read from one end only (attachments, commits, pull requests).
     identity: tuple[Any, ...] | None = None
-    # A commit named in the source issue's ``commits`` metadata: visible whenever that issue is.
-    vouched: bool = False
+    # A repository commit matched from the source issue's ``commits`` metadata: the bare
+    # ``commit:<sha12>`` node shown instead when the reader may not see that commit.
+    fallback: NodeKey | None = None
 
 
 def _first_sighting(seen: set[tuple[Any, ...]], edge: _RawEdge) -> bool:
@@ -1209,9 +1210,11 @@ class _Reader:
         await self._load_development("pull_request", nodes.get("pull_request", set()))
         await self.hubs.load((t, i) for t, ids in nodes.items() if t in HUB_TYPES for i in ids)
         await self._load_broken_scopes({e.broken_project_id for e in edges if e.broken_ref is not None})
+        # A hand-entered SHA never reveals a commit the reader could not see otherwise:
+        # unless a visible issue links that commit, it stays a bare SHA.
         for edge in edges:
-            if edge.vouched and edge.source is not None and edge.target is not None and self.visible(edge.source):
-                self._commits[edge.target[1]] = True
+            if edge.fallback is not None and edge.target is not None and not self.visible(edge.target):
+                edge.target = edge.fallback
         return [
             e
             for e in edges
