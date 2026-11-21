@@ -53,6 +53,7 @@ docker compose up -d
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |
 | `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails, repository webhook URLs and [single sign-on](single-sign-on/index.md) addresses are built from it. See [Public address (`APP_URL`)](#public-address-app_url). |
+| `STEALTH_PREFIX` | A secret path the whole instance is served under, for example `/x7k2-tracker`. Unset by default. See [Path prefix (`STEALTH_PREFIX`)](#path-prefix-stealth_prefix). |
 | `SECRET_KEY` | Signs sessions and tokens. **Must** be a strong, unique value in production. Keep in `.env.local`. |
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
@@ -195,6 +196,42 @@ loopback address, `::1`, `0.0.0.0`):
 When `APP_URL` is a real address but you opened the page under another host name, the same pages
 say so: the URLs you copy carry the `APP_URL` host, which may not be the one that reaches this
 instance.
+
+## Path prefix (STEALTH_PREFIX)
+
+`STEALTH_PREFIX` serves the whole instance under a path of your choosing, so a scanner probing
+known addresses (`/login/`, `/api/v1/`, `/static/`) finds nothing:
+
+```bash
+# .env
+STEALTH_PREFIX=/x7k2-tracker
+```
+
+It covers everything: the web pages, their stylesheets, scripts, fonts and images, the API, the
+[MCP](../ai-agents/connecting.md) endpoint, repository webhooks, single sign-on and SCIM, the
+health check, the installable app (its start page and scope) and the API docs. With the setting
+above, people sign in at `https://specivo.example.com/x7k2-tracker/` and agents connect to
+`https://specivo.example.com/x7k2-tracker/mcp/`. Every link, form, redirect and request the
+pages make stays under the prefix, and so do the links in rendered Markdown (issue references,
+`[[wiki links]]` and attachments). Links you write in Markdown with a path of their own
+(`[spec](/issue/ACME-12/)`) get the prefix too, and a link copied from the address bar, which
+already has it, is left as it is.
+
+A request outside the prefix gets a bare `404 Not Found` that names neither Specivo nor the
+prefix. Only `robots.txt` and the sitemap stay at the root, and an instance with a prefix is never
+indexed (see [Search engines](#search-engines)).
+
+- **Format.** One or more path segments of letters, digits, `.`, `_`, `~` and `-`. The leading
+  slash is added and a trailing one dropped. It may not start with a path Specivo serves itself
+  (`/api`, `/static`, `/projects`, `/login` and the like); Specivo does not start with such a
+  value. Keep `APP_URL` without the prefix: Specivo adds it.
+- **Reverse proxy.** Pass the path through unchanged. The proxy forwards
+  `https://specivo.example.com/x7k2-tracker/...` to Specivo as `/x7k2-tracker/...`; it must not
+  strip the prefix or rewrite it. The bundled nginx already does this.
+- **Changing it.** Restart after a change. Bookmarks, an installed app, MCP client settings,
+  repository webhooks and the addresses registered at an identity provider all hold the old
+  path and must be updated. Links stored in Markdown keep working: Specivo adds the prefix when
+  it renders them.
 
 ## Search engines
 
