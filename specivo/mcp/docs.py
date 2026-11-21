@@ -142,10 +142,14 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    `specivo_get_links(ref, direction="in"|"out"|"both", depth=1|2, types=[...])` -- `ref` is `ACME-12`
    or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see.
 
-### Link issues and pages so the graph finds them
-Write `ACME-42` for an issue, `[[Page title]]` for a wiki page of the same project, or a Markdown link
-to an issue, wiki page or attachment URL of this instance (for another project's wiki page). These are
-the links `specivo_get_links` and the backlink lines follow; a key inside code is not a link.
+### Connecting issues and pages (the link graph)
+- Issue to issue: add a relation with `specivo_add_relation` (`blocks`, `relates`, `duplicates`, ...)
+  or a parent with `parent_ref`. These are typed, so prefer them to mentioning the other issue in text.
+- In prose, write `ACME-42` or `[[Page title]]` only where the text naturally refers to that issue or
+  page. A Markdown link to an issue, wiki page or attachment URL of this instance also counts (use it
+  for another project's wiki page). A key inside code is not a link.
+- Do not add references to text just to connect things; `specivo_get_links` already follows
+  relations, parents, children and attachments.
 
 ### Search modes
 - `mode="hybrid"` *(default)* -- FTS + pgvector semantic via RRF fusion.

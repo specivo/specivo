@@ -82,4 +82,6 @@ def test_settings_search_tab_shows_the_link_graph(admin_page: Page, linked: dict
     expect(stats).to_contain_text("[[missing-runbook]]")
     expect(card.get_by_test_id("link-graph-rebuild")).to_be_enabled()
     expect(card).to_contain_text("Last full rebuild")
+    # The rebuild command stamped the project.
+    expect(card.get_by_test_id("link-graph-rebuilt-at")).to_contain_text("Last rebuilt:")
     tracker.assert_no_errors()

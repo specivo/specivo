@@ -68,6 +68,10 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.repositories.sweep_repository_deliveries",
                 "schedule": _REPOSITORY_SWEEP_INTERVAL_SECONDS,
             },
+            "queue-link-graph-backfill": {
+                "task": "specivo.tasks.entity_links.queue_link_graph_backfill",
+                "schedule": 3600,  # every hour
+            },
             "generate-recurring-tasks": {
                 "task": "specivo.tasks.recurring.generate_recurring_tasks",
                 "schedule": _RECURRING_BEAT_INTERVAL_SECONDS,
