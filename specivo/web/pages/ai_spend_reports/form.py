@@ -15,6 +15,7 @@ from specivo.core.i18n import gettext as _
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.services.ai_spend_planning import resolve_planning
 from specivo.services.ai_spend_report_service import (
     GROUP_BY,
     PERIODS,
@@ -47,9 +48,22 @@ NO_SHOWS = dict.fromkeys(SHOW_PARAMS.values(), "")
 #: The "Sessions" level of the drill-down: the entries themselves, a page at a time.
 SESSIONS = "sessions"
 #: Drill filters in breadcrumb order, and the form field of each.
-DRILL_ORDER: tuple[str, ...] = ("project", "user", "issue", "tool", "model", "provider", "cost_type", "branch")
+DRILL_ORDER: tuple[str, ...] = (
+    "project",
+    "version",
+    "sprint",
+    "user",
+    "issue",
+    "tool",
+    "model",
+    "provider",
+    "cost_type",
+    "branch",
+)
 FILTER_FIELD = {
     "project": "project",
+    "version": "version",
+    "sprint": "sprint",
     "user": "user_id",
     "issue": "issue",
     "tool": "tool",
@@ -61,6 +75,8 @@ FILTER_FIELD = {
 #: Where a click on a row of each grouping leads: the first of these not filtered yet, else the sessions.
 DRILL_NEXT: dict[str, tuple[str, ...]] = {
     "project": ("user", "issue"),
+    "version": ("user", "issue"),
+    "sprint": ("user", "issue"),
     "user": ("issue",),
     "issue": (),
     "tool": ("user", "issue"),
@@ -71,6 +87,11 @@ DRILL_NEXT: dict[str, tuple[str, ...]] = {
 }
 #: Page sizes of the sessions level.
 SESSION_LIMITS = (10, 25, 50)
+
+
+def _planning_value(value: str) -> str:
+    """A release or sprint filter as the URL may hold it: an id or ``-``; anything else is no filter."""
+    return value if value == NONE_VALUE or (value.isdecimal() and len(value) < 10) else ""
 
 
 def next_group(dim: str, filtered: set[str], instance: bool) -> str:
@@ -87,6 +108,7 @@ class ReportForm:
 
     Besides the report's own filters, the drill-down state lives here (and so
     in the URL): ``project`` (instance report: a key, ``-`` for unassigned),
+    ``version`` and ``sprint`` (an id, ``-`` for none),
     ``issue`` (a key, ``-`` for none), ``branch`` (``-`` for none),
     ``provider``, the grouping ``group`` (``sessions``: the entries), the
     sessions page (``offset``, ``limit``) and ``detail`` (every amount column).
@@ -114,6 +136,10 @@ class ReportForm:
     issue: str = ""
     branch: str = ""
     provider: str = ""
+    #: The release filter: a version id, or ``-`` for entries without a release.
+    version: str = ""
+    #: The sprint filter: a sprint id, or ``-`` for entries without a sprint.
+    sprint: str = ""
     offset: int = 0
     limit: int = 25
     detail: str = ""
@@ -151,6 +177,8 @@ class ReportForm:
             issue=text("issue").upper()[:50],
             branch=text("branch")[:255],
             provider=text("provider").lower()[:50],
+            version=_planning_value(text("version")),
+            sprint=_planning_value(text("sprint")),
             offset=int(offset) if offset.isdigit() and int(offset) < 10_000_000 else 0,
             limit=int(limit) if limit.isdigit() and int(limit) in SESSION_LIMITS else 25,
             detail="1" if text("detail") == "1" else "",
@@ -216,6 +244,8 @@ class ReportForm:
             "provider": self.provider,
             "cost_type": self.cost_type,
             "branch": self.branch,
+            "version": self.version,
+            "sprint": self.sprint,
             "bucket": self.bucket,
             "detail": self.detail,
             "offset": str(self.offset) if self.offset else "",
@@ -256,6 +286,8 @@ class ReportForm:
             "provider": self.provider,
             "cost_type": self.cost_type,
             "branch": self.branch,
+            "version": self.version,
+            "sprint": self.sprint,
             "format": "csv",
         }
         return urlencode({k: v for k, v in values.items() if v != ""})
@@ -282,6 +314,8 @@ def _form_params(  # noqa: PLR0913
     issue: str = Query(""),
     branch: str = Query(""),
     provider: str = Query(""),
+    version: str = Query(""),
+    sprint: str = Query(""),
     offset: str = Query(""),
     limit: str = Query(""),
     detail: str = Query(""),
@@ -311,6 +345,8 @@ def _form_params(  # noqa: PLR0913
         issue=issue,
         branch=branch,
         provider=provider,
+        version=version,
+        sprint=sprint,
         offset=offset,
         limit=limit,
         detail=detail,
@@ -383,6 +419,7 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         scope.labels["cost_type"] = _cost_type_text(form.cost_type)
     if form.branch:
         scope.labels["branch"] = _("No branch") if form.branch == NONE_VALUE else form.branch
+    planning = await _resolve_planning(db, user, project or scope.selected, form, scope)
     scope.filters = ReportFilters(
         user_id=int(form.user_id) if form.user_id else None,
         tool=form.tool or None,
@@ -395,8 +432,29 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         without_issue=form.issue == NONE_VALUE,
         branch=form.branch if form.branch and form.branch != NONE_VALUE else None,
         without_branch=form.branch == NONE_VALUE,
+        **planning,
     )
     return scope
+
+
+async def _resolve_planning(
+    db: AsyncSession, user: User, project: Project | None, form: ReportForm, scope: Scope
+) -> dict[str, Any]:
+    """The release and sprint filters (``ReportFilters`` fields) of *form*, and their breadcrumb labels.
+
+    An id the reader may not see matches nothing and is named by its number only.
+    """
+    fields: dict[str, Any] = {}
+    for dim, none_label in (("version", _("No release")), ("sprint", _("No sprint"))):
+        value = getattr(form, dim)
+        if value == NONE_VALUE:
+            fields[f"without_{dim}"] = True
+            scope.labels[dim] = none_label
+        elif value:
+            found = await resolve_planning(db, user, dim, value, project)
+            fields[f"{dim}_id"] = found.id
+            scope.labels[dim] = found.label if found.id != -1 else value
+    return fields
 
 
 def _cost_type_text(value: str) -> str:

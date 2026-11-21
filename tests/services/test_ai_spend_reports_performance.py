@@ -21,7 +21,7 @@ from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.exchange_rate import ExchangeRate
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.services.ai_spend_report_service import AiSpendReportService
+from specivo.services.ai_spend_report_service import AiSpendReportService, ReportFilters
 from specivo.services.permission_service import clear_role_cache
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
@@ -128,6 +128,9 @@ async def test_query_count_is_bounded_for_a_year_of_fifty_users(db_session: Asyn
         {"project": None, "viewer": admin, "group_by": ["user", "project", "model"], "period": "month"},
         {"project": None, "viewer": admin, "group_by": ["tool", "branch"], "period": "week"},
         {"project": p, "viewer": mgr, "group_by": ["user", "issue"], "period": "day"},
+        # The release and sprint come from the issue: one lateral join each, not a query per entry or issue.
+        {"project": p, "viewer": mgr, "group_by": ["version", "sprint"], "period": "month"},
+        {"project": p, "viewer": mgr, "group_by": ["user"], "filters": ReportFilters(without_version=True)},
     ]
     few = []
     for shape in shapes:

@@ -27,6 +27,8 @@
   {% if filters.provider %} · {{ filters.provider }}{% endif %}
   {% if filters.model %} · {{ filters.model }}{% endif %}
   {% if filters.branch == "-" %} · {% trans %}No branch{% endtrans %}{% elif filters.branch %} · {{ filters.branch }}{% endif %}
+  {% if filters.version %} · {{ filters.version_label }}{% endif %}
+  {% if filters.sprint %} · {{ filters.sprint_label }}{% endif %}
   {% if filters.cost_type %} · {{ filters.cost_type }}{% endif %}
   · <a href="/admin/ai-spend/">{% trans %}Back to the report{% endtrans %}</a>
 </p>

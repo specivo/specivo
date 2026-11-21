@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, avatar %}
+{% from "pages/projects/_ai_spend_card.html" import ai_spend_card %}
 
 {% block title %}{{ version.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -169,6 +170,8 @@
         <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(estimated_hours) }}h</span></span>
       </div>
     </div>
+
+    {{ ai_spend_card(ai_spend, "version") }}
 
     {# Changelog card (placeholder) #}
     <div class="card vd-info-card">

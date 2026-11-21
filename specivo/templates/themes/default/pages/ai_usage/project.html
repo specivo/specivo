@@ -74,6 +74,10 @@
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-provider-filter"><span class="filter-label">{% trans %}Provider{% endtrans %}</span>{{ filters.provider }}</span>{% endif %}
   {% if filters.branch %}<input type="hidden" name="branch" value="{{ filters.branch }}">
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-branch-filter"><span class="filter-label">{% trans %}Branch{% endtrans %}</span>{% if filters.branch == "-" %}{% trans %}No branch{% endtrans %}{% else %}{{ filters.branch }}{% endif %}</span>{% endif %}
+  {% if filters.version %}<input type="hidden" name="version" value="{{ filters.version }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-version-filter"><span class="filter-label">{% trans %}Release{% endtrans %}</span>{{ filters.version_label }}</span>{% endif %}
+  {% if filters.sprint %}<input type="hidden" name="sprint" value="{{ filters.sprint }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-sprint-filter"><span class="filter-label">{% trans %}Sprint{% endtrans %}</span>{{ filters.sprint_label }}</span>{% endif %}
   {% if chart_bucket %}<input type="hidden" name="bucket" value="{{ chart_bucket }}">{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>

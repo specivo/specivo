@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -590,3 +591,42 @@ class SprintService:
             "completed_hours": completed_hours,
             "data_points": data_points,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class SprintTime:
+    """The time of a sprint's issues: hours logged on them and their estimates.
+
+    ``logged`` is None when the reader may not read time entries in the project.
+    """
+
+    estimated: Decimal
+    logged: Decimal | None
+
+
+async def sprint_time(session: AsyncSession, sprint: Sprint, reader: User, *, can_view_time: bool) -> SprintTime:
+    """The estimated hours of *sprint*'s issues and the hours logged on them, as *reader* may see them.
+
+    A sprint's issues follow the AI spend rule (:mod:`specivo.services.ai_spend_planning`):
+    the issues planned into it and the issues below them that have no sprint
+    of their own (the nearest ancestor with a sprint decides), each only when
+    *reader* may see it. Estimates are summed per issue as stored (no
+    roll-up), logged hours over the time entries *reader* may read
+    (``TimeEntryService.visible_entries_clause_any``). Two queries plus the
+    visibility lookups.
+    """
+    from specivo.models.time_entry import TimeEntry
+    from specivo.services.ai_spend_planning import sprint_issue_conditions
+    from specivo.services.time_entry_service import TimeEntryService
+
+    in_sprint = await sprint_issue_conditions(session, reader, sprint.id)
+    estimated = await session.scalar(select(func.coalesce(func.sum(Issue.estimated_hours), 0)).where(*in_sprint))
+    issue_ids = select(Issue.id).where(*in_sprint)
+    logged: Decimal | None = None
+    if can_view_time:
+        stmt = select(func.coalesce(func.sum(TimeEntry.hours), 0)).where(TimeEntry.issue_id.in_(issue_ids))
+        visible = await TimeEntryService().visible_entries_clause_any(session, reader)
+        if visible is not None:
+            stmt = stmt.where(visible)
+        logged = Decimal(str(await session.scalar(stmt)))
+    return SprintTime(estimated=Decimal(str(estimated)), logged=logged)

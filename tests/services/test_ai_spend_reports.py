@@ -357,6 +357,9 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         "model": {"lab-model-1", "lab-model-2"},
         "cost_type": {"api", "free"},
         "branch": {"feat/a", None},
+        # Planning dimensions come from the issue: none of these issues is planned.
+        "version": {None},
+        "sprint": {None},
     }[dim]
     assert keys == expected
     labels = {r.labels[dim] for r in report.rows}

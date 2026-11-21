@@ -13,7 +13,9 @@
 #}
 
 {% macro dim_label(dim) -%}
-{% if dim == "user" %}{% trans %}User{% endtrans %}
+{% if dim == "version" %}{% trans %}Release{% endtrans %}
+{%- elif dim == "sprint" %}{% trans %}Sprint{% endtrans %}
+{%- elif dim == "user" %}{% trans %}User{% endtrans %}
 {%- elif dim == "project" %}{% trans %}Project{% endtrans %}
 {%- elif dim == "issue" %}{% trans %}Issue{% endtrans %}
 {%- elif dim == "tool" %}{% trans %}Tool{% endtrans %}
@@ -24,7 +26,9 @@
 {%- endmacro %}
 
 {% macro level_label(dim) -%}
-{% if dim == "user" %}{% trans %}Person{% endtrans %}
+{% if dim == "version" %}{% trans %}Release{% endtrans %}
+{%- elif dim == "sprint" %}{% trans %}Sprint{% endtrans %}
+{%- elif dim == "user" %}{% trans %}Person{% endtrans %}
 {%- elif dim == "project" %}{% trans %}Project{% endtrans %}
 {%- elif dim == "issue" %}{% trans %}Feature{% endtrans %}
 {%- elif dim == "tool" %}{% trans %}Tool{% endtrans %}
@@ -36,7 +40,9 @@
 {%- endmacro %}
 
 {% macro spend_by(dim) -%}
-{% if dim == "user" %}{% trans %}Spend by person{% endtrans %}
+{% if dim == "version" %}{% trans %}Spend by release{% endtrans %}
+{%- elif dim == "sprint" %}{% trans %}Spend by sprint{% endtrans %}
+{%- elif dim == "user" %}{% trans %}Spend by person{% endtrans %}
 {%- elif dim == "project" %}{% trans %}Spend by project{% endtrans %}
 {%- elif dim == "issue" %}{% trans %}Spend by feature{% endtrans %}
 {%- elif dim == "tool" %}{% trans %}Spend by tool{% endtrans %}
@@ -63,7 +69,7 @@
 {% macro cell(c) -%}
 {% if c.kind == "seat" %}<span class="sp-spend-seat-label">{% trans %}Unallocated seat cost{% endtrans %}</span>
 {%- elif c.kind == "hidden" %}<span class="sp-text-muted">{% trans %}An issue you cannot see{% endtrans %}</span>
-{%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% else %}–{% endif %}</span>
+{%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% else %}–{% endif %}</span>
 {%- elif c.dim == "cost_type" %}{{ cost_type_label(c.value) }}
 {%- elif c.dim == "issue" %}<a class="issue-key" href="/issue/{{ c.label }}/">{{ c.label }}</a>
 {%- elif c.dim in ("model", "branch") %}<span class="sp-aiu-model">{{ c.label }}</span>
@@ -126,6 +132,8 @@
   {% if form.project %}<input type="hidden" name="project" value="{{ form.project }}">{% endif %}
   {% if form.issue %}<input type="hidden" name="issue" value="{{ form.issue }}">{% endif %}
   {% if form.branch %}<input type="hidden" name="branch" value="{{ form.branch }}">{% endif %}
+  {% if form.version %}<input type="hidden" name="version" value="{{ form.version }}">{% endif %}
+  {% if form.sprint %}<input type="hidden" name="sprint" value="{{ form.sprint }}">{% endif %}
   {% if form.provider %}<input type="hidden" name="provider" value="{{ form.provider }}">{% endif %}
   {% if form.detail %}<input type="hidden" name="detail" value="1">{% endif %}
   <label class="sp-aiu-filter">

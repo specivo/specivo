@@ -14,6 +14,7 @@ from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
+from specivo.services.ai_spend_planning import PlanningFilter, resolve_planning
 from specivo.services.permission_service import ai_usage_visibility
 from specivo.web.pages.ai_usage._common import MY_URL, NONE_VALUE, _issues, _parse_date, _service, _tools
 
@@ -33,6 +34,12 @@ class Filters:
     project: str = ""
     provider: str = ""
     branch: str = ""
+    #: A release (version id) or sprint id from the spend report's drill-through; ``-`` for none.
+    version: str = ""
+    sprint: str = ""
+    #: How the page names the release and sprint filters (set by the page once resolved).
+    version_label: str = ""
+    sprint_label: str = ""
     errors: list[str] = field(default_factory=list)
 
     def query(self) -> str:
@@ -49,6 +56,8 @@ class Filters:
             "project": self.project,
             "provider": self.provider,
             "branch": self.branch,
+            "version": self.version,
+            "sprint": self.sprint,
         }
         return urlencode({k: v for k, v in values.items() if v})
 
@@ -57,12 +66,33 @@ class Filters:
         return {"counted": False, "excluded": True}.get(self.status)
 
     def extra(self) -> dict[str, Any]:
-        """The provider and branch filters as ``list_entries`` takes them ("-": entries without a branch)."""
+        """The provider, branch, release and sprint filters as ``list_entries`` takes them ("-": none)."""
         return {
             "provider": self.provider or None,
             "branch": self.branch if self.branch and self.branch != NONE_VALUE else None,
             "without_branch": self.branch == NONE_VALUE,
+            "planning": self.planning,
         }
+
+    @property
+    def planning(self) -> PlanningFilter:
+        """The release and sprint filters. An id the reader may not see matches nothing by itself."""
+        return PlanningFilter(
+            version_id=int(self.version) if self.version.isdecimal() else None,
+            without_version=self.version == NONE_VALUE,
+            sprint_id=int(self.sprint) if self.sprint.isdecimal() else None,
+            without_sprint=self.sprint == NONE_VALUE,
+        )
+
+    async def name_planning(self, db: AsyncSession, viewer: User, project: Project | None) -> None:
+        """Set the labels of the release and sprint filters (``KEY name`` from another project, or the id)."""
+        for dim, none_label in (("version", _("No release")), ("sprint", _("No sprint"))):
+            value = getattr(self, dim)
+            if value == NONE_VALUE:
+                setattr(self, f"{dim}_label", none_label)
+            elif value:
+                found = await resolve_planning(db, viewer, dim, value, project)
+                setattr(self, f"{dim}_label", found.label if found.id != -1 else value)
 
 
 def _filters(  # noqa: PLR0913
@@ -78,6 +108,8 @@ def _filters(  # noqa: PLR0913
     project: str = "",
     provider: str = "",
     branch: str = "",
+    version: str = "",
+    sprint: str = "",
 ) -> Filters:
     return Filters(
         user_id=user_id.strip() if user_id.strip().isdigit() else "",
@@ -91,7 +123,14 @@ def _filters(  # noqa: PLR0913
         project=project.strip().upper()[:50],
         provider=provider.strip().lower()[:50],
         branch=branch.strip()[:255],
+        version=_planning_value(version.strip()),
+        sprint=_planning_value(sprint.strip()),
     )
+
+
+def _planning_value(value: str) -> str:
+    """A release or sprint filter: an id or ``-``; anything else is no filter."""
+    return value if value == NONE_VALUE or (value.isdecimal() and len(value) < 10) else ""
 
 
 async def _issue_filter(db: AsyncSession, user: User, key: str, project: Project | None) -> int | None:

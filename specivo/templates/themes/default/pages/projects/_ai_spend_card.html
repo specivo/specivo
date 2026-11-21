@@ -1,0 +1,37 @@
+{% from "pages/ai_usage/_macros.html" import money_total %}
+{#
+  The "AI spend" card of a release (kind "version") or a sprint (kind "sprint"): the project's AI
+  spend report narrowed to it. Context: card (see specivo.web.pages.ai_spend_card.ai_spend_card).
+#}
+{% macro ai_spend_card(card, kind) -%}
+<div class="card vd-info-card sp-ai-spend-card" data-testid="ai-spend-card">
+  <h3>{% trans %}AI spend{% endtrans %}</h3>
+  {% if card.empty %}
+  <p class="sp-text-muted-xs" data-testid="ai-spend-card-empty">{% if kind == "version" %}{% trans %}No AI usage you can see counts towards this release yet.{% endtrans %}{% else %}{% trans %}No AI usage you can see counts towards this sprint yet.{% endtrans %}{% endif %}</p>
+  {% else %}
+  <div class="vd-info-row">
+    <span class="vd-info-label">{% trans %}Spend{% endtrans %}</span>
+    <span class="vd-info-value" data-testid="ai-spend-card-spend">{% if card.spend %}{{ money_total(card.spend) }}{% else %}–{% endif %}</span>
+  </div>
+  <div class="vd-info-row">
+    <span class="vd-info-label">{% trans %}API-equivalent value{% endtrans %}</span>
+    <span class="vd-info-value" data-testid="ai-spend-card-api">{% if card.api_equivalent %}{{ money_total(card.api_equivalent) }}{% else %}–{% endif %}</span>
+  </div>
+  <div class="vd-info-row">
+    <span class="vd-info-label">{% trans %}Tokens{% endtrans %}</span>
+    <span class="vd-info-value"><span class="mono" title="{{ card.tokens_full }}" data-testid="ai-spend-card-tokens">{{ card.tokens }}</span></span>
+  </div>
+  <div class="vd-info-row">
+    <span class="vd-info-label">{% trans %}People{% endtrans %}</span>
+    <span class="vd-info-value" data-testid="ai-spend-card-people">{{ card.people }}</span>
+  </div>
+  <p class="sp-text-muted-xs sp-ai-spend-card-note">
+    {% if card.seat_shown %}{% trans %}Spend is pay-per-use charges plus the share of subscriptions carried by this usage.{% endtrans %}{% else %}{% trans %}Spend is pay-per-use charges.{% endtrans %}{% endif %}
+    {% if kind == "version" %}{% trans %}Includes the sub-issues that have no release of their own.{% endtrans %}{% else %}{% trans %}Includes the sub-issues that have no sprint of their own.{% endtrans %}{% endif %}
+    {% trans first=card.date_from, last=card.date_to %}Usage from {{ first }} to {{ last }}.{% endtrans %}
+    {% if card.truncated %}{% trans %}Only the latest three years are counted.{% endtrans %}{% endif %}
+  </p>
+  {% endif %}
+  <a class="sp-ai-spend-card-link" href="{{ card.url }}" data-testid="ai-spend-card-link">{% trans %}Open the AI spend report{% endtrans %} &rarr;</a>
+</div>
+{%- endmacro %}

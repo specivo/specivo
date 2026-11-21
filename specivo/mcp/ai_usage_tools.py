@@ -518,6 +518,10 @@ async def _list(  # noqa: PLR0913
 
 #: Most rows the report tool writes out (the totals line always follows).
 REPORT_MAX_ROWS = 200
+#: How a row without a value names the dimension ("(no release)").
+_NONE_NAMES = {"version": "release"}
+#: The release and sprint arguments' value for entries without one, as in ``specivo_list_issues``.
+_NO_PLANNING = "none"
 
 
 def _report_amount(summary: Any) -> str:
@@ -541,7 +545,7 @@ def _report_line(row: Any, report: Any) -> str:
         elif dim == "issue" and row.key.get(dim) == HIDDEN_ISSUE:
             label = "(issue you cannot see)"
         else:
-            label = row.labels.get(dim) or f"(no {dim})"
+            label = row.labels.get(dim) or f"(no {_NONE_NAMES.get(dim, dim)})"
         parts.append(f"{dim}={label}")
     head = " ".join(parts) or "all"
     measures = [
@@ -604,11 +608,55 @@ async def _report_user_id(session: AsyncSession, user_login: str | None) -> int 
     return found.id if found is not None else -1
 
 
-def _report_text(report: SpendReport, project: Project | None, issue: Issue | None, include_sub_issues: bool) -> str:
+async def _report_planning(
+    session: AsyncSession, user: User, project: Project | None, release: str | None, sprint: str | None
+) -> tuple[dict[str, Any], list[str]]:
+    """The release and sprint filters (``ReportFilters`` fields) and how the scope line names them.
+
+    Each takes a version or sprint name (within *project*) or id, or ``none``.
+    One that does not exist or that the caller may not see is a 422 naming
+    the argument, with the same message either way.
+    """
+    from specivo.services.ai_spend_planning import resolve_planning
+
+    fields: dict[str, Any] = {}
+    named: list[str] = []
+    for dim, argument, value in (("version", "release", release), ("sprint", "sprint", sprint)):
+        text = (value or "").strip()
+        if not text:
+            continue
+        if text.casefold() == _NO_PLANNING:
+            fields[f"without_{dim}"] = True
+            named.append(f"no {argument}")
+            continue
+        found = await resolve_planning(session, user, dim, text, project)
+        if found.id == -1:
+            where = f" in {project.key}" if project is not None else ""
+            raise ValidationError(
+                message=(
+                    f"Unknown {argument} '{text}'{where}: use a {'version' if dim == 'version' else 'sprint'} "
+                    f"name{' or id' if project is not None else ' id'} you can see, or 'none'."
+                ),
+                field=argument,
+            )
+        fields[f"{dim}_id"] = found.id
+        named.append(f"{argument} {found.label}")
+    return fields, named
+
+
+def _report_text(
+    report: SpendReport,
+    project: Project | None,
+    issue: Issue | None,
+    include_sub_issues: bool,
+    planning: list[str] | None = None,
+) -> str:
     """*report* as the tool's text: scope line, notes, at most :data:`REPORT_MAX_ROWS` rows and the total."""
     scope = f"project {project.key}" if project is not None else "the whole instance"
     if issue is not None:
         scope = f"issue {issue.display_key}" + (" and its sub-issues" if include_sub_issues else "") + f" in {scope}"
+    if planning:
+        scope += " (" + ", ".join(planning) + ")"
     lines = [
         f"AI spend report for {scope}, {report.date_from} to {report.date_to} (UTC days), "
         f"amounts in {report.currency}, rate policy {report.rate_policy}.",
@@ -659,6 +707,8 @@ async def _ai_usage_report(  # noqa: PLR0913
     sort: str,
     issue_ref: str | None = None,
     include_sub_issues: bool = False,
+    release: str | None = None,
+    sprint: str | None = None,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
     from specivo.services.ai_spend_report_service import (
@@ -672,6 +722,7 @@ async def _ai_usage_report(  # noqa: PLR0913
     first, last = default_range(preset)
     project, issue = await _report_scope(session, user, project_key, issue_ref)
     user_id = await _report_user_id(session, user_login)
+    planning, planning_names = await _report_planning(session, user, project, release, sprint)
     issue_id = issue.id if issue is not None else None
     report = await AiSpendReportService().report(
         session,
@@ -691,6 +742,7 @@ async def _ai_usage_report(  # noqa: PLR0913
             cost_type=cost_type or None,
             issue_id=None if include_sub_issues else issue_id,
             issue_tree_id=issue_id if include_sub_issues else None,
+            **planning,
         ),
         sort=sort or "key",
     )
@@ -702,4 +754,4 @@ async def _ai_usage_report(  # noqa: PLR0913
         {"op": "report", "project_key": project.key if project is not None else None},
         project_id=project.id if project is not None else None,
     )
-    return _report_text(report, project, issue, include_sub_issues)
+    return _report_text(report, project, issue, include_sub_issues, planning_names)

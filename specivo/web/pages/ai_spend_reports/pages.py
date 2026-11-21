@@ -217,6 +217,8 @@ async def admin_spend_entries(  # noqa: PLR0913
     model: str = Query(""),
     provider: str = Query(""),
     branch: str = Query(""),
+    version: str = Query(""),
+    sprint: str = Query(""),
     cost_type: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
@@ -237,6 +239,8 @@ async def admin_spend_entries(  # noqa: PLR0913
         project=project,
         provider=provider,
         branch=branch,
+        version=version,
+        sprint=sprint,
     )
     selected: Project | None = None
     unassigned: bool | None = None
@@ -248,6 +252,7 @@ async def admin_spend_entries(  # noqa: PLR0913
         except NotFoundError:
             filters.project = ""
     issue_id = await _issue_filter(db, user, filters.issue, selected)
+    await filters.name_planning(db, user, selected)
     entries, total = await _usage.list_entries(
         db,
         user,

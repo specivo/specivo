@@ -383,12 +383,17 @@ async def _project_charts_view(
 
     excluded = filters.status == "excluded"
     extra = filters.extra()
+    planning = filters.planning
     report_filters = ReportFilters(
         user_id=_parse_int(filters.user_id),
         tool=filters.tool or None,
         model=filters.model or None,
         provider=extra["provider"],
         cost_type=filters.cost_type or None,
+        version_id=planning.version_id,
+        without_version=planning.without_version,
+        sprint_id=planning.sprint_id,
+        without_sprint=planning.without_sprint,
     )
     args: dict[str, Any] = {
         "date_from": _parse_date(filters.from_date),
@@ -430,6 +435,8 @@ async def _project_charts_view(
             report_filters.model,
             report_filters.provider,
             report_filters.cost_type,
+            filters.version,
+            filters.sprint,
         ],
         "bucket": chosen,
         **{k: _cache_value(v) for k, v in args.items()},

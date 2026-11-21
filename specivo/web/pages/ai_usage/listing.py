@@ -68,6 +68,8 @@ async def project_ai_usage(  # noqa: PLR0913
     status: str = Query(""),
     provider: str = Query(""),
     branch: str = Query(""),
+    version: str = Query(""),
+    sprint: str = Query(""),
     bucket: str = Query(""),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
@@ -76,8 +78,8 @@ async def project_ai_usage(  # noqa: PLR0913
 ) -> Response:
     """The project's AI usage the reader may see, with filters, totals in its reporting currency, and charts.
 
-    ``provider`` and ``branch`` (``-``: none) and ``issue=-`` (no issue) come
-    from the spend report's drill-through. The charts group the project's
+    ``provider``, ``branch``, ``version`` and ``sprint`` (``-``: none) and
+    ``issue=-`` (no issue) come from the spend report's drill-through. The charts group the project's
     usage, so the page spends the reader's AI report budget
     (specivo.core.ai_report_limits); the bucket asked for is only a wish.
     ``user`` is a login typed into the person filter without JS: the person
@@ -100,7 +102,10 @@ async def project_ai_usage(  # noqa: PLR0913
         status=status,
         provider=provider,
         branch=branch,
+        version=version,
+        sprint=sprint,
     )
+    await filters.name_planning(db, user, project)
     issue_id = await _issue_filter(db, user, filters.issue, project)
     common: dict[str, Any] = {
         **filters.extra(),

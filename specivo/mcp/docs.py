@@ -71,8 +71,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     ),
     "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
     "specivo_ai_usage_report": (
-        "AI spend report: usage grouped by user, model, tool, project, issue, cost type, branch and period, "
-        "in one currency"
+        "AI spend report: usage grouped by release, sprint, user, model, tool, project, issue, cost type, branch "
+        "and period, in one currency"
     ),
     "specivo_ai_subscriptions": (
         "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
@@ -246,7 +246,9 @@ and corrections.
    `project_key` reports the whole instance (administrators). Spend includes seat cost (subscription
    fees spread over the entries that used them) when you read every entry of the project.
    `issue_ref="ACME-12"` (with `include_sub_issues=true` for the issues below it) totals one issue,
-   e.g. for the spend line of a closing note
+   e.g. for the spend line of a closing note; `release="1.0"` or `sprint="Sprint 4"` totals one release or
+   sprint (an issue counts towards its own, else its nearest parent's), and `group_by="version"` or
+   `"sprint"` compares them
 
 ### Register AI subscriptions from invoices
 When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):
