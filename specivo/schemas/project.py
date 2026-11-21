@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from specivo.core.constants import GRAPH_METADATA_KEY_MAX_LENGTH, GRAPH_METADATA_KEYS_MAX
 from specivo.services.branch_name import (
     DEFAULT_BRANCH_FORMAT,
     DEFAULT_BRANCH_TYPE,
@@ -138,6 +139,15 @@ class ProjectUpdate(BaseModel):
     branch_name: BranchNameConfig | None = None
     # Suggest similar issues on the new issue form (on unless set to false).
     similar_issues: bool | None = None
+    # Issue metadata keys whose values become link graph nodes; replaces the stored list.
+    graph_metadata_keys: list[str] | None = Field(
+        default=None,
+        description=(
+            "Issue metadata keys whose string values become link graph nodes (component:KEY/<value>, "
+            f"metadata:KEY/<key>/<value>). At most {GRAPH_METADATA_KEYS_MAX} keys, each without '/'. "
+            "An empty list turns them all off."
+        ),
+    )
     # Currency the project's money reports use. Only applied when present in
     # the payload: a code sets the override (it must be an enabled currency),
     # null or "" clears it so the instance reporting currency applies.
@@ -177,6 +187,21 @@ class ProjectUpdate(BaseModel):
         if not re.fullmatch(r"[A-Z]{3}", v):
             raise ValueError("reporting_currency_code must be a three-letter ISO 4217 code")
         return v
+
+    @field_validator("graph_metadata_keys")
+    @classmethod
+    def validate_graph_metadata_keys(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        keys = list(dict.fromkeys(k.strip() for k in v if k.strip()))
+        if len(keys) > GRAPH_METADATA_KEYS_MAX:
+            raise ValueError(f"graph_metadata_keys takes at most {GRAPH_METADATA_KEYS_MAX} keys")
+        for key in keys:
+            if "/" in key:
+                raise ValueError(f"A graph metadata key cannot contain '/': {key!r}")
+            if len(key) > GRAPH_METADATA_KEY_MAX_LENGTH:
+                raise ValueError(f"A graph metadata key is at most {GRAPH_METADATA_KEY_MAX_LENGTH} characters")
+        return keys
 
     @field_validator("status")
     @classmethod
@@ -232,6 +257,8 @@ class ProjectOut(BaseModel):
     # Whether the project suggests similar issues on the new issue form (the
     # instance switch can still turn it off). ``None`` in list responses.
     similar_issues: bool | None = None
+    # The issue metadata keys that become link graph nodes (default ["component"]). ``None`` in list responses.
+    graph_metadata_keys: list[str] | None = None
     # The project's own reporting currency; ``None`` means it follows the
     # instance setting. Left ``None`` for anonymous visitors.
     reporting_currency_code: str | None = None
