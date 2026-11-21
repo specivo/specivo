@@ -368,7 +368,6 @@ async def test_issue_list_returns_200_for_authenticated_user(
     project = await ProjectService().create(
         db_session,
         ProjectCreate(name="Color Test", identifier="color-test-il", key="CLRIL"),
-        user,
     )
     await db_session.commit()
 

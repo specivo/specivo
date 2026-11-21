@@ -118,7 +118,7 @@ async def _get(client: AsyncClient, url: str) -> str:
 
 async def _make_project(db: AsyncSession, client: AsyncClient, key: str) -> Project:
     data = ProjectCreate(name=f"Thai Strings {key}", identifier=f"{_PREFIX}-{key.lower()}", key=key)
-    project = await _project_svc.create(db, data, client.state.user)
+    project = await _project_svc.create(db, data)
     await db.commit()
     await db.refresh(project)
     return project

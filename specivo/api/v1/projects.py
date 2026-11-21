@@ -242,7 +242,7 @@ async def create_project(
     if not is_global_admin(current_user):
         raise PermissionDeniedError("Only admins can create projects")
 
-    project = await _service.create(db, data, current_user)
+    project = await _service.create(db, data)
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # Creation is admin-only, so the creator may always see the map.
