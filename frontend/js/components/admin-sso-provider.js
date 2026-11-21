@@ -171,7 +171,7 @@ export function adminSsoProvider(initial) {
             this.saving = true;
             this.saveError = '';
             this.saveMessage = '';
-            var url = '/api/v1/admin/sso/providers/' + (this.isNew ? '' : this.provider.id + '/');
+            var url = spUrl('/api/v1/admin/sso/providers/' + (this.isNew ? '' : this.provider.id + '/'));
             var res = await spFetch(url, {
                 method: this.isNew ? 'POST' : 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -182,7 +182,7 @@ export function adminSsoProvider(initial) {
                 this.secretInput = '';
                 this.clearSecret = false;
                 if (this.isNew) {
-                    window.location.href = '/admin/sso/' + saved.id + '/';
+                    window.location.href = spUrl('/admin/sso/' + saved.id + '/');
                     return;
                 }
                 this.provider = saved;
@@ -330,7 +330,7 @@ export function adminSsoProvider(initial) {
         },
 
         _scimUrl(tail) {
-            return '/api/v1/admin/sso/providers/' + this.provider.id + '/scim/' + (tail || '');
+            return spUrl('/api/v1/admin/sso/providers/' + this.provider.id + '/scim/' + (tail || ''));
         },
 
         async _scimCall(method, tail, body) {
@@ -398,10 +398,10 @@ export function adminSsoProvider(initial) {
         async confirmDelete() {
             this.deleting = true;
             this.deleteError = '';
-            var url = '/api/v1/admin/sso/providers/' + this.provider.id + '/' + (this.forceDelete ? '?force=true' : '');
+            var url = spUrl('/api/v1/admin/sso/providers/' + this.provider.id + '/' + (this.forceDelete ? '?force=true' : ''));
             var res = await spFetch(url, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } });
             if (res.ok || res.status === 204) {
-                window.location.href = '/admin/sso/';
+                window.location.href = spUrl('/admin/sso/');
                 return;
             }
             var err = await res.json().catch(function () { return {}; });

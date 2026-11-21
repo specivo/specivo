@@ -8,7 +8,7 @@ import { pageSize, sameOriginUrl } from '../lib/safe-url';
 
 function go(base, params) {
     var target = sameOriginUrl(base, params);
-    if (target) window.location.assign(target);
+    if (target) window.location.assign(spUrl(target));
 }
 
 export function initPageSize() {
@@ -33,7 +33,7 @@ export function initPageSize() {
             if (limit === null) return;
             var container = document.getElementById('my-issues-container');
             if (!container || typeof htmx === 'undefined') return;
-            htmx.ajax('GET', '/partials/dashboard/my-issues/?offset=0&limit=' + limit, {target: container, swap: 'innerHTML'});
+            htmx.ajax('GET', spUrl('/partials/dashboard/my-issues/?offset=0&limit=' + limit), {target: container, swap: 'innerHTML'});
         });
     })();
 

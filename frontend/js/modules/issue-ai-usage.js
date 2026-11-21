@@ -29,7 +29,9 @@ export function loadChartsIn(root) {
     const source = root.matches && root.matches('[data-sp-chart-src]') ? root : root.querySelector('[data-sp-chart-src]');
     if (!source || !root.querySelector('[data-sp-spend-chart]') || chartBundleLoaded()) return;
     const src = safeNextPath(source.getAttribute('data-sp-chart-src') || '');
-    if (!CHART_BUNDLE.test(src)) return;
+    // The path carries the URL prefix (STEALTH_PREFIX); the bundle check is on the rest.
+    const base = spBase();
+    if (src.indexOf(base) !== 0 || !CHART_BUNDLE.test(src.slice(base.length))) return;
     const script = document.createElement('script');
     script.src = src;
     script.defer = true;

@@ -28,11 +28,13 @@ const vendorGlobals = {
 const specivoGlobals = {
     _getCsrfToken: 'readonly',
     spAnchorMenu: 'readonly',
+    spBase: 'readonly',
     spBindAnchoredMenu: 'readonly',
     spFetch: 'readonly',
     spFormatDate: 'readonly',
     spLocale: 'readonly',
     spParseRepoAddress: 'readonly',
+    spUrl: 'readonly',
 };
 
 /** Correctness rules on top of eslint:recommended. */

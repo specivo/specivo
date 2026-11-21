@@ -64,7 +64,7 @@ export function changePasswordForm(initial) {
                     if (this.redirectTo) {
                         // Keep the button disabled while the browser navigates,
                         // so a second submit cannot race the redirect.
-                        window.location.href = this.redirectTo;
+                        window.location.href = spUrl(this.redirectTo);
                         return;
                     }
                 } else {

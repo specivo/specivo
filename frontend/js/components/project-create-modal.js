@@ -55,7 +55,7 @@ export function projectCreateModal(initial) {
                     });
                     if (res.ok) {
                         var data = await res.json();
-                        var url = '/projects/' + data.key + '/';
+                        var url = spUrl('/projects/' + data.key + '/');
                         await this._waitUntilServed(url);
                         window.location.href = url;
                     } else {

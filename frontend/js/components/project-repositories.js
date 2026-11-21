@@ -438,7 +438,7 @@ export function projectRepositories(initial) {
         },
 
         base() {
-            return '/api/v1/projects/' + this.projectKey + '/repositories/';
+            return spUrl('/api/v1/projects/' + this.projectKey + '/repositories/');
         },
 
         providerLabel(name) {

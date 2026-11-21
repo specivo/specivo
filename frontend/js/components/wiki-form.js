@@ -69,6 +69,8 @@ export function wikiForm(initial) {
                     });
                     if (!res.ok) return;
                     var data = await res.json();
+                    // Markdown source keeps the application path: the renderer
+                    // adds the URL prefix, so the text survives a prefix change.
                     var url = '/api/v1/attachments/' + data.id + '/download/';
                     var isImage = (file.type || '').indexOf('image/') === 0;
                     var snippet = isImage
@@ -90,7 +92,7 @@ export function wikiForm(initial) {
                 try {
                     var url, method, payload;
                     if (this.mode === 'edit') {
-                        url = '/api/v1/projects/' + this.projectKey + '/wiki/' + this.slug + '/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/wiki/' + this.slug + '/');
                         method = 'PATCH';
                         payload = {
                             title: this.title,
@@ -100,7 +102,7 @@ export function wikiForm(initial) {
                             parent_slug: this.parentSlug || null
                         };
                     } else {
-                        url = '/api/v1/projects/' + this.projectKey + '/wiki/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/wiki/');
                         method = 'POST';
                         payload = {
                             title: this.title,
@@ -117,7 +119,7 @@ export function wikiForm(initial) {
                     if (res.ok) {
                         var data = await res.json();
                         var slug = data.slug || this.slug;
-                        window.location.href = '/projects/' + this.projectKey + '/wiki/' + slug + '/';
+                        window.location.href = spUrl('/projects/' + this.projectKey + '/wiki/' + slug + '/');
                     } else {
                         var errData = await res.json();
                         this.error = (errData.errors && errData.errors[0] && errData.errors[0].message) || i18n.saveFailed;

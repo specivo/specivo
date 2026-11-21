@@ -57,8 +57,8 @@ export function issueMetadataPanel(initial) {
             },
 
             metadataSearchUrl(slug, value, isArray) {
-                return '/search/?scope=issues&mf=' + encodeURIComponent(slug) +
-                    '&mv=' + encodeURIComponent(value) + '&ma=' + (isArray ? '1' : '0');
+                return spUrl('/search/?scope=issues&mf=' + encodeURIComponent(slug) +
+                    '&mv=' + encodeURIComponent(value) + '&ma=' + (isArray ? '1' : '0'));
             },
 
             get summaryChips() {

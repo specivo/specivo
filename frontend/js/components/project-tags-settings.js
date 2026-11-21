@@ -51,10 +51,10 @@ export function projectTagsSettings(initial) {
                 var payload = {name: this.form.name.trim(), color: this.form.color || null};
                 var url, method;
                 if (this.editingTag) {
-                    url = '/api/v1/projects/' + this.projectKey + '/tags/' + this.editingTag.id + '/';
+                    url = spUrl('/api/v1/projects/' + this.projectKey + '/tags/' + this.editingTag.id + '/');
                     method = 'PATCH';
                 } else {
-                    url = '/api/v1/projects/' + this.projectKey + '/tags/';
+                    url = spUrl('/api/v1/projects/' + this.projectKey + '/tags/');
                     method = 'POST';
                 }
                 try {

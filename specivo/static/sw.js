@@ -1,12 +1,16 @@
 /* Specivo Service Worker — cache static assets for offline/fast loads */
 
 var CACHE_NAME = 'specivo-v1';
+/* The URL prefix (STEALTH_PREFIX) this worker was served under: "" or
+   "/prefix". The worker lives at <prefix>/static/sw.js, so it is read off
+   its own path rather than templated in. */
+var BASE = self.location.pathname.replace(/\/static\/sw\.js$/, '');
 var STATIC_ASSETS = [
-  '/static/vendor/bootstrap.5.3.6.min.css',
-  '/static/vendor/alpine.3.14.min.js',
-  '/static/vendor/htmx.2.0.min.js',
-  '/static/vendor/bootstrap.bundle.5.3.6.min.js',
-  '/static/img/favicon.svg'
+  BASE + '/static/vendor/bootstrap.5.3.6.min.css',
+  BASE + '/static/vendor/alpine.3.14.min.js',
+  BASE + '/static/vendor/htmx.2.0.min.js',
+  BASE + '/static/vendor/bootstrap.bundle.5.3.6.min.js',
+  BASE + '/static/img/favicon.svg'
 ];
 
 self.addEventListener('install', function (event) {
@@ -39,7 +43,7 @@ self.addEventListener('fetch', function (event) {
   var url = new URL(event.request.url);
 
   /* Cache-first for static vendor assets and fonts (immutable) */
-  if (url.pathname.startsWith('/static/vendor/') || url.pathname.startsWith('/static/fonts/')) {
+  if (url.pathname.startsWith(BASE + '/static/vendor/') || url.pathname.startsWith(BASE + '/static/fonts/')) {
     event.respondWith(
       caches.match(event.request).then(function (cached) {
         return cached || fetch(event.request).then(function (response) {

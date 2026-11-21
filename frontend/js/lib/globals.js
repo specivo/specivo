@@ -19,9 +19,45 @@ window._getCsrfToken = function () {
     return match ? match[1] : '';
 };
 
+/* -------------------------------------------------------
+   URL prefix — an instance behind STEALTH_PREFIX serves every
+   page, asset and API under it. base.html writes it into
+   <meta name="sp-base"> ("" without a prefix); every root-relative
+   URL the frontend builds goes through spUrl() (spFetch() does it
+   itself), so it never leaves the prefix.
+   ------------------------------------------------------- */
+var spBaseValue = null;
+
+/** The URL prefix of this instance: "" or "/prefix", read once from the page. */
+window.spBase = function () {
+    if (spBaseValue === null) {
+        var meta = document.querySelector('meta[name="sp-base"]');
+        spBaseValue = meta ? (meta.getAttribute('content') || '').replace(/\/+$/, '') : '';
+    }
+    return spBaseValue;
+};
+
+/**
+ * Give a root-relative application path ("/projects/ACME/") the URL prefix.
+ * Idempotent: a path already under the prefix, an absolute URL, a
+ * protocol-relative one, a query-only or relative one and a non-string
+ * are returned as they are.
+ */
+window.spUrl = function (path) {
+    if (typeof path !== 'string' || path.charAt(0) !== '/' || path.charAt(1) === '/' || path.charAt(1) === '\\') {
+        return path;
+    }
+    var base = spBase();
+    if (!base) return path;
+    var rest = path.charAt(base.length);
+    var under = path.indexOf(base) === 0 && (rest === '' || rest === '/' || rest === '?' || rest === '#');
+    return under ? path : base + path;
+};
+
 /**
  * Drop-in fetch() wrapper that auto-attaches the X-CSRF-Token header
- * on mutating requests (POST/PATCH/PUT/DELETE).
+ * on mutating requests (POST/PATCH/PUT/DELETE), and the URL prefix to a
+ * root-relative URL (spUrl), so call sites pass application paths.
  */
 window.spFetch = function (url, opts) {
     opts = opts || {};
@@ -34,7 +70,7 @@ window.spFetch = function (url, opts) {
             opts.headers['X-CSRF-Token'] = _getCsrfToken();
         }
     }
-    return fetch(url, opts);
+    return fetch(spUrl(url), opts);
 };
 
 /* -------------------------------------------------------

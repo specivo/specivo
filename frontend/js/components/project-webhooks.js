@@ -54,7 +54,7 @@ export function projectWebhooks(initial) {
         },
 
         base() {
-            return '/api/v1/projects/' + this.projectKey + '/webhooks/';
+            return spUrl('/api/v1/projects/' + this.projectKey + '/webhooks/');
         },
 
         eventLabel(name) {
