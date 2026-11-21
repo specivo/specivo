@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError
 from specivo.models.issue import Issue
 from specivo.models.project import Project
-from specivo.models.repository import RepositoryCommit
+from specivo.models.repository import IssueCommitLink, RepositoryCommit
 from specivo.models.sprint import Sprint
 from specivo.models.tag import Tag, TagLink
 from specivo.models.user import User
@@ -93,7 +93,10 @@ async def test_an_issue_points_at_its_tags_version_sprint_assignee_component_and
     root.assigned_to_id = world.reader.id
     root.issue_metadata = {"component": "importer", "commits": [SHA_KNOWN, SHA_UNKNOWN.upper(), "not-a-sha"]}
     integration = await make_integration(db, world.home)
-    db.add(RepositoryCommit(integration_id=integration.id, sha=SHA_KNOWN, message="Import tags\n\nbody"))
+    commit = RepositoryCommit(integration_id=integration.id, sha=SHA_KNOWN, message="Import tags\n\nbody")
+    db.add(commit)
+    await db.flush()
+    db.add(IssueCommitLink(commit_id=commit.id, issue_id=other.id, source="message"))
     await db.commit()
 
     graph = await links.get_links(db, world.reader, ("issue", root.id))
@@ -113,7 +116,7 @@ async def test_an_issue_points_at_its_tags_version_sprint_assignee_component_and
     assert nodes[f"sprint:{key}/Sprint 7"].degree == 1
     assert nodes[f"user:{world.reader.login}"].degree == 1
     assert nodes[f"component:{key}/importer"].degree == 1
-    # The known SHA merged with the repository's commit; the unknown one stands alone.
+    # The known SHA merged with the repository's commit (a visible issue links it); the unknown one stands alone.
     assert nodes[f"commit:{SHA_KNOWN[:12]}"].title == "Import tags"
     assert nodes[f"commit:{SHA_UNKNOWN[:12]}"].degree is None
     kinds = {(e.kind, e.target) for e in graph.edges}
@@ -407,10 +410,23 @@ async def test_a_hand_entered_sha_merges_only_with_a_commit_of_the_issues_own_pr
 
     graph = await links.get_links(db, world.reader, ("issue", root.id))
     assert [(n.ref, n.title) for n in graph.nodes] == [(f"commit:{SHA_KNOWN[:12]}", "")]
-    # A short SHA matches a commit of the project's own repository by prefix.
+    # A short SHA matches a commit of the project's own repository by prefix, but the
+    # commit is shown only where the reader may see it already: an issue they can see
+    # links it. Linked to a private issue only, it stays a bare SHA.
     own = await make_integration(db, world.home)
-    db.add(RepositoryCommit(integration_id=own.id, sha=SHA_KNOWN, message="Own work"))
+    commit = RepositoryCommit(integration_id=own.id, sha=SHA_KNOWN, message="Own work")
+    db.add(commit)
+    secret = await issue(db, world, world.home, "Private work", private=True)
+    await db.flush()
+    db.add(IssueCommitLink(commit_id=commit.id, issue_id=secret.id, source="message"))
     root.issue_metadata = {"commits": [SHA_KNOWN[:9]]}
+    await db.commit()
+    graph = await links.get_links(db, world.reader, ("issue", root.id))
+    # Only what was typed: the full SHA of a commit the reader may not see stays hidden.
+    assert [(n.ref, n.title) for n in graph.nodes] == [(f"commit:{SHA_KNOWN[:9]}", "")]
+    # Once a visible issue links it, the hand-entered SHA merges with the commit.
+    shown = await issue(db, world, world.home, "Public work")
+    db.add(IssueCommitLink(commit_id=commit.id, issue_id=shown.id, source="message"))
     await db.commit()
     graph = await links.get_links(db, world.reader, ("issue", root.id))
     assert [(n.ref, n.title) for n in graph.nodes] == [(f"commit:{SHA_KNOWN[:12]}", "Own work")]

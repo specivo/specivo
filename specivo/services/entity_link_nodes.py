@@ -231,8 +231,10 @@ async def _metadata_commit_edges(
         if target in seen:
             continue
         seen.add(target)
-        # A repository commit is shown through any visible issue naming it, as through one it links itself.
-        edges.append(_RawEdge(node, target, "commit", vouched=commit_id is not None))
+        # A repository commit is shown only where the reader may see it already (an issue
+        # they can see links it); otherwise the reader filter falls back to the bare SHA.
+        fallback: NodeKey | None = ("commit", sha[:12]) if commit_id is not None else None
+        edges.append(_RawEdge(node, target, "commit", fallback=fallback))
     return edges
 
 
