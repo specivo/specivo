@@ -647,15 +647,22 @@ async def specivo_read_wiki(
 async def specivo_get_links(
     ref: Annotated[
         str,
-        Field(description="An issue (ACME-12) or a wiki page (wiki:ACME/<slug>)."),
+        Field(
+            description=(
+                "An issue (ACME-12), a wiki page (wiki:ACME/<slug>), or a structured node: tag:ACME/<name>, "
+                "component:ACME/<value>, metadata:ACME/<key>/<value>, version:ACME/<name>, sprint:ACME/<name>, "
+                "user:<login>."
+            )
+        ),
     ],
     direction: Annotated[
         str,
         Field(
             description=(
                 "'in' = what points here: backlinks, relations towards it (and 'relates'), parent and "
-                "children; 'out' = what it links to, all its relations, parent, children, attachments, "
-                "commits and pull requests; 'both' (default)."
+                "children; for a tag, version, sprint, component or user, its members; 'out' = what it links "
+                "to, all its relations, parent, children, attachments, commits, pull requests, tags, version, "
+                "sprint, assignee and metadata values; 'both' (default)."
             )
         ),
     ] = "both",
@@ -667,31 +674,46 @@ async def specivo_get_links(
         list[str] | None,
         Field(
             description=(
-                "Edge kinds to keep; all when omitted. Text links: wiki_link, mention, attachment_link. "
-                "Structured: relation, parent, child, attachment, commit, pull_request."
+                "Edge kinds to keep; when omitted, all but attachment. Text links: wiki_link, mention, "
+                "attachment_link. Structured: relation, parent, child, attachment, commit, pull_request. "
+                "Structured nodes: tagged, in_component, in_metadata, targets_version, in_sprint, assigned_to. "
+                "Naming a structured-node kind also expands those nodes at depth 2."
             )
         ),
     ] = None,
     limit: Annotated[int, Field(description="Neighbour nodes at most (1-200).", ge=1, le=200)] = 50,
 ) -> str:
-    """Navigate the link graph around an issue or wiki page: what links to it (backlinks) and what it links to.
+    """Navigate the link graph: backlinks and links of an issue or wiki page, or the members of a tag, version, etc.
 
     Combines links written in text -- ``[[Page]]`` wiki links, issue keys such as
     ``ACME-42``, links to issues, wiki pages and attachments of this instance --
     in issue descriptions, comments and wiki pages, with relations, parent and
-    children, attachments, commits and pull requests. Use it to find the wiki
-    pages that document an issue, the issues a design page drives, or everything
+    children, commits and pull requests, and the structured nodes items share:
+    tags (issues and pages), the version, the sprint, the assignee, metadata
+    values such as ``component`` (the project's ``graph_metadata_keys``) and
+    the SHAs in the ``commits`` metadata. Use it to find the wiki pages that
+    document an issue, everything in a version or component, or everything
     that would be affected by a change.
 
-    Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url), ``edges``
-    (source, target, kind, direction relative to the root, label, relation_type,
-    ``via`` = the comment a link is written in, ``broken`` for a link to
-    something that does not exist) and ``truncated`` (true only when a neighbour
-    or a second-hop expansion was left out). Each link is listed once, even at
-    depth 2 where both its ends are read. Only what you may see is
-    returned: a link to or from an item you cannot see is left out entirely.
+    Tags, versions, sprints, components and users are hubs: a hub you start
+    from lists its members (``version:ACME/1.2`` gives the issues in 1.2; add
+    depth=2 and types such as ["targets_version", "assigned_to", "tagged"] for
+    their assignees and tags). Elsewhere a hub is a leaf with ``degree``, the
+    number of items you may see that point at it; it is expanded only when its
+    kind is named in ``types``.
+
+    Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url, project;
+    ``degree`` on hubs; ``attachments`` = the number of files on each issue and
+    wiki page, which are not listed as nodes unless ``types`` names
+    ``attachment``), ``edges`` (source, target, kind, direction relative to
+    the root, label, relation_type, ``via`` = the comment a link is written in,
+    ``broken`` for a link to something that does not exist) and ``truncated``
+    (true only when a neighbour or a second-hop expansion was left out). Each
+    link is listed once, even at depth 2 where both its ends are read. Only
+    what you may see is returned: a link to or from an item you cannot see is
+    left out entirely, and degrees count only what you may see.
     ``specivo_show_issue`` and ``specivo_read_wiki`` already list the direct
-    text links and relations inline; call this for depth 2, filters or JSON.
+    text links and relations inline; call this for depth 2, hubs, filters or JSON.
     """
     async with _get_session_and_user() as (session, user):
         return await _get_links(session, user, ref, direction, depth, types, limit)

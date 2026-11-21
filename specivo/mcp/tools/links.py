@@ -1,4 +1,4 @@
-"""MCP tools: the link graph between issues, wiki pages and attachments."""
+"""MCP tools: the link graph between issues, wiki pages, attachments and structured nodes (tags, versions, ...)."""
 
 from __future__ import annotations
 
@@ -36,6 +36,9 @@ async def _link_lines(session: AsyncSession, user: User, root: tuple[str, int]) 
 
     Text links and relations only (parent, children, commits and pull requests
     have lines of their own), filtered for *user* like ``specivo_get_links``.
+    Tags, versions, sprints, metadata values and the assignee are never listed
+    here: the issue and page output already shows them, and a hub would only
+    repeat itself on every item.
     """
     from specivo.core.constants import ENTITY_LINKS_MAX_LIMIT
     from specivo.services.entity_link_service import KIND_RELATION, TEXT_LINK_KINDS
@@ -88,12 +91,20 @@ async def _get_links(
 ) -> str:
     import json
 
-    from specivo.services.entity_link_service import resolve_root
+    from specivo.services.entity_link_service import AGENT_DEFAULT_KINDS, resolve_root
 
-    root = await resolve_root(session, user, ref)
+    root = await resolve_root(session, user, ref, hubs=True)
     graph = await _link_svc.get_links(
-        session, user, root, direction=direction, depth=depth, kinds=types or None, limit=limit
+        session,
+        user,
+        root,
+        direction=direction,
+        depth=depth,
+        kinds=types or None,
+        limit=limit,
+        default_kinds=AGENT_DEFAULT_KINDS,
+        count_attachments=True,
     )
-    event = AuditEvent.ISSUE_READ if root[0] == "issue" else AuditEvent.WIKI_READ
+    event = AuditEvent.WIKI_READ if root[0] == "wiki_page" else AuditEvent.ISSUE_READ
     await _log_tool(session, user, event, "get_links", {"ref": ref, "direction": direction})
     return json.dumps(graph.as_dict(), ensure_ascii=False, indent=1)
