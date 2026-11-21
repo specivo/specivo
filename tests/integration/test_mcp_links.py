@@ -84,3 +84,95 @@ def test_the_tool_is_registered_and_announced():
     guide = generate_setup_guide(fmt="generic", mcp_server=server.mcp)
     assert "specivo_get_links" in guide
     assert server.specivo_get_links.__doc__ and "backlinks" in server.specivo_get_links.__doc__
+
+
+async def _attach(db_session: AsyncSession, world: World, item, name: str) -> None:
+    from specivo.models.attachment import Attachment
+
+    container = "Issue" if hasattr(item, "display_key") else "WikiPage"
+    db_session.add(
+        Attachment(
+            container_type=container,
+            container_id=item.id,
+            filename=name,
+            disk_filename=f"emc-{name}",
+            filesize=1,
+            author_id=world.admin.id,
+        )
+    )
+    await db_session.commit()
+
+
+async def test_get_links_counts_attachments_instead_of_listing_them(db_session, world):
+    doc = await page(db_session, world, world.home, "Spec", "")
+    root = await issue(db_session, world, world.home, "Root", "[[Spec]]")
+    await rebuild(db_session, root)
+    for name in ("a.png", "b.png"):
+        await _attach(db_session, world, root, name)
+    await _attach(db_session, world, doc, "c.pdf")
+
+    data = json.loads(await _get_links(db_session, world.reader, root.display_key))
+    assert data["root"]["attachments"] == 2
+    assert [(n["ref"], n["attachments"]) for n in data["nodes"]] == [(wiki_ref(world.home, "spec"), 1)]
+    assert all(e["kind"] != "attachment" for e in data["edges"])
+
+    listed = json.loads(await _get_links(db_session, world.reader, root.display_key, types=["attachment"]))
+    assert sorted(n["title"] for n in listed["nodes"]) == ["a.png", "b.png"]
+
+
+async def test_get_links_from_a_version_with_its_assignees_and_tags(db_session, world):
+    from specivo.models.tag import Tag, TagLink
+    from specivo.models.version import Version
+
+    key = world.home.key
+    first = await issue(db_session, world, world.home, "First")
+    second = await issue(db_session, world, world.home, "Second")
+    secret = await issue(db_session, world, world.hidden, "Secret")
+    doc = await page(db_session, world, world.home, "Guide", "")
+    version = Version(project_id=world.home.id, name="0.13.0", sharing="system")
+    tag = Tag(project_id=world.home.id, name="importer")
+    db_session.add_all([version, tag])
+    await db_session.flush()
+    for item in (first, second, secret):
+        item.fixed_version_id = version.id
+    first.assigned_to_id = world.reader.id
+    first.issue_metadata = {"component": "importer"}
+    db_session.add_all([TagLink(tag_id=tag.id, issue_id=first.id), TagLink(tag_id=tag.id, wiki_page_id=doc.id)])
+    await db_session.commit()
+
+    data = json.loads(
+        await _get_links(
+            db_session,
+            world.reader,
+            f"version:{key}/0.13.0",
+            depth=2,
+            types=["targets_version", "assigned_to", "tagged", "in_component"],
+        )
+    )
+    assert data["root"]["ref"] == f"version:{key}/0.13.0"
+    assert data["root"]["degree"] == 2
+    nodes = {n["ref"]: n for n in data["nodes"]}
+    assert set(nodes) == {
+        first.display_key,
+        second.display_key,
+        f"user:{world.reader.login}",
+        f"tag:{key}/importer",
+        f"component:{key}/importer",
+    }
+    assert nodes[f"tag:{key}/importer"]["degree"] == 2
+    assert "Secret" not in json.dumps(data)
+
+    tagged = json.loads(await _get_links(db_session, world.reader, f"tag:{key}/importer"))
+    assert {n["ref"] for n in tagged["nodes"]} == {first.display_key, wiki_ref(world.home, "guide")}
+
+    # The inline lines of show_issue stay free of hubs.
+    shown = await _show_issue(db_session, world.reader, first.display_key, metadata_only=True)
+    assert f"tag:{key}/importer" not in shown
+    assert f"version:{key}/0.13.0" not in shown
+
+
+def test_the_tool_documents_structured_nodes():
+    guide = generate_setup_guide(fmt="generic", mcp_server=server.mcp)
+    assert "version:ACME/<name>" in guide
+    doc = server.specivo_get_links.__doc__ or ""
+    assert "degree" in doc and "attachments" in doc

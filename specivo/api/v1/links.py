@@ -11,7 +11,7 @@ from specivo.core.exceptions import ValidationError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.links import LinkGraphOut
-from specivo.services.entity_link_service import ALL_KINDS, EntityLinkService, NodeKey, resolve_root
+from specivo.services.entity_link_service import ALL_KINDS, ITEM_KINDS, EntityLinkService, NodeKey, resolve_root
 
 router = APIRouter(tags=["links"])
 _service = EntityLinkService()
@@ -24,7 +24,13 @@ _DIRECTION = Query(
 _DEPTH = Query(1, ge=1, le=2, description="1, or 2 to expand issue and wiki-page neighbours once more")
 _KINDS = Query(
     None,
-    description="Comma-separated edge kinds to keep: " + ", ".join(sorted(ALL_KINDS)),
+    description=(
+        "Comma-separated edge kinds to keep: "
+        + ", ".join(sorted(ALL_KINDS))
+        + ". When omitted, every kind except the structured-node ones (tagged, in_component, in_metadata, "
+        "targets_version, in_sprint, assigned_to), which add tag, component, metadata, version, sprint and "
+        "user nodes with their degree"
+    ),
 )
 _LIMIT = Query(ENTITY_LINKS_DEFAULT_LIMIT, ge=1, le=ENTITY_LINKS_MAX_LIMIT, description="Neighbour nodes at most")
 
@@ -43,7 +49,14 @@ async def _graph(
     db: AsyncSession, user: User, root: NodeKey, direction: str, depth: int, kinds: str | None, limit: int
 ) -> LinkGraphOut:
     graph = await _service.get_links(
-        db, user, root, direction=direction, depth=depth, kinds=_parse_kinds(kinds), limit=limit
+        db,
+        user,
+        root,
+        direction=direction,
+        depth=depth,
+        kinds=_parse_kinds(kinds),
+        limit=limit,
+        default_kinds=ITEM_KINDS,
     )
     return LinkGraphOut.model_validate(graph.as_dict())
 

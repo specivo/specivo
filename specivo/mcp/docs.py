@@ -36,8 +36,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
-        "Link graph of an issue or wiki page: what points here (direction='in': backlinks, relations, "
-        "parent, children), outgoing links, relations; depth 1-2"
+        "Link graph of an issue, wiki page, tag, version, sprint, component or user: backlinks, links, "
+        "relations, members; depth 1-2"
     ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
@@ -140,7 +140,15 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 5. Follow the links: `specivo_show_issue` and `specivo_read_wiki` list `Links to:`, `Linked from:`
    (backlinks from issues, comments and wiki pages) and `Related:`. For more, filters or a second hop,
    `specivo_get_links(ref, direction="in"|"out"|"both", depth=1|2, types=[...])` -- `ref` is `ACME-12`
-   or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see.
+   or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see. Attachments are counted
+   on each node (`attachments`), not listed, unless `types=["attachment"]`.
+6. Everything in one release, component, tag, sprint or person's queue: start `specivo_get_links` from
+   `version:ACME/<name>`, `component:ACME/<value>`, `tag:ACME/<name>`, `sprint:ACME/<name>` or
+   `user:<login>` (other metadata keys a project lists in `graph_metadata_keys`:
+   `metadata:ACME/<key>/<value>`). It lists the members; `depth=2` with
+   `types=["targets_version", "assigned_to", "tagged", "in_component"]` adds their assignees, tags and
+   components. Away from the root these nodes are leaves with `degree` (items you may see that point
+   at them); naming their kind in `types` expands them.
 
 ### Link issues and pages so the graph finds them
 Write `ACME-42` for an issue, `[[Page title]]` for a wiki page of the same project, or a Markdown link
