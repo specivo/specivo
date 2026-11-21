@@ -111,6 +111,7 @@ from specivo.services.ai_model_price_service import (
     model_name_for,
     register_price_reference,
 )
+from specivo.services.ai_spend_planning import PlanningFilter, planning_conditions, planning_visibility
 from specivo.services.api_key_scope import (
     admin_reaches,
     is_global_admin,
@@ -477,6 +478,7 @@ class AiUsageService:
         unassigned: bool | None = None,
         issue_tree_id: int | None = None,
         external_session_id: str | None = None,
+        planning: PlanningFilter | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
@@ -489,7 +491,9 @@ class AiUsageService:
         *unassigned* ``True`` / ``False`` keeps only entries without / with a
         project; *issue_tree_id* keeps the entries of that issue and of every
         issue below it (:func:`issue_subtree_clause`); *external_session_id*
-        keeps the entries of one agent session (the id the reporter sends).
+        keeps the entries of one agent session (the id the reporter sends);
+        *planning* keeps the entries of one release or sprint, or of none
+        (:mod:`specivo.services.ai_spend_planning`).
         """
         conditions = await self._list_conditions(
             session,
@@ -511,6 +515,7 @@ class AiUsageService:
             unassigned=unassigned,
             issue_tree_id=issue_tree_id,
             external_session_id=external_session_id,
+            planning=planning,
         )
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
@@ -547,6 +552,7 @@ class AiUsageService:
         without_issue: bool = False,
         without_branch: bool = False,
         unassigned: bool | None = None,
+        planning: PlanningFilter | None = None,
     ) -> UsageSummary:
         """Totals of the entries ``list_entries`` would return with the same filters, excluded ones left out.
 
@@ -573,6 +579,7 @@ class AiUsageService:
             without_issue=without_issue,
             without_branch=without_branch,
             unassigned=unassigned,
+            planning=planning,
         )
         counted = AiUsageEntry.excluded_at.is_(None)
         row = (
@@ -628,6 +635,7 @@ class AiUsageService:
         unassigned: bool | None = None,
         issue_tree_id: int | None = None,
         external_session_id: str | None = None,
+        planning: PlanningFilter | None = None,
     ) -> list[ColumnElement[bool]]:
         """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
@@ -674,6 +682,9 @@ class AiUsageService:
             conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
         if unassigned is not None:
             conditions.append(AiUsageEntry.project_id.is_(None) if unassigned else AiUsageEntry.project_id.is_not(None))
+        if planning is not None and planning.active:
+            visibility = await planning_visibility(session, viewer)
+            conditions.extend(planning_conditions(planning, AiUsageEntry.issue_id, visibility))
         return conditions
 
     # -- authorization ------------------------------------------------------------

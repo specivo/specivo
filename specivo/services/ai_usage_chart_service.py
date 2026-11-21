@@ -589,8 +589,9 @@ class AiUsageChartService:
             branch=branch or filters.branch,
             without_branch=without_branch or filters.without_branch,
             excluded=excluded,
+            planning=filters.planning,
         )
-        # The report's own narrowing (the drill-down's project, issue and branch) follows the
+        # The report's own narrowing (the drill-down's project, issue, branch, release and sprint) follows the
         # report's rules: seat shares follow the entries (``seat_breakdown`` takes the same filters).
         conditions = [*conditions, *filters.conditions()]
         out = UsageCharts(currency=currency, scope="instance" if project is None else "project")
