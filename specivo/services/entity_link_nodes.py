@@ -224,13 +224,16 @@ async def _metadata_commit_edges(
         )
     ]
     edges: list[_RawEdge] = []
-    seen = set(linked)
+    # Duplicates are dropped by what was typed, never by the commit it matched: two
+    # prefixes of one hidden commit must come out as two bare SHAs, or the output
+    # would tell that both match. The reader drops repeats of a visible commit.
+    typed: set[str] = set()
     for sha in shas:
         commit_id = next((cid for cid, full in known if full.lower().startswith(sha)), None)
-        target: NodeKey = ("commit", commit_id) if commit_id is not None else ("commit", sha[:12])
-        if target in seen:
+        if sha[:12] in typed or ("commit", commit_id) in linked:
             continue
-        seen.add(target)
+        typed.add(sha[:12])
+        target: NodeKey = ("commit", commit_id) if commit_id is not None else ("commit", sha[:12])
         # A repository commit is shown only where the reader may see it already (an issue
         # they can see links it); otherwise the reader filter falls back to the bare SHA.
         fallback: NodeKey | None = ("commit", sha[:12]) if commit_id is not None else None
