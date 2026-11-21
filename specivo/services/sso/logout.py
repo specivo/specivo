@@ -59,6 +59,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
+from specivo.core.app_url import prefixed
 from specivo.core.config import Settings, get_settings
 from specivo.core.redis import get_redis
 from specivo.models.auth import RefreshToken
@@ -103,7 +104,7 @@ class SsoLogoutSession:
 def logged_out_path(settings: Settings | None = None) -> str:
     """The signed-out landing path on this site: stealth prefix + :data:`LOGGED_OUT_PATH`."""
     settings = settings or get_settings()
-    return settings.stealth_prefix.rstrip("/") + LOGGED_OUT_PATH
+    return prefixed(LOGGED_OUT_PATH, settings)
 
 
 def post_logout_redirect_uri(settings: Settings | None = None) -> str:

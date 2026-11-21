@@ -6,8 +6,8 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Home", "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
   {"label": "Issues"}
 ]) }}
 
@@ -15,7 +15,7 @@
   <h1>{% trans %}Issues{% endtrans %}</h1>
   {% if not anonymous %}
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/issues/new/" class="sp-btn sp-btn-primary">
+    <a href="{{ base }}/projects/{{ project.key }}/issues/new/" class="sp-btn sp-btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}New Issue{% endtrans %}
     </a>
@@ -27,7 +27,7 @@
 {% if saved_filters is defined and saved_filters %}
 <div class="filter-tabs" style="margin-bottom:var(--sp-space-lg);">
   {% for sf in saved_filters %}
-  <a href="/projects/{{ project.key }}/issues/{{ '?' ~ sf.query_string if sf.query_string else '' }}"
+  <a href="{{ base }}/projects/{{ project.key }}/issues/{{ '?' ~ sf.query_string if sf.query_string else '' }}"
      class="filter-tab{{ ' active' if sf.active else '' }}">
     {{ sf.name }}
   </a>
@@ -36,7 +36,7 @@
 {% endif %}
 
 {# Filter bar #}
-<form method="get" action="/projects/{{ project.key }}/issues/" class="filter-bar">
+<form method="get" action="{{ base }}/projects/{{ project.key }}/issues/" class="filter-bar">
   <select name="status" class="filter-select">
     <option value="open" {{ 'selected' if filters.status == 'open' }}>{% trans %}Open{% endtrans %}</option>
     <option value="closed" {{ 'selected' if filters.status == 'closed' }}>{% trans %}Closed{% endtrans %}</option>
@@ -56,7 +56,7 @@
   {% if not anonymous %}
   {% set me = {"login": user.login, "display_name": user.display_name, "avatar_url": user.avatar_url or "", "avatar_color": (user.preferences or {}).get("avatar_color", "")} %}
   {{ filter_combobox("assigned_to_id", _("Assignee"), _("Assignee…"),
-       "/api/v1/projects/" ~ project.key ~ "/assignees/search/", "user",
+       base ~ "/api/v1/projects/" ~ project.key ~ "/assignees/search/", "user",
        chip=filter_chips.get("assigned_to_id"),
        specials=[{"value": "me", "label": _("Me"), "user": me}, {"value": "none", "label": _("Unassigned")}]) }}
   {% endif %}
@@ -71,11 +71,11 @@
   {% if not anonymous %}
   {% if has_tags %}
   {{ filter_combobox("tag_id", _("Tag"), _("Tag…"),
-       "/api/v1/projects/" ~ project.key ~ "/tags/search/", "tag",
+       base ~ "/api/v1/projects/" ~ project.key ~ "/tags/search/", "tag",
        chip=filter_chips.get("tag_id")) }}
   {% endif %}
   {{ filter_combobox("fixed_version_id", _("Release"), _("Release…"),
-       "/api/v1/projects/" ~ project.key ~ "/versions/search/?include_shared=true", "version",
+       base ~ "/api/v1/projects/" ~ project.key ~ "/versions/search/?include_shared=true", "version",
        chip=filter_chips.get("fixed_version_id"),
        specials=[{"value": "none", "label": _("No release")}],
        project_key=project.key) }}
@@ -175,7 +175,7 @@
       </div>
       <div class="kanban-cards">
         {% for issue in col_shown %}
-        <a href="/issue/{{ issue.display_key }}/" class="kanban-card">
+        <a href="{{ base }}/issue/{{ issue.display_key }}/" class="kanban-card">
           <div class="kanban-card-key">
             {{ issue.display_key }}
             {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
@@ -259,7 +259,7 @@
       </tr>
     </thead>
     <tbody id="issue-table-body"
-           hx-get="/partials/issues/table/?project_key={{ project.key }}"
+           hx-get="{{ base }}/partials/issues/table/?project_key={{ project.key }}"
            hx-trigger="none"
            hx-swap="innerHTML">
       {% include "pages/issues/_table_rows.html" %}
@@ -267,7 +267,7 @@
   </table>
 </div>
 
-{{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/issues/", query=list_query) }}
+{{ pagination(total, offset, limit, base ~ "/projects/" ~ project.key ~ "/issues/", query=list_query) }}
 {% endif %}
 
 {% elif anonymous %}

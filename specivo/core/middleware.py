@@ -142,7 +142,9 @@ class CSRFMiddleware:
             b"csrf-middleware-v1",
             hashlib.sha256,
         ).digest()
-        sp = settings.stealth_prefix.rstrip("/")
+        from specivo.core.app_url import base_path
+
+        sp = base_path(settings)
         self._exempt_paths = frozenset(sp + p for p in _CSRF_EXEMPT_PATHS)
         self._exempt_mounts = tuple(sp + m for m in _CSRF_EXEMPT_MOUNTS)
         # Trailing slash optional, like the exact paths; fullmatch anchors both ends.

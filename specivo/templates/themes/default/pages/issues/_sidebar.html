@@ -57,7 +57,7 @@
     {% for rel in relations %}
     <div style="display:flex;align-items:baseline;gap:var(--sp-space-sm);font-size:var(--sp-font-size-sm);">
       <span style="color:var(--sp-text-muted);min-width:60px;">{{ rel.relation_type | replace('_', ' ') }}</span>
-      <a href="/issue/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
+      <a href="{{ base }}/issue/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
       {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
       <span style="color:var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
       {% endif %}
@@ -119,7 +119,7 @@
     <div>
       <label style="{{ lbl }}">{% trans %}Version{% endtrans %}</label>
       <div x-data='entityAutocomplete({
-             endpoint: "/api/v1/projects/{{ project.key }}/versions/search/",
+             endpoint: "{{ base }}/api/v1/projects/{{ project.key }}/versions/search/",
              field: "fixed_version_id",
              displayKey: {{ issue.display_key | tojson }},
              lockVersion: {{ issue.lock_version }},
@@ -164,7 +164,7 @@
     <div>
       <label style="{{ lbl }}">{% trans %}Sprint{% endtrans %}</label>
       <div x-data='entityAutocomplete({
-             endpoint: "/api/v1/projects/{{ project.key }}/sprints/search/",
+             endpoint: "{{ base }}/api/v1/projects/{{ project.key }}/sprints/search/",
              field: "sprint_id",
              displayKey: {{ issue.display_key | tojson }},
              lockVersion: {{ issue.lock_version }},
@@ -213,15 +213,15 @@
   <label style="{{ lbl }}">{% trans %}Tags{% endtrans %}</label>
   {% if can_tag_issue | default(true) %}
   {{ tag_field_input(
-       "/api/v1/projects/" ~ project.key ~ "/tags/search/",
-       "/api/v1/issues/" ~ issue.display_key ~ "/tags/",
+       base ~ "/api/v1/projects/" ~ project.key ~ "/tags/search/",
+       base ~ "/api/v1/issues/" ~ issue.display_key ~ "/tags/",
        (issue_tags if issue_tags is defined else []) | tojson,
        _('Add tags...')
      ) }}
   {% else %}
   <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);">
     {% for t in issue_tags if issue_tags is defined %}
-      {{ tag_badge(t.name, t.color or '', '/search/?scope=all&tag=' ~ (t.name | urlencode)) }}
+      {{ tag_badge(t.name, t.color or '', base ~ '/search/?scope=all&tag=' ~ (t.name | urlencode)) }}
     {% else %}
     <span class="sp-tag-empty">{% trans %}No tags{% endtrans %}</span>
     {% endfor %}
@@ -331,7 +331,7 @@
         {% for rel in relations %}
         <div style="display:flex;align-items:baseline;gap:var(--sp-space-sm);font-size:var(--sp-font-size-sm);">
           <span style="color:var(--sp-text-muted);min-width:60px;">{{ rel.relation_type | replace('_', ' ') }}</span>
-          <a href="/issue/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
+          <a href="{{ base }}/issue/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
           {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
           <span style="color:var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
           {% endif %}
@@ -364,7 +364,7 @@
 <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
   <label style="{{ lbl }}">{% trans %}Move{% endtrans %}</label>
   {% if move_targets is defined and move_targets %}
-  <form method="post" action="/issue/{{ issue.display_key }}/move/" style="display:flex;flex-direction:column;gap:var(--sp-space-sm);">
+  <form method="post" action="{{ base }}/issue/{{ issue.display_key }}/move/" style="display:flex;flex-direction:column;gap:var(--sp-space-sm);">
     <select name="target_project_key" style="{{ sel }}" required>
       <option value="">{% trans %}-- Select project --{% endtrans %}</option>
       {% for p in move_targets %}

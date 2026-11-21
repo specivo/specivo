@@ -87,7 +87,7 @@ export function projectMembers(initial) {
         },
 
         memberUrl(m) {
-            return '/api/v1/projects/' + this.projectKey + '/members/' + m.principal_type + '/' + this.principalId(m) + '/';
+            return spUrl('/api/v1/projects/' + this.projectKey + '/members/' + m.principal_type + '/' + this.principalId(m) + '/');
         },
 
         joinRoles(m) {

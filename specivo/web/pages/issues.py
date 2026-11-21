@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +48,7 @@ from specivo.web.deps import (
     get_templates,
     get_web_reader,
     readable_issue,
+    redirect_to,
     refuse_anonymous_web,
 )
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
@@ -121,7 +122,7 @@ def _retired_ref_redirect(request: Request, issue_ref: str, issue: Issue, suffix
     url = f"/issue/{current}/{suffix}"
     if request.url.query:
         url = f"{url}?{request.url.query}"
-    return RedirectResponse(url, status_code=302)
+    return redirect_to(url, status_code=302)
 
 
 async def _get_lookups(db: AsyncSession) -> dict:
@@ -446,7 +447,7 @@ async def imported_issue_redirect(
     keys = await visible_issue_keys(db, user, system, ref)
     if len(keys) > 1:
         query = f"{system.lower()} #{ref}" if is_plain_number(ref) else ref
-        return RedirectResponse(f"/search/?{urlencode({'q': query})}", status_code=302)
+        return redirect_to(f"/search/?{urlencode({'q': query})}", status_code=302)
     if not keys:
         if user.is_anonymous:
             return refuse_anonymous_web(request)
@@ -456,7 +457,7 @@ async def imported_issue_redirect(
     if resolved is None:
         return refuse_anonymous_web(request)
     _, issue = resolved
-    return RedirectResponse(f"/issue/{issue.display_key}/", status_code=302)
+    return redirect_to(f"/issue/{issue.display_key}/", status_code=302)
 
 
 async def _issue_page_permissions(db: AsyncSession, user: User, project: Project) -> dict[str, bool]:
@@ -1007,7 +1008,7 @@ async def restore_description_version(
     update_data = IssueUpdate(description=detail.old_value or "", lock_version=issue.lock_version)
     await _issue_svc.update(db, issue, update_data, user)
 
-    return RedirectResponse(
+    return redirect_to(
         f"/issue/{issue_ref}/",
         status_code=302,
     )
@@ -1040,4 +1041,4 @@ async def move_issue_form(
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
 
-    return RedirectResponse(f"/issue/{moved.display_key}/", status_code=302)
+    return redirect_to(f"/issue/{moved.display_key}/", status_code=302)

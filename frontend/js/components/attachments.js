@@ -85,9 +85,15 @@ function spAttachmentsComponent(initial, defaultContainerType) {
                     .replace('%(date)s', this.formatDate(att.created_at));
             },
 
+            /* The download URL as an application path: what a Markdown link holds
+               (the renderer adds the URL prefix). Navigation goes through spUrl(). */
+            downloadPath(att) {
+                return '/api/v1/attachments/' + att.id + '/download/';
+            },
+
             openLightbox(att) {
                 this.lightbox = {
-                    url: '/api/v1/attachments/' + att.id + '/download/',
+                    url: spUrl(this.downloadPath(att)),
                     name: att.filename,
                     size: this.formatSize(att.filesize)
                 };
@@ -95,7 +101,7 @@ function spAttachmentsComponent(initial, defaultContainerType) {
 
             copyLink(att) {
                 var isImage = IMAGE_TYPES.indexOf(att.content_type) !== -1;
-                var url = '/api/v1/attachments/' + att.id + '/download/';
+                var url = this.downloadPath(att);
                 var md = isImage
                     ? '![' + att.filename + '](' + url + ')'
                     : '[' + att.filename + '](' + url + ')';
@@ -103,7 +109,7 @@ function spAttachmentsComponent(initial, defaultContainerType) {
             },
 
             downloadFile(att) {
-                window.open('/api/v1/attachments/' + att.id + '/download/', '_blank');
+                window.open(spUrl(this.downloadPath(att)), '_blank');
             },
 
             confirmDelete(att) {

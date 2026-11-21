@@ -33,7 +33,7 @@ from specivo.services.ai_subscription_service import AiSubscriptionService, AiTo
 from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.api_key_scope import require_unlimited_key
 from specivo.services.currency_service import CurrencyService
-from specivo.web.deps import get_templates, require_user
+from specivo.web.deps import get_templates, redirect_to, require_user
 from specivo.web.pages.admin import require_admin
 
 router = APIRouter(tags=["web-ai-subscriptions"], include_in_schema=False)
@@ -63,7 +63,7 @@ def _parse_date(value: str, field_name: str) -> date | None:
 
 def _redirect(url: str, params: dict[str, str] | None = None) -> RedirectResponse:
     query = urlencode({k: v for k, v in (params or {}).items() if v})
-    return RedirectResponse(url + (f"?{query}" if query else ""), 303)
+    return redirect_to(url + (f"?{query}" if query else ""), 303)
 
 
 def _status(sub: AiSubscription, today: date) -> str:

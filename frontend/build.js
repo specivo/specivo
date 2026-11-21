@@ -64,9 +64,11 @@ const sharedOptions = {
   minify: !isDev,
   sourcemap: isDev,
   target: ['es2018'],
-  // Font @font-face url()s are absolute (/static/...). Keep esbuild from trying
-  // to resolve/relocate them by treating /static paths as external.
-  external: ['/static/*'],
+  // Stylesheet url()s (fonts, icons) are written relative to the bundle in
+  // dist/css/ ("../../fonts/..."), so they resolve under the URL prefix
+  // (STEALTH_PREFIX) like the bundle itself. Keep esbuild from resolving or
+  // relocating them.
+  external: ['../../fonts/*', '../../img/*'],
 };
 
 function contentHash(filePath) {

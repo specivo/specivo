@@ -41,6 +41,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
+from specivo.core.app_url import prefixed
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.core.i18n import format_date, get_locale
@@ -436,7 +437,8 @@ async def _context(
     has_children = bool(await db.scalar(select(exists().where(Issue.parent_id == issue.id))))
     state = TabState.read(issue.display_key, has_children, sub, offset, limit)
     summary = await _summary(db, user, project, issue, state)
-    return_to = f"/issue/{issue.display_key}/#ai-usage"
+    # A next= value: the path the browser asks for, so the prefix is part of it.
+    return_to = prefixed(f"/issue/{issue.display_key}/#ai-usage")
     sessions = await _sessions(db, user, project, issue, state, summary, return_to) if summary else None
     excluded_args: dict[str, Any] = {"issue_tree_id": issue.id} if state.sub else {"issue_id": issue.id}
     _none, excluded = await _usage.list_entries(db, user, project=project, excluded=True, limit=0, **excluded_args)

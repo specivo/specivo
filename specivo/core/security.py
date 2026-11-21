@@ -280,7 +280,9 @@ PASSWORD_CHANGE_EXEMPT_SUFFIXES = (
 
 def is_password_change_exempt(path: str) -> bool:
     """Return True if *path* stays reachable while a password change is forced."""
-    sp = get_settings().stealth_prefix.rstrip("/")
+    from specivo.core.app_url import base_path
+
+    sp = base_path()
     return any(path.startswith(sp + suffix) for suffix in PASSWORD_CHANGE_EXEMPT_SUFFIXES)
 
 

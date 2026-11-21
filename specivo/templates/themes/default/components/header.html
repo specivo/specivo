@@ -3,7 +3,7 @@
   <button class="hamburger" aria-label="{{ _('Menu') }}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
   </button>
-  <form class="header-search" action="/search/" method="get">
+  <form class="header-search" action="{{ base }}/search/" method="get">
     <input type="hidden" name="mode" value="hybrid">
     <input type="hidden" name="scope" value="all">
     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -53,10 +53,10 @@
         <div class="timer-dropdown-body">
           <div class="timer-issue-line">
             {% if active_timer.issue_key %}
-            <a class="sp-timer-issue-key" href="/issue/{{ active_timer.issue_key }}/">{{ active_timer.issue_key }}</a>
+            <a class="sp-timer-issue-key" href="{{ base }}/issue/{{ active_timer.issue_key }}/">{{ active_timer.issue_key }}</a>
             {% if active_timer.subject %}<span class="sp-timer-subject">{{ active_timer.subject }}</span>{% endif %}
             {% else %}
-            <a class="sp-timer-issue-key" href="/projects/{{ active_timer.project_key }}/">{{ active_timer.project_key }}</a>
+            <a class="sp-timer-issue-key" href="{{ base }}/projects/{{ active_timer.project_key }}/">{{ active_timer.project_key }}</a>
             {% endif %}
           </div>
           <div class="timer-big-display" x-text="elapsedLabel">{{ _elapsed }}</div>
@@ -131,7 +131,7 @@
           {% endif %}
         </div>
         <div class="notif-footer">
-          <a href="/my/notifications/">{% trans %}View all notifications{% endtrans %}</a>
+          <a href="{{ base }}/my/notifications/">{% trans %}View all notifications{% endtrans %}</a>
         </div>
       </div>
     </div>
@@ -159,30 +159,30 @@
           </div>
         </div>
         <div class="user-dropdown-divider"></div>
-        <a class="user-dropdown-item" href="/my/profile/">
+        <a class="user-dropdown-item" href="{{ base }}/my/profile/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           {% trans %}Profile{% endtrans %}
         </a>
-        <a class="user-dropdown-item" href="/my/preferences/">
+        <a class="user-dropdown-item" href="{{ base }}/my/preferences/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
           {% trans %}Preferences{% endtrans %}
         </a>
-        <a class="user-dropdown-item" href="/my/api-keys/">
+        <a class="user-dropdown-item" href="{{ base }}/my/api-keys/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           {% trans %}API Keys{% endtrans %}
         </a>
         {% if not user.is_service_account %}
-        <a class="user-dropdown-item" href="/my/ai-subscriptions/">
+        <a class="user-dropdown-item" href="{{ base }}/my/ai-subscriptions/">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
           {% trans %}AI subscriptions{% endtrans %}
         </a>
-        <a class="user-dropdown-item" href="/my/ai-usage/" data-testid="user-menu-ai-usage">
+        <a class="user-dropdown-item" href="{{ base }}/my/ai-usage/" data-testid="user-menu-ai-usage">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
           {% trans %}My AI usage{% endtrans %}
         </a>
         {% endif %}
         <div class="user-dropdown-divider"></div>
-        <form class="sp-signout-form" method="post" action="/logout/">
+        <form class="sp-signout-form" method="post" action="{{ base }}/logout/">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="user-dropdown-item user-dropdown-logout">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>

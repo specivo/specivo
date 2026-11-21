@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 
 from babel.numbers import format_compact_decimal, format_decimal
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import ColumnElement, and_, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,7 @@ from specivo.services import dashboard_service as dash
 from specivo.services.ai_spend_report_service import ReportRow
 from specivo.services.notification_service import NotificationService
 from specivo.services.project_service import ProjectService
-from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect, redirect_to
 from specivo.web.pages.ai_usage.rows import _money_view
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ async def _anonymous_landing(request: Request, db: AsyncSession) -> Response:
             logger.warning("Could not resolve anonymous access for the home page", exc_info=True)
             target = "/login/"
 
-    response = RedirectResponse(target, status_code=302)
+    response = redirect_to(target, status_code=302)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Vary"] = "Cookie, Authorization"
     return response

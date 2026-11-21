@@ -1,6 +1,6 @@
 export function tagFilter(initial) {
         return {
-            endpoint: initial.endpoint || '/api/v1/tags/search/',
+            endpoint: initial.endpoint || spUrl('/api/v1/tags/search/'),
             tags: initial.tags || [],
             baseParams: initial.baseParams || {},
             /* Input placeholders, translated in the template. */
@@ -135,7 +135,7 @@ export function tagFilter(initial) {
                 if (b.project_key) p.set('project_key', b.project_key);
                 p.set('limit', b.limit ? String(b.limit) : '25');
                 this.tags.forEach(function (t) { p.append('tag', t.name); });
-                window.location.assign('/search/?' + p.toString());
+                window.location.assign(spUrl('/search/?' + p.toString()));
             }
         };
     }

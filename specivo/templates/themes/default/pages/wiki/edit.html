@@ -7,17 +7,17 @@
 {% block content %}
 {% if mode == 'edit' %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
-  {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Wiki"), "url": base ~ "/projects/" ~ project.key ~ "/wiki"},
+  {"label": wiki_page.title, "url": base ~ "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
   {"label": _("Edit")}
 ]) }}
 {% else %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Wiki"), "url": base ~ "/projects/" ~ project.key ~ "/wiki"},
   {"label": _("New Page")}
 ]) }}
 {% endif %}
@@ -60,10 +60,10 @@
         {# The wikiForm parent owns `text`; the wrapper's `value` is bound via #}
         {# x-modelable. `onPasteDrop` routes paste/drop events back to         #}
         {# wikiForm.handleEditorPasteDrop for image upload.                    #}
-        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", previewParams: {{ {"project_key": project.key} | tojson }}, onPasteDrop: "handleEditorPasteDrop", i18n: {{ markdown_editor_i18n() }} })'
+        <div x-data='markdownEditor({ initial: text, previewUrl: "{{ base }}/api/v1/markdown/preview/", context: "wiki", previewParams: {{ {"project_key": project.key} | tojson }}, onPasteDrop: "handleEditorPasteDrop", i18n: {{ markdown_editor_i18n() }} })'
              x-modelable="value"
              x-model="text"
-             data-preview-url="/api/v1/markdown/preview/"
+             data-preview-url="{{ base }}/api/v1/markdown/preview/"
              data-md-context="wiki">
           <textarea x-ref="textarea" placeholder="{{ _('Write your content here (Markdown)...') }}"></textarea>
         </div>
@@ -79,8 +79,8 @@
         <div>
           <label class="modal-label">{% trans %}Tags{% endtrans %}</label>
           {{ tag_field_input(
-               "/api/v1/projects/" ~ project.key ~ "/tags/search/",
-               "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/tags/",
+               base ~ "/api/v1/projects/" ~ project.key ~ "/tags/search/",
+               base ~ "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/tags/",
                (wiki_tags if wiki_tags is defined else []) | tojson,
                _('Add tags...')
              ) }}
@@ -146,7 +146,7 @@
       <ul class="wiki-tree">
         {% for p in pages %}
         <li>
-          <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}/"
+          <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ p.slug }}/"
              class="{{ 'active' if mode == 'edit' and wiki_page and p.id == wiki_page.id else '' }}">
             {{ p.title }}
           </a>

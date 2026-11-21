@@ -90,5 +90,9 @@
    mask painted in the avatar's text colour, so the icon takes the theme's
    avatar colours and keeps the avatar's size and round shape. */
 .sp-avatar-icon { position: relative; }
-.sp-avatar-icon::before { content: ""; position: absolute; inset: 18%; background-color: currentColor; -webkit-mask: var(--sp-avatar-icon) center / contain no-repeat; mask: var(--sp-avatar-icon) center / contain no-repeat; }
-.sp-avatar-icon-git { --sp-avatar-icon: url('/static/img/avatars/git.svg'); }
+.sp-avatar-icon::before { content: ""; position: absolute; inset: 18%; background-color: currentColor; -webkit-mask: center / contain no-repeat; mask: center / contain no-repeat; }
+/* The icon is set on the pseudo-element itself rather than through a custom
+   property: a url() is resolved against the stylesheet only where it is
+   written, and the path is relative to the bundle (dist/css/) so it stays
+   under the URL prefix. */
+.sp-avatar-icon-git::before { -webkit-mask-image: url('../../img/avatars/git.svg'); mask-image: url('../../img/avatars/git.svg'); }

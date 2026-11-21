@@ -328,7 +328,7 @@ export function recurringPatternForm(initial) {
                 this.previewError = false;
                 try {
                     var days = this.form.creation_lead_time_days || 30;
-                    var url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/occurrences/?days=' + days;
+                    var url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/occurrences/?days=' + days);
                     var res = await spFetch(url);
                     if (res.ok) {
                         var data = await res.json();
@@ -350,10 +350,10 @@ export function recurringPatternForm(initial) {
                 try {
                     var url, method;
                     if (this.editing) {
-                        url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/');
                         method = 'PATCH';
                     } else {
-                        url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/');
                         method = 'POST';
                     }
                     var payload = _formToPayload(this.form, this.editing);
@@ -368,7 +368,7 @@ export function recurringPatternForm(initial) {
                         // the browser navigates away.
                         var saved = await res.json();
                         var id = saved.id || this.patternId;
-                        window.location = '/projects/' + this.projectKey + '/recurring-patterns/' + id + '/';
+                        window.location = spUrl('/projects/' + this.projectKey + '/recurring-patterns/' + id + '/');
                         return;
                     }
                     if (res.status === 409) {
@@ -493,7 +493,7 @@ export function recurringPatternDetail(initial) {
                 this.previewError = false;
                 try {
                     var days = this.pattern.creation_lead_time_days || 30;
-                    var url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.pattern.id + '/occurrences/?days=' + days;
+                    var url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.pattern.id + '/occurrences/?days=' + days);
                     var res = await spFetch(url);
                     if (res.ok) {
                         var data = await res.json();

@@ -6,9 +6,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Projects"), "url": "/projects/"},
-  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
-  {"label": _("Roadmap"), "url": "/projects/" ~ project.key ~ "/roadmap/"},
+  {"label": _("Projects"), "url": base ~ "/projects/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": _("Roadmap"), "url": base ~ "/projects/" ~ project.key ~ "/roadmap/"},
   {"label": version.name}
 ]) }}
 
@@ -40,7 +40,7 @@
     </div>
   </div>
   <div class="version-hero-actions">
-    <a href="/projects/{{ project.key }}/settings/#versions" class="sp-btn sp-btn-ghost">
+    <a href="{{ base }}/projects/{{ project.key }}/settings/#versions" class="sp-btn sp-btn-ghost">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
       {% trans %}Edit{% endtrans %}
     </a>
@@ -103,15 +103,15 @@
         <tbody>
           <template x-for="issue in filtered" :key="issue.key">
             <tr>
-              <td><a class="issue-key" :href="issue.url" x-text="issue.key"></a></td>
-              <td><div class="issue-subject"><a :href="issue.url" x-text="issue.subject"></a></div></td>
+              <td><a class="issue-key" :href="spUrl(issue.url)" x-text="issue.key"></a></td>
+              <td><div class="issue-subject"><a :href="spUrl(issue.url)" x-text="issue.subject"></a></div></td>
               <td><span class="badge-tracker" :class="issue.tracker_class" x-text="issue.tracker"></span></td>
               <td><span class="badge-status" :class="issue.status_class" x-text="issue.status"></span></td>
               <td><span class="badge-priority" :class="issue.priority"></span></td>
               <td>
                 <div class="td-assignee" x-show="issue.assignee">
                   <template x-if="issue.assignee_avatar_url">
-                    <img :src="issue.assignee_avatar_url" class="avatar-sm avatar-img" :alt="assigneeInitials(issue)">
+                    <img :src="spUrl(issue.assignee_avatar_url)" class="avatar-sm avatar-img" :alt="assigneeInitials(issue)">
                   </template>
                   <template x-if="!issue.assignee_avatar_url">
                     <span class="avatar-sm" x-text="assigneeInitials(issue)"></span>

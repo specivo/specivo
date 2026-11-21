@@ -42,7 +42,7 @@ export function resetPasswordForm() {
                         body: JSON.stringify({token: this.token, new_password: this.password})
                     });
                     if (res.ok) {
-                        window.location.href = '/login/?reset=ok';
+                        window.location.href = spUrl('/login/?reset=ok');
                     } else {
                         var data = await res.json();
                         this.error = (data.errors && data.errors[0] && data.errors[0].message) || this.msgError;

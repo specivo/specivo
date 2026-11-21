@@ -71,7 +71,7 @@
 {%- elif c.kind == "hidden" %}<span class="sp-text-muted">{% trans %}An issue you cannot see{% endtrans %}</span>
 {%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% else %}–{% endif %}</span>
 {%- elif c.dim == "cost_type" %}{{ cost_type_label(c.value) }}
-{%- elif c.dim == "issue" %}<a class="issue-key" href="/issue/{{ c.label }}/">{{ c.label }}</a>
+{%- elif c.dim == "issue" %}<a class="issue-key" href="{{ base }}/issue/{{ c.label }}/">{{ c.label }}</a>
 {%- elif c.dim in ("model", "branch") %}<span class="sp-aiu-model">{{ c.label }}</span>
 {%- else %}{{ c.label }}{% endif %}
 {%- endmacro %}
@@ -85,15 +85,15 @@
 {% block content %}
 {% if project %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
-  {"label": _("AI usage"), "url": "/projects/" ~ project.key ~ "/ai-usage/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": _("AI usage"), "url": base ~ "/projects/" ~ project.key ~ "/ai-usage/"},
   {"label": _("Spend report")}
 ]) }}
 {% else %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": _("Admin"), "url": "/admin/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": _("Admin"), "url": base ~ "/admin/"},
   {"label": _("AI spend")}
 ]) }}
 {% endif %}
@@ -108,8 +108,8 @@
 <div class="page-header">
   <h1>{% if project %}{% trans %}AI spend report{% endtrans %}{% else %}{% trans %}AI spend{% endtrans %}{% endif %}</h1>
   <div class="page-header-actions">
-    {% if project %}<a href="{{ entries_url }}" class="sp-btn sp-btn-ghost">{% trans %}Entries{% endtrans %}</a>{% endif %}
-    {% if report %}<a href="{{ csv_base }}?{{ form.api_query(report) }}" class="sp-btn sp-btn-ghost" data-testid="spend-csv" download>{% trans %}Download CSV{% endtrans %}</a>{% endif %}
+    {% if project %}<a href="{{ entries_url | prefixed }}" class="sp-btn sp-btn-ghost">{% trans %}Entries{% endtrans %}</a>{% endif %}
+    {% if report %}<a href="{{ csv_base | prefixed }}?{{ form.api_query(report) }}" class="sp-btn sp-btn-ghost" data-testid="spend-csv" download>{% trans %}Download CSV{% endtrans %}</a>{% endif %}
   </div>
 </div>
 
@@ -122,13 +122,13 @@
 
 <nav class="sp-spend-presets" aria-label="{{ _('Period') }}" data-testid="spend-presets">
   {% for p in presets if p != "custom" %}
-  <a href="{{ base_url }}?{{ form.query(preset=p, from_date='', to_date='', offset='') }}" class="sp-spend-preset{{ ' active' if form.preset == p else '' }}" {% if form.preset == p %}aria-current="true"{% endif %} data-preset="{{ p }}">{{ preset_label(p) }}</a>
+  <a href="{{ base_url | prefixed }}?{{ form.query(preset=p, from_date='', to_date='', offset='') }}" class="sp-spend-preset{{ ' active' if form.preset == p else '' }}" {% if form.preset == p %}aria-current="true"{% endif %} data-preset="{{ p }}">{{ preset_label(p) }}</a>
   {% endfor %}
 </nav>
 
 <details class="sp-spend-options"{% if error or form.group2 or form.period or form.currency or form.policy != 'entry_date' or form.seats == 'off' or form.sort == 'spend' or form.preset == 'custom' %} open{% endif %} data-testid="spend-options">
 <summary class="sp-spend-options-toggle">{% trans %}Dates, filters and options{% endtrans %}</summary>
-<form method="get" action="{{ base_url }}" class="sp-aiu-filters sp-spend-form" data-testid="spend-form">
+<form method="get" action="{{ base_url | prefixed }}" class="sp-aiu-filters sp-spend-form" data-testid="spend-form">
   {% if form.project %}<input type="hidden" name="project" value="{{ form.project }}">{% endif %}
   {% if form.issue %}<input type="hidden" name="issue" value="{{ form.issue }}">{% endif %}
   {% if form.branch %}<input type="hidden" name="branch" value="{{ form.branch }}">{% endif %}
@@ -234,7 +234,7 @@
         {% if not loop.first %}<span class="sp-drill-crumb-sep" aria-hidden="true">›</span>{% endif %}
         <span class="sp-drill-crumb">
           {% if c.dim %}<span class="sp-drill-crumb-dim">{{ level_label(c.dim) }}</span>{% endif %}
-          {% if c.current %}<span class="sp-drill-crumb-current" aria-current="page">{{ c.label }}</span>{% else %}<a href="{{ c.url }}" data-testid="spend-crumb">{{ c.label }}</a>{% endif %}
+          {% if c.current %}<span class="sp-drill-crumb-current" aria-current="page">{{ c.label }}</span>{% else %}<a href="{{ c.url | prefixed }}" data-testid="spend-crumb">{{ c.label }}</a>{% endif %}
         </span>
       </li>
       {% endfor %}
@@ -308,11 +308,11 @@
       <span class="sp-drill-tabs-label" aria-hidden="true">{% trans %}Group by{% endtrans %}</span>
       {% for t in drill.tabs %}
       {% if t.disabled %}<span class="sp-drill-tab is-disabled" aria-disabled="true" title="{{ _('Already filtered by this') }}" data-group="{{ t.group }}">{{ level_label(t.group) }}</span>
-      {% else %}<a class="sp-drill-tab{{ ' active' if t.active else '' }}" href="{{ t.url }}"{% if t.active %} aria-current="true"{% endif %} data-group="{{ t.group }}" data-testid="spend-tab">{{ level_label(t.group) }}</a>{% endif %}
+      {% else %}<a class="sp-drill-tab{{ ' active' if t.active else '' }}" href="{{ t.url | prefixed }}"{% if t.active %} aria-current="true"{% endif %} data-group="{{ t.group }}" data-testid="spend-tab">{{ level_label(t.group) }}</a>{% endif %}
       {% endfor %}
     </nav>
     {% if not form.sessions and report.group_by %}
-    <a class="sp-drill-detail-toggle" href="{{ base_url }}?{{ form.query(detail='' if detail else '1') }}" hx-boost="true" data-testid="spend-detail-toggle">{% if detail %}{% trans %}Fewer columns{% endtrans %}{% else %}{% trans %}All amount columns{% endtrans %}{% endif %}</a>
+    <a class="sp-drill-detail-toggle" href="{{ base_url | prefixed }}?{{ form.query(detail='' if detail else '1') }}" hx-boost="true" data-testid="spend-detail-toggle">{% if detail %}{% trans %}Fewer columns{% endtrans %}{% else %}{% trans %}All amount columns{% endtrans %}{% endif %}</a>
     {% endif %}
   </div>
 
@@ -349,20 +349,20 @@
             <td class="sp-aiu-num" data-label="{{ _('Tokens') }}" title="{{ r.total_tokens }}: {{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}">{{ r.tokens_short }}</td>
             <td data-label="{{ _('Cost type') }}"><span class="sp-drill-tag sp-drill-tag--{{ r.cost_type }}">{{ cost_type_label(r.cost_type) }}</span></td>
             <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ r.spend }}</strong></td>
-            {% if sessions.show_issue %}<td data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/" hx-boost="false">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+            {% if sessions.show_issue %}<td data-label="{{ _('Issue') }}">{% if r.issue_key %}<a class="issue-key" href="{{ base }}/issue/{{ r.issue_key }}/" hx-boost="false">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
             <td data-label="{{ _('Branch') }}">{% if r.branch %}<code class="sp-drill-branch">{{ r.branch }}</code>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
-            <td class="sp-aiu-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" hx-boost="false" data-testid="spend-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
+            <td class="sp-aiu-actions" data-label="">{% if r.editable %}<a class="sp-btn-sm" href="{{ base }}/ai-usage/{{ r.id }}/edit/?next={{ sessions.return_to | urlencode }}" hx-boost="false" data-testid="spend-session-edit">{% trans %}Edit{% endtrans %}</a>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
       </div>
-      <div class="sp-drill-pages" hx-boost="true" data-testid="spend-sessions-pages">{{ pagination(sessions.total, sessions.offset, sessions.limit, base_url, sessions.query) }}</div>
+      <div class="sp-drill-pages" hx-boost="true" data-testid="spend-sessions-pages">{{ pagination(sessions.total, sessions.offset, sessions.limit, base_url | prefixed, sessions.query) }}</div>
       {% else %}
       <div class="card sp-aiu-empty" data-testid="spend-empty">{% trans %}No AI usage in this period.{% endtrans %}</div>
       {% endif %}
       <p class="sp-text-muted-xs sp-drill-hint">{% trans %}Each entry is one tool's usage of one model on one day, as reported. Spend includes the entry's share of its subscription where you may see seat cost.{% endtrans %}
-        <a href="{{ level_entries_url }}" data-testid="spend-entry-list">{% trans %}Open in the entry list{% endtrans %}</a></p>
+        <a href="{{ level_entries_url | prefixed }}" data-testid="spend-entry-list">{% trans %}Open in the entry list{% endtrans %}</a></p>
     {% elif drill.rows %}
       <div class="sp-table-scroll">
       <table class="sp-table sp-spend-table sp-drill-table" data-testid="spend-table">
@@ -417,8 +417,8 @@
             <th scope="row" class="sp-drill-namecell" data-label="{{ level_label(c.dim) }}">
               <span class="sp-drill-name">
                 <span class="sp-swatch sp-slot-{{ r.slot }}" aria-hidden="true"></span>
-                {% if r.open %}<a class="sp-drill-open" href="{{ r.open }}" hx-boost="true" data-testid="spend-open">{{ r.name }}</a>
-                {% elif r.seat_only %}<a href="{{ r.drill }}">{{ cell(c) }}</a>
+                {% if r.open %}<a class="sp-drill-open" href="{{ r.open | prefixed }}" hx-boost="true" data-testid="spend-open">{{ r.name }}</a>
+                {% elif r.seat_only %}<a href="{{ r.drill | prefixed }}">{{ cell(c) }}</a>
                 {% else %}{{ cell(c) }}{% endif %}
               </span>
               {% if r.sub %}<span class="sp-drill-sub">{{ r.sub }}</span>{% endif %}
@@ -438,7 +438,7 @@
             {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ r.leverage or "–" }}</td>{% endif %}
             {% endif %}
             <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-{{ r.slot }}" style="width:{{ r.share.width }}%"></span><span class="sp-drill-share-pct">{{ r.share.label }}</span></span></td>
-            {% if detail %}<td class="sp-aiu-actions" data-label="">{% if r.drill %}<a class="sp-btn-sm" href="{{ r.drill }}" data-testid="spend-drill">{% if r.seat_only %}{% trans %}Subscriptions{% endtrans %}{% else %}{% trans %}Entries{% endtrans %}{% endif %}</a>{% endif %}</td>{% endif %}
+            {% if detail %}<td class="sp-aiu-actions" data-label="">{% if r.drill %}<a class="sp-btn-sm" href="{{ r.drill | prefixed }}" data-testid="spend-drill">{% if r.seat_only %}{% trans %}Subscriptions{% endtrans %}{% else %}{% trans %}Entries{% endtrans %}{% endif %}</a>{% endif %}</td>{% endif %}
           </tr>
           {% endif %}
           {% endfor %}
@@ -529,7 +529,7 @@
           {% if c.payment %}<span class="sp-person-plan" data-testid="spend-person-payment">{{ c.payment }}</span>{% endif %}
         </div>
       </div>
-      <a class="sp-btn-sm sp-person-open" href="{{ c.url }}" aria-label="{{ _('Open %(name)s in the report') % {'name': c.name} }}" data-testid="spend-person-open">{% trans %}Show{% endtrans %} <span aria-hidden="true">→</span></a>
+      <a class="sp-btn-sm sp-person-open" href="{{ c.url | prefixed }}" aria-label="{{ _('Open %(name)s in the report') % {'name': c.name} }}" data-testid="spend-person-open">{% trans %}Show{% endtrans %} <span aria-hidden="true">→</span></a>
     </li>
     {% endfor %}
     {% if people.more %}
@@ -539,7 +539,7 @@
         <div class="sp-person-head"><strong class="sp-person-name">{% trans count=people.more.count %}{{ count }} more person{% pluralize %}{{ count }} more people{% endtrans %}</strong><span class="sp-person-spend" data-testid="spend-people-more-spend">{{ people.more.spend }}</span></div>
         <div class="sp-person-meta"><span class="sp-text-muted-xs">{% trans %}Their spend together; the Person level lists each of them.{% endtrans %}</span></div>
       </div>
-      <a class="sp-btn-sm sp-person-open" href="{{ people.more.url }}" data-testid="spend-people-more-open">{% trans %}Show all{% endtrans %} <span aria-hidden="true">→</span></a>
+      <a class="sp-btn-sm sp-person-open" href="{{ people.more.url | prefixed }}" data-testid="spend-people-more-open">{% trans %}Show all{% endtrans %} <span aria-hidden="true">→</span></a>
     </li>
     {% endif %}
   </ol>
@@ -552,4 +552,4 @@
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
-{% block chart_js %}{% if report and charts and not charts.too_long %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}
+{% block chart_js %}{% if report and charts and not charts.too_long %}<script src="{{ base }}/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

@@ -10,6 +10,8 @@ gitignored and built in the Docker image, in CI and by the dev watcher container
 **Revised:** 2026-11-06 — vendored D3 for Observable Plot; charts load both on demand (§9).
 **Revised:** 2026-11-07 — Apache ECharts replaces Observable Plot and D3 as the chart library: an
 npm dependency, tree-shaken into a page-specific bundle (§1, §12).
+**Revised:** 2026-11-21 — every URL the UI writes carries the `STEALTH_PREFIX`: `{{ base }}` in
+templates, `spUrl()` in JS, bundle-relative stylesheet URLs (§13).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -221,7 +223,9 @@ Specivo is installable as a Progressive Web App:
 - **Meta tags** in `base.html`: `<link rel="manifest">`, `theme-color`, `mobile-web-app-capable`
 - **Service worker registration** in `frontend/js/modules/service-worker.js` (run from `app.js`)
 
-The manifest reflects the current `brand_name` setting without rebuilding.
+The manifest reflects the current `brand_name` setting without rebuilding. Both live under the
+URL prefix (§13): the manifest's `start_url` and `scope` are `{prefix}/`, and the service worker
+reads its prefix from its own path.
 
 ### 7. Markdown Rendering
 
@@ -343,6 +347,26 @@ exact version in `frontend/package.json` and bundled by esbuild, not vendored:
 - **Licences.** ECharts' `LICENSE` and `NOTICE`, its d3-derived part, zrender's and tslib's
   licences are in `specivo/static/vendor/LICENSES/` and `THIRD-PARTY-NOTICES.md`; a banner keeps
   the ECharts copyright at the top of the bundle.
+
+### 13. URL prefix (`STEALTH_PREFIX`)
+
+The whole instance, pages, static files and API included, can be served under a secret path
+(`STEALTH_PREFIX`, read only through `base_path()` / `prefixed()` in `specivo/core/app_url.py`).
+Every URL the UI writes must carry it; without a prefix all of this renders exactly as before.
+
+- **Templates:** a root-relative URL starts with the `base` global: `href="{{ base }}/projects/"`,
+  `'{{ base }}/issue/' + key` in an Alpine expression, `base ~ '/search/'` in a Jinja expression.
+  A URL from a variable goes through the idempotent `| prefixed` filter.
+- **JS:** `base.html` writes `<meta name="sp-base" content="{{ base }}">`; `spUrl(path)` (in
+  `frontend/js/lib/globals.js`) adds the prefix to a root-relative path and leaves a prefixed or
+  absolute one alone. `spFetch()` applies it itself, so its callers pass application paths;
+  navigation, `htmx.ajax`, links built in JS and Alpine `:href`/`:src` bindings use `spUrl()`.
+- **CSS:** `url()` in `frontend/css` is relative to the bundle (`../../fonts/...`), never `/static/`.
+- **Server side:** redirects go through `redirect_to()` (`specivo/web/deps.py`); rendered Markdown
+  gets the prefix in the sanitizer.
+- **Guard:** `scripts/check_static_rules.py` fails on a URL that would leave the prefix; real
+  exceptions are allow-listed there with their reason. `tests/e2e/test_stealth_prefix.py` crawls
+  a prefixed instance.
 
 ## Consequences
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
@@ -23,6 +23,7 @@ from specivo.web.deps import (
     get_templates,
     get_web_reader,
     login_redirect,
+    redirect_to,
     refuse_anonymous_web,
 )
 
@@ -81,7 +82,7 @@ async def wiki_index(
     if await check_permission(user, project.id, Permission.MANAGE_WIKI, db):
         await _wiki_svc.ensure_home_page(db, project.id, user)
 
-    return RedirectResponse(
+    return redirect_to(
         f"/projects/{project_key}/wiki/home/",
         status_code=302,
     )
@@ -224,7 +225,7 @@ async def wiki_delete(
     cascade = form.get("cascade_children") == "true"
     await _wiki_svc.delete_page(db, page.id, deleted_by=user, cascade_children=cascade)
 
-    return RedirectResponse(
+    return redirect_to(
         f"/projects/{project_key}/wiki/pages/",
         status_code=302,
     )
@@ -249,7 +250,7 @@ async def wiki_restore(
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Deleted wiki page not found") from None
 
-    return RedirectResponse(
+    return redirect_to(
         f"/projects/{project_key}/wiki/trash/",
         status_code=302,
     )

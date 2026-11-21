@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import html
 import logging
+from http import HTTPStatus
 
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
@@ -211,12 +212,9 @@ _NON_PAGE_PREFIXES = ("/api/", "/mcp", "/scim/", "/hooks/", "/health")
 
 def _is_page_request(request: Request) -> bool:
     """Whether *request* is for a web page (or an htmx partial of one), not the API."""
-    from specivo.core.config import get_settings
+    from specivo.core.app_url import strip_base
 
-    path = request.url.path
-    stealth = get_settings().stealth_prefix.rstrip("/")
-    if stealth and path.startswith(stealth + "/"):
-        path = path[len(stealth) :]
+    path = strip_base(request.url.path)
     if path.startswith(_NON_PAGE_PREFIXES):
         return False
     return request.headers.get("hx-request") == "true" or _wants_html(request)
@@ -278,7 +276,34 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse | H
     )
 
 
-async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse | HTMLResponse:
+def _outside_prefix(request: Request) -> bool:
+    """Whether a stealth prefix is set and *request* is not under it.
+
+    Such a request reached no route of the application (only ``robots.txt``
+    and the sitemap live outside the prefix). Its error must not render a
+    page: the page would link the prefix, its assets and the product to
+    whoever probes the root.
+    """
+    from specivo.core.app_url import base_path, is_under_base
+
+    return bool(base_path()) and not is_under_base(request.url.path)
+
+
+def _bare_error(status_code: int) -> PlainTextResponse:
+    """An error that says nothing about what is serving it."""
+    try:
+        phrase = HTTPStatus(status_code).phrase
+    except ValueError:
+        phrase = "Error"
+    return PlainTextResponse(phrase, status_code=status_code)
+
+
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse | HTMLResponse | PlainTextResponse:
+    if _outside_prefix(request):
+        return _bare_error(exc.status_code)
+
     # Skip HTML rendering for redirect responses (302, 307, etc.)
     if 300 <= exc.status_code < 400:
         return JSONResponse(

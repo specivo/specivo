@@ -8,9 +8,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": _("Admin"), "url": "/admin/"},
-  {"label": _("AI spend"), "url": "/admin/ai-spend/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": _("Admin"), "url": base ~ "/admin/"},
+  {"label": _("AI spend"), "url": base ~ "/admin/ai-spend/"},
   {"label": _("Entries")}
 ]) }}
 
@@ -30,14 +30,14 @@
   {% if filters.version %} · {{ filters.version_label }}{% endif %}
   {% if filters.sprint %} · {{ filters.sprint_label }}{% endif %}
   {% if filters.cost_type %} · {{ filters.cost_type }}{% endif %}
-  · <a href="/admin/ai-spend/">{% trans %}Back to the report{% endtrans %}</a>
+  · <a href="{{ base }}/admin/ai-spend/">{% trans %}Back to the report{% endtrans %}</a>
 </p>
 
 {% if rows %}
 <div class="card">
   {{ entry_table(rows, return_to, show_project=True) }}
 </div>
-{{ pagination(total, offset, limit, "/admin/ai-spend/entries/", page_query) }}
+{{ pagination(total, offset, limit, base ~ "/admin/ai-spend/entries/", page_query) }}
 {% else %}
 <div class="card sp-aiu-empty" data-testid="aiu-empty">{% trans %}No AI usage matches these filters.{% endtrans %}</div>
 {% endif %}

@@ -38,7 +38,7 @@ from specivo.services.exchange_rate_service import (
     ExchangeRateService,
     parse_policy,
 )
-from specivo.web.deps import get_templates
+from specivo.web.deps import get_templates, redirect_to
 from specivo.web.pages.admin import require_admin
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
@@ -72,7 +72,7 @@ def _parse_day(value: str) -> date | None:
 
 def _redirect(params: dict[str, str] | None = None, *, anchor: str = "") -> RedirectResponse:
     query = urlencode({k: v for k, v in (params or {}).items() if v})
-    return RedirectResponse(_BASE_URL + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else ""), 303)
+    return redirect_to(_BASE_URL + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else ""), 303)
 
 
 async def _currency_choices(db: AsyncSession, locale: str) -> list[dict[str, str]]:
@@ -290,7 +290,7 @@ async def admin_exchange_rate_update(
     day = _parse_day(rate_date)
     edit_url = f"{_BASE_URL}{rate_id}/edit/"
     if day is None:
-        return RedirectResponse(f"{edit_url}?error=date_invalid", 303)
+        return redirect_to(f"{edit_url}?error=date_invalid", 303)
     try:
         await _service.update_manual(
             db, rate_id, actor=user, request=request, rate_date=day, base=base, quote=quote, rate=rate
@@ -298,7 +298,7 @@ async def admin_exchange_rate_update(
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Exchange rate not found") from None
     except AppError as exc:
-        return RedirectResponse(f"{edit_url}?error={exc.code}", 303)
+        return redirect_to(f"{edit_url}?error={exc.code}", 303)
     return _redirect({"notice": "updated"})
 
 

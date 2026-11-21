@@ -68,6 +68,13 @@ _E2E_SERVER_ENV = {
 }
 E2E_PASSWORD = "testpassword"  # noqa: S105
 
+# A second server for the tests of an instance behind STEALTH_PREFIX: the whole
+# UI, its assets and the API live under the prefix. Its own port, so the rest
+# of the suite keeps the unprefixed server.
+E2E_STEALTH_PREFIX = "/hidden-ui"
+E2E_PREFIXED_SERVER_PORT = int(os.environ.get("E2E_PREFIXED_SERVER_PORT", str(E2E_SERVER_PORT + 1)))
+E2E_PREFIXED_ORIGIN = f"http://{E2E_SERVER_HOST}:{E2E_PREFIXED_SERVER_PORT}"
+
 
 # ---------------------------------------------------------------------------
 # Session fixtures
@@ -137,6 +144,32 @@ def kill_port_listeners(port: int) -> None:
 @pytest.fixture(scope="session")
 def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     """Start uvicorn, wait for /health/, yield base URL, stop on teardown."""
+    _fail_without_bundles()
+    proc = _start_server(E2E_SERVER_BIND, E2E_SERVER_PORT, {}, f"{E2E_BASE_URL}/health/")
+    yield E2E_BASE_URL
+    _stop_server(proc)
+
+
+@pytest.fixture(scope="session")
+def e2e_prefixed_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
+    """A server with ``STEALTH_PREFIX`` set; yields its base URL, prefix included.
+
+    ``page.goto("/x/")`` resolves a leading slash against the origin, not the
+    base URL's path, so the tests write ``f"{base}/x/"``.
+    """
+    _fail_without_bundles()
+    base = f"{E2E_PREFIXED_ORIGIN}{E2E_STEALTH_PREFIX}"
+    proc = _start_server(
+        E2E_SERVER_HOST,
+        E2E_PREFIXED_SERVER_PORT,
+        {"STEALTH_PREFIX": E2E_STEALTH_PREFIX, "APP_URL": E2E_PREFIXED_ORIGIN},
+        f"{base}/health/",
+    )
+    yield base
+    _stop_server(proc)
+
+
+def _fail_without_bundles() -> None:
     # The esbuild bundles are generated, not committed. Without them every page
     # loads with no Specivo CSS/JS, so fail once with the fix instead of per test.
     missing = missing_asset_manifests()
@@ -147,7 +180,10 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             pytrace=False,
         )
 
-    kill_port_listeners(E2E_SERVER_PORT)
+
+def _start_server(bind: str, port: int, env: dict[str, str], health_url: str) -> subprocess.Popen:
+    """Start uvicorn on *port* with the E2E settings and *env*; wait until *health_url* answers."""
+    kill_port_listeners(port)
     time.sleep(0.5)
 
     proc = subprocess.Popen(  # noqa: S603
@@ -157,13 +193,13 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             "uvicorn",
             "specivo.main:app",
             "--host",
-            E2E_SERVER_BIND,
+            bind,
             "--port",
-            str(E2E_SERVER_PORT),
+            str(port),
             "--log-level",
             "warning",
         ],
-        env={**os.environ, **_E2E_SERVER_ENV},
+        env={**os.environ, **_E2E_SERVER_ENV, **env},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -171,17 +207,17 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         try:
-            r = httpx.get(f"{E2E_BASE_URL}/health/", timeout=3)
+            r = httpx.get(health_url, timeout=3)
             if r.status_code == 200:
-                break
+                return proc
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.ReadError, OSError):
-            time.sleep(0.5)
-    else:
-        proc.kill()
-        pytest.fail(f"E2E server did not start within 20s on port {E2E_SERVER_PORT}.")
+            pass
+        time.sleep(0.5)
+    proc.kill()
+    pytest.fail(f"E2E server did not start within 20s on port {port}.")
 
-    yield E2E_BASE_URL
 
+def _stop_server(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
         proc.wait(timeout=5)
@@ -344,6 +380,38 @@ def api_client(e2e_server, _admin_auth) -> Generator[httpx.Client, None, None]:
     """httpx Client authenticated as admin, for seeding test data via REST API."""
     token, _ = _admin_auth
     client = httpx.Client(base_url=e2e_server, timeout=10)
+    client.headers["Authorization"] = f"Bearer {token}"
+    yield client
+    client.close()
+
+
+# ---------------------------------------------------------------------------
+# The instance behind STEALTH_PREFIX (e2e_prefixed_server)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def _prefixed_admin_auth(e2e_prefixed_server, e2e_seed_data) -> tuple[str, list[dict]]:
+    """Login as admin once per session, on the prefixed server."""
+    return _login_and_get_token(e2e_prefixed_server, e2e_seed_data["admin_login"], e2e_seed_data["password"])
+
+
+@pytest.fixture
+def prefixed_admin_page(browser, _prefixed_admin_auth) -> Generator[Page, None, None]:
+    """A page signed in as admin on the prefixed server (``goto(f"{base}/...")``)."""
+    _, cookies = _prefixed_admin_auth
+    context = browser.new_context()
+    context.add_cookies(cookies)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def prefixed_api(e2e_prefixed_server, _prefixed_admin_auth) -> Generator[httpx.Client, None, None]:
+    """httpx Client authenticated as admin on the prefixed server; paths are under the prefix."""
+    token, _ = _prefixed_admin_auth
+    client = httpx.Client(base_url=e2e_prefixed_server, timeout=10)
     client.headers["Authorization"] = f"Bearer {token}"
     yield client
     client.close()

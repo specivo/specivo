@@ -316,8 +316,8 @@ export function issueForm(initial) {
                 /* Files chosen in the form are recorded with the edit */
                 var updated = await res.json();
                 await this._uploadFiles(updated.id, updated.journal_id);
-                await sendBestEffort('/api/v1/issues/' + this.displayKey + '/tags/', 'PUT', {names: tagNames});
-                window.location.href = '/issue/' + this.displayKey + '/';
+                await sendBestEffort(spUrl('/api/v1/issues/' + this.displayKey + '/tags/'), 'PUT', {names: tagNames});
+                window.location.href = spUrl('/issue/' + this.displayKey + '/');
             },
 
             async _submitCreate(payload, tagNames, continueCreating) {
@@ -338,7 +338,7 @@ export function issueForm(initial) {
                 /* Create pending relations */
                 for (var j = 0; j < this.pendingRelations.length; j++) {
                     var rel = this.pendingRelations[j];
-                    await sendBestEffort('/api/v1/issues/' + data.key + '/relations/', 'POST', {
+                    await sendBestEffort(spUrl('/api/v1/issues/' + data.key + '/relations/'), 'POST', {
                         issue_to_key: rel.issue_key,
                         relation_type: rel.relation_type
                     });
@@ -348,7 +348,7 @@ export function issueForm(initial) {
                     this._clearForNext();
                     return;
                 }
-                window.location.href = '/issue/' + data.key + '/';
+                window.location.href = spUrl('/issue/' + data.key + '/');
             },
 
             /* Empty the form for the next issue ("create and continue"). */

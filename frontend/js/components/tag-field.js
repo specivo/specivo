@@ -23,7 +23,7 @@ export function tagField(initial) {
 
             // Link a tag chip to the tag-filtered search (issues + wiki).
             tagSearchUrl(name) {
-                return '/search/?scope=all&tag=' + encodeURIComponent(name);
+                return spUrl('/search/?scope=all&tag=' + encodeURIComponent(name));
             },
 
             _hasTag(name) {

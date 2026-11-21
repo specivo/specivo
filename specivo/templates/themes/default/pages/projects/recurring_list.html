@@ -5,8 +5,8 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Projects"), "url": "/projects/"},
-  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": _("Projects"), "url": base ~ "/projects/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
   {"label": _("Recurring tasks")}
 ]) }}
 
@@ -33,7 +33,7 @@
         <span class="sp-listcard-title">{% trans %}Patterns{% endtrans %}</span>
         <span class="sp-text-muted-xs-ml-sm" x-text="'(' + patterns.length + ')'"></span>
       </div>
-      <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
+      <a class="sp-btn sp-btn-primary" href="{{ base }}/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
         {% trans %}New pattern{% endtrans %}
       </a>
@@ -45,7 +45,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
         <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
         <p x-text="canManage ? labels.emptyCanManage : labels.emptyReadOnly"></p>
-        <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
+        <a class="sp-btn sp-btn-primary" href="{{ base }}/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
           {% trans %}Create first pattern{% endtrans %}
         </a>
@@ -68,7 +68,7 @@
           <template x-for="p in patterns" :key="p.id">
             <tr>
               <td>
-                <a class="version-name" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/'" x-text="p.name"></a>
+                <a class="version-name" :href="'{{ base }}/projects/' + projectKey + '/recurring-patterns/' + p.id + '/'" x-text="p.name"></a>
               </td>
               <td>
                 <span class="date-val" x-text="scheduleLabel(p)"></span>
@@ -83,7 +83,7 @@
                 <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? labels.disable : labels.enable" :aria-label="p.enabled ? labels.disable : labels.enable">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 11-12.77.04"/></svg>
                 </button>
-                <a class="action-link" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                <a class="action-link" :href="'{{ base }}/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                 </a>
                 <button type="button" class="action-link danger" @click="confirmDelete(p)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">

@@ -72,10 +72,10 @@ export function projectVersions(initial) {
                     };
                     var url, method;
                     if (this.editingVersion) {
-                        url = '/api/v1/projects/' + this.projectKey + '/versions/' + this.editingVersion.id + '/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/versions/' + this.editingVersion.id + '/');
                         method = 'PATCH';
                     } else {
-                        url = '/api/v1/projects/' + this.projectKey + '/versions/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/versions/');
                         method = 'POST';
                     }
                     var res = await spFetch(url, {

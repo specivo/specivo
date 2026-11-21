@@ -24,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
+from specivo.core.app_url import prefixed
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, ValidationError
 from specivo.hooks.repo_url import (
@@ -81,8 +82,7 @@ def generate_secret() -> str:
 
 def hook_path(integration: RepositoryIntegration) -> str:
     """The hook path, stealth prefix included."""
-    prefix = get_settings().stealth_prefix.rstrip("/")
-    return f"{prefix}/hooks/{integration.provider}/{integration.public_id}/"
+    return prefixed(f"/hooks/{integration.provider}/{integration.public_id}/")
 
 
 def hook_url(integration: RepositoryIntegration) -> str:

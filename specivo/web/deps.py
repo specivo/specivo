@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import base_path, is_under_base, prefixed, strip_base
 from specivo.core.database import DB_SESSION
 from specivo.core.middleware import (
     ANONYMOUS_READER_STATE_KEY,
@@ -264,6 +265,59 @@ def _timeago(  # noqa: C901
     return _date()
 
 
+class _BasePath:
+    """The ``base`` template global: renders as :func:`base_path`, read on every render.
+
+    Read lazily rather than stored as a string, so a settings override (tests
+    re-create the app with another ``STEALTH_PREFIX``) is seen by templates
+    built before it. The prefix is restricted to unreserved URL characters
+    (``normalize_prefix``), so it needs no escaping in an attribute or a JS
+    string literal.
+    """
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        return base_path()
+
+    def __html__(self) -> str:
+        return base_path()
+
+    def __bool__(self) -> bool:
+        return bool(base_path())
+
+    def __add__(self, other: str) -> str:
+        return base_path() + other
+
+    def __radd__(self, other: str) -> str:
+        return other + base_path()
+
+    def __eq__(self, other: object) -> bool:
+        return str(self) == other
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+    def __repr__(self) -> str:
+        return f"BasePath({base_path()!r})"
+
+
+BASE_PATH = _BasePath()
+
+
+def _prefixed_filter(value: object) -> object:
+    """Template filter: an application path (``/data/avatars/...``) with the URL prefix.
+
+    Like :func:`prefixed`, a path already under the prefix is left as it is.
+    Anything that is not a root-relative path (an absolute URL, ``""``,
+    ``None``) is returned as it is, so stored values that may hold either
+    can go through it.
+    """
+    if isinstance(value, str) and value.startswith("/") and not value.startswith(("//", "/\\")):
+        return prefixed(value)
+    return value
+
+
 def get_templates(theme: str = "default") -> Jinja2Templates:  # noqa: C901, PLR0915
     """Build a Jinja2Templates instance with theme-aware ChoiceLoader.
 
@@ -324,6 +378,14 @@ def get_templates(theme: str = "default") -> Jinja2Templates:  # noqa: C901, PLR
 
     # Brand name — from DB setting, available in all templates
     templates.env.globals["brand_name"] = _brand_name
+
+    # The URL prefix (STEALTH_PREFIX), "" when none is set. Every root-relative
+    # URL a template writes starts with it: href="{{ base }}/projects/". An
+    # application path held in a variable goes through the ``prefixed`` filter
+    # (or is written as {{ base }}{{ path }}). scripts/check_static_rules.py
+    # fails on a root-relative URL in a template that does neither.
+    templates.env.globals["base"] = BASE_PATH
+    templates.env.filters["prefixed"] = _prefixed_filter
 
     # Bundled avatar icons of built-in system accounts, for the avatar macro
     from specivo.core.constants import SYSTEM_AVATAR_ICONS
@@ -516,9 +578,9 @@ def redirect_if_password_change_required(request: Request, user: object) -> None
     if not getattr(user, "must_change_password", False):
         return
 
-    from specivo.core.config import get_settings
+    from specivo.core.app_url import base_path
 
-    sp = get_settings().stealth_prefix.rstrip("/")
+    sp = base_path()
     path = request.url.path
     if any(path.startswith(sp + suffix) for suffix in _PASSWORD_CHANGE_ALLOWED_SUFFIXES):
         return
@@ -545,7 +607,7 @@ async def require_user(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        raise HTTPException(status_code=302, headers={"Location": "/login/"})
+        raise HTTPException(status_code=302, headers={"Location": prefixed(LOGIN_PATH)})
     return user_obj  # type: ignore[return-value]
 
 
@@ -678,9 +740,8 @@ ANONYMOUS_WEB_ROUTES: frozenset[str] = frozenset(
     }
 )
 
-# Where a refused visitor is sent. Bare, exactly as ``require_user`` and every
-# page handler has always spelled it, so the refusal stays the redirect the web
-# layer already used.
+# Where a refused visitor is sent: the application path, which every redirect
+# sends through ``prefixed`` (it adds the stealth prefix, when one is set).
 LOGIN_PATH = "/login/"
 
 # A ``next`` longer than this is dropped rather than echoed into a redirect.
@@ -695,6 +756,11 @@ def safe_next_path(raw: str | None) -> str:
     header. Everything else becomes the empty string, which callers read as
     "no destination" and fall back to the dashboard.
 
+    The path is the one the browser asked for, so behind a stealth prefix it
+    must lie under the prefix: anything outside it is not this application
+    and is refused like another origin. A value that passes is redirected to
+    as it is, never through ``prefixed`` again.
+
     ``//evil.example`` and ``/\\evil.example`` are the two forms browsers
     resolve as protocol-relative URLs, so both are refused even though they
     look local.
@@ -704,6 +770,8 @@ def safe_next_path(raw: str | None) -> str:
     if not raw.startswith("/") or raw.startswith(("//", "/\\")):
         return ""
     if any(ord(char) < 0x20 or char == "\x7f" for char in raw):
+        return ""
+    if not is_under_base(raw):
         return ""
     return raw
 
@@ -718,8 +786,8 @@ def login_url_for(target: str) -> str:
     """The login URL that returns a visitor to *target* once they sign in."""
     destination = safe_next_path(target)
     if not destination:
-        return LOGIN_PATH
-    return f"{LOGIN_PATH}?next={quote(destination, safe='')}"
+        return prefixed(LOGIN_PATH)
+    return f"{prefixed(LOGIN_PATH)}?next={quote(destination, safe='')}"
 
 
 @pass_context
@@ -738,6 +806,18 @@ def _csrf_token(ctx) -> str:
     return str(getattr(request.state, CSRF_STATE_KEY, "") or "")
 
 
+def redirect_to(url: str, status_code: int = 302) -> RedirectResponse:
+    """A redirect to *url*, the one way the web layer sends a browser elsewhere.
+
+    A root-relative path gets the stealth prefix (:func:`prefixed`, so a path
+    that already carries it, such as a ``next`` value, is left as it is); an
+    absolute URL (an identity provider) and a query-only URL go unchanged.
+    """
+    if url.startswith("/") and not url.startswith(("//", "/\\")):
+        url = prefixed(url)
+    return RedirectResponse(url, status_code=status_code)
+
+
 def login_redirect(request: Request) -> RedirectResponse:
     """Send a visitor without a session to the login page, and back here after it.
 
@@ -747,7 +827,7 @@ def login_redirect(request: Request) -> RedirectResponse:
     """
     path = request.url.path
     if request.method != "GET" or "/partials/" in path:
-        return RedirectResponse(LOGIN_PATH, status_code=302)
+        return RedirectResponse(prefixed(LOGIN_PATH), status_code=302)
     return RedirectResponse(login_url_for(_current_path(request)), status_code=302)
 
 
@@ -760,7 +840,7 @@ def _sign_in_url(ctx) -> str:
     """
     request = ctx.get("request")
     if request is None:
-        return LOGIN_PATH
+        return prefixed(LOGIN_PATH)
     return login_url_for(_current_path(request))
 
 
@@ -882,7 +962,7 @@ async def _mark_for_search_engines(request: Request, db: AsyncSession) -> None:
         return
     if not enabled:
         return
-    follow_only = bool(request.url.query) or request.url.path == _SEARCH_PAGE_PATH
+    follow_only = bool(request.url.query) or strip_base(request.url.path) == _SEARCH_PAGE_PATH
     setattr(request.state, ROBOTS_STATE_KEY, ROBOTS_NOINDEX_FOLLOW if follow_only else ROBOTS_INDEX)
 
 

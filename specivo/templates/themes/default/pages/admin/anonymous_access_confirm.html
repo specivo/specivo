@@ -4,11 +4,11 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/settings/">{% trans %}Settings{% endtrans %}</a>
+  <a href="{{ base }}/admin/settings/">{% trans %}Settings{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}Turn on anonymous access{% endtrans %}</span>
 </div>
@@ -36,14 +36,14 @@
   <p class="sp-mb-md">{% trans %}No project is opted in to anonymous reading yet.{% endtrans %}</p>
   {% endif %}
 
-  <form method="post" action="/admin/settings/anonymous-access/">
+  <form method="post" action="{{ base }}/admin/settings/anonymous-access/">
     <input type="hidden" name="enabled" value="1">
     <input type="hidden" name="confirm" value="1">
     {% for p in projects %}
     <input type="hidden" name="confirmed_projects" value="{{ p.key }}">
     {% endfor %}
     <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Turn on anonymous access{% endtrans %}</button>
-    <a href="/admin/settings/" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Cancel{% endtrans %}</a>
+    <a href="{{ base }}/admin/settings/" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Cancel{% endtrans %}</a>
   </form>
 </div>
 {% endblock %}

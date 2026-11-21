@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.config import get_settings
+from specivo.core.app_url import base_path
 from specivo.core.database import DbSession
 from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
@@ -32,7 +32,7 @@ from specivo.core.rate_limit import rate_limit
 from specivo.core.security import request_session, request_session_id
 from specivo.models.user import User
 from specivo.services.email_change_service import EmailChangeService, email_change_error_message
-from specivo.web.deps import get_templates, require_user
+from specivo.web.deps import get_templates, redirect_to, require_user
 
 router = APIRouter(tags=["web-auth"], include_in_schema=False)
 _service = EmailChangeService()
@@ -42,13 +42,13 @@ _confirm_rate_limit = rate_limit("web_confirm_email", max_requests=20, window_se
 
 
 def _prefix() -> str:
-    return get_settings().stealth_prefix.rstrip("/")
+    return base_path()
 
 
 def _back(**query: str) -> RedirectResponse:
     from urllib.parse import urlencode
 
-    return RedirectResponse(f"{_prefix()}{PROFILE_PATH}?{urlencode(query)}", status_code=303)
+    return redirect_to(f"{_prefix()}{PROFILE_PATH}?{urlencode(query)}", status_code=303)
 
 
 def _outcome_messages() -> dict[str, str]:

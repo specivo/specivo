@@ -5,8 +5,8 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
   {"label": _("Roadmap")}
 ]) }}
 
@@ -19,10 +19,10 @@
     </select>
     <div class="filter-tabs">
       {% if show_completed %}
-      <a href="/projects/{{ project.key }}/roadmap/?show=open" class="filter-tab active" aria-pressed="true"
+      <a href="{{ base }}/projects/{{ project.key }}/roadmap/?show=open" class="filter-tab active" aria-pressed="true"
          data-testid="roadmap-completed-toggle">{% trans count=completed_count %}Hide completed versions (%(count)s){% endtrans %}</a>
       {% else %}
-      <a href="/projects/{{ project.key }}/roadmap/?show=all" class="filter-tab" aria-pressed="false"
+      <a href="{{ base }}/projects/{{ project.key }}/roadmap/?show=all" class="filter-tab" aria-pressed="false"
          data-testid="roadmap-completed-toggle">{% trans count=completed_count %}Show completed versions (%(count)s){% endtrans %}</a>
       {% endif %}
     </div>
@@ -34,7 +34,7 @@
 <div class="card version-card {{ 'accent-green' if status == 'closed' else 'accent-gold' }}" id="version-{{ entry.version.id }}"
      data-version-name="{{ entry.version.name }}" x-data="{ expanded: false }">
   <div class="version-header" @click="expanded = !expanded">
-    <h2><a href="/projects/{{ project.key }}/versions/{{ entry.version.id }}/" style="color:inherit;text-decoration:none">{{ entry.version.name }}</a></h2>
+    <h2><a href="{{ base }}/projects/{{ project.key }}/versions/{{ entry.version.id }}/" style="color:inherit;text-decoration:none">{{ entry.version.name }}</a></h2>
     <div class="version-meta">
       <span class="version-badge {{ 'vclosed' if status == 'closed' else status }}">{{ status }}</span>
       {% if entry.version.effective_date %}
@@ -62,7 +62,7 @@
   {% if entry.total > 0 %}
   <div class="version-issues" x-show="expanded" x-cloak>
     <p style="padding:var(--sp-space-lg) var(--sp-space-xl);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
-      {% trans issues_url="/projects/" ~ project.key ~ "/issues/?fixed_version_id=" ~ entry.version.id %}View issues on the <a href="%(issues_url)s">issues page</a>.{% endtrans %}
+      {% trans issues_url=base ~ "/projects/" ~ project.key ~ "/issues/?fixed_version_id=" ~ entry.version.id %}View issues on the <a href="%(issues_url)s">issues page</a>.{% endtrans %}
     </p>
   </div>
   {% endif %}

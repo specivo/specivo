@@ -4,9 +4,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}Roles{% endtrans %}</span>
 </div>
@@ -53,7 +53,7 @@
           </select>
         </td>
         <td>
-          <form id="role-form-{{ r.id }}" method="post" action="/admin/roles/{{ r.id }}/">
+          <form id="role-form-{{ r.id }}" method="post" action="{{ base }}/admin/roles/{{ r.id }}/">
             <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
           </form>
         </td>

@@ -42,6 +42,7 @@ from xml.sax.saxutils import escape
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import base_path
 from specivo.core.config import get_settings
 from specivo.models.issue import Issue
 from specivo.models.project import Project
@@ -85,7 +86,7 @@ async def is_indexing_enabled(session: AsyncSession) -> bool:
     ever become indexable.
     """
     settings = get_settings()
-    if settings.stealth_prefix.strip("/"):
+    if base_path(settings):
         return False
     value = await session.scalar(select(Setting.value).where(Setting.key == SEARCH_ENGINE_INDEXING_SETTING_KEY))
     if value in ("true", "false"):

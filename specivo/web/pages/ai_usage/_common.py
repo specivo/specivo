@@ -9,6 +9,7 @@ from babel.numbers import format_decimal
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import prefixed
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.models.issue import Issue
 from specivo.models.project import Project
@@ -17,7 +18,7 @@ from specivo.services.ai_subscription_service import AiToolService
 from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
-from specivo.web.deps import safe_next_path
+from specivo.web.deps import redirect_to, safe_next_path
 
 _service = AiUsageService()
 _projects = ProjectService()
@@ -61,14 +62,15 @@ def _redirect(url: str, params: dict[str, str] | None = None) -> RedirectRespons
     """303 to *url* with *params* added to its query (empty values dropped)."""
     extra = {k: v for k, v in (params or {}).items() if v}
     if not extra:
-        return RedirectResponse(url, 303)
+        return redirect_to(url, 303)
     parts = urlsplit(url)
     query = "&".join(q for q in (parts.query, urlencode(extra)) if q)
-    return RedirectResponse(urlunsplit(("", "", parts.path, query, parts.fragment)), 303)
+    return redirect_to(urlunsplit(("", "", parts.path, query, parts.fragment)), 303)
 
 
 def _next_or(raw: str | None, fallback: str) -> str:
-    return safe_next_path(raw) or fallback
+    """The safe ``next`` path, else the application path *fallback*; either way a browser path (prefixed)."""
+    return safe_next_path(raw) or prefixed(fallback)
 
 
 def _parse_date(value: str | None) -> date | None:
