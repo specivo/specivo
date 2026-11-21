@@ -367,7 +367,9 @@ async def specivo_show_issue(
     attachments the issue's description and comments link to and the issues,
     comments and wiki pages that link to it; ``Related:`` lists its relations
     and ``Broken links:`` targets that do not exist. Only items you may see are
-    listed, at most 20 per line; use specivo_get_links for more.
+    listed, at most 20 per line. These lines are the issue's neighbours in the
+    link graph; specivo_get_links is the link graph tool for more, a second
+    hop or filters.
     A ``Development:`` line then sums up reviews, CI, deployments and releases
     when there are any; use specivo_issue_development for the details.
     Use metadata_only=true to skip the description body and save tokens
@@ -614,6 +616,8 @@ async def specivo_search(
 
     Returns results with type, title, subtitle, and snippet.
     Use project_key to narrow results to a single project.
+    To see what a hit is connected to (links, backlinks, relations, parent
+    and children), follow the link graph with specivo_get_links.
     """
     async with _get_session_and_user() as (session, user):
         return await _search(session, user, query, project_key, scope, limit, mode)
