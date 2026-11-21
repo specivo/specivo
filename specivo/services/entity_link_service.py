@@ -1212,9 +1212,18 @@ class _Reader:
         await self._load_broken_scopes({e.broken_project_id for e in edges if e.broken_ref is not None})
         # A hand-entered SHA never reveals a commit the reader could not see otherwise:
         # unless a visible issue links that commit, it stays a bare SHA.
+        # Two typed prefixes of one visible commit name the same node: keep one edge.
+        merged: set[tuple[NodeKey | None, NodeKey | None]] = set()
+        kept: list[_RawEdge] = []
         for edge in edges:
-            if edge.fallback is not None and edge.target is not None and not self.visible(edge.target):
-                edge.target = edge.fallback
+            if edge.fallback is not None and edge.target is not None:
+                if not self.visible(edge.target):
+                    edge.target = edge.fallback
+                elif (edge.source, edge.target) in merged:
+                    continue
+                merged.add((edge.source, edge.target))
+            kept.append(edge)
+        edges = kept
         return [
             e
             for e in edges

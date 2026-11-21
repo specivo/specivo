@@ -424,9 +424,16 @@ async def test_a_hand_entered_sha_merges_only_with_a_commit_of_the_issues_own_pr
     graph = await links.get_links(db, world.reader, ("issue", root.id))
     # Only what was typed: the full SHA of a commit the reader may not see stays hidden.
     assert [(n.ref, n.title) for n in graph.nodes] == [(f"commit:{SHA_KNOWN[:9]}", "")]
+    # Two prefixes of that hidden commit stay two bare SHAs: collapsing them would tell they match.
+    root.issue_metadata = {"commits": [SHA_KNOWN[:7], SHA_KNOWN[:9]]}
+    await db.commit()
+    graph = await links.get_links(db, world.reader, ("issue", root.id))
+    assert sorted(n.ref for n in graph.nodes) == sorted([f"commit:{SHA_KNOWN[:7]}", f"commit:{SHA_KNOWN[:9]}"])
+    assert len(graph.edges) == 2
     # Once a visible issue links it, the hand-entered SHA merges with the commit.
     shown = await issue(db, world, world.home, "Public work")
     db.add(IssueCommitLink(commit_id=commit.id, issue_id=shown.id, source="message"))
     await db.commit()
     graph = await links.get_links(db, world.reader, ("issue", root.id))
     assert [(n.ref, n.title) for n in graph.nodes] == [(f"commit:{SHA_KNOWN[:12]}", "Own work")]
+    assert len(graph.edges) == 1  # both typed prefixes name the one visible commit
