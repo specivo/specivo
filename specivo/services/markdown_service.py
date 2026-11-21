@@ -357,9 +357,9 @@ _MD_EXTENSION_CONFIGS = {
 # Compiled once at import time
 # A URL scheme (``https:``, ``mailto:``) at the start of a link target.
 _URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
-# Issue reference: PROJ-123, but not right after ``[``, ``(`` or ``/`` (a link
-# label, a link target, a URL path).
-_ISSUE_REF_PATTERN = r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b"
+# Issue reference: PROJ-123, but not right after ``[``, ``](`` or ``/`` (a link
+# label, a link target, a URL path). Prose in parentheses, "(PROJ-123)", is linked.
+_ISSUE_REF_PATTERN = r"(?<!\[)(?<!\]\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b"
 _ISSUE_REF_RE = re.compile(_ISSUE_REF_PATTERN)
 # What Python-Markdown leaves in text for a backslash escape it has read.
 _ESCAPED_CHAR_RE = re.compile("\x02(\\d+)\x03")
