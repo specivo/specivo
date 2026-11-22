@@ -76,3 +76,31 @@ def test_wiki_history_page(admin_page: Page, api_client: httpx.Client) -> None:
 
     admin_page.goto(f"/projects/{project['key']}/wiki/{page_data['slug']}/history/")
     expect(admin_page.locator("h1.history-page-title")).to_be_visible()
+
+
+def test_wiki_delete_and_restore_from_trash(admin_page: Page, api_client: httpx.Client) -> None:
+    """Delete a page through its confirm dialog, then restore it from the trash."""
+    project = _create_project(api_client)
+    title = f"E2E Delete {unique_key()}"
+    page_data = _create_wiki_page(api_client, project["key"], title)
+
+    admin_page.goto(f"/projects/{project['key']}/wiki/{page_data['slug']}/")
+    dialog = admin_page.get_by_test_id("wiki-delete-dialog")
+    expect(dialog).to_be_hidden()
+    admin_page.get_by_test_id("wiki-delete-button").click()
+    expect(dialog).to_be_visible()
+    admin_page.get_by_test_id("wiki-delete-confirm").click()
+
+    admin_page.wait_for_url(f"**/projects/{project['key']}/wiki/pages/?notice=deleted")
+    expect(admin_page.get_by_test_id("wiki-notice")).to_be_visible()
+    expect(admin_page.locator(f"text={title}")).to_have_count(0)
+
+    admin_page.get_by_test_id("wiki-trash-link").click()
+    admin_page.wait_for_url(f"**/projects/{project['key']}/wiki/trash/")
+    row = admin_page.locator("tr", has_text=title)
+    row.get_by_role("button", name="Restore").click()
+
+    admin_page.wait_for_url(f"**/projects/{project['key']}/wiki/trash/?notice=restored")
+    expect(admin_page.get_by_test_id("wiki-trash-notice")).to_be_visible()
+    admin_page.goto(f"/projects/{project['key']}/wiki/{page_data['slug']}/")
+    expect(admin_page.locator("h1", has_text=title)).to_be_visible()

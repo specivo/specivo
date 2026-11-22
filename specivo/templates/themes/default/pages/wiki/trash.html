@@ -18,6 +18,15 @@
   <a href="{{ base }}/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">{% trans %}Back to Wiki{% endtrans %}</a>
 </div>
 
+{% if notice == "restored" %}
+<div class="flash flash-success sp-mb-md" role="status" data-testid="wiki-trash-notice">{% trans %}The page was restored.{% endtrans %}</div>
+{% endif %}
+{% if error == "slug_taken" %}
+<div class="flash flash-error sp-mb-md" role="alert" data-testid="wiki-trash-error">{% trans %}The page was not restored: another page now uses its address (slug). Rename or delete that page, then try again.{% endtrans %}</div>
+{% endif %}
+
+<p class="sp-text-muted sp-mb-md">{% trans %}Restoring a page also restores the subpages that were deleted with it.{% endtrans %}</p>
+
 {% if deleted_pages %}
 <table class="sp-table" style="width:100%;">
   <thead>

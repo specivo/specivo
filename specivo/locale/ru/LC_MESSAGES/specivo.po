@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 20:43+0100\n"
+"POT-Creation-Date: 2026-11-22 21:19+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -1106,7 +1106,7 @@ msgstr "Не удалось сбросить таймер."
 #: specivo/templates/themes/default/pages/projects/settings.html:1071
 #: specivo/templates/themes/default/pages/projects/settings.html:1305
 #: specivo/templates/themes/default/pages/projects/settings.html:1691
-#: specivo/templates/themes/default/pages/wiki/show.html:103
+#: specivo/templates/themes/default/pages/wiki/show.html:142
 msgid "Unable to connect."
 msgstr "Не удалось подключиться."
 
@@ -1207,7 +1207,8 @@ msgstr "Комментарий (необязательно)"
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:214
 #: specivo/templates/themes/default/pages/time/form.html:56
 #: specivo/templates/themes/default/pages/wiki/edit.html:136
-#: specivo/templates/themes/default/pages/wiki/show.html:237
+#: specivo/templates/themes/default/pages/wiki/show.html:77
+#: specivo/templates/themes/default/pages/wiki/show.html:276
 msgid "Cancel"
 msgstr "Отмена"
 
@@ -2692,10 +2693,11 @@ msgstr "Активировать"
 #: specivo/templates/themes/default/pages/projects/settings.html:983
 #: specivo/templates/themes/default/pages/projects/settings.html:1146
 #: specivo/templates/themes/default/pages/projects/settings.html:1443
-#: specivo/templates/themes/default/pages/wiki/show.html:166
-#: specivo/templates/themes/default/pages/wiki/show.html:201
-#: specivo/templates/themes/default/pages/wiki/show.html:203
-#: specivo/templates/themes/default/pages/wiki/show.html:239
+#: specivo/templates/themes/default/pages/wiki/show.html:47
+#: specivo/templates/themes/default/pages/wiki/show.html:205
+#: specivo/templates/themes/default/pages/wiki/show.html:240
+#: specivo/templates/themes/default/pages/wiki/show.html:242
+#: specivo/templates/themes/default/pages/wiki/show.html:278
 msgid "Delete"
 msgstr "Удалить"
 
@@ -4301,7 +4303,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:513
 #: specivo/templates/themes/default/pages/projects/settings.html:614
 #: specivo/templates/themes/default/pages/projects/settings.html:1052
-#: specivo/templates/themes/default/pages/wiki/show.html:240
+#: specivo/templates/themes/default/pages/wiki/show.html:279
 msgid "Deleting..."
 msgstr "Удаление..."
 
@@ -4365,7 +4367,7 @@ msgstr "Пресет обновлён"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:27
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:6
-#: specivo/templates/themes/default/pages/wiki/show.html:101
+#: specivo/templates/themes/default/pages/wiki/show.html:140
 msgid "Delete failed"
 msgstr "Ошибка удаления"
 
@@ -6493,6 +6495,7 @@ msgstr "Все статусы"
 #: specivo/templates/themes/default/pages/projects/settings.html:1281
 #: specivo/templates/themes/default/pages/projects/settings.html:1509
 #: specivo/templates/themes/default/pages/projects/settings.html:1671
+#: specivo/templates/themes/default/pages/wiki/show.html:56
 msgid "Close"
 msgstr "Закрыть"
 
@@ -6506,7 +6509,7 @@ msgstr "Открыть заново"
 #: specivo/templates/themes/default/pages/issues/form.html:155
 #: specivo/templates/themes/default/pages/projects/settings.html:392
 #: specivo/templates/themes/default/pages/wiki/history.html:30
-#: specivo/templates/themes/default/pages/wiki/show.html:57
+#: specivo/templates/themes/default/pages/wiki/show.html:96
 msgid "Version"
 msgstr "Версия"
 
@@ -9741,7 +9744,7 @@ msgstr "Теги"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:219
 #: specivo/templates/themes/default/pages/issues/form.html:317
 #: specivo/templates/themes/default/pages/wiki/edit.html:85
-#: specivo/templates/themes/default/pages/wiki/show.html:79
+#: specivo/templates/themes/default/pages/wiki/show.html:118
 msgid "Add tags..."
 msgstr "Добавить теги..."
 
@@ -9863,23 +9866,23 @@ msgid "Updated %(ago)s"
 msgstr "Обновлено %(ago)s"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:7
-#: specivo/templates/themes/default/pages/wiki/show.html:102
+#: specivo/templates/themes/default/pages/wiki/show.html:141
 msgid "Upload failed"
 msgstr "Ошибка загрузки"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:9
-#: specivo/templates/themes/default/pages/wiki/show.html:104
+#: specivo/templates/themes/default/pages/wiki/show.html:143
 msgid "FILE"
 msgstr "ФАЙЛ"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:10
-#: specivo/templates/themes/default/pages/wiki/show.html:105
+#: specivo/templates/themes/default/pages/wiki/show.html:144
 #, python-format
 msgid "Uploaded by %(name)s, %(date)s"
 msgstr "Загружено: %(name)s, %(date)s"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:19
-#: specivo/templates/themes/default/pages/wiki/show.html:116
+#: specivo/templates/themes/default/pages/wiki/show.html:155
 msgid "Upload"
 msgstr "Загрузить"
 
@@ -9892,38 +9895,38 @@ msgid "or click to browse"
 msgstr "или нажмите для выбора"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:32
-#: specivo/templates/themes/default/pages/wiki/show.html:131
+#: specivo/templates/themes/default/pages/wiki/show.html:170
 msgid "Images, PDFs, documents up to 50 MB"
 msgstr "Изображения, PDF, документы до 50 МБ"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:57
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:88
-#: specivo/templates/themes/default/pages/wiki/show.html:159
-#: specivo/templates/themes/default/pages/wiki/show.html:192
+#: specivo/templates/themes/default/pages/wiki/show.html:198
+#: specivo/templates/themes/default/pages/wiki/show.html:231
 msgid "Copy markdown link"
 msgstr "Скопировать ссылку в Markdown"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:60
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:92
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:94
-#: specivo/templates/themes/default/pages/wiki/show.html:162
-#: specivo/templates/themes/default/pages/wiki/show.html:196
-#: specivo/templates/themes/default/pages/wiki/show.html:198
+#: specivo/templates/themes/default/pages/wiki/show.html:201
+#: specivo/templates/themes/default/pages/wiki/show.html:235
+#: specivo/templates/themes/default/pages/wiki/show.html:237
 msgid "Download"
 msgstr "Скачать"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:90
-#: specivo/templates/themes/default/pages/wiki/show.html:194
+#: specivo/templates/themes/default/pages/wiki/show.html:233
 msgid "Link"
 msgstr "Ссылка"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:109
-#: specivo/templates/themes/default/pages/wiki/show.html:215
+#: specivo/templates/themes/default/pages/wiki/show.html:254
 msgid "No attachments yet."
 msgstr "Вложений пока нет."
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:128
-#: specivo/templates/themes/default/pages/wiki/show.html:234
+#: specivo/templates/themes/default/pages/wiki/show.html:273
 msgid "Delete attachment?"
 msgstr "Удалить вложение?"
 
@@ -9932,7 +9935,7 @@ msgid "This cannot be undone."
 msgstr "Это действие нельзя отменить."
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:129
-#: specivo/templates/themes/default/pages/wiki/show.html:235
+#: specivo/templates/themes/default/pages/wiki/show.html:274
 msgid "Are you sure you want to delete"
 msgstr "Вы уверены, что хотите удалить"
 
@@ -10053,7 +10056,7 @@ msgstr "Восстановить эту версию описания?"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:109
 #: specivo/templates/themes/default/pages/wiki/history.html:61
-#: specivo/templates/themes/default/pages/wiki/trash.html:39
+#: specivo/templates/themes/default/pages/wiki/trash.html:48
 msgid "Restore"
 msgstr "Восстановить"
 
@@ -13215,7 +13218,7 @@ msgstr "Все"
 #: specivo/templates/themes/default/pages/issues/detail.html:293
 #: specivo/templates/themes/default/pages/issues/form.html:414
 #: specivo/templates/themes/default/pages/search.html:47
-#: specivo/templates/themes/default/pages/wiki/show.html:110
+#: specivo/templates/themes/default/pages/wiki/show.html:149
 msgid "Attachments"
 msgstr "Вложения"
 
@@ -13416,7 +13419,7 @@ msgstr "Между версией %(from_version)s и версией %(to_versio
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:5
 #: specivo/templates/themes/default/pages/wiki/edit.html:21
-#: specivo/templates/themes/default/pages/wiki/index.html:20
+#: specivo/templates/themes/default/pages/wiki/index.html:28
 msgid "New Page"
 msgstr "Новая страница"
 
@@ -13451,8 +13454,8 @@ msgstr "(нет — корневой уровень)"
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:145
 #: specivo/templates/themes/default/pages/wiki/index.html:13
-#: specivo/templates/themes/default/pages/wiki/show.html:286
-#: specivo/templates/themes/default/pages/wiki/show.html:328
+#: specivo/templates/themes/default/pages/wiki/show.html:325
+#: specivo/templates/themes/default/pages/wiki/show.html:367
 msgid "Pages"
 msgstr "Страницы"
 
@@ -13478,7 +13481,21 @@ msgstr "Сравнить выбранные"
 msgid "No version history available."
 msgstr "История версий недоступна."
 
-#: specivo/templates/themes/default/pages/wiki/index.html:60
+#: specivo/templates/themes/default/pages/wiki/index.html:22
+#: specivo/templates/themes/default/pages/wiki/show.html:386
+#: specivo/templates/themes/default/pages/wiki/trash.html:13
+msgid "Trash"
+msgstr "Корзина"
+
+#: specivo/templates/themes/default/pages/wiki/index.html:36
+msgid "The page was moved to the trash."
+msgstr "Страница перемещена в корзину."
+
+#: specivo/templates/themes/default/pages/wiki/index.html:37
+msgid "Open the trash"
+msgstr "Открыть корзину"
+
+#: specivo/templates/themes/default/pages/wiki/index.html:77
 msgid "No wiki pages yet. Create one to get started."
 msgstr "Страниц вики пока нет. Создайте страницу, чтобы начать."
 
@@ -13486,56 +13503,94 @@ msgstr "Страниц вики пока нет. Создайте страниц
 msgid "All pages"
 msgstr "Все страницы"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:47
+#: specivo/templates/themes/default/pages/wiki/show.html:55
+msgid "Delete page?"
+msgstr "Удалить страницу?"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:60
+#, python-format
+msgid ""
+"<strong>%(title)s</strong> moves to the wiki trash. You can restore it "
+"from there with its history."
+msgstr ""
+"Страница <strong>%(title)s</strong> будет перемещена в корзину вики. "
+"Оттуда её можно восстановить вместе с историей."
+
+#: specivo/templates/themes/default/pages/wiki/show.html:65
+#, python-format
+msgid "Also move its subpage to the trash"
+msgid_plural "Also move its %(count)s subpages to the trash"
+msgstr[0] "Также переместить в корзину её %(count)s подстраницу"
+msgstr[1] "Также переместить в корзину её %(count)s подстраницы"
+msgstr[2] "Также переместить в корзину её %(count)s подстраниц"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:69
+#, python-format
+msgid ""
+"If you leave this unticked, the subpages stay in the wiki and move up one"
+" level, under %(parent)s."
+msgstr ""
+"Если не отмечать этот флажок, подстраницы останутся в вики и поднимутся "
+"на уровень выше, под страницу %(parent)s."
+
+#: specivo/templates/themes/default/pages/wiki/show.html:71
+msgid ""
+"If you leave this unticked, the subpages stay in the wiki and move up to "
+"the top level."
+msgstr ""
+"Если не отмечать этот флажок, подстраницы останутся в вики и переместятся"
+" на верхний уровень."
+
+#: specivo/templates/themes/default/pages/wiki/show.html:78
+msgid "Delete page"
+msgstr "Удалить страницу"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:86
 #, python-format
 msgid "Last edited by <strong>%(author)s</strong>"
 msgstr "Последнее изменение: <strong>%(author)s</strong>"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:52
+#: specivo/templates/themes/default/pages/wiki/show.html:91
 #, python-format
 msgid "Version %(version)s"
 msgstr "Версия %(version)s"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:60
+#: specivo/templates/themes/default/pages/wiki/show.html:99
 #, python-format
 msgid "Edited by %(author)s"
 msgstr "Изменил: %(author)s"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:130
+#: specivo/templates/themes/default/pages/wiki/show.html:169
 msgid "<strong>Drop files here</strong> or click to browse"
 msgstr "<strong>Перетащите файлы сюда</strong> или нажмите для выбора"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:235
+#: specivo/templates/themes/default/pages/wiki/show.html:274
 msgid "? This cannot be undone."
 msgstr "? Это действие нельзя отменить."
 
-#: specivo/templates/themes/default/pages/wiki/show.html:254
+#: specivo/templates/themes/default/pages/wiki/show.html:293
 msgid "Linked from"
 msgstr "Ссылки сюда"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:259
+#: specivo/templates/themes/default/pages/wiki/show.html:298
 msgid "Loading links…"
 msgstr "Загрузка ссылок…"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:269
+#: specivo/templates/themes/default/pages/wiki/show.html:308
 msgid "On this page"
 msgstr "На этой странице"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:307
+#: specivo/templates/themes/default/pages/wiki/show.html:346
 msgid "Add child page"
 msgstr "Добавить дочернюю страницу"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:340
+#: specivo/templates/themes/default/pages/wiki/show.html:380
 msgid "New page"
 msgstr "Новая страница"
 
 #: specivo/templates/themes/default/pages/wiki/trash.html:3
 msgid "Wiki Trash"
 msgstr "Корзина вики"
-
-#: specivo/templates/themes/default/pages/wiki/trash.html:13
-msgid "Trash"
-msgstr "Корзина"
 
 #: specivo/templates/themes/default/pages/wiki/trash.html:17
 msgid "Deleted Wiki Pages"
@@ -13545,15 +13600,33 @@ msgstr "Удалённые страницы вики"
 msgid "Back to Wiki"
 msgstr "Назад к вики"
 
+#: specivo/templates/themes/default/pages/wiki/trash.html:22
+msgid "The page was restored."
+msgstr "Страница восстановлена."
+
 #: specivo/templates/themes/default/pages/wiki/trash.html:25
+msgid ""
+"The page was not restored: another page now uses its address (slug). "
+"Rename or delete that page, then try again."
+msgstr ""
+"Страница не восстановлена: её адрес (slug) теперь занят другой страницей."
+" Переименуйте или удалите ту страницу и повторите попытку."
+
+#: specivo/templates/themes/default/pages/wiki/trash.html:28
+msgid "Restoring a page also restores the subpages that were deleted with it."
+msgstr ""
+"При восстановлении страницы восстанавливаются и подстраницы, удалённые "
+"вместе с ней."
+
+#: specivo/templates/themes/default/pages/wiki/trash.html:34
 msgid "Title"
 msgstr "Заголовок"
 
-#: specivo/templates/themes/default/pages/wiki/trash.html:26
+#: specivo/templates/themes/default/pages/wiki/trash.html:35
 msgid "Deleted"
 msgstr "Удалено"
 
-#: specivo/templates/themes/default/pages/wiki/trash.html:47
+#: specivo/templates/themes/default/pages/wiki/trash.html:56
 msgid "No deleted pages."
 msgstr "Нет удалённых страниц."
 

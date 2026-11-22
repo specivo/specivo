@@ -50,7 +50,7 @@
 .wiki-panel-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-lg) var(--sp-space-xl); border-bottom: 1px solid var(--sp-border); flex-shrink: 0; }
 .wiki-panel-header h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin: 0; }
 .wiki-panel-body { flex: 1; overflow-y: auto; padding: var(--sp-space-md) var(--sp-space-lg); }
-.wiki-panel-footer { padding: var(--sp-space-md) var(--sp-space-lg); border-top: 1px solid var(--sp-border); flex-shrink: 0; }
+.wiki-panel-footer { padding: var(--sp-space-md) var(--sp-space-lg); border-top: 1px solid var(--sp-border); flex-shrink: 0; display: flex; flex-direction: column; gap: var(--sp-space-sm); }
 .wiki-toc-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); box-shadow: var(--sp-shadow-sm); margin-bottom: var(--sp-space-lg); position: relative; z-index: 1; }
 .wiki-toc-title { font-size: var(--sp-font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sp-text-muted); margin-bottom: var(--sp-space-md); }
 .wiki-toc { list-style: none; font-size: var(--sp-font-size-sm); border-left: 2px solid var(--sp-border); padding-left: 0; }
@@ -60,7 +60,7 @@
 .wiki-toc .nav-link.toc-h3 { padding-left: var(--sp-space-xl); font-size: var(--sp-font-size-xs); }
 .wiki-page-header { margin-bottom: var(--sp-space-xl); }
 .wiki-page-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-2xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.3; }
-.wiki-page-actions { display: flex; gap: var(--sp-space-sm); margin-top: var(--sp-space-md); }
+.wiki-page-actions { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); margin-top: var(--sp-space-md); }
 .wiki-page-meta { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); }
 .wiki-content { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-left: 3px solid var(--sp-accent); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl) var(--sp-space-3xl); box-shadow: var(--sp-shadow-sm); line-height: 1.75; color: var(--sp-text-secondary); min-width: 0; overflow-wrap: break-word; overflow-x: auto; }
 .wiki-content h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 600; color: var(--sp-text-primary); margin: var(--sp-space-2xl) 0 var(--sp-space-md); padding-bottom: var(--sp-space-sm); border-bottom: 1px solid var(--sp-border); letter-spacing: -0.01em; }
@@ -231,3 +231,7 @@
 /* Markdown too complex to render safely, shown as plain text (markdown_budget.py) */
 .sp-markdown-fallback-notice { font-size: var(--sp-font-size-sm); font-style: italic; color: var(--sp-text-muted); }
 .sp-markdown-fallback pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Wiki page delete dialog: the "also delete subpages" option */
+.wiki-delete-cascade { display: flex; align-items: center; gap: var(--sp-space-sm); margin-top: var(--sp-space-md); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); cursor: pointer; }
+.wiki-index-actions { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); }

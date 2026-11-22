@@ -26,8 +26,24 @@ glance. See [Creating & editing pages](editing.md#every-save-is-a-new-version).
 
 ## Delete and restore
 
-Deleting a wiki page is a **soft delete** — the page moves to a **trash** rather than being destroyed.
-From the trash you can **restore** a page, bringing it back with its history intact.
+Deleting a wiki page is a **soft delete** — the page moves to the wiki's **trash** rather than being
+destroyed, and you can **restore** it from there with its history intact. Both need the
+**Delete wiki pages** permission (see [Roles](../install/roles.md)); without it, the page shows no
+**Delete** button and the wiki shows no **Trash** link.
+
+To delete a page, open it, click **Delete** and confirm. You land on the list of all pages. The Home
+page has no **Delete** button: every wiki keeps one.
+
+If the page has subpages, the dialog asks what happens to them:
+
+- Leave **Also move its subpages to the trash** unticked and only the page goes. Its direct subpages
+  move up one level, under the deleted page's parent (or to the top level), and stay in the wiki.
+- Tick it and the whole branch goes to the trash with the page.
+
+To restore a page, open **Trash** — on the list of all pages, or at the bottom of the **Pages** panel
+on any page — and click **Restore** next to it. The subpages that were deleted together with it come
+back too, in their old places. If another page has taken the deleted page's address (its slug) in the
+meantime, the restore is refused: rename or delete that page first.
 
 !!! warning "Deleting moves a page to trash, not oblivion"
     A deleted page disappears from the wiki and from normal navigation, and any `[[links]]` pointing to

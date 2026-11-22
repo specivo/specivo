@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import NotFoundError
+from specivo.core.exceptions import ConflictError, NotFoundError
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
@@ -37,6 +37,12 @@ _wiki_svc = WikiService()
 _attachment_svc = AttachmentService()
 _tag_svc = TagService()
 _issue_svc = IssueService()
+
+
+# Result codes a redirect may pass back to the page list and the trash.
+_INDEX_NOTICES = frozenset({"deleted"})
+_TRASH_NOTICES = frozenset({"restored"})
+_TRASH_ERRORS = frozenset({"slug_taken"})
 
 
 def _wiki_tags_to_dicts(tags: list) -> list[dict]:
@@ -92,6 +98,7 @@ async def wiki_index(
 async def wiki_all_pages(
     project_key: str,
     request: Request,
+    notice: str = Query(""),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page listing all pages."""
@@ -111,6 +118,8 @@ async def wiki_all_pages(
 
     pages = await _wiki_svc.list_pages(db, project.id)
     can_manage = await check_permission(user, project.id, "manage_wiki", db)
+    # Deleting a page and opening the trash (to restore one) need the same permission.
+    can_delete = await check_permission(user, project.id, "delete_wiki_pages", db)
 
     page_tree = _wiki_svc.build_page_tree(pages)
 
@@ -126,6 +135,8 @@ async def wiki_all_pages(
             "pages": pages,
             "page_tree": page_tree,
             "can_manage_wiki": can_manage,
+            "can_delete_wiki": can_delete,
+            "notice": notice if notice in _INDEX_NOTICES else "",
         },
     )
 
@@ -182,6 +193,8 @@ async def wiki_trash(
     request: Request,
     user: WebUser,
     project: ProjectForReader,
+    notice: str = Query(""),
+    error: str = Query(""),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki trash (deleted pages) view."""
@@ -201,6 +214,8 @@ async def wiki_trash(
             "active_project": project,
             "project": project,
             "deleted_pages": deleted_pages,
+            "notice": notice if notice in _TRASH_NOTICES else "",
+            "error": error if error in _TRASH_ERRORS else "",
         },
     )
 
@@ -222,11 +237,12 @@ async def wiki_delete(
     page, _ = await _wiki_svc.get_page(db, project.id, slug)
 
     form = await request.form()
+    # Unticked, the page's subpages stay and move up to its parent.
     cascade = form.get("cascade_children") == "true"
     await _wiki_svc.delete_page(db, page.id, deleted_by=user, cascade_children=cascade)
 
     return redirect_to(
-        f"/projects/{project_key}/wiki/pages/",
+        f"/projects/{project_key}/wiki/pages/?notice=deleted",
         status_code=302,
     )
 
@@ -249,9 +265,12 @@ async def wiki_restore(
         await _wiki_svc.restore_page(db, page_id, project_id=project.id)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Deleted wiki page not found") from None
+    except ConflictError:
+        # A live page has taken the slug since: nothing was restored.
+        return redirect_to(f"/projects/{project_key}/wiki/trash/?error=slug_taken", status_code=302)
 
     return redirect_to(
-        f"/projects/{project_key}/wiki/trash/",
+        f"/projects/{project_key}/wiki/trash/?notice=restored",
         status_code=302,
     )
 
@@ -307,6 +326,7 @@ async def wiki_show(
 
     all_pages = await _wiki_svc.list_pages(db, project.id)
     can_manage = False if anonymous else await check_permission(user, project.id, "manage_wiki", db)
+    can_delete = False if anonymous else await check_permission(user, project.id, "delete_wiki_pages", db)
 
     # Build tree structure for sidebar
     page_tree = _wiki_svc.build_page_tree(all_pages)
@@ -321,6 +341,16 @@ async def wiki_show(
     # Also expand the current page itself if it has children
     if page.id in page_tree:
         expanded_ids.add(page.id)
+
+    # For the delete dialog: how many pages sit below this one, and where its
+    # direct children go when only the page itself is deleted (its parent).
+    descendant_count = 0
+    frontier = [page.id]
+    while frontier:
+        children = [c.id for parent_id in frontier for c in page_tree.get(parent_id, [])]
+        descendant_count += len(children)
+        frontier = children
+    parent_title = next((p.title for p in all_pages if p.id == page.parent_id), None)
 
     if anonymous:
         # Attachments are outside the anonymous scope altogether — the API
@@ -381,6 +411,11 @@ async def wiki_show(
             "page_tree": page_tree,
             "expanded_ids": expanded_ids,
             "can_manage_wiki": can_manage,
+            # The Home page cannot be deleted, so it offers no Delete action.
+            "can_delete_page": can_delete and page.slug != "home",
+            "can_delete_wiki": can_delete,
+            "descendant_count": descendant_count,
+            "parent_title": parent_title,
             "attachments": attachments_json,
             "attachment_map": attachment_map,
             "wiki_tags": wiki_tags,
