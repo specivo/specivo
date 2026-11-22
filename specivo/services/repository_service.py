@@ -45,7 +45,7 @@ from specivo.models.repository import (
     RepositoryIntegration,
     RepositoryRelease,
 )
-from specivo.models.role import Role, RoleBuiltin
+from specivo.models.role import ROLE_SYSTEM_KEY_AUTOMATION, Role, RoleBuiltin
 from specivo.models.user import User
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.repository import (
@@ -71,8 +71,6 @@ from specivo.schemas.repository import (
 logger = logging.getLogger(__name__)
 
 REPO_INTEGRATION_SECRET_PURPOSE = "repo-integration-secret"  # noqa: S105
-#: The seeded role ``$git`` gets for merge automation unless a manager picks another.
-AUTOMATION_ROLE_NAME = "Automation"
 
 
 def generate_secret() -> str:
@@ -167,9 +165,12 @@ class RepositoryAlreadyConnectedError(AppError):
 
 
 async def automation_role(session: AsyncSession) -> Role | None:
-    """The seeded Automation role (created by the migration), if it still exists."""
+    """The Automation role ``$git`` gets for merge automation unless a manager picks another.
+
+    Found by its ``system_key``, so an administrator may rename it.
+    """
     return (
-        await session.execute(select(Role).where(Role.name == AUTOMATION_ROLE_NAME, Role.builtin == RoleBuiltin.CUSTOM))
+        await session.execute(select(Role).where(Role.system_key == ROLE_SYSTEM_KEY_AUTOMATION))
     ).scalar_one_or_none()
 
 

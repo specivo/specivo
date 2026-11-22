@@ -1,4 +1,4 @@
-"""Permission catalogue, role resolution and the permission check.
+"""Permission keys, role resolution and the permission check.
 
 Who may do what in a project is decided here and nowhere else.
 ``get_user_roles`` resolves the roles a user holds in a project, and every
@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Permission catalogue
+# Permission keys
 # ---------------------------------------------------------------------------
 
 
@@ -98,6 +98,9 @@ class Permission(StrEnum):
     name, so members are drop-in replacements for the raw strings stored in
     ``roles.permissions`` JSONB and accepted by ``check_permission()``.
     Prefer using these constants over string literals at call sites.
+
+    What each one means to people (labels, groups, prerequisites, the Non
+    member ceiling) is ``specivo.services.permission_catalogue``.
     """
 
     # --- Issues ---
@@ -134,39 +137,6 @@ class Permission(StrEnum):
     # --- Admin ---
     MANAGE_PROJECT = "manage_project"
 
-
-# Human-readable labels for the admin role editor. Keyed by the enum's string
-# value so existing consumers (templates, JSONB lookups) keep working unchanged.
-PERMISSIONS: dict[str, str] = {
-    Permission.ADD_ISSUES: "Create issues",
-    Permission.EDIT_ISSUES: "Edit issues",
-    Permission.DELETE_ISSUES: "Delete issues",
-    Permission.ADD_ISSUE_NOTES: "Add comments",
-    Permission.EDIT_OWN_NOTES: "Edit own comments",
-    Permission.EDIT_NOTES: "Edit any comments",
-    Permission.DELETE_OWN_NOTES: "Delete own comments",
-    Permission.DELETE_NOTES: "Delete any comments",
-    Permission.MANAGE_ISSUE_RELATIONS: "Manage issue relations",
-    Permission.MANAGE_SUBTASKS: "Manage subtasks",
-    Permission.VIEW_ISSUES: "View issues",
-    Permission.VIEW_PRIVATE_NOTES: "View private notes",
-    Permission.SET_ISSUES_PRIVATE: "Set issues private",
-    Permission.MANAGE_MEMBERS: "Manage project members",
-    Permission.MANAGE_VERSIONS: "Manage versions",
-    Permission.MANAGE_SPRINTS: "Manage sprints (create, start, complete, edit, delete)",
-    Permission.MANAGE_RECURRING_TASKS: "Manage recurring tasks (create, edit, skip, delete)",
-    Permission.VIEW_WIKI: "View wiki pages",
-    Permission.MANAGE_WIKI: "Manage wiki pages",
-    Permission.DELETE_WIKI_PAGES: "Delete wiki pages",
-    Permission.VIEW_TIME_ENTRIES: "View time entries",
-    Permission.LOG_TIME: "Log time",
-    Permission.MANAGE_TIME_ENTRIES: "Edit/delete any time entries",
-    Permission.VIEW_AI_USAGE: "View AI usage",
-    Permission.LOG_AI_USAGE: "Log AI usage",
-    Permission.MANAGE_AI_USAGE: "Edit/exclude any AI usage entries",
-    Permission.LOG_AI_USAGE_FOR_OTHERS: "Log AI usage on behalf of other members",
-    Permission.MANAGE_PROJECT: "Manage project settings",
-}
 
 # The only permissions the anonymous user can ever hold. Mirrors
 # ck_projects_anonymous_permissions_allowed, and is enforced again inside
