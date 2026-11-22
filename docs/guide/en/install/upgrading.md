@@ -88,8 +88,13 @@ list; a model's first bundled price is valid from 1 January 2000, so older usage
 ### Fill in the link graph
 
 "Mentioned in" on issues and "Linked from" on wiki pages come from a stored link graph. New and
-edited texts are linked as they are saved; run this once after upgrading to link what was already
-written:
+edited texts are linked as they are saved. After an upgrade, or after restoring an older dump, each
+project that was never fully indexed is rebuilt automatically: an hourly background task queues the
+rebuild, so you do not need to do anything as long as the worker and scheduler containers are
+running. The **Link graph** card in the project's settings shows **Last rebuilt:**, or **Not indexed
+yet — rebuild queued** until it has run.
+
+Without a worker and scheduler, run this once to link what was already written:
 
 ```bash
 docker compose exec api python -m specivo.cli.rebuild_links

@@ -108,13 +108,24 @@ in the **Link graph** card:
   are written, next to the project's relations, parent links and attachments;
 - how many links point at something that doesn't exist yet, with the most common ones (a misspelled
   `[[page]]` or an issue key that was never created) — only from texts you can read;
-- when the graph last changed, and the result of the last full rebuild.
+- when the graph last changed, and the result of the last full rebuild;
+- **Last rebuilt:** with the date and time of the last full rebuild in your timezone. A project that has never been rebuilt shows **Not indexed yet — rebuild queued**.
+
+Projects whose graph was never fully built are rebuilt automatically. An hourly background task
+queues a rebuild for each such project (at most 50 per run, never while one is already queued or
+running), and the card shows it as a normal running rebuild started by **automatic backfill**. A
+rebuild counts as done even when some texts failed, so a text that keeps failing does not start a
+new rebuild every hour; the failures show in the last result. This needs the background worker and
+scheduler to be running.
 
 **Rebuild link graph** re-reads every text of the project and links what can be linked. You rarely need
 it: imports rebuild the graph themselves. Use it after a large data import from outside Specivo, after
 an upgrade that changes what counts as a link, or when links look out of date. The rebuild runs in the
 background with a progress count, and only one runs per project at a time. From the command line,
 `make rebuild-links` (or `make rebuild-links PROJECT=ACME`) does the same.
+
+Tags, versions, sprints, assignees and the values of some metadata keys are part of the graph too,
+for AI agents: see [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph).
 
 ## What's next
 

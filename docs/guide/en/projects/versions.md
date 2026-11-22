@@ -77,6 +77,8 @@ issues and on their sub-issues that have no version of their own, as far as you 
 AI spend report** opens the project's [spend report](ai-spend-reports.md#release-and-sprint)
 narrowed to the version, over the days its usage covers.
 
+![A version page with its issues and the AI spend card](../../assets/img/version-page.webp)
+
 An entry counts toward the version its issue has now, so moving an issue to another version moves
 its AI spend too.
 

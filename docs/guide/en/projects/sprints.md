@@ -71,6 +71,8 @@ The **AI spend** card shows the sprint's spend, API-equivalent value, tokens and
 people. **Open the AI spend report** opens the project's
 [spend report](ai-spend-reports.md#release-and-sprint) narrowed to the sprint.
 
+![A sprint page with its time and AI spend cards](../../assets/img/sprint-page.webp)
+
 ## The backlog
 
 The **backlog** is the pool of issues that aren't yet committed to a sprint. This is where you plan:
