@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}{{ role.name }} - {% trans %}Roles{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/roles/">{% trans %}Roles{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{{ role.name }}</span>
+</div>
+
+{#
+  The editor. The catalogue (groups, labels, descriptions and each
+  permission's "requires" closure) comes from the server so the dependency
+  rules in the browser are the same ones the API enforces on save.
+#}
+<div class="sp-roles-form" x-data='adminRoleEditor({
+  role: {{ role | tojson }},
+  catalogue: {{ catalogue | tojson }},
+  i18n: {
+    saved: {{ _("Saved.") | tojson }},
+    saveFailed: {{ _("Failed to save the role.") | tojson }},
+    conflict: {{ _("Someone else changed this role; reload to see their changes.") | tojson }},
+    deleteFailed: {{ _("Failed to delete the role.") | tojson }},
+    confirmDelete: {{ _("Delete the role %s? This cannot be undone.") | tojson }}
+  }
+})'>
+
+  <h1 class="sp-page-h1" x-text="savedName">{{ role.name }}</h1>
+
+  {% if show_workflow_warning %}
+  <div class="sp-roles-warning" role="note">
+    <strong>{% trans %}This role can't change issue status yet.{% endtrans %}</strong>
+    {% trans %}It has no workflow transitions, so its members can't move issues between statuses. Full access does not change that.{% endtrans %}
+    <a href="{{ base }}/admin/workflows/" class="sp-text-link">{% trans %}Set up transitions in Workflows{% endtrans %}</a>
+  </div>
+  {% endif %}
+
+  <form @submit.prevent="save()" novalidate>
+
+    {# --- General --- #}
+    <section class="card sp-card-pad sp-roles-section" aria-labelledby="sp-role-general">
+      <h2 id="sp-role-general" class="sp-roles-section-title">{% trans %}General{% endtrans %}</h2>
+      <div class="form-group">
+        <label class="form-label" for="sp-role-name">{% trans %}Name{% endtrans %}</label>
+        {% if role.builtin %}
+        <input id="sp-role-name" class="form-input" type="text" value="{{ role.name }}" readonly aria-describedby="sp-role-name-hint">
+        <p id="sp-role-name-hint" class="form-hint">{% trans %}A built-in role can't be renamed.{% endtrans %}</p>
+        {% else %}
+        <input id="sp-role-name" class="form-input" type="text" maxlength="255" required autocomplete="off"
+          x-model="name" :aria-invalid="nameError ? 'true' : 'false'" aria-describedby="sp-role-name-error">
+        <div id="sp-role-name-error" class="form-error" x-show="nameError" x-cloak x-text="nameError"></div>
+        {% endif %}
+      </div>
+      {% if not role.builtin %}
+      <label class="sp-roles-check">
+        <input type="checkbox" x-model="assignable">
+        <span>
+          {% trans %}Offered when adding members{% endtrans %}
+          <span class="form-hint">{% trans %}Untick to keep the role on existing members but stop offering it for new ones.{% endtrans %}</span>
+        </span>
+      </label>
+      {% else %}
+      <p class="form-hint">
+        {% trans %}Non member is what every signed-in user holds on a public project they are not a member of. Its permissions can be changed, but it can never get full access, manage the project or its members, or delete anything.{% endtrans %}
+      </p>
+      {% endif %}
+    </section>
+
+    {# --- Permissions --- #}
+    <section class="card sp-card-pad sp-roles-section" aria-labelledby="sp-role-permissions">
+      <h2 id="sp-role-permissions" class="sp-roles-section-title">{% trans %}Permissions{% endtrans %}</h2>
+      <p class="sp-roles-section-intro">
+        {% trans %}Ticking a permission also ticks the ones it needs; unticking one also unticks the ones that need it. A permission only matters in projects where its module is enabled.{% endtrans %}
+      </p>
+
+      {% if not role.non_member %}
+      <label class="sp-roles-switch">
+        <input type="checkbox" role="switch" x-model="fullAccess">
+        <span>
+          <span class="sp-roles-switch-label">{% trans %}Full access{% endtrans %}</span>
+          <span class="form-hint">{% trans %}Every permission, including ones added in later versions.{% endtrans %}</span>
+        </span>
+      </label>
+      {% endif %}
+
+      <div x-show="!fullAccess" class="sp-roles-groups">
+        {% for g in catalogue.groups %}
+        <fieldset class="sp-roles-group">
+          <legend class="sp-roles-group-legend">{{ g.label }}</legend>
+          <label class="sp-roles-all">
+            <input type="checkbox" :checked='groupAll({{ g.key | tojson }})' x-effect='markGroup($el, {{ g.key | tojson }})'
+              :disabled='groupEmpty({{ g.key | tojson }})' @change='toggleGroup({{ g.key | tojson }}, $event.target.checked)'>
+            {% trans %}All{% endtrans %}
+          </label>
+          {% if g.module and module_hints.get(g.module) %}
+          <p class="form-hint sp-roles-module">{{ module_hints[g.module] }}</p>
+          {% endif %}
+          {% for p in g.permissions %}
+          {% set off_limits = role.non_member and p.key not in catalogue.non_member_allowed %}
+          <label class="sp-roles-perm{% if off_limits %} sp-roles-perm-disabled{% endif %}">
+            <input type="checkbox" name="permission" value="{{ p.key }}"
+              :checked='isOn({{ p.key | tojson }})' @change='toggle({{ p.key | tojson }}, $event.target.checked)'
+              {% if off_limits %}disabled{% endif %}>
+            <span>
+              <span class="sp-roles-perm-label">{{ p.label }}</span>
+              {% if not p.enforced %}<span class="sp-roles-unused">{% trans %}Not used yet{% endtrans %}</span>{% endif %}
+              <span class="form-hint">{{ p.description }}</span>
+              {% if off_limits %}<span class="form-hint">{% trans %}Not available for Non member{% endtrans %}</span>{% endif %}
+            </span>
+          </label>
+          {% endfor %}
+        </fieldset>
+        {% endfor %}
+      </div>
+    </section>
+
+    {# --- Visibility --- #}
+    <section class="card sp-card-pad sp-roles-section" aria-labelledby="sp-role-visibility">
+      <h2 id="sp-role-visibility" class="sp-roles-section-title">{% trans %}Visibility{% endtrans %}</h2>
+      <p class="sp-roles-section-intro">
+        {% trans %}What this role can see beyond its permissions. A user who holds several roles gets the widest setting among them.{% endtrans %}
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="sp-role-users-visibility">{% trans %}Users visibility{% endtrans %}</label>
+        <select id="sp-role-users-visibility" class="form-input" x-model="usersVisibility">
+          <option value="all">{% trans %}All active users{% endtrans %}</option>
+          <option value="members_of_visible_projects">{% trans %}Members of visible projects{% endtrans %}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sp-role-time-visibility">{% trans %}Time entries visibility{% endtrans %}</label>
+        <select id="sp-role-time-visibility" class="form-input" x-model="timeEntriesVisibility">
+          <option value="all">{% trans %}All time entries{% endtrans %}</option>
+          <option value="own">{% trans %}Own time entries{% endtrans %}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sp-role-ai-visibility">{% trans %}AI usage visibility{% endtrans %}</label>
+        <select id="sp-role-ai-visibility" class="form-input" x-model="aiUsageVisibility">
+          <option value="all">{% trans %}All AI usage{% endtrans %}</option>
+          <option value="own">{% trans %}Own AI usage{% endtrans %}</option>
+        </select>
+      </div>
+    </section>
+
+    <div class="sp-roles-savebar">
+      <button type="submit" class="sp-btn sp-btn-primary" :disabled="saving">
+        <span x-show="!saving">{% trans %}Save{% endtrans %}</span>
+        <span x-show="saving" x-cloak>{% trans %}Saving...{% endtrans %}</span>
+      </button>
+      <span x-show="saved" x-cloak class="sp-msg-success sp-roles-inline-msg" role="status" x-text="savedText"></span>
+      <span x-show="error" x-cloak class="sp-msg-danger sp-roles-inline-msg" role="alert" x-text="error"></span>
+      <button type="button" x-show="conflict" x-cloak class="sp-btn sp-btn-ghost" @click="reload()">{% trans %}Reload{% endtrans %}</button>
+    </div>
+  </form>
+
+  {# --- Delete --- #}
+  <section class="card sp-card-pad sp-roles-section sp-roles-danger" aria-labelledby="sp-role-delete">
+    <h2 id="sp-role-delete" class="sp-roles-section-title">{% trans %}Delete role{% endtrans %}</h2>
+    {% if delete_block == "builtin" %}
+    <p class="sp-roles-section-intro">{% trans %}Built-in role: it can't be deleted.{% endtrans %}</p>
+    {% elif delete_block == "automation" %}
+    <p class="sp-roles-section-intro">{% trans %}Used by merge automation: repositories act with this role, so it can't be deleted. It can be renamed.{% endtrans %}</p>
+    {% elif delete_block == "in_use" %}
+    <p class="sp-roles-section-intro">
+      {% trans count=membership_count %}%(count)s project membership uses this role. Remove the role from these projects' members first:{% pluralize %}%(count)s project memberships use this role. Remove the role from these projects' members first:{% endtrans %}
+    </p>
+    <ul class="sp-roles-projects">
+      {% for p in usage_projects %}
+      <li><a href="{{ base }}/projects/{{ p.key }}/settings/" class="sp-text-link">{{ p.name }}</a> <span class="sp-text-muted-xs">{{ p.key }}</span></li>
+      {% endfor %}
+    </ul>
+    {% elif workflow_transition_count %}
+    <p class="sp-roles-section-intro">
+      {% trans count=workflow_transition_count %}Deleting the role also deletes its %(count)s workflow transition.{% pluralize %}Deleting the role also deletes its %(count)s workflow transitions.{% endtrans %}
+    </p>
+    {% else %}
+    <p class="sp-roles-section-intro">{% trans %}No project membership uses this role, so it can be deleted.{% endtrans %}</p>
+    {% endif %}
+
+    <div x-show="deleteError" x-cloak class="sp-msg-danger-mb-sm" role="alert">
+      <span x-text="deleteError"></span>
+      <ul class="sp-roles-projects" x-show="deleteProjects.length > 0">
+        <template x-for="p in deleteProjects" :key="p.id">
+          <li><a :href="'{{ base }}/projects/' + p.key + '/settings/'" class="sp-text-link" x-text="p.name"></a> <span class="sp-text-muted-xs" x-text="p.key"></span></li>
+        </template>
+      </ul>
+    </div>
+
+    <button type="button" class="sp-btn sp-btn-danger" @click="remove()"
+      {% if delete_block %}disabled aria-disabled="true"{% else %}:disabled="deleting"{% endif %}>
+      <span x-show="!deleting">{% trans %}Delete role{% endtrans %}</span>
+      <span x-show="deleting" x-cloak>{% trans %}Deleting...{% endtrans %}</span>
+    </button>
+  </section>
+</div>
+{% endblock %}

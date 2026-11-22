@@ -21,6 +21,9 @@ import { projectComputedMetadata } from './components/project-computed-metadata'
 import { adminUsers } from './components/admin-users';
 import { adminGroups } from './components/admin-groups';
 import { adminGroupDetail } from './components/admin-group-detail';
+import { adminRoles } from './components/admin-roles';
+import { adminRoleNew } from './components/admin-role-new';
+import { adminRoleEditor } from './components/admin-role-editor';
 import { adminSsoProvider } from './components/admin-sso-provider';
 import { adminUserDetail } from './components/admin-user-detail';
 import { adminSettings } from './components/admin-settings';
@@ -89,6 +92,9 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('adminUsers', adminUsers);
   Alpine.data('adminGroups', adminGroups);
   Alpine.data('adminGroupDetail', adminGroupDetail);
+  Alpine.data('adminRoles', adminRoles);
+  Alpine.data('adminRoleNew', adminRoleNew);
+  Alpine.data('adminRoleEditor', adminRoleEditor);
   Alpine.data('adminSsoProvider', adminSsoProvider);
   Alpine.data('adminUserDetail', adminUserDetail);
   Alpine.data('adminSettings', adminSettings);

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}New role{% endtrans %} - {% trans %}Roles{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/roles/">{% trans %}Roles{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}New role{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}New role{% endtrans %}</h1>
+
+<div class="sp-roles-form" x-data='adminRoleNew({
+  i18n: {
+    createFailed: {{ _("Failed to create the role.") | tojson }}
+  }
+})'>
+  <form class="card sp-card-pad" @submit.prevent="submit()" novalidate>
+    <div class="form-group">
+      <label class="form-label" for="sp-role-name">{% trans %}Name{% endtrans %}</label>
+      <input id="sp-role-name" class="form-input" type="text" maxlength="255" required autocomplete="off"
+        x-model="name" :aria-invalid="nameInvalid ? 'true' : 'false'" aria-describedby="sp-role-name-error">
+      <div id="sp-role-name-error" class="form-error" x-show="nameError" x-cloak x-text="nameError"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="sp-role-source">{% trans %}Start from{% endtrans %}</label>
+      <select id="sp-role-source" class="form-input" x-model="source">
+        <option value="">{% trans %}A blank role{% endtrans %}</option>
+        {% for r in copy_sources %}
+        <option value="{{ r.id }}">{% trans name=r.name %}A copy of %(name)s{% endtrans %}</option>
+        {% endfor %}
+      </select>
+      <p class="form-hint" x-show="source === ''">
+        {% trans %}A blank role has no permissions, and it can't change issue status until you add workflow transitions for it.{% endtrans %}
+      </p>
+      <p class="form-hint" x-show="source !== ''" x-cloak>
+        {% trans %}The copy gets the permissions, the visibility settings and the workflow transitions of the role you pick.{% endtrans %}
+      </p>
+    </div>
+
+    <div x-show="error" x-cloak class="sp-msg-danger-mb-sm" role="alert" x-text="error"></div>
+
+    <div class="sp-roles-actions">
+      <button type="submit" class="sp-btn sp-btn-primary" :disabled="saving || !canSubmit">
+        <span x-show="!saving">{% trans %}Create role{% endtrans %}</span>
+        <span x-show="saving" x-cloak>{% trans %}Creating...{% endtrans %}</span>
+      </button>
+      <a href="{{ base }}/admin/roles/" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

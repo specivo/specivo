@@ -1,4 +1,4 @@
-"""Web admin pages: dashboard, workflows, roles, trackers, settings, email, presets."""
+"""Web admin pages: dashboard, workflows, trackers, settings, email, presets."""
 
 from __future__ import annotations
 
@@ -551,62 +551,8 @@ async def admin_workflows(
 
 
 # ---------------------------------------------------------------------------
-# Roles and trackers: visibility settings
+# Trackers: private-by-default flag (roles live in ``admin_roles``)
 # ---------------------------------------------------------------------------
-
-
-@router.get("/admin/roles/", response_class=HTMLResponse)
-async def admin_roles(
-    request: Request,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """Render the roles page: each role's user, time entry and AI usage visibility."""
-    from specivo.models.role import Role
-
-    roles = (await db.execute(select(Role).order_by(Role.builtin, Role.position, Role.id))).scalars().all()
-    templates = get_templates()
-    return templates.TemplateResponse(
-        request,
-        "pages/admin/roles.html",
-        context={"user": user, "active_page": "admin", "roles": list(roles)},
-    )
-
-
-@router.post("/admin/roles/{role_id}/", response_model=None)
-async def admin_role_update(
-    role_id: int,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = DB_SESSION,
-    users_visibility: str = Form(""),
-    time_entries_visibility: str = Form(""),
-    ai_usage_visibility: str = Form(""),
-) -> Response:
-    """Save a role's ``users_visibility``, ``time_entries_visibility`` and ``ai_usage_visibility``.
-
-    Unknown values are ignored (left unchanged), like the settings form.
-    Builtin roles are editable here too: only their ``builtin`` is protected.
-    """
-    from fastapi import HTTPException
-
-    from specivo.models.role import (
-        AI_USAGE_VISIBILITY_VALUES,
-        TIME_ENTRIES_VISIBILITY_VALUES,
-        USERS_VISIBILITY_VALUES,
-        Role,
-    )
-
-    role = await db.get(Role, role_id)
-    if role is None:
-        raise HTTPException(status_code=404, detail="Role not found")
-    if users_visibility in USERS_VISIBILITY_VALUES:
-        role.users_visibility = users_visibility
-    if time_entries_visibility in TIME_ENTRIES_VISIBILITY_VALUES:
-        role.time_entries_visibility = time_entries_visibility
-    if ai_usage_visibility in AI_USAGE_VISIBILITY_VALUES:
-        role.ai_usage_visibility = ai_usage_visibility
-    await db.commit()
-    return redirect_to("/admin/roles/", status_code=303)
 
 
 @router.get("/admin/trackers/", response_class=HTMLResponse)
