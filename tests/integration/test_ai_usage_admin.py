@@ -93,6 +93,22 @@ async def _post_form(client: AsyncClient, user: User, url: str, data: Mapping[st
     )
 
 
+async def _patch_json(client: AsyncClient, user: User, url: str, body: Mapping[str, object]):
+    """PATCH JSON the way the role editor does: session cookie plus the CSRF cookie and header."""
+    resp = await client.get("/admin/", cookies=_cookies(user))
+    csrf = next(
+        value.split("=", 1)[1].split(";")[0].strip()
+        for key, value in resp.headers.multi_items()
+        if key.lower() == "set-cookie" and value.startswith("csrf_token=")
+    )
+    return await client.patch(
+        url,
+        json=dict(body),
+        cookies={**_cookies(user), "csrf_token": csrf},
+        headers={"x-csrf-token": csrf},
+    )
+
+
 async def _unpriced_entries(db: AsyncSession, alice: User) -> list[AiUsageEntry]:
     entries = [
         await _usage.log(
@@ -316,14 +332,17 @@ async def test_role_editor_saves_ai_usage_visibility(
     await db_session.commit()
     assert role.ai_usage_visibility == "own"
 
-    page = await client.get("/admin/roles/", cookies=_cookies(admin))
-    assert f'id="ai_usage_visibility_{role.id}"' in page.text
+    page = await client.get(f"/admin/roles/{role.id}/", cookies=_cookies(admin))
+    assert page.status_code == 200
+    assert 'id="sp-role-ai-visibility"' in page.text
 
-    resp = await _post_form(client, admin, f"/admin/roles/{role.id}/", {"ai_usage_visibility": "all"}, "/admin/roles/")
-    assert resp.status_code == 303
+    url = f"/api/v1/admin/roles/{role.id}/"
+    resp = await _patch_json(client, admin, url, {"lock_version": role.lock_version, "ai_usage_visibility": "all"})
+    assert resp.status_code == 200, resp.text
     await db_session.refresh(role)
     assert role.ai_usage_visibility == "all"
 
-    await _post_form(client, admin, f"/admin/roles/{role.id}/", {"ai_usage_visibility": "everyone"}, "/admin/roles/")
+    resp = await _patch_json(client, admin, url, {"lock_version": role.lock_version, "ai_usage_visibility": "everyone"})
+    assert resp.status_code == 422
     await db_session.refresh(role)
     assert role.ai_usage_visibility == "all"

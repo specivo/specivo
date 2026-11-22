@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Who can do what{% endtrans %} - {% trans %}Roles{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/roles/">{% trans %}Roles{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Who can do what{% endtrans %}</span>
+</div>
+
+<div class="sp-roles-header">
+  <h1 class="sp-page-h1 sp-page-h1--inline">{% trans %}Roles{% endtrans %}</h1>
+  <a href="{{ base }}/admin/roles/new/" class="sp-btn sp-btn-primary">{% trans %}New role{% endtrans %}</a>
+</div>
+
+<p class="sp-roles-intro">
+  {% trans %}Every permission, and which roles have it. A permission only matters in projects where its module is enabled.{% endtrans %}
+</p>
+
+{% include "pages/admin/_roles_tabs.html" %}
+
+<div class="card sp-roles-matrix-card">
+  <table class="sp-roles-matrix">
+    <thead>
+      <tr>
+        <th scope="col" class="sp-roles-matrix-perm">{% trans %}Permission{% endtrans %}</th>
+        {% for c in columns %}
+        <th scope="col" class="sp-roles-matrix-role">
+          <a href="{{ base }}/admin/roles/{{ c.id }}/">{{ c.name }}</a>
+          {% if c.full_access %}<span class="sp-badge-info sp-roles-matrix-badge">{% trans %}Full access{% endtrans %}</span>{% endif %}
+          {% if c.builtin %}<span class="sp-roles-matrix-note">{% trans %}Built-in{% endtrans %}</span>{% endif %}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in groups %}
+      <tr class="sp-roles-matrix-group">
+        <th scope="colgroup" colspan="{{ columns | length + 1 }}">{{ g.label }}</th>
+      </tr>
+      {% for p in g.permissions %}
+      <tr>
+        <th scope="row" class="sp-roles-matrix-perm">
+          {{ p.label }}
+          {% if not p.enforced %}<span class="sp-roles-unused">{% trans %}Not used yet{% endtrans %}</span>{% endif %}
+        </th>
+        {% for c in columns %}
+        {% if c.full_access or p.key in c.granted %}
+        <td class="sp-roles-matrix-yes"><span aria-hidden="true">&#10003;</span><span class="sp-visually-hidden">{% trans %}Yes{% endtrans %}</span></td>
+        {% else %}
+        <td class="sp-roles-matrix-no"><span class="sp-visually-hidden">{% trans %}No{% endtrans %}</span></td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

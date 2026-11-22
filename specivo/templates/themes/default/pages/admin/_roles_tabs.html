@@ -1,0 +1,5 @@
+{# Tabs shared by the roles list and the "who can do what" matrix. Plain links: each tab is its own page. #}
+<nav class="sp-subnav" aria-label="{{ _('Roles') }}">
+  <a href="{{ base }}/admin/roles/" class="{{ 'active' if roles_tab == 'list' else '' }}"{% if roles_tab == 'list' %} aria-current="page"{% endif %}>{% trans %}Roles{% endtrans %}</a>
+  <a href="{{ base }}/admin/roles/matrix/" class="{{ 'active' if roles_tab == 'matrix' else '' }}"{% if roles_tab == 'matrix' %} aria-current="page"{% endif %}>{% trans %}Who can do what{% endtrans %}</a>
+</nav>

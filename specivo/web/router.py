@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from specivo.web.pages.admin import router as admin_pages
 from specivo.web.pages.admin_ai_model_prices import router as admin_ai_model_price_pages
 from specivo.web.pages.admin_exchange_rates import router as admin_exchange_rate_pages
+from specivo.web.pages.admin_roles import router as admin_role_pages
 from specivo.web.pages.admin_sso import router as admin_sso_pages
 from specivo.web.pages.ai_issue_usage import router as ai_issue_usage_pages
 from specivo.web.pages.ai_spend_reports import router as ai_spend_report_pages
@@ -49,6 +50,7 @@ web_router.include_router(recurring_pages)
 web_router.include_router(time_pages)
 web_router.include_router(search_pages)
 web_router.include_router(admin_pages)
+web_router.include_router(admin_role_pages)
 web_router.include_router(admin_sso_pages)
 web_router.include_router(admin_exchange_rate_pages)
 web_router.include_router(admin_ai_model_price_pages)
