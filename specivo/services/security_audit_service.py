@@ -47,6 +47,10 @@ class AuditEvent(StrEnum):
     SEARCH_QUERY = "search_query"
     MEMBER_CHANGE = "member_change"
     GROUP_CHANGE = "group_change"
+    # A role was created, edited or deleted in Administration -> Roles.
+    ROLE_CREATED = "role_created"
+    ROLE_UPDATED = "role_updated"
+    ROLE_DELETED = "role_deleted"
     ACCESS_GRANTED = "access_granted"
     ACCESS_DENIED = "access_denied"
     AUTH_FAILURE = "auth_failure"
@@ -311,6 +315,9 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.SEARCH_QUERY,
             AuditEvent.MEMBER_CHANGE,
             AuditEvent.GROUP_CHANGE,
+            AuditEvent.ROLE_CREATED,
+            AuditEvent.ROLE_UPDATED,
+            AuditEvent.ROLE_DELETED,
             AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
             AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
         ],
@@ -1051,6 +1058,40 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details=details,
+        )
+
+    async def log_role_change(
+        self,
+        session: AsyncSession,
+        event: AuditEvent,
+        user_id: int,
+        role_id: int,
+        role_name: str,
+        details: dict[str, Any],
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a role created, edited or deleted. Core feature — always persisted.
+
+        A role is global, so ``project_id`` is NULL and the role is
+        identified by ``resource_type``/``resource_id``. *details* carries the
+        event's facts (``RoleService`` returns them); ``role_name`` is always
+        included. Written in the caller's transaction, in a savepoint, so a
+        failed audit insert cannot undo the change.
+        """
+        if event not in (AuditEvent.ROLE_CREATED, AuditEvent.ROLE_UPDATED, AuditEvent.ROLE_DELETED):
+            raise ValueError(f"Not a role event: {event!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event,
+            user_id=user_id,
+            resource_type="role",
+            resource_id=role_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={**details, "role_name": role_name},
         )
 
     async def log_search_query(

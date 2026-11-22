@@ -16,6 +16,7 @@ from specivo.api.v1.admin.embedding_models import router as admin_embedding_mode
 from specivo.api.v1.admin.metadata_presets import router as admin_metadata_presets_router
 from specivo.api.v1.admin.metadata_schemas import router as admin_metadata_schemas_router
 from specivo.api.v1.admin.projects import router as admin_projects_router
+from specivo.api.v1.admin.roles import router as admin_roles_router
 from specivo.api.v1.admin.settings import router as admin_settings_router
 from specivo.api.v1.admin.sso import router as admin_sso_router
 from specivo.api.v1.admin.user_groups import router as admin_user_groups_router
@@ -95,6 +96,7 @@ api_router.include_router(users_router)
 api_router.include_router(agent_sessions_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_user_groups_router)
+api_router.include_router(admin_roles_router)
 api_router.include_router(admin_sso_router)
 api_router.include_router(admin_projects_router)
 api_router.include_router(admin_email_router)

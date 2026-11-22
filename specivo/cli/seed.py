@@ -4,15 +4,21 @@ Usage::
 
     uv run python -m specivo.cli.seed
 
-The command is idempotent — it upserts by name so it is safe to re-run after
-migrations without producing duplicates.
+The command is idempotent and safe to re-run after migrations: the container
+entrypoint runs it on every start.
 
 Default roles
 -------------
 Manager   - all permissions via ["*"] wildcard
-Developer - core development permissions
+Developer - core development permissions, wiki editing included
 Reporter  - read + create + comment
 Agent     - API-facing role for automated agents (no management/delete rights)
+
+The default roles and their workflow transitions are created once, on a fresh
+database (one without a custom role other than the system roles the
+migrations create, such as Automation). The entrypoint's re-seed never
+changes roles or workflows afterwards: they belong to the administrator, who
+edits them under Administration -> Roles and Workflows.
 
 Non member - builtin, read-only; what a signed-in user holds on a public project
              without a membership. Migration 0032 creates it; seeding only
@@ -80,6 +86,7 @@ _DEFAULT_ROLES: list[dict] = [
             "manage_subtasks",
             "view_issues",
             "view_wiki",
+            "manage_wiki",
             "log_time",
             "view_time_entries",
             "view_ai_usage",
@@ -250,29 +257,31 @@ async def seed_priorities(session: AsyncSession) -> None:
     print(f"Seeded {len(_DEFAULT_PRIORITIES)} priorities: {[p['name'] for p in _DEFAULT_PRIORITIES]}")
 
 
-async def seed_roles(session: AsyncSession) -> None:
-    """Upsert default roles into the database.
+async def is_fresh_database(session: AsyncSession) -> bool:
+    """Return True when no custom role exists apart from the system roles the migrations create."""
+    custom = await session.execute(
+        select(Role.id).where(Role.builtin == RoleBuiltin.CUSTOM, Role.system_key.is_(None)).limit(1)
+    )
+    return custom.scalar_one_or_none() is None
 
-    Existing roles with the same name are updated to match the current
-    definition so that re-seeding after a spec change is safe.
-    New roles are inserted.
+
+async def seed_roles(session: AsyncSession) -> bool:
+    """Create the default roles on a fresh database; return whether it was fresh.
+
+    On any other database this does nothing: an existing role is never
+    updated, and a renamed or deleted default role is never recreated.
     """
+    fresh = await is_fresh_database(session)
+    if not fresh:
+        print("Roles exist already; not seeding roles")
+        return False
     for role_data in _DEFAULT_ROLES:
-        result = await session.execute(select(Role).where(Role.name == role_data["name"]))
-        role = result.scalar_one_or_none()
-
-        if role is None:
-            role = Role(**role_data)
-            session.add(role)
-            logger.info("Created role: %s", role_data["name"])
-        else:
-            # Update to latest definition (idempotent)
-            for key, value in role_data.items():
-                setattr(role, key, value)
-            logger.info("Updated role: %s", role_data["name"])
+        session.add(Role(**role_data))
+        logger.info("Created role: %s", role_data["name"])
 
     await session.commit()
     print(f"Seeded {len(_DEFAULT_ROLES)} roles: {[r['name'] for r in _DEFAULT_ROLES]}")
+    return True
 
 
 async def seed_non_member_role(session: AsyncSession) -> None:
@@ -280,7 +289,7 @@ async def seed_non_member_role(session: AsyncSession) -> None:
 
     Migration 0032 creates the role, so this normally finds it and does
     nothing. Its permissions belong to the administrator once it exists, so
-    unlike ``seed_roles`` this never resets them. A custom role that already
+    this never resets them. A custom role that already
     uses the name is left alone, with a warning.
     """
     existing = (
@@ -344,8 +353,14 @@ _DEFAULT_TRANSITIONS: list[tuple[str, str, str]] = [
 ]
 
 
-async def seed_workflow_transitions(session: AsyncSession) -> None:
-    """Upsert default workflow transitions for Manager and Developer roles."""
+async def seed_workflow_transitions(session: AsyncSession, *, fresh: bool) -> None:
+    """Create the default workflow transitions for Manager and Developer, on a fresh database only.
+
+    *fresh* is what :func:`seed_roles` returned. Afterwards the workflows are
+    the administrator's, and a transition they deleted is never re-added.
+    """
+    if not fresh:
+        return
     # Build lookup maps
     status_result = await session.execute(select(IssueStatus))
     statuses = {s.name: s.id for s in status_result.scalars().all()}
@@ -639,10 +654,10 @@ async def _run() -> None:
         await seed_statuses(session)
         await seed_trackers(session)
         await seed_priorities(session)
-        await seed_roles(session)
+        fresh = await seed_roles(session)
         await seed_non_member_role(session)
         await seed_time_entry_activities(session)
-        await seed_workflow_transitions(session)
+        await seed_workflow_transitions(session, fresh=fresh)
         await seed_embedding_model(session)
         await seed_metadata_presets(session)
         await seed_settings(session)

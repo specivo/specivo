@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, CheckConstraint, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from specivo.models.base import Base, TimestampMixin
+from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 
 
 class RoleBuiltin(IntEnum):
@@ -22,6 +22,12 @@ class RoleBuiltin(IntEnum):
     # ``anonymous_permissions`` instead.
     ANONYMOUS = 2
 
+
+# ``roles.system_key`` values (``ck_roles_system_key``): a stable marker for a
+# custom role some feature relies on, so renaming the role never breaks it.
+# The Automation role ``$git`` holds for merge automation.
+ROLE_SYSTEM_KEY_AUTOMATION = "automation"
+ROLE_SYSTEM_KEY_VALUES: tuple[str, ...] = (ROLE_SYSTEM_KEY_AUTOMATION,)
 
 # Name the Non member role is seeded with. Administrators may not rename it
 # through the application, but code finds it by ``builtin``, never by name.
@@ -46,7 +52,7 @@ AI_USAGE_VISIBILITY_OWN = "own"
 AI_USAGE_VISIBILITY_VALUES: tuple[str, ...] = (AI_USAGE_VISIBILITY_ALL, AI_USAGE_VISIBILITY_OWN)
 
 
-class Role(Base, TimestampMixin):
+class Role(Base, TimestampMixin, LockVersionMixin):
     """Project role with a set of permissions.
 
     Roles are assigned to project members via the MemberRole join table.
@@ -81,6 +87,14 @@ class Role(Base, TimestampMixin):
     - ``"all"`` - every AI usage entry in the project
     - ``"own"`` - only the entries logged in the user's name (or reported by them)
 
+    ``system_key`` marks a custom role a feature finds by key rather than by
+    name (``ROLE_SYSTEM_KEY_VALUES``); such a role can be renamed but not
+    deleted, and the key is never copied to another role.
+
+    ``lock_version`` guards concurrent edits in the role editor. Reordering
+    roles writes ``position`` with Core ``UPDATE`` statements and so does not
+    bump it.
+
     ``users_visibility`` and ``time_entries_visibility`` default to ``"all"``,
     ``ai_usage_visibility`` to ``"own"``. When a user holds several roles the
     most permissive value wins; see ``permission_service``.
@@ -113,6 +127,20 @@ class Role(Base, TimestampMixin):
             "builtin = 0 OR NOT assignable",
             name="ck_roles_builtin_not_assignable",
         ),
+        CheckConstraint(
+            "system_key IS NULL OR system_key IN ('automation')",
+            name="ck_roles_system_key",
+        ),
+        CheckConstraint(
+            "system_key IS NULL OR builtin = 0",
+            name="ck_roles_system_key_custom",
+        ),
+        Index(
+            "uq_roles_system_key",
+            "system_key",
+            unique=True,
+            postgresql_where=text("system_key IS NOT NULL"),
+        ),
         Index(
             "uq_roles_single_builtin",
             "builtin",
@@ -134,6 +162,9 @@ class Role(Base, TimestampMixin):
 
     # A RoleBuiltin value; immutable once the row exists
     builtin: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    # Stable marker for a role a feature relies on (ROLE_SYSTEM_KEY_VALUES), or None
+    system_key: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     # List of permission strings granted by this role.  ["*"] = all permissions.
     permissions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
@@ -158,7 +189,7 @@ class Role(Base, TimestampMixin):
         String(30), nullable=False, default=AI_USAGE_VISIBILITY_OWN, server_default=AI_USAGE_VISIBILITY_OWN
     )
 
-    # Extensible settings JSONB (reserved for future use, e.g. Phase 2 workflow)
+    # Extensible settings JSONB (reserved for future use, e.g. workflow options)
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
 
     def __repr__(self) -> str:
