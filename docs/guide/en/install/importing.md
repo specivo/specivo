@@ -224,6 +224,7 @@ docker compose exec api python -m specivo.cli.admin import-map resolve-pending -
   page, an attachment.
 - Fill in the real email address for accounts that were given a placeholder, and tell people to set a new
   password (or sign in with [single sign-on](single-sign-on/index.md)).
-- Check the roles of the imported members in each project.
+- Check the roles of the imported members in each project. Imported roles arrive with no permissions:
+  set them under **Administration → Roles** (see [Roles and permissions](roles.md)).
 - Search indexing for the imported records runs at the end of the import. See
   [Semantic search](semantic-search.md).

@@ -20,7 +20,7 @@ The viewer groups event types into categories:
 | Category | What it holds |
 |---|---|
 | Sign-in | Password sign-ins and failures, refused credentials (`auth_failure`), password resets and changes, email address changes. |
-| Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
+| Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, roles created, changed or deleted (see [Roles and permissions](roles.md#audit-log)), anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns, time entries and AI subscriptions. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
 | Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes, exchange rates added, edited, deleted or imported, exchange rate settings and the rate fetch switched on or off, AI model prices added, changed or deleted, bundled prices loaded, other people's AI subscriptions added, changed or deleted by an administrator, and AI subscription self-service switched on or off. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
