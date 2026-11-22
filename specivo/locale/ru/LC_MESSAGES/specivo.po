@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 21:19+0100\n"
+"POT-Creation-Date: 2026-11-22 21:27+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -675,8 +675,8 @@ msgid "Edit own comments"
 msgstr "Редактирование своих комментариев"
 
 #: specivo/services/permission_catalogue.py:117
-msgid "Add and remove attachments on comments the user wrote."
-msgstr "Добавлять и удалять вложения в комментариях, написанных пользователем."
+msgid "Add and remove attachments on your own comments."
+msgstr "Добавлять и удалять вложения в своих комментариях."
 
 #: specivo/services/permission_catalogue.py:121
 msgid "Edit any comment"
@@ -849,7 +849,7 @@ msgstr ""
 "видит всегда."
 
 #: specivo/services/permission_catalogue.py:199
-msgid "Log AI usage in the user's own name."
+msgid "Log AI usage in your own name."
 msgstr "Учитывать использование ИИ от своего имени."
 
 #: specivo/services/permission_catalogue.py:199
@@ -4711,7 +4711,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/role_detail.html:85
 #: specivo/templates/themes/default/pages/admin/roles_matrix.html:35
-#: specivo/web/pages/admin_roles.py:52
+#: specivo/web/pages/admin_roles.py:51
 msgid "Full access"
 msgstr "Полный доступ"
 
@@ -13756,7 +13756,7 @@ msgstr "Действует только в проектах с включённ�
 msgid "Only applies in projects with the Time tracking module enabled."
 msgstr "Действует только в проектах с включённым модулем учёта времени."
 
-#: specivo/web/pages/admin_roles.py:54
+#: specivo/web/pages/admin_roles.py:53
 #, python-format
 msgid "%(granted)s of %(total)s"
 msgstr "%(granted)s из %(total)s"
@@ -14098,4 +14098,7 @@ msgstr "Сюда пока не ссылается ни одна вики-стр�
 
 #~ msgid "Choose which users and time entries each role can see."
 #~ msgstr "Какие пользователи и записи времени видны каждой роли."
+
+#~ msgid "Add and remove attachments on comments the user wrote."
+#~ msgstr "Добавлять и удалять вложения в комментариях, написанных пользователем."
 

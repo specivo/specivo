@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 21:19+0100\n"
+"POT-Creation-Date: 2026-11-22 21:27+0100\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -609,7 +609,7 @@ msgid "Edit own comments"
 msgstr ""
 
 #: specivo/services/permission_catalogue.py:117
-msgid "Add and remove attachments on comments the user wrote."
+msgid "Add and remove attachments on your own comments."
 msgstr ""
 
 #: specivo/services/permission_catalogue.py:121
@@ -777,7 +777,7 @@ msgid "See AI usage logged in the project; people always see their own entries."
 msgstr ""
 
 #: specivo/services/permission_catalogue.py:199
-msgid "Log AI usage in the user's own name."
+msgid "Log AI usage in your own name."
 msgstr ""
 
 #: specivo/services/permission_catalogue.py:199
@@ -4424,7 +4424,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/role_detail.html:85
 #: specivo/templates/themes/default/pages/admin/roles_matrix.html:35
-#: specivo/web/pages/admin_roles.py:52
+#: specivo/web/pages/admin_roles.py:51
 msgid "Full access"
 msgstr ""
 
@@ -12881,7 +12881,7 @@ msgstr ""
 msgid "Only applies in projects with the Time tracking module enabled."
 msgstr ""
 
-#: specivo/web/pages/admin_roles.py:54
+#: specivo/web/pages/admin_roles.py:53
 #, python-format
 msgid "%(granted)s of %(total)s"
 msgstr ""
@@ -13188,5 +13188,11 @@ msgstr ""
 #~ " permissions. A user who holds "
 #~ "several roles gets the widest setting"
 #~ " among them."
+#~ msgstr ""
+
+#~ msgid "Add and remove attachments on comments the user wrote."
+#~ msgstr ""
+
+#~ msgid "Log AI usage in the user's own name."
 #~ msgstr ""
 

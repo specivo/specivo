@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 21:19+0100\n"
+"POT-Creation-Date: 2026-11-22 21:27+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -609,8 +609,8 @@ msgid "Edit own comments"
 msgstr "编辑自己的评论"
 
 #: specivo/services/permission_catalogue.py:117
-msgid "Add and remove attachments on comments the user wrote."
-msgstr "在用户自己写的评论上添加和移除附件。"
+msgid "Add and remove attachments on your own comments."
+msgstr "在您自己的评论上添加和移除附件。"
 
 #: specivo/services/permission_catalogue.py:121
 msgid "Edit any comment"
@@ -777,8 +777,8 @@ msgid "See AI usage logged in the project; people always see their own entries."
 msgstr "查看项目中记录的 AI 使用；每个人始终能看到自己的记录。"
 
 #: specivo/services/permission_catalogue.py:199
-msgid "Log AI usage in the user's own name."
-msgstr "以用户本人名义记录 AI 使用。"
+msgid "Log AI usage in your own name."
+msgstr "以您自己的名义记录 AI 使用情况。"
 
 #: specivo/services/permission_catalogue.py:199
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:51
@@ -4447,7 +4447,7 @@ msgstr "勾选一项权限会同时勾选它所需的权限；取消勾选会同
 
 #: specivo/templates/themes/default/pages/admin/role_detail.html:85
 #: specivo/templates/themes/default/pages/admin/roles_matrix.html:35
-#: specivo/web/pages/admin_roles.py:52
+#: specivo/web/pages/admin_roles.py:51
 msgid "Full access"
 msgstr "完全访问"
 
@@ -12901,7 +12901,7 @@ msgstr "仅适用于启用了维基模块的项目。"
 msgid "Only applies in projects with the Time tracking module enabled."
 msgstr "仅适用于启用了工时记录模块的项目。"
 
-#: specivo/web/pages/admin_roles.py:54
+#: specivo/web/pages/admin_roles.py:53
 #, python-format
 msgid "%(granted)s of %(total)s"
 msgstr "%(granted)s / %(total)s"
@@ -13190,4 +13190,7 @@ msgstr "目前还没有维基页面、工作项或评论链接到这里。"
 
 #~ msgid "Choose which users and time entries each role can see."
 #~ msgstr "选择每个角色可以看到哪些用户和工时记录。"
+
+#~ msgid "Add and remove attachments on comments the user wrote."
+#~ msgstr "在用户自己写的评论上添加和移除附件。"
 

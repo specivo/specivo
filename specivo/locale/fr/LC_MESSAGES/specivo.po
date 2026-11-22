@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 21:19+0100\n"
+"POT-Creation-Date: 2026-11-22 21:27+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.app>\n"
 "Language: fr\n"
@@ -679,10 +679,8 @@ msgid "Edit own comments"
 msgstr "Modifier ses propres commentaires"
 
 #: specivo/services/permission_catalogue.py:117
-msgid "Add and remove attachments on comments the user wrote."
-msgstr ""
-"Ajouter et retirer des pièces jointes sur les commentaires écrits par "
-"l'utilisateur."
+msgid "Add and remove attachments on your own comments."
+msgstr "Ajouter et retirer des pièces jointes sur vos propres commentaires."
 
 #: specivo/services/permission_catalogue.py:121
 msgid "Edit any comment"
@@ -857,8 +855,8 @@ msgstr ""
 "toujours ses propres saisies."
 
 #: specivo/services/permission_catalogue.py:199
-msgid "Log AI usage in the user's own name."
-msgstr "Consigner l'utilisation de l'IA au nom de l'utilisateur lui-même."
+msgid "Log AI usage in your own name."
+msgstr "Consigner l'utilisation de l'IA en votre propre nom."
 
 #: specivo/services/permission_catalogue.py:199
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:51
@@ -4720,7 +4718,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/role_detail.html:85
 #: specivo/templates/themes/default/pages/admin/roles_matrix.html:35
-#: specivo/web/pages/admin_roles.py:52
+#: specivo/web/pages/admin_roles.py:51
 msgid "Full access"
 msgstr "Accès complet"
 
@@ -13808,7 +13806,7 @@ msgstr ""
 "S'applique uniquement aux projets où le module de suivi du temps est "
 "activé."
 
-#: specivo/web/pages/admin_roles.py:54
+#: specivo/web/pages/admin_roles.py:53
 #, python-format
 msgid "%(granted)s of %(total)s"
 msgstr "%(granted)s sur %(total)s"
@@ -14150,4 +14148,10 @@ msgstr "Aucune page wiki, aucun ticket ni commentaire ne pointe encore ici."
 #~ "Choisissez les utilisateurs et les "
 #~ "saisies de temps que chaque rôle "
 #~ "peut voir."
+
+#~ msgid "Add and remove attachments on comments the user wrote."
+#~ msgstr ""
+#~ "Ajouter et retirer des pièces jointes"
+#~ " sur les commentaires écrits par "
+#~ "l'utilisateur."
 

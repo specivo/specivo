@@ -163,8 +163,9 @@ async def test_catalogue(admin_client: AsyncClient) -> None:
     resp = await admin_client.get(f"{URL}permissions/")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 28
+    # Every permission is listed; the total counts only the enforced ones.
     assert sum(len(g["permissions"]) for g in body["groups"]) == 28
+    assert body["total"] == 25
     wiki = next(g for g in body["groups"] if g["key"] == "wiki")
     delete = next(p for p in wiki["permissions"] if p["key"] == "delete_wiki_pages")
     assert delete["requires"] == ["view_wiki", "manage_wiki"]

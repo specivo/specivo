@@ -114,7 +114,7 @@ PERMISSION_GROUPS: tuple[PermissionGroup, ...] = (
             PermissionInfo(
                 P.EDIT_OWN_NOTES,
                 _l("Edit own comments"),
-                _l("Add and remove attachments on comments the user wrote."),
+                _l("Add and remove attachments on your own comments."),
             ),
             PermissionInfo(
                 P.EDIT_NOTES,
@@ -196,7 +196,7 @@ PERMISSION_GROUPS: tuple[PermissionGroup, ...] = (
                 _l("View AI usage"),
                 _l("See AI usage logged in the project; people always see their own entries."),
             ),
-            PermissionInfo(P.LOG_AI_USAGE, _l("Log AI usage"), _l("Log AI usage in the user's own name.")),
+            PermissionInfo(P.LOG_AI_USAGE, _l("Log AI usage"), _l("Log AI usage in your own name.")),
             PermissionInfo(
                 P.LOG_AI_USAGE_FOR_OTHERS,
                 _l("Log AI usage for others"),
@@ -230,6 +230,12 @@ PERMISSION_GROUPS: tuple[PermissionGroup, ...] = (
 
 #: Every permission in catalogue order.
 CATALOGUE_ORDER: tuple[Permission, ...] = tuple(info.key for group in PERMISSION_GROUPS for info in group.permissions)
+
+#: The keys of the permissions some code checks (``enforced``). Role summaries
+#: ("13 of 25") count only these: holding a "Not used yet" permission grants nothing.
+ENFORCED_KEYS: frozenset[str] = frozenset(
+    info.key.value for group in PERMISSION_GROUPS for info in group.permissions if info.enforced
+)
 
 _ORDER_INDEX: Mapping[str, int] = MappingProxyType({key.value: i for i, key in enumerate(CATALOGUE_ORDER)})
 
@@ -352,10 +358,12 @@ def catalogue_payload() -> dict[str, Any]:
 
         {"groups": [{"key", "label", "module",
                      "permissions": [{"key", "label", "description", "enforced", "requires": [...]}]}],
-         "non_member_allowed": [...], "total": 28}
+         "non_member_allowed": [...], "total": 25}
 
     ``requires`` is the transitive closure, in catalogue order, so a client
-    can tick every prerequisite in one step.
+    can tick every prerequisite in one step. ``permissions`` lists every
+    permission, the ``enforced=False`` ones included; ``total`` counts only
+    the enforced ones, the denominator of a role's "N of total" summary.
     """
     groups = [
         {
@@ -378,5 +386,5 @@ def catalogue_payload() -> dict[str, Any]:
     return {
         "groups": groups,
         "non_member_allowed": sorted((p.value for p in NON_MEMBER_ALLOWED), key=_ORDER_INDEX.__getitem__),
-        "total": len(CATALOGUE_ORDER),
+        "total": len(ENFORCED_KEYS),
     }

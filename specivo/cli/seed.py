@@ -43,7 +43,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from specivo.core.config import get_settings
@@ -265,6 +265,32 @@ async def is_fresh_database(session: AsyncSession) -> bool:
     return custom.scalar_one_or_none() is None
 
 
+async def place_system_roles_last(session: AsyncSession) -> None:
+    """Give the system roles (Automation) positions after every other custom role.
+
+    The migrations create Automation before the seed runs, at position 1, so
+    without this it would tie with Manager and, having the lower id, be
+    listed first.
+    """
+    last = await session.scalar(
+        select(func.max(Role.position)).where(Role.builtin == RoleBuiltin.CUSTOM, Role.system_key.is_(None))
+    )
+    system_ids = (
+        await session.scalars(
+            select(Role.id)
+            .where(Role.builtin == RoleBuiltin.CUSTOM, Role.system_key.is_not(None))
+            .order_by(Role.position, Role.id)
+        )
+    ).all()
+    for offset, role_id in enumerate(system_ids, start=1):
+        await session.execute(
+            update(Role)
+            .where(Role.id == role_id)
+            .values(position=(last or 0) + offset)
+            .execution_options(synchronize_session=False)
+        )
+
+
 async def seed_roles(session: AsyncSession) -> bool:
     """Create the default roles on a fresh database; return whether it was fresh.
 
@@ -278,6 +304,8 @@ async def seed_roles(session: AsyncSession) -> bool:
     for role_data in _DEFAULT_ROLES:
         session.add(Role(**role_data))
         logger.info("Created role: %s", role_data["name"])
+    await session.flush()
+    await place_system_roles_last(session)
 
     await session.commit()
     print(f"Seeded {len(_DEFAULT_ROLES)} roles: {[r['name'] for r in _DEFAULT_ROLES]}")

@@ -22,7 +22,7 @@ Each row shows:
 |---|---|
 | **Role** | The name; click it to open the role page |
 | **Memberships** | How many project memberships hold the role. A group's membership counts once, and memberships a subproject inherits from its parent count too. |
-| **Permissions** | **Full access**, or how many of the permissions the role has, such as "13 of 28" |
+| **Permissions** | **Full access**, or how many of the permissions the role has, such as "13 of 25". Permissions marked **Not used yet** count in neither number. |
 | **Offered when adding members** | Whether the role appears in the role picker when someone adds a member |
 
 The arrows on each row move a role up or down. The order here is the order of the role pickers on
@@ -165,7 +165,8 @@ member**.
 **Automation** is the role the built-in Git account uses when a project turns on
 [merge automation](../integrations/repositories.md#merge-automation). You can rename it and change
 its permissions and transitions, and merge automation keeps using it under its new name. It cannot
-be deleted.
+be deleted. A new installation lists it after the default roles; it is not offered when adding
+members, so its place in the list changes no role picker.
 
 ## Deleting a role
 

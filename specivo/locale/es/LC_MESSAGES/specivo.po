@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 21:19+0100\n"
+"POT-Creation-Date: 2026-11-22 21:27+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -681,8 +681,8 @@ msgid "Edit own comments"
 msgstr "Editar comentarios propios"
 
 #: specivo/services/permission_catalogue.py:117
-msgid "Add and remove attachments on comments the user wrote."
-msgstr "Añadir y quitar adjuntos en los comentarios que escribió el usuario."
+msgid "Add and remove attachments on your own comments."
+msgstr "Añadir y quitar adjuntos en sus propios comentarios."
 
 #: specivo/services/permission_catalogue.py:121
 msgid "Edit any comment"
@@ -853,8 +853,8 @@ msgstr ""
 "propios registros."
 
 #: specivo/services/permission_catalogue.py:199
-msgid "Log AI usage in the user's own name."
-msgstr "Registrar uso de IA a nombre del propio usuario."
+msgid "Log AI usage in your own name."
+msgstr "Registrar uso de IA en su propio nombre."
 
 #: specivo/services/permission_catalogue.py:199
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:51
@@ -4709,7 +4709,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/role_detail.html:85
 #: specivo/templates/themes/default/pages/admin/roles_matrix.html:35
-#: specivo/web/pages/admin_roles.py:52
+#: specivo/web/pages/admin_roles.py:51
 msgid "Full access"
 msgstr "Acceso completo"
 
@@ -13761,7 +13761,7 @@ msgstr "Solo se aplica en proyectos con el módulo Wiki activado."
 msgid "Only applies in projects with the Time tracking module enabled."
 msgstr "Solo se aplica en proyectos con el módulo de registro de tiempo activado."
 
-#: specivo/web/pages/admin_roles.py:54
+#: specivo/web/pages/admin_roles.py:53
 #, python-format
 msgid "%(granted)s of %(total)s"
 msgstr "%(granted)s de %(total)s"
@@ -14101,4 +14101,7 @@ msgstr "Ninguna página wiki, incidencia o comentario enlaza aquí todavía."
 
 #~ msgid "Choose which users and time entries each role can see."
 #~ msgstr "Elige qué usuarios y registros de tiempo puede ver cada rol."
+
+#~ msgid "Add and remove attachments on comments the user wrote."
+#~ msgstr "Añadir y quitar adjuntos en los comentarios que escribió el usuario."
 
