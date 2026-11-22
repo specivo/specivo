@@ -576,7 +576,7 @@ issue, unless the request comes from a fork or an outsider and
 Rules for the role:
 
 - Choosing a role other than Automation (or the one Git already holds) can give Git more rights, so
-  it needs the **Manage project members** permission. The built-in Non member and Anonymous roles
+  it needs the **Manage members** permission. The built-in Non member and Anonymous roles
   cannot be chosen.
 - Git is never an administrator, so nothing is bypassed: the permission check and the workflow
   apply as for a person with that role.
