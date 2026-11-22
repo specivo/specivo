@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 20:43+0100\n"
+"POT-Creation-Date: 2026-11-22 21:19+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -1070,7 +1070,7 @@ msgstr "ยกเลิกตัวจับเวลาไม่สำเร็
 #: specivo/templates/themes/default/pages/projects/settings.html:1071
 #: specivo/templates/themes/default/pages/projects/settings.html:1305
 #: specivo/templates/themes/default/pages/projects/settings.html:1691
-#: specivo/templates/themes/default/pages/wiki/show.html:103
+#: specivo/templates/themes/default/pages/wiki/show.html:142
 msgid "Unable to connect."
 msgstr "ไม่สามารถเชื่อมต่อได้"
 
@@ -1171,7 +1171,8 @@ msgstr "ความคิดเห็น (ไม่บังคับ)"
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:214
 #: specivo/templates/themes/default/pages/time/form.html:56
 #: specivo/templates/themes/default/pages/wiki/edit.html:136
-#: specivo/templates/themes/default/pages/wiki/show.html:237
+#: specivo/templates/themes/default/pages/wiki/show.html:77
+#: specivo/templates/themes/default/pages/wiki/show.html:276
 msgid "Cancel"
 msgstr "ยกเลิก"
 
@@ -2621,10 +2622,11 @@ msgstr "เปิดใช้งาน"
 #: specivo/templates/themes/default/pages/projects/settings.html:983
 #: specivo/templates/themes/default/pages/projects/settings.html:1146
 #: specivo/templates/themes/default/pages/projects/settings.html:1443
-#: specivo/templates/themes/default/pages/wiki/show.html:166
-#: specivo/templates/themes/default/pages/wiki/show.html:201
-#: specivo/templates/themes/default/pages/wiki/show.html:203
-#: specivo/templates/themes/default/pages/wiki/show.html:239
+#: specivo/templates/themes/default/pages/wiki/show.html:47
+#: specivo/templates/themes/default/pages/wiki/show.html:205
+#: specivo/templates/themes/default/pages/wiki/show.html:240
+#: specivo/templates/themes/default/pages/wiki/show.html:242
+#: specivo/templates/themes/default/pages/wiki/show.html:278
 msgid "Delete"
 msgstr "ลบ"
 
@@ -4204,7 +4206,7 @@ msgstr "กลุ่มนี้ไม่ได้มอบสิทธิ์เ
 #: specivo/templates/themes/default/pages/projects/settings.html:513
 #: specivo/templates/themes/default/pages/projects/settings.html:614
 #: specivo/templates/themes/default/pages/projects/settings.html:1052
-#: specivo/templates/themes/default/pages/wiki/show.html:240
+#: specivo/templates/themes/default/pages/wiki/show.html:279
 msgid "Deleting..."
 msgstr "กำลังลบ..."
 
@@ -4268,7 +4270,7 @@ msgstr "อัปเดตพรีเซ็ตแล้ว"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:27
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:6
-#: specivo/templates/themes/default/pages/wiki/show.html:101
+#: specivo/templates/themes/default/pages/wiki/show.html:140
 msgid "Delete failed"
 msgstr "ลบไม่สำเร็จ"
 
@@ -6344,6 +6346,7 @@ msgstr "ทุกสถานะ"
 #: specivo/templates/themes/default/pages/projects/settings.html:1281
 #: specivo/templates/themes/default/pages/projects/settings.html:1509
 #: specivo/templates/themes/default/pages/projects/settings.html:1671
+#: specivo/templates/themes/default/pages/wiki/show.html:56
 msgid "Close"
 msgstr "ปิด"
 
@@ -6357,7 +6360,7 @@ msgstr "เปิดอีกครั้ง"
 #: specivo/templates/themes/default/pages/issues/form.html:155
 #: specivo/templates/themes/default/pages/projects/settings.html:392
 #: specivo/templates/themes/default/pages/wiki/history.html:30
-#: specivo/templates/themes/default/pages/wiki/show.html:57
+#: specivo/templates/themes/default/pages/wiki/show.html:96
 msgid "Version"
 msgstr "เวอร์ชัน"
 
@@ -9479,7 +9482,7 @@ msgstr "แท็ก"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:219
 #: specivo/templates/themes/default/pages/issues/form.html:317
 #: specivo/templates/themes/default/pages/wiki/edit.html:85
-#: specivo/templates/themes/default/pages/wiki/show.html:79
+#: specivo/templates/themes/default/pages/wiki/show.html:118
 msgid "Add tags..."
 msgstr "เพิ่มแท็ก..."
 
@@ -9601,23 +9604,23 @@ msgid "Updated %(ago)s"
 msgstr "อัปเดตเมื่อ %(ago)s"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:7
-#: specivo/templates/themes/default/pages/wiki/show.html:102
+#: specivo/templates/themes/default/pages/wiki/show.html:141
 msgid "Upload failed"
 msgstr "อัปโหลดไม่สำเร็จ"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:9
-#: specivo/templates/themes/default/pages/wiki/show.html:104
+#: specivo/templates/themes/default/pages/wiki/show.html:143
 msgid "FILE"
 msgstr "ไฟล์"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:10
-#: specivo/templates/themes/default/pages/wiki/show.html:105
+#: specivo/templates/themes/default/pages/wiki/show.html:144
 #, python-format
 msgid "Uploaded by %(name)s, %(date)s"
 msgstr "อัปโหลดโดย %(name)s เมื่อ %(date)s"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:19
-#: specivo/templates/themes/default/pages/wiki/show.html:116
+#: specivo/templates/themes/default/pages/wiki/show.html:155
 msgid "Upload"
 msgstr "อัปโหลด"
 
@@ -9630,38 +9633,38 @@ msgid "or click to browse"
 msgstr "หรือคลิกเพื่อเลือกไฟล์"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:32
-#: specivo/templates/themes/default/pages/wiki/show.html:131
+#: specivo/templates/themes/default/pages/wiki/show.html:170
 msgid "Images, PDFs, documents up to 50 MB"
 msgstr "รูปภาพ PDF เอกสาร ขนาดไม่เกิน 50 MB"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:57
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:88
-#: specivo/templates/themes/default/pages/wiki/show.html:159
-#: specivo/templates/themes/default/pages/wiki/show.html:192
+#: specivo/templates/themes/default/pages/wiki/show.html:198
+#: specivo/templates/themes/default/pages/wiki/show.html:231
 msgid "Copy markdown link"
 msgstr "คัดลอกลิงก์ Markdown"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:60
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:92
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:94
-#: specivo/templates/themes/default/pages/wiki/show.html:162
-#: specivo/templates/themes/default/pages/wiki/show.html:196
-#: specivo/templates/themes/default/pages/wiki/show.html:198
+#: specivo/templates/themes/default/pages/wiki/show.html:201
+#: specivo/templates/themes/default/pages/wiki/show.html:235
+#: specivo/templates/themes/default/pages/wiki/show.html:237
 msgid "Download"
 msgstr "ดาวน์โหลด"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:90
-#: specivo/templates/themes/default/pages/wiki/show.html:194
+#: specivo/templates/themes/default/pages/wiki/show.html:233
 msgid "Link"
 msgstr "ลิงก์"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:109
-#: specivo/templates/themes/default/pages/wiki/show.html:215
+#: specivo/templates/themes/default/pages/wiki/show.html:254
 msgid "No attachments yet."
 msgstr "ยังไม่มีไฟล์แนบ"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:128
-#: specivo/templates/themes/default/pages/wiki/show.html:234
+#: specivo/templates/themes/default/pages/wiki/show.html:273
 msgid "Delete attachment?"
 msgstr "ลบไฟล์แนบหรือไม่?"
 
@@ -9670,7 +9673,7 @@ msgid "This cannot be undone."
 msgstr "การดำเนินการนี้ไม่สามารถยกเลิกได้"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:129
-#: specivo/templates/themes/default/pages/wiki/show.html:235
+#: specivo/templates/themes/default/pages/wiki/show.html:274
 msgid "Are you sure you want to delete"
 msgstr "คุณแน่ใจหรือไม่ว่าต้องการลบ"
 
@@ -9791,7 +9794,7 @@ msgstr "กู้คืนคำอธิบายเวอร์ชันนี
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:109
 #: specivo/templates/themes/default/pages/wiki/history.html:61
-#: specivo/templates/themes/default/pages/wiki/trash.html:39
+#: specivo/templates/themes/default/pages/wiki/trash.html:48
 msgid "Restore"
 msgstr "กู้คืน"
 
@@ -12889,7 +12892,7 @@ msgstr "ทั้งหมด"
 #: specivo/templates/themes/default/pages/issues/detail.html:293
 #: specivo/templates/themes/default/pages/issues/form.html:414
 #: specivo/templates/themes/default/pages/search.html:47
-#: specivo/templates/themes/default/pages/wiki/show.html:110
+#: specivo/templates/themes/default/pages/wiki/show.html:149
 msgid "Attachments"
 msgstr "ไฟล์แนบ"
 
@@ -13082,7 +13085,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:5
 #: specivo/templates/themes/default/pages/wiki/edit.html:21
-#: specivo/templates/themes/default/pages/wiki/index.html:20
+#: specivo/templates/themes/default/pages/wiki/index.html:28
 msgid "New Page"
 msgstr "หน้าใหม่"
 
@@ -13117,8 +13120,8 @@ msgstr "(ไม่มี — ระดับราก)"
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:145
 #: specivo/templates/themes/default/pages/wiki/index.html:13
-#: specivo/templates/themes/default/pages/wiki/show.html:286
-#: specivo/templates/themes/default/pages/wiki/show.html:328
+#: specivo/templates/themes/default/pages/wiki/show.html:325
+#: specivo/templates/themes/default/pages/wiki/show.html:367
 msgid "Pages"
 msgstr "หน้า"
 
@@ -13144,7 +13147,21 @@ msgstr "เปรียบเทียบที่เลือก"
 msgid "No version history available."
 msgstr "ไม่มีประวัติเวอร์ชัน"
 
-#: specivo/templates/themes/default/pages/wiki/index.html:60
+#: specivo/templates/themes/default/pages/wiki/index.html:22
+#: specivo/templates/themes/default/pages/wiki/show.html:386
+#: specivo/templates/themes/default/pages/wiki/trash.html:13
+msgid "Trash"
+msgstr "ถังขยะ"
+
+#: specivo/templates/themes/default/pages/wiki/index.html:36
+msgid "The page was moved to the trash."
+msgstr "ย้ายหน้าไปที่ถังขยะแล้ว"
+
+#: specivo/templates/themes/default/pages/wiki/index.html:37
+msgid "Open the trash"
+msgstr "เปิดถังขยะ"
+
+#: specivo/templates/themes/default/pages/wiki/index.html:77
 msgid "No wiki pages yet. Create one to get started."
 msgstr "ยังไม่มีหน้าวิกิ สร้างหน้าใหม่เพื่อเริ่มต้นใช้งาน"
 
@@ -13152,56 +13169,90 @@ msgstr "ยังไม่มีหน้าวิกิ สร้างหน�
 msgid "All pages"
 msgstr "ทุกหน้า"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:47
+#: specivo/templates/themes/default/pages/wiki/show.html:55
+msgid "Delete page?"
+msgstr "ลบหน้านี้หรือไม่"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:60
+#, python-format
+msgid ""
+"<strong>%(title)s</strong> moves to the wiki trash. You can restore it "
+"from there with its history."
+msgstr ""
+"<strong>%(title)s</strong> จะถูกย้ายไปที่ถังขยะของวิกิ "
+"คุณกู้คืนหน้านี้พร้อมประวัติได้จากที่นั่น"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:65
+#, python-format
+msgid "Also move its subpage to the trash"
+msgid_plural "Also move its %(count)s subpages to the trash"
+msgstr[0] "ย้ายหน้าย่อย %(count)s หน้าไปที่ถังขยะด้วย"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:69
+#, python-format
+msgid ""
+"If you leave this unticked, the subpages stay in the wiki and move up one"
+" level, under %(parent)s."
+msgstr ""
+"หากไม่เลือกช่องนี้ หน้าย่อยจะยังอยู่ในวิกิและเลื่อนขึ้นหนึ่งระดับ "
+"ไปอยู่ใต้ %(parent)s"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:71
+msgid ""
+"If you leave this unticked, the subpages stay in the wiki and move up to "
+"the top level."
+msgstr "หากไม่เลือกช่องนี้ หน้าย่อยจะยังอยู่ในวิกิและเลื่อนขึ้นไปอยู่ระดับบนสุด"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:78
+msgid "Delete page"
+msgstr "ลบหน้า"
+
+#: specivo/templates/themes/default/pages/wiki/show.html:86
 #, python-format
 msgid "Last edited by <strong>%(author)s</strong>"
 msgstr "แก้ไขล่าสุดโดย <strong>%(author)s</strong>"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:52
+#: specivo/templates/themes/default/pages/wiki/show.html:91
 #, python-format
 msgid "Version %(version)s"
 msgstr "เวอร์ชัน %(version)s"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:60
+#: specivo/templates/themes/default/pages/wiki/show.html:99
 #, python-format
 msgid "Edited by %(author)s"
 msgstr "แก้ไขโดย %(author)s"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:130
+#: specivo/templates/themes/default/pages/wiki/show.html:169
 msgid "<strong>Drop files here</strong> or click to browse"
 msgstr "<strong>วางไฟล์ที่นี่</strong> หรือคลิกเพื่อเลือกไฟล์"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:235
+#: specivo/templates/themes/default/pages/wiki/show.html:274
 msgid "? This cannot be undone."
 msgstr "? การดำเนินการนี้ไม่สามารถยกเลิกได้"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:254
+#: specivo/templates/themes/default/pages/wiki/show.html:293
 msgid "Linked from"
 msgstr "ลิงก์มาจาก"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:259
+#: specivo/templates/themes/default/pages/wiki/show.html:298
 msgid "Loading links…"
 msgstr "กำลังโหลดลิงก์…"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:269
+#: specivo/templates/themes/default/pages/wiki/show.html:308
 msgid "On this page"
 msgstr "ในหน้านี้"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:307
+#: specivo/templates/themes/default/pages/wiki/show.html:346
 msgid "Add child page"
 msgstr "เพิ่มหน้าย่อย"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:340
+#: specivo/templates/themes/default/pages/wiki/show.html:380
 msgid "New page"
 msgstr "หน้าใหม่"
 
 #: specivo/templates/themes/default/pages/wiki/trash.html:3
 msgid "Wiki Trash"
 msgstr "ถังขยะวิกิ"
-
-#: specivo/templates/themes/default/pages/wiki/trash.html:13
-msgid "Trash"
-msgstr "ถังขยะ"
 
 #: specivo/templates/themes/default/pages/wiki/trash.html:17
 msgid "Deleted Wiki Pages"
@@ -13211,15 +13262,31 @@ msgstr "หน้าวิกิที่ถูกลบ"
 msgid "Back to Wiki"
 msgstr "กลับไปยังวิกิ"
 
+#: specivo/templates/themes/default/pages/wiki/trash.html:22
+msgid "The page was restored."
+msgstr "กู้คืนหน้าแล้ว"
+
 #: specivo/templates/themes/default/pages/wiki/trash.html:25
+msgid ""
+"The page was not restored: another page now uses its address (slug). "
+"Rename or delete that page, then try again."
+msgstr ""
+"ไม่ได้กู้คืนหน้า: ตอนนี้มีหน้าอื่นใช้ที่อยู่ (slug) ของหน้านี้แล้ว "
+"เปลี่ยนชื่อหรือลบหน้านั้นก่อน แล้วลองอีกครั้ง"
+
+#: specivo/templates/themes/default/pages/wiki/trash.html:28
+msgid "Restoring a page also restores the subpages that were deleted with it."
+msgstr "การกู้คืนหน้าจะกู้คืนหน้าย่อยที่ถูกลบไปพร้อมกันด้วย"
+
+#: specivo/templates/themes/default/pages/wiki/trash.html:34
 msgid "Title"
 msgstr "ชื่อเรื่อง"
 
-#: specivo/templates/themes/default/pages/wiki/trash.html:26
+#: specivo/templates/themes/default/pages/wiki/trash.html:35
 msgid "Deleted"
 msgstr "ถูกลบแล้ว"
 
-#: specivo/templates/themes/default/pages/wiki/trash.html:47
+#: specivo/templates/themes/default/pages/wiki/trash.html:56
 msgid "No deleted pages."
 msgstr "ไม่มีหน้าที่ถูกลบ"
 

@@ -15,11 +15,28 @@
 
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
   <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Wiki{% endtrans %}</h1>
-  <a href="{{ base }}/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-primary">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
-    {% trans %}New Page{% endtrans %}
-  </a>
+  <div class="wiki-index-actions">
+    {% if can_delete_wiki %}
+    <a href="{{ base }}/projects/{{ project.key }}/wiki/trash/" class="sp-btn sp-btn-ghost" data-testid="wiki-trash-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      {% trans %}Trash{% endtrans %}
+    </a>
+    {% endif %}
+    {% if can_manage_wiki %}
+    <a href="{{ base }}/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
+      {% trans %}New Page{% endtrans %}
+    </a>
+    {% endif %}
+  </div>
 </div>
+
+{% if notice == "deleted" %}
+<div class="flash flash-success sp-mb-md" role="status" data-testid="wiki-notice">
+  {% trans %}The page was moved to the trash.{% endtrans %}
+  {% if can_delete_wiki %}<a href="{{ base }}/projects/{{ project.key }}/wiki/trash/">{% trans %}Open the trash{% endtrans %}</a>{% endif %}
+</div>
+{% endif %}
 
 {% if pages %}
 <div class="card" style="padding: var(--sp-space-lg);" x-data="{ expanded: {} }">
