@@ -128,6 +128,14 @@ the project with a similar subject (see [Similar issues](../issues/creating.md#s
 Untick it to turn the list off for this project. When an administrator has turned the suggestions
 off for the whole instance, the box has no effect and says so.
 
+### Metadata keys in the link graph
+
+The **General** tab also has **Metadata keys in the link graph**, a comma-separated list of
+[metadata](../metadata/index.md) keys, `component` by default. Each value of these keys becomes a
+node in the project's link graph, so an AI agent can list everything in one component (see
+[Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph)). You can list
+up to 10 keys; leave the field empty for none. Only people who can manage the project see it.
+
 ### Reporting currency
 
 Money reports for a project, such as AI spend, are shown in the instance's reporting currency. To

@@ -14,12 +14,12 @@ know the shape of what's possible.
 | Area | What the agent can do |
 |---|---|
 | **Issues & comments** | List issues, narrowed like the issue list's filters (status, assignee — a login, `me` or `none` —, tag, release — a version name or `none` —, sprint, parent and metadata values); read, create, and update issues; edit descriptions and core fields; set or change an issue's [parent](../issues/subtasks.md) and list its subtasks; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history, or the whole change history with the names of the statuses, people and versions a change refers to. |
-| **Search** | Search across issues, wiki, and more using Specivo's hybrid (keyword + meaning) search. |
+| **Search** | Search across issues, wiki, and more using Specivo's hybrid (keyword + meaning) search. With `expand=1`, each of the top 5 issue and wiki page hits also lists up to 10 things it is linked to (links, backlinks, relations, parent, children, tags, version, assignee), one line per link, so the agent sees a hit's context without a second call. Comments and attachments are not expanded. |
 | **Wiki** | List, read, create, edit, and append to wiki pages, including section-level reads and edits, and history/restore. |
 | **Metadata & schemas** | Read and set [issue metadata](../metadata/values.md) values, and list the available metadata schemas. |
 | **Tags** | List a project's [tags](../projects/tags.md), tag issues and wiki pages (also while creating them), and, with **Manage project**, create, rename, recolor and delete tags. |
 | **Relations** | Link issues with typed [relations](../issues/relations.md) — relates, blocks, duplicates, and so on — and remove them. |
-| **Links** | Follow the links between issues, wiki pages and comments: `specivo_show_issue` and `specivo_read_wiki` list what an item links to and what links to it (backlinks), and `specivo_get_links` returns the neighbourhood as JSON, two hops deep at most, filtered by kind. Agents only see links between items the key may open. |
+| **Links** | Follow the links between items: `specivo_show_issue` and `specivo_read_wiki` list what an item links to and what links to it (backlinks), and `specivo_get_links` returns the neighbourhood as JSON. See [Navigating the link graph](#navigating-the-link-graph). Agents only see links between items the key may open. |
 | **Development** | `specivo_issue_development(issue_ref, kinds=[...], limit, offset)` returns an issue's [development activity](../integrations/repositories.md#reading-development-activity-through-the-api-and-mcp) as JSON, the same document as the REST API: commits, pull requests, reviews, CI runs, deployments with their environment type, and releases, with a summary and a paged timeline. `specivo_show_issue` sums it up on one `Development:` line. Agents see it only for issues the key may open. |
 | **Versions** | List and manage versions (milestones/releases) and see which issues belong to each. |
 | **Sprints** | List sprints, see sprint issues, and manage the plan/start/complete lifecycle. |
@@ -33,6 +33,79 @@ know the shape of what's possible.
     A well-behaved agent calls `specivo_list_lookups` to learn your project's tracker, status, and
     priority IDs before creating or updating issues, and `specivo_whoami` to confirm who it's acting
     as. If you connect a new agent, ask it to run these first.
+
+## Navigating the link graph
+
+Specivo keeps a graph of how issues and wiki pages are connected: text links (`ACME-42`, `[[Page]]`,
+links to this instance's pages), relations, parent and children, commits and pull requests, and the
+things items share. Tags, versions, sprints, assignees and the values of some metadata keys (by
+default `component`) are **nodes** of their own, so an agent can ask "what is in this release?" and
+get the issues, not just text matches.
+
+`specivo_get_links` takes a **ref** to start from:
+
+| Ref | Starts from |
+|---|---|
+| `ACME-12` | an issue |
+| `wiki:ACME/<slug>` | a wiki page |
+| `version:ACME/<name>` | a version and the issues planned for it |
+| `sprint:ACME/<name>` | a sprint and its issues |
+| `tag:ACME/<name>` | a tag and the issues and pages that carry it |
+| `component:ACME/<value>` | a component (the `component` metadata value) |
+| `metadata:ACME/<key>/<value>` | the value of another metadata key your project lists (see below) |
+| `user:<login>` | a person and the issues assigned to them |
+
+From a tag, version, sprint, component, metadata value or person, the result lists the members,
+newest first, up to `limit`. Anywhere else these nodes are leaves with a `degree`, the number of
+items you may see that point at them. Hand-entered commit SHAs in an issue's `commits` metadata
+become commit nodes too.
+
+The options:
+
+| Option | What it does |
+|---|---|
+| `direction` | `in` (what points here, or a node's members), `out` or `both` (default). |
+| `depth` | `1` (default) or `2`, which expands the linked issues and pages once more. From a tag, version, sprint, component, metadata value or person, `3` is allowed, for example a version, its issues, their tags and the pages with those tags. |
+| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`. Naming a node kind also expands those nodes at depth 2. |
+| `limit` | Neighbours at most, 1 to 200 (default 50). `truncated` says when more were left out. |
+| `to` | Another ref. Returns the shortest path between the two instead of the neighbours (see below). |
+| `filter` | Keeps only the issues that match, for example `{"status": "open", "component": "importer"}` (see below). |
+| `format` | `json` (default) or `compact`. |
+
+Attachments are not listed as nodes by default. Each issue and page node has an `attachments` count
+instead, and `types=["attachment"]` lists them.
+
+**How are two things connected?** `specivo_get_links("ACME-12", to="wiki:ACME/runbook")` returns the
+shortest path, at most 4 hops, over links the key may see. It steps through issues and wiki pages
+over text links, relations and parent/child links, and never through an item the key cannot see.
+Tags, versions and other nodes are passed through only when `types` names their kind, but either end
+of the path may be one. The answer is a `path` with `hops`, ordered `nodes` and `edges`, or
+`path: null` with a `reason`: `no_path_within_4_hops`, or `budget_exhausted` when the search stopped
+after 500 nodes. `to` cannot be combined with `filter`.
+
+**Filtering.** `filter` keys are `status` (`open`, `closed` or a status name), `tracker`, `version`,
+`assignee` (a login, or `me`), `component`, and any other key in the project's list of metadata keys.
+A list value means any of them; matching ignores case; an unknown key is an error. The filter runs
+after the read, which then reads up to 200 nodes and cuts the result to `limit`. The root is always
+kept, wiki pages are dropped, and tags, versions and other nodes stay while they are linked to a
+kept issue.
+
+**Compact output.** `format="compact"` saves tokens. It starts with a header such as
+`root: ACME-12 "Import fails" [In Progress] (14 nodes, 17 edges)` (plus `, truncated` when
+applicable), then one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook "Runbook"`. A node's
+title is written once, after its ref.
+
+??? note "Which metadata keys become nodes"
+    Project managers choose the keys in **Project settings → General → Metadata keys in the link
+    graph**: a comma-separated list of at most 10 [metadata](../metadata/index.md) keys, `component`
+    by default. Every value of those keys becomes a node. Leave the field empty to turn metadata nodes
+    off. The change takes effect for the next read; no rebuild is needed.
+
+??? note "What a key can see"
+    Everything is filtered for the key's user. Tags are visible to anyone who may view the project's
+    issues or wiki. Versions, sprints and metadata values need permission to view the project's
+    issues. A person node appears only for signed-in users, and `user:<login>` works only for
+    yourself, an administrator, or a member of a project whose issues you can view.
 
 ## Read vs write
 
