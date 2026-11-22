@@ -52,7 +52,13 @@ def test_generate_enable_and_revoke_scim_token(admin_page: Page, provider: dict,
     assert token.startswith("spvscim_")
 
     expect(toggle).to_be_enabled()
-    toggle.check()
+    # The toggle saves asynchronously: wait for the save before calling SCIM,
+    # or a slow server answers 401 because provisioning is still off.
+    with admin_page.expect_response(
+        lambda r: r.request.method == "PATCH" and f"/sso/providers/{provider['id']}/scim/" in r.url
+    ) as saved:
+        toggle.check()
+    assert saved.value.ok, saved.value.status
     expect(toggle).to_be_checked()
 
     scim = httpx.get(
