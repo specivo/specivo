@@ -3,6 +3,60 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
+## [0.14.0] - 2026-11-23
+
+### Added
+- Added a role editor under Administration → Roles: create, copy, rename, reorder and delete roles, choose their permissions in plain-language groups with dependencies ticked automatically, a Full access switch, and a "Who can do what" matrix
+- Added the admin roles REST API at `/api/v1/admin/roles/`, with a permission catalogue and optimistic locking
+- Added role created, changed and deleted events to the security audit log
+- Added deleting wiki pages from the web UI, with a choice to keep or trash their subpages, and a Trash link to restore them
+- Added tags, metadata values, versions, sprints and assignees as link graph nodes
+- Added graph-aware retrieval for agents: one-hop context in search results, the shortest path between two items, node filters and a compact output in `specivo_get_links`
+- Added a project setting for which metadata keys become link graph nodes
+- Added an hourly backfill that rebuilds the link graph of projects never fully rebuilt, and the last rebuild time on the project's link graph card
+- Added AI spend and time per release and per sprint: release and sprint grouping in the AI spend reports, and AI spend cards on version and sprint pages
+- Added the number of AI usage entries to the issue's AI usage tab
+- Added guide pages for roles and permissions and the link graph tools, in English and Chinese
+
+### Changed
+- Changed the Developer role to create and edit wiki pages; an existing Developer role gets this only if it still has its original permissions
+- Changed startup seeding to create the default roles and workflow transitions only on a new database, so role and workflow edits survive restarts
+- Changed `STEALTH_PREFIX` to cover the whole web UI, redirects and rendered links; it is now validated, and an invalid value stops startup
+- Changed the bundled nginx config into a template that applies its static, health and MCP rules under `STEALTH_PREFIX`; set the prefix in `.env` without a trailing slash
+- Changed deleting a project to instance admins only, audited, and refused while it has subprojects
+- Changed deleting an issue with subtasks to be refused instead of deleting the subtasks
+- Changed MCP tool refusals to be returned as tool errors instead of "Error: ..." strings
+- Changed agent sessions to start one per MCP connection instead of one per API key
+- Changed role visibility to be edited on the role page; the old roles form route is gone
+
+### Fixed
+- Fixed issue references in parentheses not being linked or indexed in the link graph
+- Fixed `specivo_get_links` listing edges twice, reporting truncation when nothing was cut, and leaving relations and hierarchy out of `direction="in"`
+- Fixed the issue form landing on a 404 and login redirects losing the page
+- Fixed MCP edits missing the history, notifications and audit entries that REST edits get
+- Fixed wiki section tools ignoring code fences, and repeated restores and parent cycles in the wiki
+- Fixed issue list and search errors on dates and saved filters, unstable paging and wrong hybrid counts
+- Fixed AI usage entries staying behind when an issue moves to another project
+- Fixed recurring task generation stopping after a failed pattern, mail retries on permanent failures, and beat locks using the wrong Redis
+- Fixed importer data loss for time logged against retired activities, placeholder rewrites outside the run, and very long phases
+
+### Security
+- Fixed stored XSS through attachment file names on the issue Attachments tab
+- Fixed description versions, journals and wiki-page ids not being scoped to the issue or project in the URL
+- Fixed changing tags without edit permission on issues and wiki pages
+- Fixed an issue's parent and category being settable outside its project or the caller's access
+- Fixed MCP tools and project admin routes revealing private project keys to non-members
+- Fixed CSRF checks being skipped for cookie requests that carried an API key or Authorization header
+- Fixed error responses missing security headers
+- Fixed watcher lists showing email addresses, and private notes ignoring View private notes
+- Fixed a refused bulk update writing part of its changes without a journal
+- Fixed MCP sessions opening before the key was checked, and hardened the importer's file and string handling
+- Fixed a hand-entered commit SHA revealing a commit linked only to issues the reader cannot see
+
+### Internal
+- Added migrations 0071 (link graph rebuild time), 0072 (role system keys, role lock version, Developer wiki editing) and 0073 (Automation role listed last)
+- Added ratcheting code quality gates, mypy and ESLint to CI, and split the most complex functions
+
 ## [0.13.0] - 2026-11-08
 
 ### Added
