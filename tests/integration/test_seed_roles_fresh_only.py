@@ -9,7 +9,7 @@ Everything runs inside the test's rolled-back transaction.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.cli.seed import (
@@ -22,6 +22,7 @@ from specivo.cli.seed import (
 )
 from specivo.models.role import Role, RoleBuiltin
 from specivo.models.workflow import WorkflowTransition
+from specivo.services.role_service import RoleService
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration, pytest.mark.serial]
 
@@ -100,3 +101,15 @@ async def test_reseeding_never_changes_roles_or_workflows(db_session: AsyncSessi
     assert await _role(db_session, "Reporter (renamed)") is not None
     assert await _role(db_session, "Agent") is None
     assert await _transitions(db_session, developer.id) == 20
+
+
+async def test_fresh_seed_lists_the_automation_role_after_the_defaults(db_session: AsyncSession) -> None:
+    """The migrations create Automation at position 1 before the seed runs; it must not stay first."""
+    await _start_fresh(db_session)
+    await db_session.execute(update(Role).where(Role.system_key.is_not(None)).values(position=1))
+    await db_session.flush()
+
+    assert await seed_roles(db_session) is True
+
+    custom = [r for r in await RoleService().list_roles(db_session) if r.builtin == RoleBuiltin.CUSTOM]
+    assert [r.name for r in custom] == ["Manager", "Developer", "Reporter", "Agent", "Automation"]

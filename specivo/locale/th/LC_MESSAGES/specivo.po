@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 21:19+0100\n"
+"POT-Creation-Date: 2026-11-22 21:27+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -647,8 +647,8 @@ msgid "Edit own comments"
 msgstr "แก้ไขความคิดเห็นของตนเอง"
 
 #: specivo/services/permission_catalogue.py:117
-msgid "Add and remove attachments on comments the user wrote."
-msgstr "เพิ่มและลบไฟล์แนบในความคิดเห็นที่ผู้ใช้เขียนเอง"
+msgid "Add and remove attachments on your own comments."
+msgstr "เพิ่มและลบไฟล์แนบในความคิดเห็นของคุณเอง"
 
 #: specivo/services/permission_catalogue.py:121
 msgid "Edit any comment"
@@ -815,8 +815,8 @@ msgid "See AI usage logged in the project; people always see their own entries."
 msgstr "ดูการใช้งาน AI ที่บันทึกในโปรเจกต์ ทุกคนเห็นรายการของตนเองเสมอ"
 
 #: specivo/services/permission_catalogue.py:199
-msgid "Log AI usage in the user's own name."
-msgstr "บันทึกการใช้งาน AI ในนามของผู้ใช้เอง"
+msgid "Log AI usage in your own name."
+msgstr "บันทึกการใช้งาน AI ในนามของคุณเอง"
 
 #: specivo/services/permission_catalogue.py:199
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:51
@@ -4608,7 +4608,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/role_detail.html:85
 #: specivo/templates/themes/default/pages/admin/roles_matrix.html:35
-#: specivo/web/pages/admin_roles.py:52
+#: specivo/web/pages/admin_roles.py:51
 msgid "Full access"
 msgstr "สิทธิ์เต็ม"
 
@@ -13404,7 +13404,7 @@ msgstr "มีผลเฉพาะในโปรเจกต์ที่เป
 msgid "Only applies in projects with the Time tracking module enabled."
 msgstr "มีผลเฉพาะในโปรเจกต์ที่เปิดใช้โมดูลบันทึกเวลา"
 
-#: specivo/web/pages/admin_roles.py:54
+#: specivo/web/pages/admin_roles.py:53
 #, python-format
 msgid "%(granted)s of %(total)s"
 msgstr "%(granted)s จาก %(total)s"
@@ -13712,4 +13712,7 @@ msgstr "ยังไม่มีหน้าวิกิ งาน หรือ�
 
 #~ msgid "Choose which users and time entries each role can see."
 #~ msgstr "เลือกว่าแต่ละบทบาทจะเห็นผู้ใช้และบันทึกเวลาใดได้บ้าง"
+
+#~ msgid "Add and remove attachments on comments the user wrote."
+#~ msgstr "เพิ่มและลบไฟล์แนบในความคิดเห็นที่ผู้ใช้เขียนเอง"
 

@@ -120,7 +120,9 @@ class TestNonMemberCeiling:
 
 def test_payload_shape() -> None:
     payload = catalogue_payload()
-    assert payload["total"] == 28
+    # "Not used yet" permissions are listed but not counted.
+    assert sum(len(g["permissions"]) for g in payload["groups"]) == 28
+    assert payload["total"] == 25
     assert [g["key"] for g in payload["groups"]] == [
         "issues",
         "comments",
@@ -142,3 +144,21 @@ def test_payload_shape() -> None:
     }
     assert all(isinstance(p["label"], str) for g in payload["groups"] for p in g["permissions"])
     assert set(payload["non_member_allowed"]) == {p.value for p in NON_MEMBER_ALLOWED}
+
+
+def test_total_counts_only_enforced_permissions() -> None:
+    payload = catalogue_payload()
+    listed = [p for g in payload["groups"] for p in g["permissions"]]
+    unused = {p["key"] for p in listed if not p["enforced"]}
+    assert unused == {"manage_subtasks", "delete_own_notes", "delete_notes"}
+    assert payload["total"] == len(listed) - len(unused)
+
+
+def test_descriptions_address_the_reader() -> None:
+    """Descriptions speak to the administrator as "you", never of "the user"."""
+    for group in catalogue_payload()["groups"]:
+        for p in group["permissions"]:
+            assert "the user" not in p["description"].lower(), p["key"]
+    comments = next(g for g in catalogue_payload()["groups"] if g["key"] == "comments")
+    edit_own = next(p for p in comments["permissions"] if p["key"] == "edit_own_notes")
+    assert edit_own["description"] == "Add and remove attachments on your own comments."

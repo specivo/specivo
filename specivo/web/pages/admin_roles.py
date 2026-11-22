@@ -20,7 +20,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.i18n import gettext as _
 from specivo.models.role import ROLE_SYSTEM_KEY_AUTOMATION, Role, RoleBuiltin
 from specivo.models.user import User
-from specivo.services.permission_catalogue import FULL_ACCESS, catalogue_payload
+from specivo.services.permission_catalogue import ENFORCED_KEYS, FULL_ACCESS, catalogue_payload
 from specivo.services.role_service import RoleService
 from specivo.web.deps import get_templates
 from specivo.web.pages.admin import require_admin
@@ -42,26 +42,25 @@ def _is_full_access(role: Role) -> bool:
     return FULL_ACCESS in (role.permissions or [])
 
 
-def _catalogue_keys(catalogue: dict[str, Any]) -> set[str]:
-    return {p["key"] for g in catalogue["groups"] for p in g["permissions"]}
+def _summary(role: Role) -> str:
+    """Return "Full access", or how many of the enforced permissions the role holds.
 
-
-def _summary(role: Role, known: set[str]) -> str:
-    """Return "Full access", or how many of the catalogue's permissions the role holds."""
+    "Not used yet" permissions count in neither number: holding one grants nothing.
+    """
     if _is_full_access(role):
         return _("Full access")
-    granted = len(known.intersection(role.permissions or []))
-    return _("%(granted)s of %(total)s") % {"granted": granted, "total": len(known)}
+    granted = len(ENFORCED_KEYS.intersection(role.permissions or []))
+    return _("%(granted)s of %(total)s") % {"granted": granted, "total": len(ENFORCED_KEYS)}
 
 
-def _role_row(role: Role, counts: dict[int, int], known: set[str]) -> dict[str, Any]:
+def _role_row(role: Role, counts: dict[int, int]) -> dict[str, Any]:
     return {
         "id": role.id,
         "name": role.name,
         "builtin": role.builtin != RoleBuiltin.CUSTOM,
         "assignable": bool(role.assignable),
         "full_access": _is_full_access(role),
-        "summary": _summary(role, known),
+        "summary": _summary(role),
         "membership_count": counts.get(role.id, 0),
     }
 
@@ -75,8 +74,7 @@ async def admin_roles(
     """List the roles: memberships, a permission summary, and their order in member pickers."""
     roles = await _service.list_roles(db)
     counts = await _service.membership_counts(db)
-    known = _catalogue_keys(catalogue_payload())
-    rows = [_role_row(r, counts, known) for r in roles]
+    rows = [_role_row(r, counts) for r in roles]
     return get_templates().TemplateResponse(
         request,
         "pages/admin/roles.html",

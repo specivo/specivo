@@ -77,6 +77,17 @@ def _cookies(user: User) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+async def test_list_summary_leaves_out_permissions_not_used_yet(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    # manage_subtasks and delete_own_notes are "Not used yet": neither number counts them.
+    await _role(db_session, "Unused perms", ["view_issues", "manage_subtasks", "delete_own_notes"])
+
+    resp = await admin_client.get("/admin/roles/")
+
+    assert '"summary": "1 of 25"' in resp.text
+
+
 async def test_list_shows_roles_summary_and_order(admin_client: AsyncClient, db_session: AsyncSession) -> None:
     partial = await _role(db_session, "Partial", ["view_issues", "add_issues"])
     full = await _role(db_session, "Lead", ["*"])
@@ -90,7 +101,7 @@ async def test_list_shows_roles_summary_and_order(admin_client: AsyncClient, db_
     assert "/admin/roles/new/" in text
     assert "/admin/roles/matrix/" in text
     # The summary: a count for a partial role, "Full access" for "*".
-    assert '"summary": "2 of 28"' in text
+    assert '"summary": "2 of 25"' in text
     assert '"summary": "Full access"' in text
     # Non member is listed after the custom roles, marked built-in, with no arrows.
     non_member = await _non_member(db_session)
