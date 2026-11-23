@@ -9,18 +9,21 @@ from fastapi import APIRouter, Depends, Form, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.ai_billing import ACCOUNT_PAYERS, BILLING_METHOD_MANUAL
 from specivo.core.ai_pricing import TOKEN_CLASSES
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.i18n import get_locale
 from specivo.core.money import Money, MoneyError, currency_display_name, format_decimal_plain
 from specivo.core.utils import utcnow
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.services.ai_billing_account_service import AiBillingAccountService
 from specivo.services.ai_model_price_service import AiModelPriceService
 from specivo.services.ai_subscription_service import AiSubscriptionService
-from specivo.services.ai_usage_service import AiUsageInput, EntryReferences
+from specivo.services.ai_usage_service import BILLING_OVERRIDE, AiUsageInput, BillingOverride, EntryReferences
 from specivo.services.currency_service import CurrencyService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.web.deps import get_templates, require_user
@@ -44,6 +47,32 @@ router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
 #: Token classes behind the "more tokens" disclosure of the form.
 _EXTRA_TOKENS = ("cache_read", "cache_write_5m", "cache_write_1h", "reasoning")
 
+_accounts = AiBillingAccountService()
+
+#: Values of the billing field of the edit form: "" (automatic), ``account:<id>`` or ``payer:<payer>``.
+_ACCOUNT_PREFIX = "account:"
+_PAYER_PREFIX = "payer:"
+
+
+def _billing_value(entry: AiUsageEntry) -> str:
+    """The billing field of *entry*: its override, or "" when the billing is resolved automatically."""
+    if entry.billing_method != BILLING_METHOD_MANUAL:
+        return ""
+    if entry.billing_account_id is not None:
+        return f"{_ACCOUNT_PREFIX}{entry.billing_account_id}"
+    return f"{_PAYER_PREFIX}{entry.payer}"
+
+
+def _override_of(value: str) -> BillingOverride | None:
+    """The billing override a submitted billing field asks for; ``None`` clears it."""
+    if not value:
+        return None
+    if value.startswith(_ACCOUNT_PREFIX) and value[len(_ACCOUNT_PREFIX) :].isdigit():
+        return BillingOverride(account_id=int(value[len(_ACCOUNT_PREFIX) :]))
+    if value.startswith(_PAYER_PREFIX) and value[len(_PAYER_PREFIX) :] in ACCOUNT_PAYERS:
+        return BillingOverride(payer=value[len(_PAYER_PREFIX) :])
+    raise _FormError("billing_invalid", "billing_account")
+
 
 # ---------------------------------------------------------------------------
 # Entry form (log and edit)
@@ -65,6 +94,7 @@ def _blank_form(project: Project | None, currency: str) -> dict[str, Any]:
         "cost_amount": "",
         "cost_currency": currency,
         "comments": "",
+        "billing": "",
     }
 
 
@@ -84,6 +114,7 @@ def _form_of(entry: AiUsageEntry, refs: EntryReferences, currency: str) -> dict[
         "cost_amount": format_decimal_plain(reported.amount) if reported is not None else "",
         "cost_currency": reported.currency if reported is not None else currency,
         "comments": entry.comments or "",
+        "billing": _billing_value(entry),
     }
 
 
@@ -102,6 +133,7 @@ def _read_form(  # noqa: PLR0913
     cost_amount: str,
     cost_currency: str,
     comments: str,
+    billing: str | None = None,
 ) -> dict[str, Any]:
     return {
         "project": project.strip().upper(),
@@ -117,6 +149,8 @@ def _read_form(  # noqa: PLR0913
         "cost_amount": cost_amount.strip(),
         "cost_currency": cost_currency.strip().upper(),
         "comments": comments,
+        # None: the form had no billing field (the override stays as it is).
+        "billing": billing.strip() if billing is not None else None,
     }
 
 
@@ -182,6 +216,7 @@ async def _form_choices(
         on_behalf = await _service.may_log_for_others(db, user, fixed_project)
     else:
         on_behalf = await _service.may_log_for_others_anywhere(db, user)
+    billing_accounts = await _billing_choices(db, user, entry) if entry is not None else None
     return {
         "tools": [{"slug": t.slug, "name": t.name, "provider": t.default_provider or ""} for t in tools],
         "models": [{"provider": p, "model": m} for p, m in await AiModelPriceService().model_suggestions(db)],
@@ -193,6 +228,30 @@ async def _form_choices(
         "can_log_for_others": on_behalf and entry is None,
         "cost_types": list(AI_USAGE_COST_TYPES),
         "extra_tokens": _EXTRA_TOKENS,
+        "billing_accounts": billing_accounts,
+        "payers": list(ACCOUNT_PAYERS),
+    }
+
+
+async def _billing_choices(db: AsyncSession, user: User, entry: AiUsageEntry) -> dict[str, list[dict[str, Any]]]:
+    """The accounts the billing override may name: the instance's, then the entry user's own.
+
+    Active ones, plus the entry's current account; a person's own accounts
+    only for that person and administrators (a manager sees company accounts).
+    """
+
+    def keep(a: AiBillingAccount) -> bool:
+        return (a.is_active or a.id == entry.billing_account_id) and _accounts.can_view(user, a)
+
+    def choice(a: AiBillingAccount) -> dict[str, Any]:
+        return {"value": f"{_ACCOUNT_PREFIX}{a.id}", "name": a.name, "slug": a.slug, "payer": a.payer}
+
+    instance = await _accounts.instance_accounts(db, active_only=False)
+    personal = await _accounts.personal_accounts(db, entry.user_id, active_only=False)
+    by_name = sorted(instance, key=lambda a: a.name.lower()), sorted(personal, key=lambda a: a.name.lower())
+    return {
+        "instance": [choice(a) for a in by_name[0] if keep(a)],
+        "personal": [choice(a) for a in by_name[1] if keep(a)],
     }
 
 
@@ -359,6 +418,7 @@ async def _submitted(request: Request) -> tuple[dict[str, Any], str]:
     form = _read_form(
         **{name: text(name) for name in _FORM_FIELDS},
         tokens={c: text(f"tokens_{c}") for c in TOKEN_CLASSES},
+        billing=text("billing") if "billing" in data else None,
     )
     return form, text("next")
 
@@ -457,6 +517,8 @@ async def ai_usage_update(
         }
         if not entry.is_locked:
             changes.update(_usage_values(form))
+        if form["billing"] is not None and form["billing"] != _billing_value(entry):
+            changes[BILLING_OVERRIDE] = _override_of(form["billing"])
         async with db.begin_nested():
             await _service.update(db, user, entry, changes, request=request)
     except (AppError, _FormError) as exc:

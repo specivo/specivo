@@ -219,7 +219,7 @@ The REST API mirrors time entries; every URL needs its trailing slash:
 | `GET /api/v1/my/ai-usage/` | The entries logged in your name, unassigned ones included. Filters: `project_key`, `unassigned`, `tool`, `model`, `cost_type`, `source`, `excluded`, `from_date`, `to_date`, `offset`, `limit`. |
 | `GET /api/v1/projects/{key}/ai-usage/` | A project's entries you may read: your own and those you reported, or everyone's with **View AI usage** set to *all*. The same filters, plus `user_id` and `issue_id`. |
 | `POST /api/v1/projects/{key}/ai-usage/` | Log an entry by hand: `tool`, `model`, `usage_date`, `tokens`, and optionally `issue_id`, `cost_type`, `cost` (`{"amount": "0.42", "currency": "USD"}`), `on_behalf_of` and `comments`. `POST /api/v1/my/ai-usage/` logs one without a project. |
-| `GET`, `PATCH`, `DELETE /api/v1/ai-usage/{id}/` | Read, change or delete one entry. `PATCH` with `project_key` (or `null`) moves it; `tokens` changes only the classes sent. |
+| `GET`, `PATCH`, `DELETE /api/v1/ai-usage/{id}/` | Read, change or delete one entry. `PATCH` with `project_key` (or `null`) moves it; `tokens` changes only the classes sent; `billing_account_id` or `payer` sets the billing by hand (see below). |
 | `POST /api/v1/ai-usage/{id}/exclude/`, `/include/` | Leave an entry out of reports, or count it again. |
 
 Entries logged this way have the source `api` (with an API key) or `manual` (signed in). Agents use
@@ -229,12 +229,22 @@ the MCP tools `specivo_log_ai_usage` (source `mcp`) and `specivo_ai_usage`
 
 - You can change entries logged in your name; **Manage AI usage** in a project lets you change
   anyone's there. Moving an entry to another project is checked like logging it there.
-- An entry sent by a reporter keeps its tokens, model and tool: only its project, issue and
-  comments can change (anything else is `ai_usage_field_locked`). Exclude a wrong one rather than
+- An entry sent by a reporter keeps its tokens, model and tool: only its project, issue,
+  comments and billing account can change (anything else is `ai_usage_field_locked`). Exclude a wrong one rather than
   deleting it; a later re-send of the same bucket keeps it excluded. Only administrators delete
   reported entries.
 - Changing the usage of a hand-logged entry prices it again. An edit, exclusion or deletion by
   someone other than the entry's owner is written to the [audit log](../install/audit-log.md).
+- Every entry shows `payer`, `billing_method` (what decided the billing; `manual` when a person set
+  it) and `billing_account` (`id`, `slug`, `name`, `kind`, `instance`; `null` without an account or
+  when it is somebody else's personal account). To correct it, `PATCH` with `billing_account_id`
+  (one of the entry's person's own accounts or a company account, active, and one you can see; its
+  payer becomes the entry's) or with `payer` alone (`employer` or `employee`, no account). Over MCP,
+  `specivo_ai_usage` `op="update"` takes `billing_account` (the slug) or `payer`. The choice is kept
+  when the reporter sends the bucket again and when accounts change. `billing_account_id: null` (or
+  `billing_account=""` over MCP) clears it, and Specivo resolves the billing again. An account the
+  entry's person may not use is `ai_usage_billing_account_unknown`. Every change is audited as
+  `ai_usage_billing_overridden`.
 
 ## Limits and errors
 

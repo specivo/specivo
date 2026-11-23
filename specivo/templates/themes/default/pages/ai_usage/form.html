@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "pages/ai_usage/_macros.html" import error_text, cost_type_label, source_label with context %}
+{% from "pages/auth/_ai_billing_account_macros.html" import payer_label with context %}
 {% from "components/filter_combobox.html" import issue_combobox %}
 
 {% block title %}{{ _("Edit AI usage") if entry else _("Log AI usage") }}{% if project %} - {{ project.name }}{% endif %} - {{ brand_name }}{% endblock %}
@@ -28,6 +29,7 @@
   <div><span class="sp-text-muted-xs">{% trans %}Logged in the name of{% endtrans %}</span> {{ entry.user_name }}</div>
   <div><span class="sp-text-muted-xs">{% trans %}Source{% endtrans %}</span> {{ source_label(entry.source) }}{% if entry.on_behalf %} · {% if entry.key_name %}{% trans reporter=entry.reporter_name, key=entry.key_name %}logged by {{ reporter }} via key {{ key }}{% endtrans %}{% else %}{% trans reporter=entry.reporter_name %}logged by {{ reporter }}{% endtrans %}{% endif %}{% endif %}</div>
   <div><span class="sp-text-muted-xs">{% trans %}Spend{% endtrans %}</span> {{ entry.marginal or "–" }} · <span class="sp-text-muted-xs">{% trans %}API value{% endtrans %}</span> {{ entry.api_equivalent or "–" }}</div>
+  <div data-testid="aiu-entry-billing"><span class="sp-text-muted-xs">{% trans %}Paid by{% endtrans %}</span> {% if entry.payer == "unknown" %}{% trans %}Unknown{% endtrans %}{% else %}{{ payer_label(entry.payer) }}{% endif %}{% if entry.billing_account %} · {% trans account=entry.billing_account %}through {{ account }}{% endtrans %}{% elif entry.billing_private %} · {% trans %}through a personal account{% endtrans %}{% endif %}{% if entry.billing_manual %} <span class="sp-aiu-badge">{% trans %}Set by hand{% endtrans %}</span>{% endif %}</div>
   {% if entry.excluded %}<div><span class="sp-aiu-badge">{% trans %}Excluded{% endtrans %}</span> {% trans %}This entry is left out of totals and reports.{% endtrans %}</div>{% endif %}
 </div>
 {% endif %}
@@ -149,6 +151,29 @@
         </select>
       </div>
       <span class="sp-text-muted-xs">{% trans %}What the provider billed, if you know it. Used as the spend of pay-per-use usage; otherwise the spend is computed from the price table.{% endtrans %}</span>
+    </div>
+    {% endif %}
+
+    {% if billing_accounts is not none %}
+    <div class="sp-aiu-field sp-aiu-wide">
+      <label class="form-label" for="aiu-billing">{% trans %}Billing account{% endtrans %}</label>
+      <select id="aiu-billing" name="billing" class="form-input" data-testid="aiu-form-billing">
+        <option value="" {{ 'selected' if not form.billing else '' }}>{% trans %}Automatic (from the route and the billing accounts){% endtrans %}</option>
+        {% if billing_accounts.instance %}
+        <optgroup label="{{ _('Company accounts') }}">
+          {% for a in billing_accounts.instance %}<option value="{{ a.value }}" {{ 'selected' if form.billing == a.value else '' }}>{{ a.name }} ({{ a.slug }}) · {{ payer_label(a.payer) }}</option>{% endfor %}
+        </optgroup>
+        {% endif %}
+        {% if billing_accounts.personal %}
+        <optgroup label="{{ _('Personal accounts') }}">
+          {% for a in billing_accounts.personal %}<option value="{{ a.value }}" {{ 'selected' if form.billing == a.value else '' }}>{{ a.name }} ({{ a.slug }}) · {{ payer_label(a.payer) }}</option>{% endfor %}
+        </optgroup>
+        {% endif %}
+        <optgroup label="{{ _('No account') }}">
+          {% for p in payers %}<option value="payer:{{ p }}" {{ 'selected' if form.billing == 'payer:' ~ p else '' }}>{% if p == "employer" %}{% trans %}Paid by the employer{% endtrans %}{% else %}{% trans %}Paid by the employee{% endtrans %}{% endif %}</option>{% endfor %}
+        </optgroup>
+      </select>
+      <span class="sp-text-muted-xs">{% trans %}Choose the account that paid for this usage to correct the payer. Your choice is kept when the reporter sends the entry again. Automatic works it out from the route, the billing accounts and the project again.{% endtrans %}</span>
     </div>
     {% endif %}
 

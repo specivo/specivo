@@ -1472,10 +1472,13 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
         "session's entries, to check what was attributed where); get "
         "(entry_id); update (entry_id plus the fields to change: project_key moves the entry, '' makes it "
         "unassigned; issue_ref, '' clears it; comments; and for entries not from the reporter the usage: tool, "
-        "model, provider, usage_date, the token counts, request_count, cost_type, cost_amount + cost_currency); "
+        "model, provider, usage_date, the token counts, request_count, cost_type, cost_amount + cost_currency; "
+        "and on any entry the billing override: billing_account (slug of the entry user's own or an instance "
+        "account; its payer becomes the entry's) or payer alone (employer or employee, no account), kept when the "
+        "reporter sends the entry again; billing_account='' clears it); "
         "exclude / include (entry_id: leave an entry out of reports, or count it again). "
         "You may change entries logged in your name, or any with manage_ai_usage in their project. Entries "
-        "from the reporter or an import keep their usage (only project, issue and comments change) and are "
+        "from the reporter or an import keep their usage (only project, issue, comments and billing change) and are "
         "excluded rather than deleted. " + _NO_COUNTERS
     ),
 )
@@ -1518,6 +1521,13 @@ async def specivo_ai_usage(  # noqa: PLR0913
     ] = None,
     cost_currency: Annotated[str | None, Field(description="update: ISO currency of cost_amount.")] = None,
     comments: Annotated[str | None, Field(description="update: new note ('' clears it).")] = None,
+    billing_account: Annotated[
+        str | None,
+        Field(description="update: slug of the billing account that paid ('' clears the override)."),
+    ] = None,
+    payer: Annotated[
+        str | None, Field(description="update: employer or employee, for an override without an account.")
+    ] = None,
     offset: Annotated[int, Field(description="list: entries to skip.", ge=0)] = 0,
     limit: Annotated[int, Field(description="list: max entries (1-100).", ge=1, le=100)] = 25,
 ) -> str:
@@ -1554,6 +1564,8 @@ async def specivo_ai_usage(  # noqa: PLR0913
             cost_amount=cost_amount,
             cost_currency=cost_currency,
             comments=comments,
+            billing_account=billing_account,
+            payer=payer,
             offset=offset,
             limit=limit,
         )
