@@ -11,7 +11,8 @@ name and version never change after the insert.
 
 ``payer`` and ``billing_account_id`` say who paid and through which billing
 account; ``route`` is the backend the usage went through. Like ``cost_type``
-they are snapshots.
+they are snapshots, resolved at write time (``billing_method`` says which
+step decided) and again when a billing account changes.
 
 Costs are a **snapshot at write time** (see ``AiUsageService``):
 ``price_id`` and ``priced_at`` record which price row was used and at which
@@ -45,7 +46,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from specivo.core.ai_billing import ENTRY_PAYERS, PAYER_UNKNOWN
+from specivo.core.ai_billing import BILLING_METHOD_NONE, BILLING_METHODS, ENTRY_PAYERS, PAYER_UNKNOWN
 from specivo.core.ai_pricing import TOKEN_CLASSES
 from specivo.core.money import Money
 from specivo.models.base import Base, TimestampMixin
@@ -97,6 +98,11 @@ class AiUsageEntry(Base, TimestampMixin):
         CheckConstraint(_in("cost_type", AI_USAGE_COST_TYPES), name="ck_ai_usage_entries_cost_type"),
         CheckConstraint(_in("cost_basis", AI_USAGE_COST_BASES), name="ck_ai_usage_entries_cost_basis"),
         CheckConstraint(_in("payer", ENTRY_PAYERS), name="ck_ai_usage_entries_payer"),
+        CheckConstraint(_in("billing_method", BILLING_METHODS), name="ck_ai_usage_entries_billing_method"),
+        CheckConstraint(
+            f"requested_cost_type IS NULL OR {_in('requested_cost_type', AI_USAGE_COST_TYPES)}",
+            name="ck_ai_usage_entries_requested_cost_type",
+        ),
         CheckConstraint(
             "source NOT IN ('reporter', 'import') OR idempotency_key IS NOT NULL",
             name="ck_ai_usage_entries_key_required",
@@ -203,6 +209,14 @@ class AiUsageEntry(Base, TimestampMixin):
         Integer, ForeignKey("ai_billing_accounts.id", ondelete="SET NULL"), nullable=True
     )
     payer: Mapped[str] = mapped_column(String(8), nullable=False, default=PAYER_UNKNOWN, server_default=PAYER_UNKNOWN)
+    #: Which resolution step decided the account and payer (see ``BILLING_METHODS``).
+    billing_method: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=BILLING_METHOD_NONE, server_default=BILLING_METHOD_NONE
+    )
+    #: The cost type the record or person asked for (``NULL``: none, so the
+    #: account's default or the subscription decided). Kept so that a changed
+    #: billing account re-resolves the entry from what was sent.
+    requested_cost_type: Mapped[str | None] = mapped_column(String(12), nullable=True)
 
     # -- context -------------------------------------------------------------
     external_session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)

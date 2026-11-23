@@ -24,6 +24,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-21 — recorded AI spend by release and sprint: the nearest-ancestor lookup, its visibility and its query shape (§4).
 **Revised:** 2026-11-23 — recorded the optional idempotency key on manual, API and MCP AI usage entries (§4).
 **Revised:** 2026-11-23 — recorded AI billing accounts, the payer and route on AI usage entries and the project payer default (§4).
+**Revised:** 2026-11-23 — recorded billing resolution at ingest and the re-resolution when an account changes (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -279,6 +280,21 @@ no tools of its own (coverage stays the subscription's). `ai_usage_entries.payer
 `billing_account_id` and `route` (the raw backend id, String(100)) are snapshots like `cost_type`; `route` never feeds
 pricing. The project setting `ai_usage_payer_default` (`employer` / `employee`; absent = `none`) is a key of
 `projects.settings`, read with `project_payer_default`.
+
+**Billing resolution.** Every write of an entry (ingest, replays, REST/MCP, a person's edit) resolves its account,
+payer and cost type in `specivo.services.ai_billing_resolution`, first match wins, and stores the step as
+`billing_method`: `manual` (a person set it; kept through replays and re-resolution), `record` (the record's
+`billing_account` slug: the user's own account first, then an instance account), `instance_route` and
+`personal_route` (`route_patterns` plus `tool_slugs`, oldest account first), `subscription` (the covering
+subscription's account; only when no cost type or `subscription` was asked for), then `project_default` or `none`.
+The account's payer becomes the entry's; the cost type is the one asked for (kept as `requested_cost_type`), else the
+account's `default_cost_type`, else `unknown`. `subscription_id` is set only when the account is that subscription's
+(its fee schedule), so gateway usage without a cost type is never charged to a personal plan. An unusable slug is the
+ingest warning `billing_account_unknown`, one message for unknown, foreign and inactive. Creating an account with
+route patterns, or changing an account's payer, patterns, tools, default cost type or state, re-resolves the entries it
+may affect from the stored inputs and re-prices those whose cost type or subscription changed, in the same transaction
+(`AiUsageService.rebill_for_account`; `rebill_for_project` for a changed payer default), with one
+`ai_usage_costs_recomputed` audit event (`reason` `billing`) when something changed.
 
 **AI usage entries.** `ai_usage_entries` holds one bucket of usage per session x model x **UTC day**, logged in a
 user's name (`user_id`, on behalf of) and written by `reporter_user_id` / `reporter_api_key_id` with a `source`

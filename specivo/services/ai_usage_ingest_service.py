@@ -36,6 +36,17 @@ an ``attribution_dropped`` warning, and the next step is tried. With a
 ``project_key``, ``agent_log`` and inferred issues of other projects are
 dropped too.
 
+Billing account and payer
+-------------------------
+Resolved for every record, replays included, by
+:mod:`specivo.services.ai_billing_resolution` from ``billing_account``,
+``route``, the tool and the project the entry ends up in. The result names the
+entry's ``payer`` and ``billing_account`` (slug). A slug no account available
+to the user has gets the warning ``billing_account_unknown`` (one message
+whether it does not exist, is someone else's or is switched off) and the
+other steps decide. A replay that changes only the route or the slug resolves
+again and is ``updated`` when the billing changes; a changed route is stored.
+
 Replays
 -------
 A replay of a bucket that is already attributed (``stored``) mostly keeps
@@ -83,6 +94,7 @@ from specivo.core.exceptions import AppError, NotFoundError
 from specivo.core.money import Money, MoneyError
 from specivo.core.utils import utcnow
 from specivo.hooks.refs import extract_branch_refs
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_usage_entry import MANUAL_ATTRIBUTION, AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
@@ -163,6 +175,10 @@ class RecordResult:
     entry_id: int | None = None
     revision: int | None = None
     attribution: dict[str, Any] | None = None
+    #: Who pays for the stored entry and the slug of its billing account (see
+    #: :mod:`specivo.services.ai_billing_resolution`); ``None`` when rejected.
+    payer: str | None = None
+    billing_account: str | None = None
     warnings: list[Problem] = field(default_factory=list)
     error: Problem | None = None
 
@@ -174,6 +190,8 @@ class RecordResult:
             "entry_id": self.entry_id,
             "revision": self.revision,
             "attribution": self.attribution,
+            "payer": self.payer,
+            "billing_account": self.billing_account,
             "warnings": [w.as_dict() for w in self.warnings],
             "error": self.error.as_dict() if self.error is not None else None,
         }
@@ -277,6 +295,7 @@ class AiUsageIngestService:
         result.status = "rejected"
         result.entry_id = result.revision = None
         result.attribution = None
+        result.payer = result.billing_account = None
         return result
 
     async def _write(self, session: AsyncSession, batch: _Batch, record: IngestRecord, result: RecordResult) -> None:
@@ -345,6 +364,8 @@ class AiUsageIngestService:
             client_name=batch.client_name,
             client_version=batch.client_version,
             idempotency_key=record.idempotency_key,
+            route=record.route,
+            billing_account=record.billing_account,
         )
 
     async def _upsert(
@@ -400,6 +421,23 @@ class AiUsageIngestService:
         result.entry_id = entry.id
         result.revision = entry.revision
         result.attribution = await self._attribution_of(session, actor, entry)
+        result.payer = entry.payer
+        account = (
+            await session.get(AiBillingAccount, entry.billing_account_id)
+            if entry.billing_account_id is not None
+            else None
+        )
+        result.billing_account = account.slug if account is not None else None
+        if outcome.billing_slug_unknown:
+            # One message whether the slug does not exist, is someone else's or is switched off.
+            result.warnings.append(
+                Problem(
+                    "billing_account_unknown",
+                    f"No active billing account '{record.billing_account}' is available to this user; "
+                    "the account was found from the other rules",
+                    "billing_account",
+                )
+            )
 
     async def _target_user(
         self, session: AsyncSession, batch: _Batch, record: IngestRecord, login: str

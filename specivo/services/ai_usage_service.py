@@ -50,6 +50,16 @@ used as the marginal cost of ``api`` usage only. Prices added or edited later
 never change an entry by themselves: :meth:`AiUsageService.recompute_range`
 does, each entry at its own ``priced_at``.
 
+Billing
+-------
+Every write resolves the entry's billing account, payer and cost type
+(:mod:`specivo.services.ai_billing_resolution`), keeping the cost type the
+record asked for (``requested_cost_type``) and the step that decided
+(``billing_method``). A change to a billing account resolves the entries it
+may affect again and re-prices those whose cost type or subscription changed
+(:meth:`AiUsageService.rebill_for_account`); a moved entry is resolved again
+in its new project.
+
 Audit: logging for another user, an edit by someone other than the entry's
 user, excluding and including, deleting, and recomputing costs.
 """
@@ -70,6 +80,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
+from specivo.core.ai_billing import (
+    BILLING_METHOD_MANUAL,
+    BILLING_METHOD_NONE,
+    BILLING_METHOD_PROJECT_DEFAULT,
+    BILLING_METHOD_RECORD,
+    PAYER_UNKNOWN,
+    normalize_account_slug,
+    normalize_route,
+)
 from specivo.core.ai_pricing import TOKEN_CLASSES, TokenCounts, model_name_variants, normalize_provider
 from specivo.core.ai_usage import (
     COMMENTS_MAX_LENGTH,
@@ -90,6 +109,7 @@ from specivo.core.constants import MAX_HIERARCHY_DEPTH
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.money import Money, MoneyError, format_decimal_plain
 from specivo.core.utils import utcnow
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.ai_subscription import AiSubscription
 from specivo.models.ai_usage_entry import (
@@ -106,6 +126,12 @@ from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
+from specivo.services.ai_billing_resolution import (
+    BillingLookups,
+    BillingRequest,
+    BillingResolution,
+    BillingResolver,
+)
 from specivo.services.ai_model_price_service import (
     AiModelPriceService,
     PriceReference,
@@ -135,6 +161,7 @@ register_price_reference(PRICE_REFERENCE)
 
 _audit = SecurityAuditService()
 _prices = AiModelPriceService()
+_billing_resolver = BillingResolver()
 
 #: Fields a person may change on any entry they may edit.
 ATTRIBUTION_FIELDS: frozenset[str] = frozenset({"project_id", "issue_id", "comments"})
@@ -217,7 +244,8 @@ class AiUsageInput:
     """One bucket of usage as a client or a person sends it (raw values; validated by the service).
 
     ``tokens`` and ``long_context`` map token classes to counts. ``cost_type``
-    ``None`` lets the server default it from the user's subscriptions.
+    ``None`` lets the server default it from the billing account the usage
+    resolves to (see :mod:`specivo.services.ai_billing_resolution`).
     """
 
     tool: str
@@ -241,6 +269,10 @@ class AiUsageInput:
     client_version: str | None = None
     comments: str | None = None
     idempotency_key: str | None = None
+    #: Raw id of the backend the usage went through; only selects a billing account.
+    route: str | None = None
+    #: Slug of the billing account the record names (see :mod:`specivo.services.ai_billing_resolution`).
+    billing_account: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,10 +286,15 @@ class ModelSuggestion:
 
 @dataclass(frozen=True, slots=True)
 class UpsertResult:
-    """What an upsert did: ``created``, ``updated`` or ``unchanged`` (nothing written)."""
+    """What an upsert did: ``created``, ``updated`` or ``unchanged`` (nothing written).
+
+    ``billing_slug_unknown``: the record named a billing account slug the
+    user has no account for; the account was resolved from the other rules.
+    """
 
     entry: AiUsageEntry
     status: str
+    billing_slug_unknown: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,6 +389,10 @@ def _cost_snapshot(entry: AiUsageEntry) -> tuple[Any, ...]:
         entry.api_equivalent_currency,
         entry.cost_basis,
     )
+
+
+def _billing_snapshot(entry: AiUsageEntry) -> tuple[Any, ...]:
+    return (entry.billing_method, entry.billing_account_id, entry.payer, entry.cost_type, entry.subscription_id)
 
 
 def _iso(value: datetime | date | None) -> str | None:
@@ -1080,6 +1121,11 @@ class AiUsageService:
         for name, max_length in CONTEXT_MAX_LENGTHS.items():
             values[name] = self._text(getattr(data, name), name, max_length)
         values["comments"] = self._text(data.comments, "comments", COMMENTS_MAX_LENGTH)
+        if data.route is not None and not isinstance(data.route, str):
+            raise _invalid("route must be text", "route")
+        values["route"] = normalize_route(data.route)
+        if data.billing_account is not None and normalize_account_slug(data.billing_account) is None:
+            raise _invalid("billing_account is the slug of a billing account", "billing_account")
         key = (data.idempotency_key or "").strip() or None
         if key is not None and (len(key) > IDEMPOTENCY_KEY_MAX_LENGTH or not _KEY_RE.match(key)):
             raise _invalid(
@@ -1132,21 +1178,60 @@ class AiUsageService:
 
     # -- costs ----------------------------------------------------------------------
 
-    async def _default_cost_type(
-        self, session: AsyncSession, user_id: int, requested: str | None, values: Mapping[str, Any]
-    ) -> tuple[str, int | None]:
-        """The cost type and covering subscription: the requested type, else the user's subscription, else unknown."""
-        from specivo.services.ai_subscription_service import AiSubscriptionService
+    async def _billing(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: int,
+        values: Mapping[str, Any],
+        requested: str | None,
+        project: Project | None,
+        account_slug: str | None = None,
+        stored: AiUsageEntry | None = None,
+        keep_named: bool = False,
+        lookups: BillingLookups | None = None,
+    ) -> BillingResolution:
+        """The billing account, payer, cost type and subscription of usage *values* (``tool_slug``,
+        ``provider``, ``usage_date``, ``started_at``, ``route``) in *project*.
 
-        if requested is not None and requested != "subscription":
-            return requested, None
-        at = priced_at_for(values["usage_date"], values["started_at"])
-        coverage = await AiSubscriptionService().subscription_for(
-            session, user_id, values["tool_slug"], values["provider"], at
+        *stored* is the entry being written again: an account and payer a
+        person set (``manual``) stay. With *keep_named* (a re-resolution
+        without the record) the account a record named earlier stays while it
+        is active.
+        """
+        manual = stored is not None and stored.billing_method == BILLING_METHOD_MANUAL
+        named = (
+            stored.billing_account_id
+            if keep_named and stored is not None and stored.billing_method == BILLING_METHOD_RECORD
+            else None
         )
-        if coverage is not None:
-            return "subscription", coverage.subscription.id
-        return (requested or "unknown"), None
+        request = BillingRequest(
+            user_id=user_id,
+            tool_slug=values["tool_slug"],
+            provider=values["provider"],
+            at=priced_at_for(values["usage_date"], values["started_at"]),
+            route=values.get("route"),
+            requested_cost_type=requested,
+            account_slug=normalize_account_slug(account_slug) if account_slug else None,
+            project_settings=project.settings if project is not None else None,
+            has_project=project is not None,
+            named_account_id=named,
+            manual=manual,
+            manual_account_id=stored.billing_account_id if manual and stored is not None else None,
+            manual_payer=stored.payer if manual and stored is not None else PAYER_UNKNOWN,
+        )
+        return await _billing_resolver.resolve(session, request, lookups=lookups)
+
+    @staticmethod
+    def _entry_values(entry: AiUsageEntry) -> dict[str, Any]:
+        """The usage values of a stored entry that billing resolution reads."""
+        return {
+            "tool_slug": entry.tool_slug,
+            "provider": entry.provider,
+            "usage_date": entry.usage_date,
+            "started_at": entry.started_at,
+            "route": entry.route,
+        }
 
     async def apply_costs(self, session: AsyncSession, entry: AiUsageEntry) -> None:
         """Price *entry* at its ``priced_at`` with the prices valid then, and store the snapshot.
@@ -1246,8 +1331,8 @@ class AiUsageService:
         values = await self._validated(session, data, source=source)
         project = await self._project(session, data.project_id)
         await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
-        entry = await self._insert(session, actor, target, data, values, source, api_key_id, request)
-        return UpsertResult(entry, "created")
+        entry, billing = await self._insert(session, actor, target, data, values, source, api_key_id, request, project)
+        return UpsertResult(entry, "created", billing.slug_unknown)
 
     async def upsert(
         self,
@@ -1287,7 +1372,9 @@ class AiUsageService:
             await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
             savepoint = await session.begin_nested()
             try:
-                entry = await self._insert(session, actor, target, data, values, source, api_key_id, request)
+                entry, billing = await self._insert(
+                    session, actor, target, data, values, source, api_key_id, request, project
+                )
             except IntegrityError:
                 await savepoint.rollback()
                 existing = await self._by_key(session, target.id, values["idempotency_key"])
@@ -1296,7 +1383,7 @@ class AiUsageService:
             else:
                 if savepoint.is_active:
                     await savepoint.commit()
-                return UpsertResult(entry, "created")
+                return UpsertResult(entry, "created", billing.slug_unknown)
         return await self._replace(
             session, actor, target, existing, data, values, project, request, reattribute=reattribute
         )
@@ -1319,18 +1406,26 @@ class AiUsageService:
         source: str,
         api_key_id: int | None,
         request: Request | None,
-    ) -> AiUsageEntry:
-        cost_type, subscription_id = await self._default_cost_type(session, target.id, data.cost_type, values)
+        project: Project | None,
+    ) -> tuple[AiUsageEntry, BillingResolution]:
+        billing = await self._billing(
+            session,
+            user_id=target.id,
+            values=values,
+            requested=data.cost_type,
+            project=project,
+            account_slug=data.billing_account,
+        )
         entry = AiUsageEntry(
             **values,
+            **billing.columns(),
             project_id=data.project_id,
             issue_id=data.issue_id,
             user_id=target.id,
             reporter_user_id=actor.id,
             reporter_api_key_id=api_key_id,
             source=source,
-            cost_type=cost_type,
-            subscription_id=subscription_id,
+            requested_cost_type=data.cost_type,
             revision=1,
         )
         await self.apply_costs(session, entry)
@@ -1340,7 +1435,7 @@ class AiUsageService:
             details = await self._details(session, entry, target)
             details["reporter_api_key_id"] = api_key_id
             await self._audit(session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER, actor, entry, details, request)
-        return entry
+        return entry, billing
 
     async def _replace(
         self,
@@ -1395,21 +1490,31 @@ class AiUsageService:
             await self.require_can_log(session, actor, target, stored, None, request=request)
         if assigns:
             await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
+            final_project = project
         else:
             stored = await self._project(session, entry.project_id)
             await self.require_can_log(session, actor, target, stored, None, request=request)
+            final_project = stored
 
-        cost_type, subscription_id = await self._default_cost_type(session, entry.user_id, data.cost_type, values)
+        billing = await self._billing(
+            session,
+            user_id=entry.user_id,
+            values=values,
+            requested=data.cost_type,
+            project=final_project,
+            account_slug=data.billing_account,
+            stored=entry,
+        )
         incoming = {k: v for k, v in values.items() if k not in ("comments", "attribution_method", "idempotency_key")}
-        incoming["cost_type"] = cost_type
-        incoming["subscription_id"] = subscription_id
+        incoming |= billing.columns()
+        incoming["requested_cost_type"] = data.cost_type
         if assigns:
             incoming["project_id"] = data.project_id
             incoming["issue_id"] = data.issue_id
             incoming["attribution_method"] = values["attribution_method"]
         changed = {name: value for name, value in incoming.items() if getattr(entry, name) != value}
         if not changed:
-            return UpsertResult(entry, "unchanged")
+            return UpsertResult(entry, "unchanged", billing.slug_unknown)
         for name, value in changed.items():
             setattr(entry, name, value)
         await self.apply_costs(session, entry)
@@ -1421,7 +1526,7 @@ class AiUsageService:
             details["status"] = "updated"
             details["revision"] = entry.revision
             await self._audit(session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER, actor, entry, details, request)
-        return UpsertResult(entry, "updated")
+        return UpsertResult(entry, "updated", billing.slug_unknown)
 
     async def update(  # noqa: C901, PLR0912
         self,
@@ -1490,15 +1595,23 @@ class AiUsageService:
                 "repo_hint",
             ):
                 setattr(entry, name, values[name])
-            if usage_changes & _COST_FIELDS:
-                requested = changes.get("cost_type", entry.cost_type)
-                if requested is not None and requested not in AI_USAGE_COST_TYPES:
-                    raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
-                if "cost_type" in changes and changes["cost_type"] is None:
-                    requested = None
-                cost_type, subscription_id = await self._default_cost_type(session, entry.user_id, requested, values)
-                entry.cost_type = cost_type
-                entry.subscription_id = subscription_id
+
+        reprice = bool(usage_changes & _COST_FIELDS)
+        if reprice or entry.project_id != before["project_id"]:
+            # The billing follows the usage and the project (its payer default).
+            requested = changes.get("cost_type", entry.requested_cost_type)
+            if requested is not None and requested not in AI_USAGE_COST_TYPES:
+                raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
+            billing = await self._billing(
+                session,
+                user_id=entry.user_id,
+                values=self._entry_values(entry),
+                requested=requested,
+                project=await self._project(session, entry.project_id),
+                stored=entry,
+                keep_named=True,
+            )
+            if self._set_billing(entry, billing, requested) or reprice:
                 await self.apply_costs(session, entry)
 
         after = self._editable_state(entry)
@@ -1579,6 +1692,7 @@ class AiUsageService:
             client_version=entry.client_version,
             comments=entry.comments,
             idempotency_key=entry.idempotency_key,
+            route=entry.route,
         )
 
     @staticmethod
@@ -1604,7 +1718,18 @@ class AiUsageService:
             "external_session_id": entry.external_session_id,
             "git_branch": entry.git_branch,
             "repo_hint": entry.repo_hint,
+            "payer": entry.payer,
+            "billing_account_id": entry.billing_account_id,
         }
+
+    @staticmethod
+    def _set_billing(entry: AiUsageEntry, billing: BillingResolution, requested: str | None) -> bool:
+        """Store *billing* on *entry*; whether its cost type or subscription changed (so it needs re-pricing)."""
+        cost_changed = (entry.cost_type, entry.subscription_id) != (billing.cost_type, billing.subscription_id)
+        for name, value in billing.columns().items():
+            setattr(entry, name, value)
+        entry.requested_cost_type = requested
+        return cost_changed
 
     async def set_excluded(
         self,
@@ -1874,6 +1999,121 @@ class AiUsageService:
                 status_code=503,
             ) from exc
         return task_id
+
+    # -- billing re-resolution --------------------------------------------------------
+
+    async def rebill_for_account(
+        self, session: AsyncSession, account: AiBillingAccount, *, actor_id: int | None, request: Request | None = None
+    ) -> RecomputeOutcome:
+        """Resolve again, and re-price, the entries a change of *account* may affect.
+
+        Those that point at it, and those its route patterns could now take
+        (entries with a route whose account no record named and no person
+        set): for an instance account any user's, for a personal account its
+        owner's (whose subscription coverage may change too).
+        """
+        movable = AiUsageEntry.billing_method.not_in((BILLING_METHOD_MANUAL, BILLING_METHOD_RECORD))
+        if account.owner_user_id is None:
+            others: ColumnElement[bool] = and_(AiUsageEntry.route.is_not(None), movable)
+        else:
+            others = and_(AiUsageEntry.user_id == account.owner_user_id, movable)
+        condition = or_(AiUsageEntry.billing_account_id == account.id, others)
+        return await self._rebill(
+            session, [condition], actor_id=actor_id, details={"billing_account_id": account.id}, request=request
+        )
+
+    async def rebill_for_project(
+        self, session: AsyncSession, project: Project, *, actor_id: int | None, request: Request | None = None
+    ) -> RecomputeOutcome:
+        """Resolve again the entries of *project* whose payer came from its payer default (or from nothing)."""
+        conditions = [
+            AiUsageEntry.project_id == project.id,
+            AiUsageEntry.billing_method.in_((BILLING_METHOD_PROJECT_DEFAULT, BILLING_METHOD_NONE)),
+        ]
+        return await self._rebill(
+            session, conditions, actor_id=actor_id, details={"project_key": project.key}, request=request
+        )
+
+    async def _rebill(
+        self,
+        session: AsyncSession,
+        conditions: Sequence[ColumnElement[bool]],
+        *,
+        actor_id: int | None,
+        details: dict[str, Any],
+        request: Request | None,
+    ) -> RecomputeOutcome:
+        """Resolve the billing of the matching entries again from what was sent, like a price recompute.
+
+        An entry whose cost type or subscription changes is re-priced at its
+        own ``priced_at``; one whose billing changes at all gets ``revision``
+        bumped. One audit event when something changed; the caller commits.
+        """
+        before, after = _Totals(), _Totals()
+        lookups = BillingLookups()
+        projects: dict[int, Project | None] = {}
+        entries = changed = 0
+        last_id = 0
+        while True:
+            batch = list(
+                (
+                    await session.execute(
+                        select(AiUsageEntry)
+                        .where(*conditions, AiUsageEntry.id > last_id)
+                        .order_by(AiUsageEntry.id)
+                        .limit(RECOMPUTE_BATCH)
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not batch:
+                break
+            for entry in batch:
+                entries += 1
+                before.add(entry)
+                if entry.project_id is not None and entry.project_id not in projects:
+                    projects[entry.project_id] = await session.get(Project, entry.project_id)
+                billing = await self._billing(
+                    session,
+                    user_id=entry.user_id,
+                    values=self._entry_values(entry),
+                    requested=entry.requested_cost_type,
+                    project=projects.get(entry.project_id) if entry.project_id is not None else None,
+                    stored=entry,
+                    keep_named=True,
+                    lookups=lookups,
+                )
+                snapshot = (_billing_snapshot(entry), _cost_snapshot(entry))
+                if self._set_billing(entry, billing, entry.requested_cost_type):
+                    await self.apply_costs(session, entry)
+                if (_billing_snapshot(entry), _cost_snapshot(entry)) != snapshot:
+                    entry.revision += 1
+                    changed += 1
+                after.add(entry)
+            last_id = batch[-1].id
+            await session.flush()
+        outcome = RecomputeOutcome(entries, changed, before.as_details(), after.as_details())
+        if changed:
+            try:
+                await _audit.log_ai_usage_change(
+                    session,
+                    AuditEvent.AI_USAGE_COSTS_RECOMPUTED,
+                    user_id=actor_id,
+                    details={
+                        **details,
+                        "reason": "billing",
+                        "entries": entries,
+                        "changed": changed,
+                        "before": outcome.before,
+                        "after": outcome.after,
+                    },
+                    request=request,
+                )
+            except Exception:
+                logger.exception("Failed to write the %s audit event", AuditEvent.AI_USAGE_COSTS_RECOMPUTED)
+        return outcome
 
     # -- audit ----------------------------------------------------------------------
 
