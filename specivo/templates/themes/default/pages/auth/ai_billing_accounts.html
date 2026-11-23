@@ -13,7 +13,7 @@
 </div>
 
 <h1 class="sp-page-h1">{% trans %}My AI billing accounts{% endtrans %}</h1>
-<p class="sp-text-muted sp-mb-md">{% trans %}What your AI usage is paid through, and who pays: the company's gateways and plans, and your own subscriptions and API keys. Set the share your employer pays back on an account you pay for. Only you and administrators see your own accounts.{% endtrans %} <a href="{{ base }}/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %} &rarr;</a></p>
+<p class="sp-text-muted sp-mb-md">{% trans %}What your AI usage is paid through, and who pays: the company's gateways and plans, and your own subscriptions and API keys. Set the share your employer pays back on an account you pay for. Only you and administrators see your own accounts.{% endtrans %} <a href="{{ base }}/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %} &rarr;</a> <a href="{{ base }}/my/ai-reimbursement-claims/">{% trans %}My AI reimbursement claims{% endtrans %} &rarr;</a></p>
 
 {% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account added.{% endtrans %}</div>
 {% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account saved.{% endtrans %}</div>

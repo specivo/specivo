@@ -24,6 +24,7 @@ from pydantic import Field
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
 from specivo.mcp.ai_billing_account_tools import _ai_billing_accounts
+from specivo.mcp.ai_reimbursement_claim_tools import _ai_reimbursement_claims
 from specivo.mcp.ai_subscription_tools import SubscriptionPeriod, _ai_subscriptions
 from specivo.mcp.ai_usage_tools import _ai_usage, _ai_usage_report, _log_ai_usage
 from specivo.mcp.annotations import TOOL_ANNOTATIONS
@@ -1824,6 +1825,56 @@ async def specivo_ai_billing_accounts(  # noqa: PLR0913
             account_id=account_id,
             changes=changes,
             include_inactive=include_inactive,
+        )
+
+
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_ai_reimbursement_claims"],
+    description=(
+        "AI reimbursement claims: an employee claims back, once a month, the reimbursable part of the AI usage "
+        "they paid for themselves in company projects (each account's reimburse_share x (seat cost + marginal "
+        "spend)), and an administrator approves it. Ops: list (your claims; user=login or 'all' for others', "
+        "administrators only; status filter); get (claim_id: the claim and its frozen entries); create (month "
+        "YYYY-MM of a month that has ended, optional currency and note: a draft priced from that month); "
+        "refresh (claim_id, optional note: a draft takes the current figures); submit (claim_id: draft -> "
+        "submitted, amounts frozen from now on); withdraw (claim_id: submitted -> draft); delete (claim_id: a "
+        "draft or rejected claim); approve, reject (optional reason the holder reads) and paid (claim_id; "
+        "administrators, never on their own claim); export (claim_id: CSV). A submitted claim never changes: "
+        "entries edited, re-priced, re-billed, excluded or deleted later are reported as CHANGED instead. "
+        "Statuses: draft, submitted, approved, paid, rejected. Needs an unlimited API key of a person."
+    ),
+)
+async def specivo_ai_reimbursement_claims(
+    op: Annotated[
+        str,
+        Field(
+            description=("One of: list, get, create, refresh, submit, withdraw, approve, reject, paid, delete, export.")
+        ),
+    ],
+    claim_id: Annotated[int | None, Field(description="Every op but list and create: the claim ID.")] = None,
+    month: Annotated[str | None, Field(description="create: the month, YYYY-MM (it must have ended).")] = None,
+    currency: Annotated[
+        str | None, Field(description="create: ISO currency code (default: the instance reporting currency).")
+    ] = None,
+    note: Annotated[str | None, Field(description="create, refresh: your note ('' clears it on refresh).")] = None,
+    reason: Annotated[str | None, Field(description="reject: the reason the holder reads.")] = None,
+    user: Annotated[
+        str | None, Field(description="list: a login, or 'all' for everyone's claims (administrators only).")
+    ] = None,
+    status: Annotated[str | None, Field(description="list: draft, submitted, approved, paid or rejected.")] = None,
+) -> str:
+    async with _get_session_and_user() as (session, caller):
+        return await _ai_reimbursement_claims(
+            session,
+            caller,
+            op,
+            claim_id=claim_id,
+            month=month,
+            currency=currency,
+            note=note,
+            reason=reason,
+            user=user,
+            status=status,
         )
 
 

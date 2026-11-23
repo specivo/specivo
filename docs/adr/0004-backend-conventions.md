@@ -27,6 +27,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded billing resolution at ingest and the re-resolution when an account changes (§4).
 **Revised:** 2026-11-23 — recorded the AI billing account and project payer default audit events (§18).
 **Revised:** 2026-11-23 — recorded the parent session, unattended flag and agent profile of AI usage entries (§4).
+**Revised:** 2026-11-23 — recorded AI reimbursement claims and their snapshot rule (§4) and the claim audit events (§18).
 **Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
@@ -378,6 +379,21 @@ seat cost + marginal) of employee-paid entries in projects whose payer default i
 (`reimburse_factors`), each part converted on its own day; shown only with seat cost, to global administrators or
 to a viewer whose `user_id` filter is themselves (`reimbursable_allowed`), and only when the report holds
 employee-paid usage.
+
+**AI reimbursement claims.** `ai_reimbursement_claims` (one person, one past month as its first day, one
+currency; `draft` -> `submitted` -> `approved` -> `paid`, or `rejected`, final; at most one claim per person and month
+that is not rejected) and `ai_reimbursement_claim_entries` (the entries it froze) go only through
+`AiReimbursementClaimService`. A claim is built by `AiSpendReportService.holder_entry_spend`, the report's own rules
+for the holder's own usage in every project (no administrator check: `filters.user_id` must be the viewer), and keeps
+the entries with a reimbursable amount above 0, each with its `revision`, `entry_fingerprint` (day, project, account,
+payer, cost type, subscription, stored costs), share and amounts converted into the claim's currency; a missing rate
+refuses the claim. **Snapshot rule:** nothing writes to a claim when entries change. A draft is refreshed by its
+holder; a submitted, approved or paid claim never moves, and `changes` compares the frozen rows with the entries now
+(deleted, excluded, fingerprint differs = `billing`, current factor differs = `share`) at read time, in three
+queries for any number of claims. The holder creates, refreshes, submits, withdraws and deletes (draft or rejected);
+global administrators approve, reject and mark paid, never their own; nobody else sees a claim (404); a
+project-limited key is refused. Notifications are mails (`send_notification_email`): in-app notifications need a
+project and claims have none.
 
 **Hermes event receivers.** Hermes Agent posts signed outbound webhooks to
 `POST /api/v1/hermes/events/{token}/` (`specivo.api.v1.hermes_events`, served with and without the slash; no
@@ -923,6 +939,14 @@ set) is written by `AiBillingAccountService.change_project_payer_default`, the o
 value changes; it re-resolves the project's entries in the same transaction. Category Administration; `resource_type`
 `ai_billing_account` or `setting`. MCP changes (`specivo_ai_billing_accounts`) also write `AI_BILLING_ACCOUNTS_CHANGED`
 (category Agents: `op`, `account_ids`, `owner`, `fields`).
+
+**AI reimbursement claim events.** `AI_REIMBURSEMENT_CLAIM_SUBMITTED` / `_WITHDRAWN` / `_APPROVED` / `_REJECTED` /
+`_PAID` / `_EXPORTED` (category AI usage, `resource_type` `ai_reimbursement_claim`; details: `claim_id`,
+`holder_user_id`, `holder_login`, `month`, `currency`, `total`, `entries`, `status_from`, `status_to`; approval adds
+`changed_entries`, rejection `reason_given` but never the reason, export `format`) are written by
+`AiReimbursementClaimService` through `log_ai_billing_change`, in the transaction of the step. Creating, refreshing and
+deleting a draft are not audited. MCP changes (`specivo_ai_reimbursement_claims`) also write
+`AI_REIMBURSEMENT_CLAIMS_CHANGED` (category Agents: `op`, `claim_ids`, `holder`).
 
 **AI usage events** (category AI usage, `resource_type` `ai_usage_entry`, `project_id` set when the entry has one),
 written by `AiUsageService` in the transaction of the change: `AI_USAGE_LOGGED_FOR_OTHER` (an entry created in another

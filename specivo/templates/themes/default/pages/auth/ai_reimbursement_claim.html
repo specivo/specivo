@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_reimbursement_claim_macros.html" import status_badge, change_label, notice_text, error_text with context %}
+
+{% block title %}{{ claim.month_label }} - {% trans %}AI reimbursement claims{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  {% if admin_mode %}
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ back_url | prefixed }}">{% trans %}AI reimbursement claims{% endtrans %}</a>
+  {% else %}
+  <a href="{{ back_url | prefixed }}">{% trans %}My AI reimbursement claims{% endtrans %}</a>
+  {% endif %}
+  <span class="sep">/</span>
+  <span class="current">{{ claim.month_label }}</span>
+</div>
+
+<h1 class="sp-page-h1">{% if admin_mode %}{% trans name=claim.holder_name, month=claim.month_label %}Claim of {{ name }} for {{ month }}{% endtrans %}{% else %}{% trans month=claim.month_label %}Claim for {{ month }}{% endtrans %}{% endif %} {{ status_badge(claim.status) }}</h1>
+
+{% if notice %}<div class="flash flash-success" role="status" data-testid="claim-notice">{{ notice_text(notice) }}</div>{% endif %}
+{% if error %}<div class="flash flash-error" role="alert" data-testid="claim-error">{{ error_text(error) }}</div>{% endif %}
+{% if claim.changed_entries %}
+<div class="flash flash-warning" role="status" data-testid="claim-changed-warning">
+  {% if claim.status == "draft" %}{% trans count=claim.changed_entries %}{{ count }} entry changed since this claim was computed. Refresh the claim to take the current figures.{% pluralize %}{{ count }} entries changed since this claim was computed. Refresh the claim to take the current figures.{% endtrans %}
+  {% else %}{% trans count=claim.changed_entries %}{{ count }} entry changed after this claim was submitted. The claimed amount stays as it was; the changed entry is marked below.{% pluralize %}{{ count }} entries changed after this claim was submitted. The claimed amount stays as it was; the changed entries are marked below.{% endtrans %}{% endif %}
+</div>
+{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="claim-summary">
+  <div class="sp-claim-summary">
+    <div class="sp-claim-fact"><span class="sp-claim-fact-label">{% trans %}Amount{% endtrans %}</span><span class="sp-claim-fact-value" data-testid="claim-total">{{ claim.total }}</span></div>
+    <div class="sp-claim-fact"><span class="sp-claim-fact-label">{% trans %}Entries{% endtrans %}</span><span class="sp-claim-fact-value">{{ claim.entry_count }}</span></div>
+    <div class="sp-claim-fact"><span class="sp-claim-fact-label">{% trans %}Computed{% endtrans %}</span><span>{{ claim.computed_at }}</span></div>
+    {% if claim.submitted_at %}<div class="sp-claim-fact"><span class="sp-claim-fact-label">{% trans %}Submitted{% endtrans %}</span><span>{{ claim.submitted_at }}</span></div>{% endif %}
+    {% if claim.decided_at %}<div class="sp-claim-fact"><span class="sp-claim-fact-label">{% if claim.status == "rejected" %}{% trans %}Rejected{% endtrans %}{% else %}{% trans %}Approved{% endtrans %}{% endif %}</span><span>{{ claim.decided_at }}{% if claim.decided_by %} &middot; {{ claim.decided_by }}{% endif %}</span></div>{% endif %}
+    {% if claim.paid_at %}<div class="sp-claim-fact"><span class="sp-claim-fact-label">{% trans %}Paid{% endtrans %}</span><span>{{ claim.paid_at }}{% if claim.paid_by %} &middot; {{ claim.paid_by }}{% endif %}</span></div>{% endif %}
+  </div>
+  {% if claim.note %}<p class="sp-mb-md"><span class="sp-text-muted-xs">{% trans %}Note{% endtrans %}:</span> {{ claim.note }}</p>{% endif %}
+  {% if claim.decision_note %}<p data-testid="claim-decision-note"><span class="sp-text-muted-xs">{% trans %}Reason{% endtrans %}:</span> {{ claim.decision_note }}</p>{% endif %}
+</div>
+
+<div class="card sp-card-pad sp-mb-md" data-testid="claim-actions">
+  <div class="sp-claim-actions">
+    <a class="sp-btn sp-btn-ghost" href="{{ export_url | prefixed }}" data-testid="claim-export">{% trans %}Export CSV{% endtrans %}</a>
+    {% if is_holder and not admin_mode %}
+      {% if claim.status == "draft" %}
+      <form method="post" action="{{ (action_base ~ 'submit/') | prefixed }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-primary" data-testid="claim-submit">{% trans %}Submit for approval{% endtrans %}</button>
+      </form>
+      <form method="post" action="{{ (action_base ~ 'refresh/') | prefixed }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-ghost" data-testid="claim-refresh">{% trans %}Refresh figures{% endtrans %}</button>
+      </form>
+      {% elif claim.status == "submitted" %}
+      <form method="post" action="{{ (action_base ~ 'withdraw/') | prefixed }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-ghost" data-testid="claim-withdraw">{% trans %}Withdraw{% endtrans %}</button>
+      </form>
+      {% endif %}
+      {% if claim.status in ("draft", "rejected") %}
+      <form method="post" action="{{ (action_base ~ 'delete/') | prefixed }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-danger" data-testid="claim-delete">{% trans %}Delete{% endtrans %}</button>
+      </form>
+      {% endif %}
+    {% endif %}
+    {% if admin_mode and can_decide %}
+      {% if claim.status == "submitted" %}
+      <form method="post" action="{{ (action_base ~ 'approve/') | prefixed }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-primary" data-testid="claim-approve">{% trans %}Approve{% endtrans %}</button>
+      </form>
+      <form method="post" action="{{ (action_base ~ 'reject/') | prefixed }}" class="sp-claim-reject">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="reason" class="form-input" maxlength="1000" aria-label="{{ _('Reason for the rejection (optional)') }}" placeholder="{{ _('Reason (optional)') }}" data-testid="claim-reject-reason">
+        <button type="submit" class="sp-btn sp-btn-danger" data-testid="claim-reject">{% trans %}Reject{% endtrans %}</button>
+      </form>
+      {% elif claim.status == "approved" %}
+      <form method="post" action="{{ (action_base ~ 'paid/') | prefixed }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-primary" data-testid="claim-paid">{% trans %}Mark as paid{% endtrans %}</button>
+      </form>
+      {% endif %}
+    {% elif admin_mode and is_holder %}
+      <span class="sp-text-muted-xs" data-testid="claim-own">{% trans %}This is your own claim: another administrator decides on it.{% endtrans %}</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card sp-card-pad" data-testid="claim-entries-card">
+  <h3 class="sp-card-h3">{% trans %}Claimed usage{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}Amounts in the claim's currency, converted on each day. Reimbursable = share x (seat cost + pay-per-token spend).{% endtrans %}</p>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="claim-entries-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Day{% endtrans %}</th>
+          <th>{% trans %}Project{% endtrans %}</th>
+          <th>{% trans %}Account{% endtrans %}</th>
+          <th>{% trans %}Tool{% endtrans %}</th>
+          <th>{% trans %}Model{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Share{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Seat cost{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Pay per token{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Reimbursable{% endtrans %}</th>
+          <th>{% trans %}Changed{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr{% if e.changed %} class="sp-claim-changed"{% endif %} data-testid="claim-entry">
+          <td class="sp-sub-dates">{{ e.usage_date }}</td>
+          <td>{{ e.project }}</td>
+          <td>{{ e.account }}</td>
+          <td>{{ e.tool }}</td>
+          <td>{{ e.model }}</td>
+          <td class="sp-sub-num">{{ e.share_percent }}%</td>
+          <td class="sp-sub-num">{{ e.seat }}</td>
+          <td class="sp-sub-num">{{ e.marginal }}</td>
+          <td class="sp-sub-num">{{ e.reimbursable }}</td>
+          <td>{% if e.changed %}<span class="sp-badge-warning" data-testid="claim-entry-changed">{{ change_label(e.changed) }}</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="sp-text-muted">{% trans %}No entries.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

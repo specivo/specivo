@@ -1,0 +1,49 @@
+{% macro status_badge(status) -%}
+<span class="sp-claim-status sp-claim-status-{{ status }}" data-testid="claim-status">{% if status == "draft" %}{% trans %}Draft{% endtrans %}
+{% elif status == "submitted" %}{% trans %}Submitted{% endtrans %}
+{% elif status == "approved" %}{% trans %}Approved{% endtrans %}
+{% elif status == "paid" %}{% trans %}Paid{% endtrans %}
+{% elif status == "rejected" %}{% trans %}Rejected{% endtrans %}
+{% else %}{{ status }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro status_label(status) -%}
+{% if status == "all" %}{% trans %}All{% endtrans %}
+{% elif status == "draft" %}{% trans %}Draft{% endtrans %}
+{% elif status == "submitted" %}{% trans %}Submitted{% endtrans %}
+{% elif status == "approved" %}{% trans %}Approved{% endtrans %}
+{% elif status == "paid" %}{% trans %}Paid{% endtrans %}
+{% elif status == "rejected" %}{% trans %}Rejected{% endtrans %}
+{% else %}{{ status }}{% endif %}
+{%- endmacro %}
+
+{% macro change_label(reason) -%}
+{% if reason == "deleted" %}{% trans %}Entry deleted{% endtrans %}
+{% elif reason == "excluded" %}{% trans %}Entry excluded from reports{% endtrans %}
+{% elif reason == "billing" %}{% trans %}Cost or billing changed{% endtrans %}
+{% elif reason == "share" %}{% trans %}Reimbursed share changed{% endtrans %}
+{% else %}{{ reason }}{% endif %}
+{%- endmacro %}
+
+{% macro notice_text(notice) -%}
+{% if notice == "created" %}{% trans %}Claim created as a draft. Check it, then submit it.{% endtrans %}
+{% elif notice == "refreshed" %}{% trans %}Claim refreshed with the month's current figures.{% endtrans %}
+{% elif notice == "submitted" %}{% trans %}Claim submitted for approval.{% endtrans %}
+{% elif notice == "withdrawn" %}{% trans %}Claim withdrawn. It is a draft again.{% endtrans %}
+{% elif notice == "deleted" %}{% trans %}Claim deleted.{% endtrans %}
+{% elif notice == "approved" %}{% trans %}Claim approved.{% endtrans %}
+{% elif notice == "rejected" %}{% trans %}Claim rejected.{% endtrans %}
+{% elif notice == "paid" %}{% trans %}Claim marked as paid.{% endtrans %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro error_text(code) -%}
+{% if code == "ai_reimbursement_claim_exists" %}{% trans %}You already have a claim for this month. Open it to refresh or delete it.{% endtrans %}
+{% elif code == "ai_reimbursement_claim_empty" %}{% trans %}There is nothing to reimburse for this month: no usage you paid for in company projects on an account with a reimbursed share.{% endtrans %}
+{% elif code == "ai_reimbursement_claim_unconverted" %}{% trans %}Some amounts have no exchange rate into the claim currency. Ask an administrator to add the rates.{% endtrans %}
+{% elif code == "ai_reimbursement_claim_status" %}{% trans %}The claim is no longer in a state that allows this. Reload the page.{% endtrans %}
+{% elif code == "ai_reimbursement_claim_invalid" %}{% trans %}Choose a month that has ended, and keep notes to 1000 characters.{% endtrans %}
+{% elif code == "permission_denied" %}{% trans %}You cannot do this with this claim.{% endtrans %}
+{% elif code %}{% trans %}The change could not be saved.{% endtrans %}
+{%- endif %}
+{%- endmacro %}

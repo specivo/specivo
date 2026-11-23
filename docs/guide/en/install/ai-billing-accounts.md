@@ -83,6 +83,39 @@ for work with **Add an account**, and set the **Reimbursed share** if your emplo
 back. **My AI subscriptions** shows, for each subscription, a link to its account, where you set
 its reimbursed share.
 
+## Reimbursement claims
+
+Usage you pay for yourself becomes **reimbursable** when it runs through one of your accounts with
+a reimbursed share, in a project whose AI payer default is *employer* (company work). For each such
+entry the amount is the share times its seat cost (its part of your subscription's fee for the
+month) plus its pay-per-token spend. Usage in your own projects is never reimbursable.
+
+Once a month has ended, claim it:
+
+1. Open **AI reimbursement claims** from your user menu or your
+   [profile](../getting-started/your-profile.md), pick the month and select **Create claim**. The
+   claim starts as a draft, in the instance's reporting currency, with each entry it covers.
+2. Check the entries. **Refresh figures** takes the month's current numbers into the draft, for
+   example after late usage was reported or a price was corrected.
+3. Select **Submit for approval**. Administrators get an email. From now on the claim's amounts
+   never change. **Withdraw** takes a submitted claim back to a draft.
+4. An administrator opens **Admin → AI reimbursement claims**, then **Approve** or **Reject**
+   (with an optional reason that you see). Once the money is sent, they select **Mark as paid**.
+   You get an email for each decision. Nobody decides on their own claim, administrators included.
+
+You have one claim per month. A rejected claim is final: delete it if you like and claim the month
+again. **Export CSV** downloads a claim with one line per entry and the total, for your expense
+system.
+
+A claim keeps the figures it was made with. When an entry it covers is later edited, re-priced,
+moved to another account or project, excluded or deleted, or an account's share changes, the claim
+does not change. It is marked *changed* instead, with the affected entries flagged, so the
+administrator can approve the amount that was asked for or reject the claim for you to claim the
+month again. Usage reported for the month after you submitted is not added to the claim.
+
+Submitting, withdrawing, approving, rejecting, paying and exporting a claim are written to the
+[audit log](audit-log.md#ai-reimbursement-claims).
+
 ## With your AI agent
 
 The `specivo_ai_billing_accounts` tool works like the pages, for the person whose API key the agent
@@ -98,6 +131,11 @@ uses:
 A key limited to some projects is refused. Every change the tool makes is written to the
 [audit log](audit-log.md#ai-billing-accounts) as `ai_billing_accounts_changed`. The
 `specivo_ai_subscriptions` tool shows the billing account of each subscription.
+
+The `specivo_ai_reimbursement_claims` tool handles claims: `list` (yours; administrators pass
+`user="all"` or a login, and `status`), `get`, `create` (`month` as `YYYY-MM`, optional `currency`
+and `note`), `refresh`, `submit`, `withdraw`, `delete` and `export` (the CSV); administrators
+`approve`, `reject` (optional `reason`) and `paid`. It needs an unlimited key.
 
 ## Through the API
 
@@ -126,3 +164,21 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/jso
 Each account in a response lists `subscription_ids`, the subscriptions it is the fee schedule of,
 and each subscription has a `billing_account_id`. An API key limited to some projects cannot use
 these endpoints.
+
+Reimbursement claims have their own endpoints. Amounts are strings, the month is `YYYY-MM`:
+
+```bash
+# Claim March, then submit it
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  https://specivo.example.com/api/v1/my/ai-reimbursement-claims/ -d '{"month": "2026-03"}'
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://specivo.example.com/api/v1/my/ai-reimbursement-claims/42/submit/
+```
+
+| Endpoint | Who |
+|---|---|
+| `GET`, `POST /api/v1/my/ai-reimbursement-claims/`; `GET`, `DELETE /api/v1/my/ai-reimbursement-claims/{id}/`; `POST .../{id}/refresh/`, `.../submit/`, `.../withdraw/`; `GET .../{id}/export/` (CSV) | the person, for their own claims |
+| `GET /api/v1/admin/ai-reimbursement-claims/` (`?status=`, `?user_id=`); `GET .../{id}/`; `POST .../{id}/approve/`, `.../reject/` (`{"reason": "..."}`), `.../paid/`; `GET .../{id}/export/` | administrators, never on their own claim |
+
+Each claim lists `changed_entries`, and each of its entries `changed` (`deleted`, `excluded`,
+`billing` or `share`) when it is no longer what the claim froze.

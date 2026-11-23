@@ -661,6 +661,7 @@ class AiSpendReportService:
         filters: ReportFilters | None,
         sort: str,
         projects: Sequence[Project] | None = None,
+        holder: bool = False,
     ) -> SpendReport:
         from specivo.services.exchange_rate_service import ExchangeRateService
 
@@ -668,7 +669,14 @@ class AiSpendReportService:
         _check_report_args(date_from, date_to, period, sort, filters)
         requested_period = period
         period = coarsen_period(date_from, date_to, period)
-        project_set = await self._resolve_scope(session, viewer, project, projects)
+        if holder:
+            # A person's own usage across every project (reimbursement claims): no admin check, since the
+            # conditions keep the viewer's own entries only, all of which they may read.
+            if project is not None or projects is not None or filters.user_id != viewer.id:
+                raise _invalid("A holder report covers the viewer's own usage in every project", "user_id")
+            project_set = None
+        else:
+            project_set = await self._resolve_scope(session, viewer, project, projects)
 
         rates = ExchangeRateService()
         policy, target = await self._policy_and_currency(session, rates, project, rate_policy, currency)
@@ -925,6 +933,42 @@ class AiSpendReportService:
             sort="key",
         )
         return {int(r.key["entry"]): r for r in report.rows if r.key.get("entry") is not None}
+
+    async def holder_entry_spend(
+        self,
+        session: AsyncSession,
+        holder: User,
+        *,
+        date_from: date,
+        date_to: date,
+        filters: ReportFilters,
+        currency: str | None = None,
+        rate_policy: str | RatePolicy | None = None,
+    ) -> SpendReport:
+        """*holder*'s own usage in every project, one row per entry, with seat cost and the reimbursable amount.
+
+        The report a reimbursement claim is built from: ``filters.user_id``
+        must be *holder* (422 otherwise), so it never shows anybody else's
+        usage and needs no administrator. Seat shares and the reimbursable
+        amount follow the same rules as :meth:`report` (``reimbursable_allowed``
+        holds for a person's own usage). The caller refuses a project-limited
+        API key, under which the holder would read only some of their entries.
+        """
+        return await self._report(
+            session,
+            holder,
+            project=None,
+            date_from=date_from,
+            date_to=date_to,
+            dims=("entry",),
+            period=None,
+            currency=currency,
+            rate_policy=rate_policy,
+            include_seat_cost=True,
+            filters=filters,
+            sort="key",
+            holder=True,
+        )
 
     async def drill_facts(
         self,
