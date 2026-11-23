@@ -226,6 +226,24 @@ class AuditEvent(StrEnum):
     # create, update, deactivate; every MCP call is audited): ``op``,
     # ``account_ids``, ``owner`` and, for a change, ``fields``.
     AI_BILLING_ACCOUNTS_CHANGED = "ai_billing_accounts_changed"
+    # AI reimbursement claims, written by ``AiReimbursementClaimService`` in the
+    # transaction of the change (details: ``claim_id``, ``holder_user_id``,
+    # ``holder_login``, ``month`` as ``YYYY-MM``, ``currency``, ``total`` at the
+    # currency's minor units, ``entries``, ``status_from``, ``status_to``). A
+    # claim submitted, withdrawn to draft, approved (adds ``changed_entries``:
+    # entries edited, re-priced or removed since the snapshot), rejected (adds
+    # ``reason_given``; the reason is free text and never logged) or marked
+    # paid; a claim exported as CSV (``format``, no status change).
+    AI_REIMBURSEMENT_CLAIM_SUBMITTED = "ai_reimbursement_claim_submitted"
+    AI_REIMBURSEMENT_CLAIM_WITHDRAWN = "ai_reimbursement_claim_withdrawn"
+    AI_REIMBURSEMENT_CLAIM_APPROVED = "ai_reimbursement_claim_approved"
+    AI_REIMBURSEMENT_CLAIM_REJECTED = "ai_reimbursement_claim_rejected"
+    AI_REIMBURSEMENT_CLAIM_PAID = "ai_reimbursement_claim_paid"
+    AI_REIMBURSEMENT_CLAIM_EXPORTED = "ai_reimbursement_claim_exported"
+    # MCP tool calls that change AI reimbursement claims
+    # (``specivo_ai_reimbursement_claims`` create, refresh, submit, withdraw,
+    # approve, reject, paid, delete): ``op``, ``claim_ids``, ``holder``.
+    AI_REIMBURSEMENT_CLAIMS_CHANGED = "ai_reimbursement_claims_changed"
     # AI usage entries. Logged in another user's name (details: ``entry_id``,
     # ``target_user_id``, ``target_login``, ``source``, ``tool``,
     # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
@@ -329,7 +347,19 @@ _AI_BILLING_ACCOUNT_ROW_EVENTS = frozenset(
         AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
     }
 )
-_AI_BILLING_EVENTS = _AI_BILLING_ACCOUNT_ROW_EVENTS | {AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED}
+_AI_REIMBURSEMENT_CLAIM_EVENTS = frozenset(
+    {
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_SUBMITTED,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_WITHDRAWN,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_APPROVED,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_REJECTED,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_PAID,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_EXPORTED,
+    }
+)
+_AI_BILLING_EVENTS = (
+    _AI_BILLING_ACCOUNT_ROW_EVENTS | {AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED} | _AI_REIMBURSEMENT_CLAIM_EVENTS
+)
 
 _AI_USAGE_EVENTS = frozenset(
     {
@@ -429,6 +459,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.RELATION_REMOVED,
             AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
             AuditEvent.AI_BILLING_ACCOUNTS_CHANGED,
+            AuditEvent.AI_REIMBURSEMENT_CLAIMS_CHANGED,
             AuditEvent.AGENT_SESSION_STARTED,
             AuditEvent.AGENT_TOOL_CALLED,
             AuditEvent.AGENT_APPROVAL_REQUESTED,
@@ -546,6 +577,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_USAGE_COSTS_RECOMPUTED,
             AuditEvent.AI_USAGE_LOGGED,
             AuditEvent.AI_USAGE_CHANGED,
+            *_AI_REIMBURSEMENT_CLAIM_EVENTS,
         ],
         AuditCategory.AI_USAGE,
     ),
@@ -1698,7 +1730,8 @@ class SecurityAuditService:
         project_id: int | None = None,
         request: Request | None = None,
     ) -> SecurityAuditLog:
-        """Log an AI billing account added, changed or deactivated, or a project's payer default changed.
+        """Log an AI billing account added, changed or deactivated, a project's payer default changed,
+        or a step of an AI reimbursement claim (``resource_type`` ``ai_reimbursement_claim``).
 
         Written in the caller's transaction, in a savepoint, like
         :meth:`log_exchange_rate_change`.
@@ -1706,12 +1739,18 @@ class SecurityAuditService:
         if event_type not in _AI_BILLING_EVENTS:
             raise ValueError(f"Not an AI billing event: {event_type!r}")
         info = self.request_info(request) if request is not None else current_request_info()
+        if event_type in _AI_BILLING_ACCOUNT_ROW_EVENTS:
+            resource_type = "ai_billing_account"
+        elif event_type in _AI_REIMBURSEMENT_CLAIM_EVENTS:
+            resource_type = "ai_reimbursement_claim"
+        else:
+            resource_type = "setting"
         return await self._persist(
             session,
             savepoint=True,
             event_type=event_type,
             user_id=user_id,
-            resource_type="ai_billing_account" if event_type in _AI_BILLING_ACCOUNT_ROW_EVENTS else "setting",
+            resource_type=resource_type,
             resource_id=resource_id,
             project_id=project_id,
             ip_address=info["ip_address"],

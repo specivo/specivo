@@ -86,6 +86,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
         "AI billing accounts (gateways, company plans, personal keys) and who pays: op='list', 'create', "
         "'update' or 'deactivate'"
     ),
+    "specivo_ai_reimbursement_claims": (
+        "Monthly AI reimbursement claims: op='list', 'get', 'create', 'refresh', 'submit', 'withdraw', "
+        "'delete', 'export'; administrators 'approve', 'reject', 'paid'"
+    ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -292,6 +296,18 @@ Changing an account's payer, patterns, tools, default cost type or state re-reso
 affects. A project's payer default (employer, employee or none) is a project setting
 (`ai_usage_payer_default`), used when no account decides.
 
+### Claim back AI usage you paid for
+An employee-paid account with a `reimburse_share` makes its usage in company projects (payer default
+`employer`) reimbursable: share x (seat cost + marginal spend).
+1. `specivo_ai_reimbursement_claims(op="create", month="2026-03")` -- a draft for a month that has ended,
+   priced from that month's usage; `op="get"` shows its entries, `op="refresh"` takes the current figures
+2. `op="submit"` (`claim_id`) -- the amounts are frozen from now on; administrators are mailed
+3. An administrator: `op="list", user="all", status="submitted"`, then `op="approve"`, `op="reject"`
+   (`reason`) or, once the money is sent, `op="paid"` -- never on their own claim
+4. `op="export"` returns the claim as CSV
+An entry edited, re-priced, re-billed, excluded or deleted after submission is reported as CHANGED;
+the claim keeps its amount. `op="withdraw"` takes a submitted claim back to draft.
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -408,6 +424,10 @@ the security audit log. Notable cases:
   their own; company accounts (`owner="instance"`) and other people's (`owner="login"`) are changed
   by administrators only, and those changes write `ai_billing_account_*` events. Changing your own
   needs self-service on. Every change over MCP writes `ai_billing_accounts_changed`.
+- `specivo_ai_reimbursement_claims` needs an unlimited key of a person. You see and change your own
+  claims; administrators see everyone's and approve, reject or mark paid somebody else's. Each step
+  writes an `ai_reimbursement_claim_*` event, and every change over MCP also writes
+  `ai_reimbursement_claims_changed`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
@@ -425,8 +445,8 @@ on them for approvals and retries:
   `specivo_setup_guide` and `specivo_ai_usage_report`. Safe to retry after a
   dropped session.
 - **destructiveHint: true** -- deletes, `specivo_remove_relation`,
-  `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence` and
-  `specivo_ai_subscriptions` (its `delete` op).
+  `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence`,
+  `specivo_ai_subscriptions` and `specivo_ai_reimbursement_claims` (their `delete` ops).
 - **idempotentHint: true** -- updates by key, deletes, `specivo_add_relation`,
   `specivo_tag` and `specivo_ai_usage`: a repeat with the same arguments
   changes nothing more.

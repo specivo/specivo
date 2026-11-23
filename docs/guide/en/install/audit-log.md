@@ -193,6 +193,22 @@ personal account. People's changes to their own accounts are not, except that ev
 is `ai_billing_accounts_changed`. When a change re-prices usage, `ai_usage_costs_recomputed` is
 written too. See [AI billing accounts](ai-billing-accounts.md).
 
+### AI reimbursement claims
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_reimbursement_claim_submitted` | the person who made the claim | `claim_id`, `holder_user_id`, `holder_login`, `month` (`YYYY-MM`), `currency`, `total`, `entries`, `status_from`, `status_to` |
+| `ai_reimbursement_claim_withdrawn` | the person who made the claim | the same |
+| `ai_reimbursement_claim_approved` | the administrator | the same, plus `changed_entries`: entries edited, re-priced or removed since the claim was made |
+| `ai_reimbursement_claim_rejected` | the administrator | the same, plus `reason_given` (the reason itself is never copied into the log) |
+| `ai_reimbursement_claim_paid` | the administrator | the same |
+| `ai_reimbursement_claim_exported` | whoever downloaded the CSV | the same, plus `format` |
+| `ai_reimbursement_claims_changed` | the account whose key an agent used, over MCP (`specivo_ai_reimbursement_claims`) | `tool: "ai_reimbursement_claims"`, `source: "mcp"`, `op`, `claim_ids`, `holder` |
+
+These events are in the **AI usage** category, except `ai_reimbursement_claims_changed` (**Agents**).
+Making, refreshing and deleting a draft are not recorded. See
+[AI billing accounts](ai-billing-accounts.md#reimbursement-claims).
+
 ### AI usage
 
 | Event | Who acted | Details |
