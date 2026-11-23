@@ -147,6 +147,20 @@ pause a new one starts. A session records:
   status, assigned to its own account, updated while it is in progress and assigned to its own
   account (so an agent resuming its issue marks it again, even when nothing changes), or started a
   timer on. The latest one wins. Only an issue the key's account can see is ever recorded.
+- **how it was opened**: `mcp` (an MCP connection) or `rest` (plain REST calls);
+- **the client's own session id and its parent's**, when the client reports them (see below).
+
+An agent client that has session ids of its own (a Hermes session, for example) can report them with
+`specivo_agent_session(op="set", external_session_id=..., parent_session_id=...)`, and can name its
+working issue in the same call with `issue_ref`. The ids are 1 to 200 letters, digits and `. _ : -`.
+The call changes only the session of the connection it is made on, and a parent is linked only to a
+session of the same account, so another account's ids never attach to yours. When the
+[reporter](reporting-ai-usage.md) later sends usage with the same `session_id`, Specivo attributes it
+to that session's issue (or, when that session names none, to the nearest one in its parent chain)
+instead of guessing from the time of the work. `specivo_agent_session(op="get")` shows the session.
+Setting ids is recorded in the audit log. The REST list of a project's agent sessions
+(`GET /api/v1/projects/{key}/agent-sessions/`) shows the same fields and takes an
+`external_session_id` filter.
 
 The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
 an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about
