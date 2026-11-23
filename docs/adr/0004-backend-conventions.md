@@ -376,7 +376,11 @@ seven days). `HermesEventService.map_event` is the one mapping from Hermes event
 unmapped events answer 200 `ignored`. Sessions are found or opened only among the receiver's account's rows
 (`AgentSessionService.open_webhook_session`: `client_type` `webhook`, no API key, `receiver_id`, the newest open row with
 the id, parents through `set_external`), so an id another account uses never attaches; a new row takes the issue
-`issue_for_external` finds, which puts its events on that project's timeline. `end_session` sets `ended_at`. The receiver
+`issue_for_external` finds while the account may still log there (`AgentSessionService.can_log_on`, i.e.
+`AiUsageService.require_can_log`, checked on every event; otherwise the session names no issue and its rows no
+project), which puts its events on that project's timeline. The kill switch stops receivers with
+`hermes_receivers.killed_at` (set by `kill_agent` / `kill_all`, cleared by `unkill_agent`), kept apart from the owner's
+`is_active` so an unkill never turns on a receiver its owner switched off. `end_session` sets `ended_at`. The receiver
 never writes AI usage or cost.
 
 **MCP transport sessions** are a different thing from agent sessions: the `Mcp-Session-Id` of a Streamable HTTP

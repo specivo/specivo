@@ -653,3 +653,41 @@ async def test_events_of_a_session_on_no_issue_stay_off_project_timelines(
     )
     assert page.status_code == 200, page.text
     assert "terminal_nowhere" not in page.text
+
+
+async def test_a_session_does_not_attach_to_an_issue_its_account_can_no_longer_log_on(
+    client: AsyncClient, db_session: AsyncSession, world: SessionWorld
+) -> None:
+    """The issue found through the Hermes session id is used only where the account may still log usage."""
+    from sqlalchemy import delete
+
+    from specivo.models.member import Member
+
+    minted = await _receiver(db_session, world.agent, name="agent host")
+    first = await post_event(client, minted.token, payload("on_session_start", "hev-live"), minted.secret)
+    attached = await db_session.get(AgentSession, first.json()["agent_session_id"])
+    await db_session.refresh(attached)
+    assert attached.issue_id == world.pub.id  # sanity: while a member, it attaches
+
+    await db_session.execute(delete(Member).where(Member.user_id == world.agent.id, Member.project_id == world.p.id))
+    await db_session.commit()
+    clear_role_cache(db_session)
+
+    # The open session stops naming the issue, and its rows name no project.
+    call = payload("post_tool_call", "hev-live", tool_name="terminal_lost")
+    resp = await post_event(client, minted.token, call, minted.secret)
+    assert resp.json()["agent_session_id"] == attached.id
+    await db_session.refresh(attached)
+    assert attached.issue_id is None
+    [row] = await _audit(db_session, "agent_tool_called")
+    assert row.project_id is None
+
+    # A later session with the same id does not attach either.
+    await post_event(client, minted.token, payload("on_session_end", "hev-live"), minted.secret)
+    later = await post_event(client, minted.token, payload("on_session_start", "hev-live"), minted.secret)
+    assert later.json()["agent_session_id"] != attached.id
+    fresh = await db_session.get(AgentSession, later.json()["agent_session_id"])
+    await db_session.refresh(fresh)
+    assert fresh.issue_id is None
+    started = await _audit(db_session, "agent_session_started")
+    assert all(r.project_id is None for r in started if r.agent_session_id == fresh.id)
