@@ -1,5 +1,5 @@
 ---
-description: AI spend reports in Specivo — see what AI coding tools cost per person, model, tool, project, issue, release, sprint, branch and period, in one currency, with flat-rate subscription fees spread over the usage and API-equivalent value side by side.
+description: AI spend reports in Specivo — see what AI coding tools cost per person, model, tool, project, issue, release, sprint, branch, payer, billing account and period, in one currency, with flat-rate subscription fees spread over the usage, API-equivalent value side by side, and what employees may have reimbursed.
 ---
 
 # AI spend reports
@@ -21,7 +21,7 @@ Both reports open as a drill-down: tiles with the **spend**, **entries**, **toke
 of what you are looking at, a **Group by** switch, a table and a **Spend by …** card next to it.
 
 - **Group by**: **Project** (on the AI spend page), **Release** and **Sprint** (within one project),
-  **Person**, **Feature** (the issue), **Tool**, **Model** or **Sessions**. The AI spend page starts
+  **Person**, **Feature** (the issue), **Tool**, **Model**, **Payer** or **Sessions**. The AI spend page starts
   with projects, a project report with people.
 - Each row has a colour, a name and a short line under it (how many people used a tool or worked on
   an issue, which tools a person used), its entries, tokens, spend and its **share** of the total.
@@ -65,6 +65,7 @@ seat**, never the plan; anyone else sees only the cost types of the entries (*Su
 | **Spend** | Pay-per-use plus seat cost: what the usage actually cost. |
 | **API-equivalent value** | What the same tokens would have cost at pay-per-use [API prices](../install/ai-model-prices.md). It is an estimate, not a bill. |
 | **Leverage** | The API-equivalent value of subscription usage divided by its seat cost. Above 1, the subscription costs less than paying per use would have; below 1, it costs more. Shown only where there is a seat cost. |
+| **Reimbursable** | What employees may have reimbursed for usage they paid for themselves (see [Who paid](#who-paid)). Shown only to administrators, and to you when the report is narrowed to your own usage. |
 | **Tokens**, **Entries** | Token totals (hover a row for input, output, cache and reasoning), long-context tokens included, and how many entries count. Entries that have no price are counted in brackets. |
 
 Spend and API-equivalent value are always shown side by side, so you can see both what you pay and
@@ -118,6 +119,8 @@ The period buttons are always shown; the other settings are under **Dates, filte
 - **Model**: type part of a model name and pick it. The suggestions come from the price list and the
   models in the usage you may see in that report, with their provider and aliases. Press Enter to
   filter by exactly what you typed, for a model nobody has priced.
+- **Payer**: only usage paid by the employer, by the employee, or not known. See [Who paid](#who-paid).
+- **Usage**: **Organization only** leaves personal usage out. See [Who paid](#who-paid).
 - **Tool**, **Cost type**: narrow the usage. Unallocated seat cost has no tool
   or model, so it is left out when you filter by tool or model, and likewise when you open a project, an issue
   or a branch.
@@ -152,6 +155,50 @@ leaves unallocated seat cost out.
 
 The [version](versions.md#ai-spend-of-a-version) and [sprint](sprints.md#time-and-ai-spend) pages
 show the same totals in an **AI spend** card.
+
+## Who paid
+
+Each AI usage entry records **who paid** for it (the employer, the employee, or not known) and the
+[billing account](../install/ai-billing-accounts.md) it was paid through, such as a company gateway,
+a company plan, or a person's own subscription or API key. Specivo decides both when the usage is
+reported.
+
+- **Group by Payer** splits the spend into employer, employee and unknown. Open the employee row to
+  see the billing accounts behind it.
+- **Billing account** and **Route** (the backend the usage went through, for example a gateway name)
+  are also in **Group by** and **Then by**. Opening a row narrows the report to that account or
+  route.
+- A **Who paid** table under the totals shows the spend, API-equivalent value and leverage for each
+  payer. It appears once some usage has a known payer.
+- **Usage: Organization only** leaves out personal usage. Personal usage is usage without a project,
+  and usage in a project whose payer default is **employee** (someone's own project). Use it for
+  company reports, so that people's own projects on the same tools do not count.
+
+**Personal accounts stay private.** A person's own billing account is named only to that person and
+to administrators. Everyone else sees all such usage on one **Personal account** row, which cannot
+be opened. Plan names are never shown in project reports.
+
+### Reimbursable
+
+A person can set a **reimbursable share** (0 to 100 %) on their own billing account (see
+[AI billing accounts](../install/ai-billing-accounts.md)). The report then shows what they may
+claim:
+
+**reimbursable = share × (seat cost + pay-per-use)**
+
+It counts only for usage the employee paid for, in projects whose payer default is **employer**.
+Usage in personal projects is never reimbursable. The seat cost is the same share of the
+subscription the report already shows. Pay-per-use spend on top of the plan, for example on a
+personal API key, counts through pay-per-use.
+
+For example, Alice has a 100 USD plan that is 50 % reimbursable. Her usage in company projects
+carries 75 USD of its fee, so she may claim 37.50 USD. With a personal API key that is fully
+reimbursable and has 10 USD of pay-per-use spend in company projects, the total is 47.50 USD.
+
+The reimbursable amount is shown only where seat cost is shown, to administrators, and to you when
+the report is narrowed to your own usage (choose yourself under **User**). It appears in the totals,
+in the **Who paid** table, under **All amount columns** and in the CSV. It is left out when no usage
+in the report was paid by an employee.
 
 ## Charts
 
@@ -193,19 +240,23 @@ too old*). Add the missing rates under **Admin → Exchange rates** and open the
 
 Opening rows down to **Sessions** shows the entries in the report itself. With **All amount
 columns**, every row also has an **Entries** button. It opens the AI usage list filtered to that row:
-the same period, person, tool, model, issue, branch, release, sprint and so on. On the AI spend page it opens a list of the
+the same period, person, tool, model, issue, branch, release, sprint, payer, billing account and so on. On the AI spend page it opens a list of the
 instance's entries, unassigned ones included. Rows on an issue you cannot see have no button.
 
 ## Download
 
 **Download CSV** saves the report as it is shown, with the filters of the path you opened: one line
 per row (all of them, also those under **Other**) and a total line, the amounts in the report's
-currency, and a column listing amounts that were not converted. At the **Sessions** level it lists
+currency, and a column listing amounts that were not converted. When some usage has a known payer,
+one `total:employer`, `total:employee` and `total:unknown` line follows the total. The
+**reimbursable** column is there where the report shows it. At the **Sessions** level it lists
 the spend per model.
 
 The same report is available over the REST API (`GET /api/v1/projects/{key}/ai-usage/report/` and,
 for administrators, `GET /api/v1/ai-usage/report/`, both with `format=csv`; `issue`, `branch`,
 `version`, `sprint` and, on the instance report, `project` narrow it like the path, `-` meaning none;
-`group_by=version,sprint` groups by release and sprint). AI agents get it through the
+`group_by=version,sprint` groups by release and sprint; `group_by=payer,billing_account,route`
+and the filters `payer`, `billing_account` (an id or slug), `route` and `scope=organization` cover
+who paid, and the answer lists `payer_totals`). AI agents get it through the
 `specivo_ai_usage_report` MCP tool, which takes `release` and `sprint` (a name or an id, `none` for
-none). The same rules about what each person may see apply everywhere.
+none) and `payer`, `billing_account`, `route` and `scope`. Its answer ends with the totals per payer. The same rules about what each person may see apply everywhere.

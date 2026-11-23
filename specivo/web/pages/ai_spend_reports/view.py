@@ -18,6 +18,7 @@ from specivo.models.ai_subscription import AiSubscription
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.services.ai_spend_billing import HIDDEN_ACCOUNT
 from specivo.services.ai_spend_report_service import (
     GROUP_BY,
     HIDDEN_ISSUE,
@@ -43,6 +44,7 @@ from specivo.web.pages.ai_spend_reports.form import (
     Scope,
     _cost_type_text,
     attended_text,
+    payer_text,
 )
 from specivo.web.pages.ai_usage._common import NONE_VALUE, _fmt_int
 from specivo.web.pages.ai_usage.charts import _charts_view, cached_chart_payload, fold_breakdowns
@@ -54,7 +56,7 @@ def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
     if row.seat_only:
         user_id = row.key.get("user")
         return f"/admin/ai-subscriptions/?user_id={user_id}" if user_id is not None else "/admin/ai-subscriptions/"
-    if row.key.get("issue") == HIDDEN_ISSUE:
+    if row.key.get("issue") == HIDDEN_ISSUE or row.key.get("billing_account") == HIDDEN_ACCOUNT:
         return ""
     first, last = report.date_from, report.date_to
     if row.period is not None and report.period is not None:
@@ -78,6 +80,7 @@ def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
     if "branch" in key:
         params["branch"] = key["branch"] or NONE_VALUE
     params.update(_session_context_params(key, form))
+    params.update(_billing_params(key, form))
     for dim in ("version", "sprint"):
         if dim in key:
             params[dim] = str(key[dim]) if key[dim] is not None else NONE_VALUE
@@ -105,6 +108,23 @@ def _session_context_params(key: dict[str, Any], form: ReportForm) -> dict[str, 
     return params
 
 
+def _billing_params(key: dict[str, Any], form: ReportForm) -> dict[str, str]:
+    """The payer, billing account, route and scope filters of a row's entries: the row's own, else the form's."""
+    params: dict[str, str] = {}
+    if "payer" in key:
+        params["payer"] = str(key["payer"])
+    elif form.payer:
+        params["payer"] = form.payer
+    for dim in ("billing_account", "route"):
+        if dim in key:
+            params[dim] = str(key[dim]) if key[dim] is not None else NONE_VALUE
+        elif getattr(form, dim):
+            params[dim] = getattr(form, dim)
+    if form.scope:
+        params["scope"] = form.scope
+    return params
+
+
 def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str) -> dict[str, Any]:
     cells = []
     for dim in report.group_by:
@@ -114,6 +134,8 @@ def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str
             kind = "seat"
         elif dim == "issue" and value == HIDDEN_ISSUE:
             kind = "hidden"
+        elif dim == "billing_account" and value == HIDDEN_ACCOUNT:
+            kind = "personal"
         elif value is None:
             kind = "none"
         cells.append({"dim": dim, "kind": kind, "label": row.labels.get(dim, ""), "value": value})
@@ -136,6 +158,7 @@ def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str
         ),
         "total_spend": _money_view(row.total_spend, locale) if row.total_spend else None,
         "leverage": f"{row.leverage}×" if row.leverage is not None else "",
+        "reimbursable": _money_view(row.reimbursable, locale) if row.reimbursable else None,
         "drill": _drill(report, row, form),
     }
 
@@ -157,6 +180,8 @@ def _cell_text(cell: dict[str, Any]) -> str:
         return _("Unallocated seat cost")
     if kind == "hidden":
         return _("An issue you cannot see")
+    if kind == "personal":
+        return _("Personal account")
     if kind == "none":
         return {
             "project": _("Unassigned"),
@@ -165,11 +190,15 @@ def _cell_text(cell: dict[str, Any]) -> str:
             "version": _("No release"),
             "sprint": _("No sprint"),
             "profile": _("No profile"),
+            "billing_account": _("No billing account"),
+            "route": _("No route"),
         }.get(dim, "–")
     if dim == "cost_type":
         return _cost_type_text(cell["value"])
     if dim == "attended":
         return attended_text(cell["value"])
+    if dim == "payer":
+        return payer_text(cell["value"])
     return str(cell["label"])
 
 
@@ -268,6 +297,7 @@ async def _cache_parts(db: AsyncSession, user: User, project: Project | None, re
         "visibility": await ai_usage_visibility(db, user, project) if project is not None else "",
         "seat_shown": report.seat_cost_shown,
         "seat_hidden": report.seat_cost_hidden,
+        "reimbursable": report.reimbursable_shown,
         "currency": report.currency,
         "policy": [policy.kind.value, policy.max_age_days, policy.fixed_on],
         "from": report.date_from.isoformat(),
@@ -336,6 +366,10 @@ async def _context(db: AsyncSession, report: SpendReport | None, form: ReportFor
             rate_dates=[d.isoformat() for d in report.rate_dates],
             rates_used=_rates_view(report),
             unpriced_models=[{"model": m, "count": n} for m, n in report.unpriced_models],
+            # The "Who paid" table only when something says who paid.
+            payer_totals=[_row_view(report, r, form, locale) | {"payer": r.key["payer"]} for r in report.payer_totals]
+            if any(r.key["payer"] != "unknown" for r in report.payer_totals)
+            else [],
         )
     return context
 
@@ -381,6 +415,12 @@ def _entries_url(report: SpendReport, form: ReportForm) -> str:
         "branch": form.branch,
         "version": form.version,
         "sprint": form.sprint,
+        "attended": form.attended,
+        "profile": form.profile,
+        "payer": form.payer,
+        "billing_account": form.billing_account,
+        "route": form.route,
+        "scope": form.scope,
         "status": "counted",
     }
     if report.project is not None:

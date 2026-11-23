@@ -82,6 +82,14 @@
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-attended-filter"><span class="filter-label">{% trans %}Runs{% endtrans %}</span>{% if filters.attended == "unattended" %}{% trans %}Unattended{% endtrans %}{% else %}{% trans %}Attended{% endtrans %}{% endif %}</span>{% endif %}
   {% if filters.profile %}<input type="hidden" name="profile" value="{{ filters.profile }}">
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-profile-filter"><span class="filter-label">{% trans %}Agent profile{% endtrans %}</span>{% if filters.profile == "-" %}{% trans %}No profile{% endtrans %}{% else %}{{ filters.profile }}{% endif %}</span>{% endif %}
+  {% if filters.payer %}<input type="hidden" name="payer" value="{{ filters.payer }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-payer-filter"><span class="filter-label">{% trans %}Payer{% endtrans %}</span>{% if filters.payer == "employer" %}{% trans %}Employer{% endtrans %}{% elif filters.payer == "employee" %}{% trans %}Employee{% endtrans %}{% else %}{% trans %}Unknown payer{% endtrans %}{% endif %}</span>{% endif %}
+  {% if filters.billing_account %}<input type="hidden" name="billing_account" value="{{ filters.billing_account }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-account-filter"><span class="filter-label">{% trans %}Billing account{% endtrans %}</span>{{ filters.billing_account_label }}</span>{% endif %}
+  {% if filters.route %}<input type="hidden" name="route" value="{{ filters.route }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-route-filter"><span class="filter-label">{% trans %}Route{% endtrans %}</span>{% if filters.route == "-" %}{% trans %}No route{% endtrans %}{% else %}{{ filters.route }}{% endif %}</span>{% endif %}
+  {% if filters.scope %}<input type="hidden" name="scope" value="{{ filters.scope }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-scope-filter"><span class="filter-label">{% trans %}Usage{% endtrans %}</span>{% trans %}Organization only{% endtrans %}</span>{% endif %}
   {% if chart_bucket %}<input type="hidden" name="bucket" value="{{ chart_bucket }}">{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>

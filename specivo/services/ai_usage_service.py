@@ -152,6 +152,8 @@ from specivo.services.security_audit_service import AuditEvent, SecurityAuditSer
 if TYPE_CHECKING:
     from fastapi import Request
 
+    from specivo.services.ai_spend_billing import BillingFilter
+
 logger = logging.getLogger(__name__)
 
 #: ``ai_usage_entries.price_id`` / ``priced_at`` point at prices: referenced
@@ -531,6 +533,7 @@ class AiUsageService:
         unattended: bool | None = None,
         profile: str | None = None,
         without_profile: bool = False,
+        billing: BillingFilter | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
@@ -547,7 +550,9 @@ class AiUsageService:
         *planning* keeps the entries of one release or sprint, or of none
         (:mod:`specivo.services.ai_spend_planning`); *unattended* ``True`` /
         ``False`` keeps only unattended / attended usage; *profile* matches the
-        agent profile exactly (``without_profile`` keeps entries without one).
+        agent profile exactly (``without_profile`` keeps entries without one);
+        *billing* the payer, billing account, route and scope filters
+        (:class:`specivo.services.ai_spend_billing.BillingFilter`).
         """
         conditions = await self._list_conditions(
             session,
@@ -573,6 +578,7 @@ class AiUsageService:
             unattended=unattended,
             profile=profile,
             without_profile=without_profile,
+            billing=billing,
         )
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
@@ -613,6 +619,7 @@ class AiUsageService:
         unattended: bool | None = None,
         profile: str | None = None,
         without_profile: bool = False,
+        billing: BillingFilter | None = None,
     ) -> UsageSummary:
         """Totals of the entries ``list_entries`` would return with the same filters, excluded ones left out.
 
@@ -643,6 +650,7 @@ class AiUsageService:
             unattended=unattended,
             profile=profile,
             without_profile=without_profile,
+            billing=billing,
         )
         counted = AiUsageEntry.excluded_at.is_(None)
         row = (
@@ -702,6 +710,7 @@ class AiUsageService:
         unattended: bool | None = None,
         profile: str | None = None,
         without_profile: bool = False,
+        billing: BillingFilter | None = None,
     ) -> list[ColumnElement[bool]]:
         """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
@@ -750,6 +759,8 @@ class AiUsageService:
             conditions.append(AiUsageEntry.profile == profile.strip())
         if without_profile:
             conditions.append(AiUsageEntry.profile.is_(None))
+        if billing is not None:
+            conditions.extend(billing.conditions())
         if excluded is not None:
             conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
         if unassigned is not None:

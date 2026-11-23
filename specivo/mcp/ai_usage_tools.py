@@ -109,6 +109,7 @@ def _line(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
         f"#{entry.id} {entry.usage_date.isoformat()} {_where(entry, refs)} {entry.tool_slug}/{entry.model} "
         f"user={_login(refs, entry.user_id)} {_tokens(entry)} cost_type={entry.cost_type} "
         f"marginal={_money(entry.marginal)} api_equivalent={_money(entry.api_equivalent)} source={entry.source}"
+        f" payer={entry.payer}"
         + (f" session={session_id}" if (session_id := _session(entry, viewer)) else "")
         + (f" profile={entry.profile}" if entry.profile else "")
         + (f" [{', '.join(flags)}]" if flags else "")
@@ -386,6 +387,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     excluded: bool | None = None,
     unassigned: bool | None = None,
     session_id: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
     tokens: dict[str, int] | None = None,
     request_count: int | None = None,
     cost_amount: Any = None,
@@ -412,6 +415,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
             excluded=excluded,
             unassigned=unassigned,
             session_id=session_id,
+            payer=payer,
+            billing_account=billing_account,
             offset=offset,
             limit=limit,
         )
@@ -496,11 +501,15 @@ async def _list(  # noqa: PLR0913
     offset: int,
     limit: int,
     session_id: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
 ) -> str:
     """A project's entries the caller may read; without a project, the entries logged in the caller's name.
 
     *session_id* keeps the caller's own entries of that agent session (the
     id the reporter sends, shown on the caller's entries), in any project.
+    *payer* and *billing_account* (an id or slug, ``none`` for none; one the
+    caller may not see matches nothing) narrow them by who paid.
     """
     if limit < 1 or limit > _MAX_LIMIT:
         raise ValidationError(message=f"limit must be between 1 and {_MAX_LIMIT}", field="limit")
@@ -514,6 +523,7 @@ async def _list(  # noqa: PLR0913
         if project is None:
             project = await session.get(Project, issue.project_id)
     session_id = session_id.strip() if session_id else None
+    billing = await _billing_filter(session, user, payer=payer, billing_account=billing_account)
     user_id: int | None
     if project is None or session_id:
         # A session is one person's client session: only the caller's own entries match.
@@ -538,6 +548,7 @@ async def _list(  # noqa: PLR0913
         excluded=excluded,
         unassigned=unassigned if project is None else None,
         external_session_id=session_id,
+        billing=billing,
         offset=offset,
         limit=limit,
     )
@@ -559,6 +570,51 @@ async def _list(  # noqa: PLR0913
     refs = await _usage.references(session, user, entries)
     lines.extend(f"  {_line(entry, refs, user)}" for entry in entries)
     return "\n".join(lines)
+
+
+async def _billing_fields(
+    session: AsyncSession,
+    user: User,
+    *,
+    payer: str | None = None,
+    billing_account: str | None = None,
+    route: str | None = None,
+    scope: str | None = None,
+) -> dict[str, Any]:
+    """The payer, billing account, route and scope filters as ``BillingFilter`` / ``ReportFilters`` fields.
+
+    ``none`` selects usage without a billing account or route. An unknown
+    payer or scope is a 422; a billing account the caller may not see, or
+    none by that id or slug, matches nothing.
+    """
+    from specivo.services.ai_spend_billing import (
+        NO_VALUE,
+        parse_payer,
+        parse_scope,
+        resolve_billing_account,
+        route_filter,
+    )
+
+    def none_value(value: str | None) -> str | None:
+        text = (value or "").strip()
+        return NO_VALUE if text.casefold() == _NO_PLANNING else text or None
+
+    fields: dict[str, Any] = {}
+    if (found := parse_payer(payer)) is not None:
+        fields["payer"] = found
+    fields.update((await resolve_billing_account(session, user, none_value(billing_account))).fields)
+    fields.update(route_filter(none_value(route)))
+    if parse_scope(scope):
+        fields["organization"] = True
+    return fields
+
+
+async def _billing_filter(session: AsyncSession, user: User, *, payer: str | None, billing_account: str | None) -> Any:
+    """The entry list's payer and billing account filters (a ``BillingFilter``), or None without one."""
+    from specivo.services.ai_spend_billing import BillingFilter
+
+    fields = await _billing_fields(session, user, payer=payer, billing_account=billing_account)
+    return BillingFilter(**fields) if fields else None
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +649,8 @@ def _report_line(row: Any, report: Any) -> str:
             label = "(unallocated seat)"
         elif dim == "issue" and row.key.get(dim) == HIDDEN_ISSUE:
             label = "(issue you cannot see)"
+        elif dim == "billing_account" and row.key.get(dim) is None:
+            label = "(no billing account)"
         else:
             label = row.labels.get(dim) or f"(no {_NONE_NAMES.get(dim, dim)})"
         parts.append(f"{dim}={label}")
@@ -610,6 +668,8 @@ def _report_line(row: Any, report: Any) -> str:
             measures.insert(4, f"unallocated_seat={_report_amount(row.seat_unallocated)}")
         if row.leverage is not None:
             measures.append(f"leverage={format_decimal_plain(row.leverage)}x")
+    if report.reimbursable_shown:
+        measures.append(f"reimbursable={_report_amount(row.reimbursable)}")
     if row.unpriced_entries:
         measures.append(f"unpriced={row.unpriced_entries}")
     return f"{head}: " + " ".join(measures)
@@ -726,13 +786,19 @@ def _report_text(
         from specivo.services.ai_spend_report_service import fold_rows
 
         rest = report.rows[REPORT_MAX_ROWS:]
-        summed = fold_rows(rest, report.currency, report.seat_cost_shown)
+        summed = fold_rows(rest, report.currency, report.seat_cost_shown, report.reimbursable_shown)
         measures = _report_line(summed, report).split(": ", 1)[1]
         lines.append(
             f"  ... and {len(rest)} more rows, together: {measures} "
             "(narrow the period or the grouping, sort=spend for the largest first, or use the CSV export)"
         )
     lines.append(f"Total: {_report_line(report.totals, report).split(': ', 1)[1]}")
+    # Only when something says who paid: a report of unattributed usage stays as it was.
+    if any(row.key["payer"] != "unknown" for row in report.payer_totals):
+        lines.append("By payer:")
+        for row in report.payer_totals:
+            measures = _report_line(row, report).split(": ", 1)[1]
+            lines.append(f"  {row.key['payer']}: {measures}")
     return "\n".join(lines)
 
 
@@ -760,6 +826,10 @@ async def _ai_usage_report(  # noqa: PLR0913
     sprint: str | None = None,
     attended: str | None = None,
     profile: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
+    route: str | None = None,
+    scope: str | None = None,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
     from specivo.services.ai_spend_report_service import (
@@ -782,6 +852,11 @@ async def _ai_usage_report(  # noqa: PLR0913
     project, issue = await _report_scope(session, user, project_key, issue_ref)
     user_id = await _report_user_id(session, user_login)
     planning, planning_names = await _report_planning(session, user, project, release, sprint)
+    billing = await _billing_fields(
+        session, user, payer=payer, billing_account=billing_account, route=route, scope=scope
+    )
+    if billing.get("organization"):
+        planning_names.append("organization only")
     issue_id = issue.id if issue is not None else None
     report = await AiSpendReportService().report(
         session,
@@ -803,6 +878,7 @@ async def _ai_usage_report(  # noqa: PLR0913
             issue_tree_id=issue_id if include_sub_issues else None,
             **planning,
             **context,
+            **billing,
         ),
         sort=sort or "key",
     )

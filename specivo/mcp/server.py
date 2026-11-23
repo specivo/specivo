@@ -1506,6 +1506,10 @@ async def specivo_ai_usage(  # noqa: PLR0913
         str | None,
         Field(description="list: only your own entries from this agent session (the session= value on your entries)."),
     ] = None,
+    payer: Annotated[str | None, Field(description="list: only usage paid by employer, employee or unknown.")] = None,
+    billing_account: Annotated[
+        str | None, Field(description="list: only this billing account (id or slug), or 'none' for usage without one.")
+    ] = None,
     input_tokens: Annotated[int | None, Field(ge=0, description="update: new input token count.")] = None,
     output_tokens: Annotated[int | None, Field(ge=0, description="update: new output token count.")] = None,
     cache_write_tokens: Annotated[int | None, Field(ge=0, description="update: cache writes (5-minute).")] = None,
@@ -1549,6 +1553,8 @@ async def specivo_ai_usage(  # noqa: PLR0913
             excluded=excluded,
             unassigned=unassigned,
             session_id=session_id,
+            payer=payer,
+            billing_account=billing_account,
             tokens=tokens or None,
             request_count=request_count,
             cost_amount=cost_amount,
@@ -1576,6 +1582,14 @@ async def specivo_ai_usage(  # noqa: PLR0913
         "(its project's report; include_sub_issues adds the issues below it), e.g. for the spend total of a "
         "closing note. release and sprint narrow it to one release or sprint (a name in project_key, or an "
         "id; 'none' for entries without one), e.g. release='1.0' for what a release cost."
+        "\n\nWho paid: group_by payer, billing_account and route; filter with payer (employer, employee, "
+        "unknown), billing_account (an id or slug, 'none' for entries without one) and route ('none' for "
+        "none). scope='organization' leaves out personal usage (no project, or a project whose payer default "
+        "is employee). The reply ends with the totals per payer (spend, API-equivalent value, leverage). A "
+        "personal billing account you may not see shows as 'Personal account'. reimbursable (what an employee "
+        "may claim: the account's reimburse share x (seat cost + marginal spend) of employee-paid usage in "
+        "projects whose payer default is employer) shows to administrators, and to a person whose report is "
+        "narrowed to their own usage (user_login), where seat cost shows."
     ),
 )
 async def specivo_ai_usage_report(  # noqa: PLR0913
@@ -1585,7 +1599,8 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
         Field(
             description=(
                 "Comma list: version, sprint, user, project, issue, tool, provider, model, cost_type, branch, "
-                "attended (attended or unattended runs), profile (the agent profile)."
+                "attended (attended or unattended runs), profile (the agent profile), payer, billing_account, "
+                "route."
             )
         ),
     ] = None,
@@ -1623,6 +1638,16 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
     profile: Annotated[
         str | None, Field(description="Only this agent profile, e.g. 'research', or 'none' for usage without one.")
     ] = None,
+    payer: Annotated[str | None, Field(description="Only usage paid by: employer, employee or unknown.")] = None,
+    billing_account: Annotated[
+        str | None, Field(description="Only this billing account: an id or slug, or 'none' for usage without one.")
+    ] = None,
+    route: Annotated[
+        str | None, Field(description="Only this route (the backend the usage went through), or 'none'.")
+    ] = None,
+    scope: Annotated[
+        str | None, Field(description="'all' (default) or 'organization' (personal usage left out).")
+    ] = None,
 ) -> str:
     async with _get_session_and_user() as (session, user):
         return await _ai_usage_report(
@@ -1648,6 +1673,10 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
             sprint=sprint,
             attended=attended,
             profile=profile,
+            payer=payer,
+            billing_account=billing_account,
+            route=route,
+            scope=scope,
         )
 
 

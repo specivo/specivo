@@ -96,6 +96,7 @@ from sqlalchemy import and_, exists, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from specivo.core.ai_billing import ENTRY_PAYERS, PAYER_EMPLOYEE, PAYER_UNKNOWN
 from specivo.core.ai_pricing import TOKEN_CLASSES, normalize_provider
 from specivo.core.ai_subscriptions import month_first, month_last, months_between, prorated_fee
 from specivo.core.exceptions import AppError, PermissionDeniedError
@@ -115,6 +116,15 @@ from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
+from specivo.services.ai_spend_billing import (
+    HIDDEN_ACCOUNT,
+    PAYER_LABELS,
+    PERSONAL_ACCOUNT_LABEL,
+    BillingFilter,
+    account_names,
+    reimbursable_allowed,
+    reimburse_factors,
+)
 from specivo.services.ai_spend_planning import (
     PLANNING_DIMENSIONS,
     PlanningFilter,
@@ -143,6 +153,9 @@ GROUP_BY: tuple[str, ...] = (
     "branch",
     "attended",
     "profile",
+    "payer",
+    "billing_account",
+    "route",
 )
 #: Labels of the two ``attended`` rows, keyed by the entry's ``unattended`` flag.
 ATTENDED_LABELS: dict[bool, str] = {False: "Attended", True: "Unattended"}
@@ -190,7 +203,7 @@ MAX_PERIODS = 120
 SEAT_RATE_DAY = "month_end"
 
 #: Dimensions an unallocated seat fee can fill (the rest stay empty, so it gets a row of its own).
-_SEAT_DIMENSIONS = frozenset({"user", "provider", "cost_type", "subscription"})
+_SEAT_DIMENSIONS = frozenset({"user", "provider", "cost_type", "subscription", "payer", "billing_account"})
 #: Column of each dimension stored on the entry (the planning dimensions are expressions, see ``_dimension_columns``).
 _COLUMNS = {
     "user": AiUsageEntry.user_id,
@@ -204,6 +217,10 @@ _COLUMNS = {
     # Keyed by the ``unattended`` flag: False is the "Attended" row, True the "Unattended" one.
     "attended": AiUsageEntry.unattended,
     "profile": AiUsageEntry.profile,
+    "payer": AiUsageEntry.payer,
+    # A personal account the viewer may not see is folded into HIDDEN_ACCOUNT ("Personal account").
+    "billing_account": AiUsageEntry.billing_account_id,
+    "route": AiUsageEntry.route,
     # Internal only (never in GROUP_BY, so no report groups by plan): the charts' seat breakdown.
     "subscription": AiUsageEntry.subscription_id,
     # Internal only: one row per entry, for the drill-down's page of entries (always with ``entry_ids``).
@@ -300,6 +317,10 @@ class ReportFilters:
     viewer may not see matches nothing by itself. ``unattended`` ``True`` /
     ``False`` keeps unattended / attended usage; ``profile`` /
     ``without_profile`` the entries of one agent profile (or of none).
+    ``payer``, ``billing_account_id`` / ``without_billing_account``,
+    ``route`` / ``without_route`` and ``organization`` (personal entries left
+    out) are the billing filters (:class:`specivo.services.ai_spend_billing.BillingFilter`);
+    callers resolve a billing account the viewer may not see to -1.
     """
 
     user_id: int | None = None
@@ -320,6 +341,12 @@ class ReportFilters:
     unattended: bool | None = None
     profile: str | None = None
     without_profile: bool = False
+    payer: str | None = None
+    billing_account_id: int | None = None
+    without_billing_account: bool = False
+    route: str | None = None
+    without_route: bool = False
+    organization: bool = False
     #: Internal: only these entries (the sessions page of the drill-down prices its page of entries).
     entry_ids: tuple[int, ...] | None = None
     #: The entries of this issue and of every issue below it (the issue page's AI usage tab).
@@ -333,6 +360,18 @@ class ReportFilters:
             without_version=self.without_version,
             sprint_id=self.sprint_id,
             without_sprint=self.without_sprint,
+        )
+
+    @property
+    def billing(self) -> BillingFilter:
+        """The payer, billing account, route and scope filters."""
+        return BillingFilter(
+            payer=self.payer,
+            billing_account_id=self.billing_account_id,
+            without_billing_account=self.without_billing_account,
+            route=self.route,
+            without_route=self.without_route,
+            organization=self.organization,
         )
 
     @property
@@ -352,6 +391,7 @@ class ReportFilters:
             or self.unattended is not None
             or bool(self.profile)
             or self.without_profile
+            or self.billing.active
         )
         return (
             narrowed or bool(self.tool or self.model or self.provider) or self.cost_type not in (None, "subscription")
@@ -374,6 +414,7 @@ class ReportFilters:
             out.append(AiUsageEntry.profile == self.profile)
         if self.without_profile:
             out.append(AiUsageEntry.profile.is_(None))
+        out.extend(self.billing.conditions())
         return out
 
     def cache_parts(self) -> list[Any]:
@@ -399,6 +440,7 @@ class ReportFilters:
             self.unattended,
             self.profile,
             self.without_profile,
+            *self.billing.cache_parts(),
         ]
 
 
@@ -429,6 +471,8 @@ class ReportRow:
     #: The API-equivalent value of the row's subscription usage (the leverage numerator), with seat cost only.
     seat_api: ConversionSummary | None = None
     leverage: Decimal | None = None
+    #: What employees may have reimbursed: share x (allocated seat cost + marginal); None when not shown.
+    reimbursable: ConversionSummary | None = None
     # Conversion results gathered while the rows are built.
     _results: dict[str, list[ConversionResult]] = field(default_factory=lambda: defaultdict(list))
 
@@ -483,6 +527,10 @@ class SpendReport:
     unpriced_models: list[tuple[str, int]] = field(default_factory=list)
     #: The period asked for, when it was coarsened into ``period`` (see :func:`coarsen_period`).
     requested_period: str | None = None
+    #: Whether the reimbursable measure is shown (see :func:`specivo.services.ai_spend_billing.reimbursable_allowed`).
+    reimbursable_shown: bool = False
+    #: The totals per payer (employer, employee, unknown; those with usage or seat cost), finished like a row.
+    payer_totals: list[ReportRow] = field(default_factory=list)
 
     @property
     def rate_dates(self) -> tuple[date, ...]:
@@ -628,14 +676,25 @@ class AiSpendReportService:
         seats_allowed = await self._seats_allowed(session, viewer, project, project_set, date_from, date_to)
         seat_shown = include_seat_cost and seats_allowed
         unallocated_shown = seat_shown and project is None and project_set is None and not filters.excludes_seats
+        reimbursable_shown = reimbursable_allowed(viewer, filters.user_id, seat_shown)
 
         conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
         if project_set is not None:
             conditions.append(await self._set_clause(session, viewer, project_set))
-        raw = await self._grouped_rows(session, conditions, dims, *await self._dimension_columns(session, viewer, dims))
+        raw = await self._grouped_rows(
+            session,
+            conditions,
+            dims,
+            *await self._dimension_columns(session, viewer, dims),
+            with_accounts=reimbursable_shown,
+        )
+        if reimbursable_shown:
+            factors = await reimburse_factors(session, ((r["payer"], r["account"], r["project_ref"]) for r in raw))
+            for r in raw:
+                r["reimburse"] = factors.get((r["account"], r["project_ref"]))
         builder = await self._usage_rows(session, viewer, raw, dims, period)
 
-        seat_items: list[tuple[ReportRow, Money, date, bool]] = []
+        seat_items: list[_SeatItem] = []
         if seat_shown:
             seat_items = await self._seat_items(
                 session,
@@ -650,9 +709,12 @@ class AiSpendReportService:
         await self._convert(session, rates, builder, seat_items, target, policy)
         rows = builder.rows()
         totals = _totals_row(rows)
-        for row in [*rows, totals]:
-            _finish(row, target, seat_shown)
-        await self._label(session, project, rows, dims)
+        payer_totals = builder.payer_rows()
+        # Nothing to reimburse without employee-paid usage: the measure is left out rather than always 0.
+        reimbursable_shown = reimbursable_shown and any(r.key["payer"] == PAYER_EMPLOYEE for r in payer_totals)
+        for row in [*rows, totals, *payer_totals]:
+            _finish(row, target, seat_shown, reimbursable_shown)
+        await self._label(session, viewer, project, rows, dims)
         rows.sort(key=_sort_key(dims, period, sort))
         missing = await unpriced_models(session, conditions) if totals.unpriced_entries else []
         return SpendReport(
@@ -674,6 +736,8 @@ class AiSpendReportService:
             totals=totals,
             unpriced_models=missing,
             requested_period=requested_period if requested_period != period else None,
+            reimbursable_shown=reimbursable_shown,
+            payer_totals=payer_totals,
         )
 
     async def _resolve_scope(
@@ -749,12 +813,19 @@ class AiSpendReportService:
         dims: tuple[str, ...],
         period: str | None,
     ) -> _RowBuilder:
-        """A row builder holding the usage of *raw*, issues *viewer* cannot see folded into one hidden key."""
+        """A row builder holding the usage of *raw*, issues and billing accounts *viewer* cannot see folded
+        into one hidden key each (an issue you cannot see, "Personal account")."""
         visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
+        names: dict[int, str | None] = {}
+        if "billing_account" in dims:
+            names = await account_names(session, viewer, {r["billing_account"] for r in raw})
         builder = _RowBuilder(dims, period)
         for r in raw:
             if "issue" in dims and r["issue"] is not None and r["issue"] not in visible_issues:
                 r["issue"] = HIDDEN_ISSUE
+            account = r["billing_account"]
+            if "billing_account" in dims and account is not None and names.get(account) is None:
+                r["billing_account"] = HIDDEN_ACCOUNT
             builder.add_usage(r)
         return builder
 
@@ -994,22 +1065,30 @@ class AiSpendReportService:
         dims: tuple[str, ...],
         dim_columns: dict[str, Any],
         laterals: list[Any],
+        *,
+        with_accounts: bool = False,
     ) -> list[dict[str, Any]]:
-        """One row per group x day x user x subscription x currencies, with the sums.
+        """One row per group x day x user x subscription x payer x currencies, with the sums.
 
-        The day, user, subscription and cost type are always in the grouping:
-        conversion goes by day and allocation by user, month and subscription.
-        *dim_columns* holds the expression of each of *dims* and *laterals*
-        the joins they need (``_dimension_columns``).
+        The day, user, subscription, cost type and payer are always in the
+        grouping: conversion goes by day, allocation by user, month and
+        subscription, and the totals split by payer. *with_accounts* adds the
+        billing account (``account``) and project (``project_ref``), which
+        the reimbursable measure needs. *dim_columns* holds the expression of
+        each of *dims* and *laterals* the joins they need (``_dimension_columns``).
         """
         keys: dict[str, Any] = {
             "usage_date": AiUsageEntry.usage_date,
             "user": AiUsageEntry.user_id,
             "subscription_id": AiUsageEntry.subscription_id,
             "cost_type": AiUsageEntry.cost_type,
+            "payer": AiUsageEntry.payer,
             "marginal_currency": AiUsageEntry.marginal_currency,
             "api_currency": AiUsageEntry.api_equivalent_currency,
         }
+        if with_accounts:
+            keys["account"] = AiUsageEntry.billing_account_id
+            keys["project_ref"] = AiUsageEntry.project_id
         for dim in dims:
             keys.setdefault(dim, dim_columns[dim])
         names = list(keys)
@@ -1037,6 +1116,8 @@ class AiSpendReportService:
             )
             for dim in GROUP_BY:
                 item.setdefault(dim, None)
+            item.setdefault("account", None)
+            item.setdefault("project_ref", None)
             out.append(item)
         return out
 
@@ -1064,8 +1145,8 @@ class AiSpendReportService:
         date_to: date,
         user_id: int | None,
         unallocated: bool,
-    ) -> list[tuple[ReportRow, Money, date, bool]]:
-        """The seat cost shares as ``(row, amount in the plan's currency, rate day, allocated?)``."""
+    ) -> list[_SeatItem]:
+        """The seat cost shares, each on its row and its payer's total, in the plan's currency."""
         first, last = month_first(date_from.year, date_from.month), month_last(date_to.year, date_to.month)
         stmt = select(AiSubscription).where(
             AiSubscription.starts_on <= last,
@@ -1094,7 +1175,7 @@ class AiSpendReportService:
 
         weights, factors = await self._weights(session, subscriptions, first, last)
         today = utcnow().date()
-        items: list[tuple[ReportRow, Money, date, bool]] = []
+        items: list[_SeatItem] = []
 
         def rate_day(year: int, month: int) -> date:
             return min(month_last(year, month), today) if SEAT_RATE_DAY == "month_end" else month_first(year, month)
@@ -1116,10 +1197,19 @@ class AiSpendReportService:
             share = (fees[(holder.id, day.year, day.month)] * weight / total).quantize(
                 _SHARE_EXPONENT, rounding=ROUND_HALF_UP
             )
-            items.append((builder.row_for(r), Money(share, holder.currency_code), rate_day(day.year, day.month), True))
+            items.append(
+                _SeatItem(
+                    rows=(builder.row_for(r), builder.payer_row(r["payer"])),
+                    money=Money(share, holder.currency_code),
+                    day=rate_day(day.year, day.month),
+                    allocated=True,
+                    reimburse=r.get("reimburse"),
+                )
+            )
 
         # Fees no entry carries.
         if unallocated:
+            payers = await _account_payers(session, {s.billing_account_id for s in subscriptions.values()})
             for (sub_id, year, month), _fee in sorted(fees.items()):
                 if weights.get((sub_id, year, month)):
                     continue
@@ -1137,9 +1227,24 @@ class AiSpendReportService:
                 if not days or not part:
                     continue
                 day = max(month_first(year, month), date_from, sub.starts_on)
-                row = builder.seat_row(user_id=sub.user_id, provider=sub.provider, subscription_id=sub.id, day=day)
+                payer = payers.get(sub.billing_account_id, PAYER_UNKNOWN) if sub.billing_account_id else PAYER_UNKNOWN
+                row = builder.seat_row(
+                    user_id=sub.user_id,
+                    provider=sub.provider,
+                    subscription_id=sub.id,
+                    day=day,
+                    payer=payer,
+                    billing_account=sub.billing_account_id,
+                )
                 amount = Money(part.quantize(_SHARE_EXPONENT, rounding=ROUND_HALF_UP), sub.currency_code)
-                items.append((row, amount, rate_day(year, month), False))
+                items.append(
+                    _SeatItem(
+                        rows=(row, builder.payer_row(payer)),
+                        money=amount,
+                        day=rate_day(year, month),
+                        allocated=False,
+                    )
+                )
         return items
 
     async def _weights(
@@ -1208,30 +1313,42 @@ class AiSpendReportService:
         session: AsyncSession,
         rates: Any,
         builder: _RowBuilder,
-        seat_items: list[tuple[ReportRow, Money, date, bool]],
+        seat_items: list[_SeatItem],
         target: str,
         policy: RatePolicy,
     ) -> None:
-        """Convert every amount in one batch (two queries) and file the results on their rows."""
-        targets: list[tuple[ReportRow, str]] = []
+        """Convert every amount in one batch (two queries) and file the results on their rows.
+
+        A seat share is converted once and filed on its row and its payer's
+        total; its reimbursable part (share x the account's factor) is an
+        amount of its own.
+        """
+        targets: list[list[tuple[ReportRow, str]]] = []
         items: list[tuple[Money, date]] = []
         for row, measure, money, day in builder.amounts():
-            targets.append((row, measure))
+            targets.append([(row, measure)])
             items.append((money, day))
-        for row, money, day, allocated in seat_items:
-            targets.append((row, "seat_allocated" if allocated else "seat_unallocated"))
-            items.append((money, day))
+        for item in seat_items:
+            measure = "seat_allocated" if item.allocated else "seat_unallocated"
+            targets.append([(row, measure) for row in item.rows])
+            items.append((item.money, item.day))
+            if item.reimburse:
+                part = (item.money.amount * item.reimburse).quantize(_SHARE_EXPONENT, rounding=ROUND_HALF_UP)
+                targets.append([(row, "reimbursable") for row in item.rows])
+                items.append((Money(part, item.money.currency), item.day))
         if not items:
             return
         results = await rates.convert_many(session, items, target, policy)
-        for (row, measure), result in zip(targets, results, strict=True):
-            row._results[measure].append(result)
+        for filed, result in zip(targets, results, strict=True):
+            for row, measure in filed:
+                row._results[measure].append(result)
 
     @staticmethod
-    async def _label(
-        session: AsyncSession, project: Project | None, rows: list[ReportRow], dims: tuple[str, ...]
+    async def _label(  # noqa: C901, PLR0912
+        session: AsyncSession, viewer: User, project: Project | None, rows: list[ReportRow], dims: tuple[str, ...]
     ) -> None:
-        """Fill ``labels``: user names, project keys, issue keys, tool names, releases and sprints (one query each)."""
+        """Fill ``labels``: user names, project keys, issue keys, tool names, releases, sprints and billing
+        accounts (one query each); a billing account *viewer* may not see is "Personal account"."""
         from specivo.services.ai_subscription_service import AiToolService
 
         user_ids = {r.key.get("user") for r in rows if r.key.get("user") is not None}
@@ -1257,6 +1374,9 @@ class AiSpendReportService:
             for dim in dims
             if dim in PLANNING_DIMENSIONS
         }
+        accounts: dict[int, str | None] = {}
+        if "billing_account" in dims:
+            accounts = await account_names(session, viewer, {r.key.get("billing_account") for r in rows})
         for row in rows:
             for dim in dims:
                 value = row.key.get(dim)
@@ -1272,6 +1392,10 @@ class AiSpendReportService:
                     row.labels[dim] = tools.get(value, value)
                 elif dim == "attended":
                     row.labels[dim] = ATTENDED_LABELS[bool(value)]
+                elif dim == "payer":
+                    row.labels[dim] = PAYER_LABELS.get(value, str(value))
+                elif dim == "billing_account":
+                    row.labels[dim] = accounts.get(value) or PERSONAL_ACCOUNT_LABEL
                 elif dim in planned:
                     row.labels[dim] = planned[dim].get(value, "")
                 else:
@@ -1283,13 +1407,38 @@ class AiSpendReportService:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class _SeatItem:
+    """A seat cost share in its plan's currency: the rows it is filed on (its row, its payer's total),
+    the day it is converted at, and the reimbursable factor of the entries carrying it."""
+
+    rows: tuple[ReportRow, ...]
+    money: Money
+    day: date
+    allocated: bool
+    reimburse: Decimal | None = None
+
+
+async def _account_payers(session: AsyncSession, account_ids: set[int | None]) -> dict[int, str]:
+    """The payer of each billing account in *account_ids* (one query)."""
+    from specivo.models.ai_billing_account import AiBillingAccount
+
+    ids = [i for i in account_ids if i is not None]
+    if not ids:
+        return {}
+    stmt = select(AiBillingAccount.id, AiBillingAccount.payer).where(AiBillingAccount.id.in_(ids))
+    return {aid: payer for aid, payer in (await session.execute(stmt)).all()}
+
+
 class _RowBuilder:
-    """Folds the grouped query rows into report rows and collects the amounts to convert."""
+    """Folds the grouped query rows into report rows and the payer totals, and collects the amounts to convert."""
 
     def __init__(self, dims: tuple[str, ...], period: str | None) -> None:
         self.dims = dims
         self.period = period
         self._rows: dict[tuple[Any, ...], ReportRow] = {}
+        # The totals per payer, keyed ("payer", payer): filed beside the rows, never one of them.
+        self._payers: dict[tuple[Any, ...], ReportRow] = {}
         # Per row and measure: (currency, day) -> sum, so each day and currency is converted once.
         self._amounts: dict[tuple[Any, ...], dict[str, dict[tuple[str, date], Decimal]]] = {}
         self._seat_only = any(d not in _SEAT_DIMENSIONS for d in dims)
@@ -1307,8 +1456,30 @@ class _RowBuilder:
     def row_for(self, raw: dict[str, Any]) -> ReportRow:
         return self._get(raw, raw["usage_date"])[1]
 
+    def _payer(self, payer: str | None) -> tuple[tuple[Any, ...], ReportRow]:
+        value = payer or PAYER_UNKNOWN
+        key = ("payer", value)
+        row = self._payers.get(key)
+        if row is None:
+            row = ReportRow(key={"payer": value}, period=None, labels={"payer": PAYER_LABELS.get(value, value)})
+            self._payers[key] = row
+            self._amounts[key] = {"marginal": defaultdict(Decimal), "api_equivalent": defaultdict(Decimal)}
+        return key, row
+
+    def payer_row(self, payer: str | None) -> ReportRow:
+        """The total row of *payer* (``unknown`` for none)."""
+        return self._payer(payer)[1]
+
+    def payer_rows(self) -> list[ReportRow]:
+        """The payer totals in :data:`ENTRY_PAYERS` order."""
+        order = {p: i for i, p in enumerate(ENTRY_PAYERS)}
+        return sorted(self._payers.values(), key=lambda r: order.get(r.key["payer"], len(order)))
+
     def add_usage(self, raw: dict[str, Any]) -> None:
-        key, row = self._get(raw, raw["usage_date"])
+        self._add(*self._get(raw, raw["usage_date"]), raw)
+        self._add(*self._payer(raw.get("payer")), raw)
+
+    def _add(self, key: tuple[Any, ...], row: ReportRow, raw: dict[str, Any]) -> None:
         row.entries += raw["entries"]
         row.unpriced_entries += raw["unpriced"]
         row.request_count += raw["requests"]
@@ -1317,19 +1488,40 @@ class _RowBuilder:
         day = raw["usage_date"]
         if raw["marginal"] is not None and raw["marginal_currency"]:
             self._amounts[key]["marginal"][(raw["marginal_currency"], day)] += raw["marginal"]
+            factor = raw.get("reimburse")
+            if factor:
+                part = (raw["marginal"] * factor).quantize(_SHARE_EXPONENT, rounding=ROUND_HALF_UP)
+                self._amounts[key].setdefault("reimbursable", defaultdict(Decimal))
+                self._amounts[key]["reimbursable"][(raw["marginal_currency"], day)] += part
         if raw["api"] is not None and raw["api_currency"]:
             self._amounts[key]["api_equivalent"][(raw["api_currency"], day)] += raw["api"]
             if raw["cost_type"] == "subscription":
                 self._amounts[key].setdefault("seat_api", defaultdict(Decimal))
                 self._amounts[key]["seat_api"][(raw["api_currency"], day)] += raw["api"]
 
-    def seat_row(self, *, user_id: int, provider: str, subscription_id: int, day: date) -> ReportRow:
-        values = {"user": user_id, "provider": provider, "cost_type": "subscription", "subscription": subscription_id}
+    def seat_row(
+        self,
+        *,
+        user_id: int,
+        provider: str,
+        subscription_id: int,
+        day: date,
+        payer: str | None = None,
+        billing_account: int | None = None,
+    ) -> ReportRow:
+        values = {
+            "user": user_id,
+            "provider": provider,
+            "cost_type": "subscription",
+            "subscription": subscription_id,
+            "payer": payer,
+            "billing_account": billing_account,
+        }
         return self._get(values, day, seat_only=self._seat_only)[1]
 
     def amounts(self) -> Iterable[tuple[ReportRow, str, Money, date]]:
         for key, measures in self._amounts.items():
-            row = self._rows[key]
+            row = self._rows[key] if key in self._rows else self._payers[key]
             for measure, sums in measures.items():
                 for (code, day), amount in sorted(sums.items()):
                     yield row, measure, Money(amount, code), day
@@ -1345,10 +1537,10 @@ def _joined(stmt: Any, laterals: list[Any]) -> Any:
     return stmt
 
 
-def fold_rows(rows: list[ReportRow], currency: str, seat_shown: bool) -> ReportRow:
+def fold_rows(rows: list[ReportRow], currency: str, seat_shown: bool, reimbursable_shown: bool = False) -> ReportRow:
     """One row summing *rows* (an "other" group of a long report), finished like any row."""
     row = _totals_row(rows)
-    _finish(row, currency, seat_shown)
+    _finish(row, currency, seat_shown, reimbursable_shown)
     return row
 
 
@@ -1365,9 +1557,11 @@ def _totals_row(rows: list[ReportRow]) -> ReportRow:
     return total
 
 
-def _finish(row: ReportRow, currency: str, seat_shown: bool) -> None:
-    """Fold the row's conversion results into summaries, total spend and leverage."""
+def _finish(row: ReportRow, currency: str, seat_shown: bool, reimbursable_shown: bool = False) -> None:
+    """Fold the row's conversion results into summaries, total spend, leverage and the reimbursable amount."""
     res = row._results
+    if reimbursable_shown:
+        row.reimbursable = summarize(res.get("reimbursable", []), currency)
     row.marginal = summarize(res.get("marginal", []), currency)
     row.api_equivalent = summarize(res.get("api_equivalent", []), currency)
     if seat_shown:
@@ -1424,7 +1618,11 @@ def _unconverted(name: str, summary: ConversionSummary | None) -> str:
 
 
 def report_csv(report: SpendReport) -> str:
-    """The report as CSV: one line per row, then a ``total`` line. Amounts in the reporting currency.
+    """The report as CSV: one line per row, a ``total`` line, then one ``total:<payer>`` line per payer
+    (when some usage has a known payer).
+
+    Amounts are in the reporting currency; ``reimbursable`` is a column only
+    where the report shows it.
 
     Values a formula could start with are quoted with a leading apostrophe
     (labels come from people: branch and model names).
@@ -1436,6 +1634,8 @@ def report_csv(report: SpendReport) -> str:
     header += ["currency", "marginal_spend", "api_equivalent_value"]
     if seat:
         header += ["allocated_seat_cost", "unallocated_seat_cost", "total_spend", "leverage"]
+    if report.reimbursable_shown:
+        header += ["reimbursable"]
     header += ["unpriced_entries", "not_converted"]
     writer.writerow(header)
 
@@ -1457,6 +1657,8 @@ def report_csv(report: SpendReport) -> str:
                 _amount(row.total_spend),
                 format_decimal_plain(row.leverage) if row.leverage is not None else "",
             ]
+        if report.reimbursable_shown:
+            cells.append(_amount(row.reimbursable))
         notes = "; ".join(
             n
             for n in (
@@ -1464,6 +1666,7 @@ def report_csv(report: SpendReport) -> str:
                 _unconverted("api_equivalent_value", row.api_equivalent),
                 _unconverted("allocated_seat_cost", row.seat_allocated) if seat else "",
                 _unconverted("unallocated_seat_cost", row.seat_unallocated) if seat else "",
+                _unconverted("reimbursable", row.reimbursable) if report.reimbursable_shown else "",
             )
             if n
         )
@@ -1473,6 +1676,14 @@ def report_csv(report: SpendReport) -> str:
     for row in report.rows:
         writer.writerow(line(row, None))
     writer.writerow(line(report.totals, "total"))
+    # Per-payer lines only when something says who paid: a report of unattributed usage keeps its shape.
+    known = any(r.key["payer"] != PAYER_UNKNOWN for r in report.payer_totals)
+    for payer_row in report.payer_totals if known else []:
+        cells = line(payer_row, f"total:{payer_row.key['payer']}")
+        # A payer total has no grouping values.
+        for i in range(len(report.group_by)):
+            cells[1 + i] = ""
+        writer.writerow(cells)
     return buf.getvalue()
 
 

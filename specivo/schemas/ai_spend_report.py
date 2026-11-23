@@ -12,6 +12,7 @@ from specivo.core.money import format_decimal_plain
 from specivo.schemas.ai_usage import AiUsageTokens
 from specivo.schemas.exchange_rate import RateUsedOut, UnconvertedGroupOut
 from specivo.schemas.money import MoneyOut
+from specivo.services.ai_spend_billing import HIDDEN_ACCOUNT
 from specivo.services.ai_spend_report_service import HIDDEN_ISSUE, ReportRow, SpendReport
 
 
@@ -64,6 +65,13 @@ class ReportRowOut(BaseModel):
     unallocated_seat_cost: ReportAmountOut | None
     total_spend: ReportAmountOut | None = Field(description="Marginal spend plus seat cost")
     leverage: str | None = Field(description="API-equivalent value of subscription usage / seat cost")
+    reimbursable: ReportAmountOut | None = Field(
+        None,
+        description=(
+            "Reimbursable share x (allocated seat cost + marginal spend) of employee-paid usage in employer "
+            "projects; null when not shown (administrators, or a report of your own usage, with seat cost)"
+        ),
+    )
 
     @classmethod
     def from_row(cls, row: ReportRow) -> ReportRowOut:
@@ -83,6 +91,7 @@ class ReportRowOut(BaseModel):
             unallocated_seat_cost=ReportAmountOut.from_summary(row.seat_unallocated),
             total_spend=ReportAmountOut.from_summary(row.total_spend),
             leverage=format_decimal_plain(row.leverage) if row.leverage is not None else None,
+            reimbursable=ReportAmountOut.from_summary(row.reimbursable),
         )
 
 
@@ -103,13 +112,23 @@ class SpendReportOut(BaseModel):
         description="Seat cost was asked for but is left out: you cannot see every entry of the project"
     )
     unallocated_shown: bool
+    reimbursable_shown: bool = Field(
+        False, description="Whether `reimbursable` is filled: administrators, or a report narrowed to your own usage"
+    )
     sort: str
     hidden_issue_key: int = HIDDEN_ISSUE
+    hidden_billing_account_key: int = Field(
+        HIDDEN_ACCOUNT, description="The billing_account key of personal accounts you may not see"
+    )
     rows: list[ReportRowOut] = Field(description="A page of the rows (`offset`, `limit`); the CSV has every row")
     row_count: int = Field(description="Every row of the report; more than `rows` holds when it is a page")
     offset: int = 0
     limit: int | None = None
     totals: ReportRowOut
+    payer_totals: list[ReportRowOut] = Field(
+        default_factory=list,
+        description="The totals per payer (employer, employee, unknown): spend, API-equivalent value, leverage",
+    )
     rate_dates: list[date]
     rates_used: list[RateUsedOut]
 
@@ -130,12 +149,14 @@ class SpendReportOut(BaseModel):
             seat_cost_shown=report.seat_cost_shown,
             seat_cost_hidden=report.seat_cost_hidden,
             unallocated_shown=report.unallocated_shown,
+            reimbursable_shown=report.reimbursable_shown,
             sort=report.sort,
             rows=[ReportRowOut.from_row(r) for r in page],
             row_count=len(report.rows),
             offset=offset,
             limit=limit,
             totals=ReportRowOut.from_row(report.totals),
+            payer_totals=[ReportRowOut.from_row(r) for r in report.payer_totals],
             rate_dates=list(report.rate_dates),
             rates_used=[RateUsedOut.from_used(r) for r in report.rates_used],
         )

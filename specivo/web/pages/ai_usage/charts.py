@@ -395,6 +395,7 @@ async def _project_charts_view(
         sprint_id=planning.sprint_id,
         without_sprint=planning.without_sprint,
         **session_context_filters(filters.attended, filters.profile),
+        **filters.billing_fields,
     )
     args: dict[str, Any] = {
         "date_from": _parse_date(filters.from_date),

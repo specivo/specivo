@@ -364,6 +364,21 @@ stored value, so a replay changing one is `updated`. Spend reports group by `att
 `ReportFilters.conditions` so the charts and seat breakdown narrow the same way); a seat fee never matches either
 filter.
 
+**Spend by payer and billing account.** Spend reports group by `payer`, `billing_account` and `route` and filter by
+them and by `scope=organization` (`ReportFilters.payer` / `billing_account_id` / `without_billing_account` /
+`route` / `without_route` / `organization`, i.e. `specivo.services.ai_spend_billing.BillingFilter`, applied in
+`ReportFilters.conditions` and passed to `AiUsageService.list_entries` as `billing=`); a seat fee never matches one.
+The organization scope leaves out personal entries (`personal_entry_clause`): no project, a project whose payer
+default is `employee`, or `billing_method = 'project_default'` with payer `employee`. A billing account filter is an
+id or a slug (`resolve_billing_account`); one the viewer may not see (`AiBillingAccountService.can_view`) matches
+nothing (-1). Grouped by `billing_account`, accounts the viewer may not see fold into one `HIDDEN_ACCOUNT` (0) row,
+"Personal account", which does not drill. Every report carries `payer_totals` (one finished row per payer:
+marginal, seat cost, API-equivalent value, leverage). `reimbursable` = the account's `reimburse_share` x (allocated
+seat cost + marginal) of employee-paid entries in projects whose payer default is `employer`, read at report time
+(`reimburse_factors`), each part converted on its own day; shown only with seat cost, to global administrators or
+to a viewer whose `user_id` filter is themselves (`reimbursable_allowed`), and only when the report holds
+employee-paid usage.
+
 **Hermes event receivers.** Hermes Agent posts signed outbound webhooks to
 `POST /api/v1/hermes/events/{token}/` (`specivo.api.v1.hermes_events`, served with and without the slash; no
 `Authorization` header). A receiver (`hermes_receivers`) belongs to one account; its `token` is the URL part and its

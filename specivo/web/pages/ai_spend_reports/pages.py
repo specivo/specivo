@@ -221,6 +221,10 @@ async def admin_spend_entries(  # noqa: PLR0913
     sprint: str = Query(""),
     attended: str = Query(""),
     profile: str = Query("", max_length=100),
+    payer: str = Query(""),
+    billing_account: str = Query(""),
+    route: str = Query("", max_length=100),
+    scope: str = Query(""),
     cost_type: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
@@ -245,6 +249,10 @@ async def admin_spend_entries(  # noqa: PLR0913
         sprint=sprint,
         attended=attended,
         profile=profile,
+        payer=payer,
+        billing_account=billing_account,
+        route=route,
+        scope=scope,
     )
     selected: Project | None = None
     unassigned: bool | None = None
@@ -257,6 +265,7 @@ async def admin_spend_entries(  # noqa: PLR0913
             filters.project = ""
     issue_id = await _issue_filter(db, user, filters.issue, selected)
     await filters.name_planning(db, user, selected)
+    await filters.name_billing(db, user)
     entries, total = await _usage.list_entries(
         db,
         user,
