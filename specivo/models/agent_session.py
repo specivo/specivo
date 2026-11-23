@@ -29,6 +29,9 @@ class AgentSession(Base, TimestampMixin):
     ``tool_call_count`` counts the MCP tool calls written to the security
     audit log for this session (``security_audit_logs.agent_session_id``), so
     the session list needs no join to the partitioned audit table.
+
+    ``receiver_id`` names the Hermes event receiver that opened the session
+    (``client_type = "webhook"``, no API key); ``NULL`` for every other session.
     """
 
     __tablename__ = "agent_sessions"
@@ -43,6 +46,7 @@ class AgentSession(Base, TimestampMixin):
         ),
         Index("ix_agent_sessions_user_external", "user_id", "external_session_id"),
         Index("ix_agent_sessions_parent_session_id", "parent_session_id"),
+        Index("ix_agent_sessions_receiver_id", "receiver_id"),
         CheckConstraint("client_type IN ('mcp', 'rest', 'webhook')", name="ck_agent_sessions_client_type"),
         CheckConstraint(
             "api_key_id IS NOT NULL OR client_type = 'webhook'", name="ck_agent_sessions_api_key_unless_webhook"
@@ -70,6 +74,10 @@ class AgentSession(Base, TimestampMixin):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    receiver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("hermes_receivers.id", ondelete="SET NULL", name="fk_agent_sessions_receiver_id"),
+        nullable=True,
+    )
     tool_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     def __repr__(self) -> str:

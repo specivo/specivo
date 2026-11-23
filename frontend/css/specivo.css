@@ -78,6 +78,7 @@
 @import "./pages/ai-issue-usage.css";
 @import "./pages/ai-spend-card.css";
 @import "./pages/api-key-limit.css";
+@import "./pages/hermes-receivers.css";
 @import "./pages/rate-limited.css";
 @import "./pages/admin-roles.css";
 @import "./pages/agent-sessions.css";

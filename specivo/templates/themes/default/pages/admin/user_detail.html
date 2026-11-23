@@ -267,6 +267,12 @@
     </table>
   </div>
 
+  {# --- Hermes event receivers of this account --- #}
+  {% if not target_user.login.startswith("$") %}
+  {% set receivers_api = base ~ "/api/v1/admin/users/" ~ target_user.id ~ "/hermes-receivers/" %}
+  {% include "pages/my/_hermes_receivers_panel.html" %}
+  {% endif %}
+
   {# --- MCP Configuration (service accounts only) --- #}
   <template x-if="targetUser.is_service_account">
     <div class="card" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;">

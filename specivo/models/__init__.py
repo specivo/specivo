@@ -14,6 +14,7 @@ from specivo.models.credential import CredentialAuditLog, ExternalSystem, Issued
 from specivo.models.currency import Currency
 from specivo.models.entity_link import EntityLink
 from specivo.models.exchange_rate import ExchangeRate
+from specivo.models.hermes_receiver import HermesDelivery, HermesReceiver
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.issue_source_ref import IssueSourceRef
@@ -71,6 +72,8 @@ __all__ = [
     "AiUsageEntry",
     "BillingRate",
     "Base",
+    "HermesDelivery",
+    "HermesReceiver",
     "LockVersionMixin",
     "TimestampMixin",
     "ActiveTimer",

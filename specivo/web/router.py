@@ -16,6 +16,7 @@ from specivo.web.pages.auth import router as auth_pages
 from specivo.web.pages.connected_accounts import router as connected_account_pages
 from specivo.web.pages.dashboard import router as dashboard_pages
 from specivo.web.pages.email_change import router as email_change_pages
+from specivo.web.pages.hermes_receivers import router as hermes_receiver_pages
 from specivo.web.pages.issues import router as issue_pages
 from specivo.web.pages.issues import short_router as issue_short_pages
 from specivo.web.pages.projects import router as project_pages
@@ -36,6 +37,7 @@ web_router.include_router(auth_pages)
 web_router.include_router(sso_pages)
 web_router.include_router(connected_account_pages)
 web_router.include_router(email_change_pages)
+web_router.include_router(hermes_receiver_pages)
 # Before the project and admin pages, whose paths could otherwise match first.
 web_router.include_router(ai_spend_report_pages)
 web_router.include_router(ai_issue_usage_pages)
