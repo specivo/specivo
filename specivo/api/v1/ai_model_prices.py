@@ -22,7 +22,7 @@ from specivo.schemas.ai_model_price import (
     prices_dict,
 )
 from specivo.schemas.common import PaginatedResponse
-from specivo.services.ai_model_price_service import UNSET, AiModelPriceService, PriceInput
+from specivo.services.ai_model_price_service import UNSET, AiModelPriceService, PriceInput, price_lookup
 
 router = APIRouter(prefix="/admin/ai-model-prices", tags=["ai-model-prices"])
 _service = AiModelPriceService()
@@ -124,11 +124,14 @@ async def resolve_price(
     """Which price applies to a model at an instant (admin only).
 
     ``unpriced`` when no active period contains the instant: there is never a
-    fallback to the latest price.
+    fallback to the latest price. ``variants_tried`` lists the spellings the
+    name was matched by (dots and dashes between digits, OpenRouter routing
+    suffixes); ``matched_by`` says whether the row was found by the reported
+    name, an alias of it, or a variant.
     """
     instant: datetime = at or utcnow()
     resolved = await _service.resolve(db, model, instant, provider=provider)
-    return AiModelPriceResolveOut.build(model, instant, resolved)
+    return AiModelPriceResolveOut.build(price_lookup(model, provider), model, instant, resolved)
 
 
 @router.post("/seed/", response_model=AiModelPriceSeedOut)

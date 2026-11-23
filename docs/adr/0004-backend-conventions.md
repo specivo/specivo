@@ -234,8 +234,15 @@ prices, currency, identity or start. A change closes the open period and inserts
 (`AiModelPriceService.create`); the seed loader (`specivo.core.ai_pricing_seed.plan_seed`, applied by
 `specivo.services.ai_model_price_seed.apply_seed` in migration 0061, at worker start and on demand) only appends
 periods and never touches `admin` rows. Resolve a price only through `AiModelPriceService.resolve(model, at,
-provider)`: names normalised (case, provider prefixes), model before alias, `admin` before `seed`, at an aware
-instant compared in UTC; no match is `None` (unpriced), never zero and never the latest price. Compute costs only
+provider)`: names normalised (case, provider prefixes such as `openrouter/anthropic/` or `nousresearch/`) and tried
+in their spelling variants (`specivo.core.ai_pricing.model_name_variants`: dots and dashes between digits, so
+`claude-sonnet-4.6` finds `claude-sonnet-4-6`, and OpenRouter routing suffixes such as `:free`; never `-fast` or other
+name suffixes) against model names and aliases. The reported spelling ranks before an alias of it, which ranks before a
+variant; then `admin` before `seed`. Add an alias only for a name no variant covers. An explicit provider restricts the
+match unless it is a gateway (`GATEWAY_PROVIDERS`: `openrouter`, `litellm`, `nous`), whose own rows then only win
+ties. The instant is aware and compared in UTC; no match is `None` (unpriced), never zero and never the latest price.
+`GET /api/v1/admin/ai-model-prices/resolve/` and the probe on the admin price list show the variants tried and how the
+row matched. Compute costs only
 with the pure `specivo.core.ai_pricing.price_usage(tokens, long_context_tokens, price)` (exact `Decimal`, partial
 when a class with tokens has no price). A table that prices with these rows registers a `PriceReference` so
 referenced rows cannot be deleted or ended before their entries.

@@ -245,22 +245,52 @@ PROVIDER_PREFIXES: dict[str, str | None] = {
     "z-ai": "zai",
     "dashscope": "dashscope",
     "qwen": "dashscope",
+    "nous": "nous",
+    "nousresearch": "nous",
+    "nous-portal": "nous",
+    "openai-codex": "openai",
+    "vertex": "gemini",
+    "vertex_ai": "gemini",
+    "vertexai": "gemini",
     "openrouter": None,
     "litellm": None,
 }
+
+#: Providers that route to other providers' models. As an explicit provider
+#: they break ties instead of restricting the match: ``openrouter`` with
+#: ``claude-sonnet-4.6`` is priced by the ``anthropic`` row. The Nous Portal
+#: serves other labs' models too, so ``nous`` is one, although it also names
+#: the provider of the Nous models' own rows.
+GATEWAY_PROVIDERS: frozenset[str] = frozenset({"openrouter", "litellm", "nous"})
+
+#: OpenRouter routing suffixes: the same model and price, routed differently.
+#: ``-fast`` and similar name suffixes are other models and are kept.
+ROUTING_SUFFIXES: tuple[str, ...] = (":free", ":beta", ":nitro", ":floor", ":online")
+
+_DOT_BETWEEN_DIGITS = re.compile(r"(?<=\d)\.(?=\d)")
+_DASH_BETWEEN_DIGITS = re.compile(r"(?<=\d)-(?=\d)")
 
 PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,49}$")
 MODEL_NAME_MAX_LENGTH = 200
 
 
 def normalize_provider(value: str | None) -> str | None:
-    """A provider slug in lower case (``"Anthropic "`` -> ``"anthropic"``); ``None`` for empty."""
+    """A provider slug in lower case (``"Anthropic "`` -> ``"anthropic"``); ``None`` for empty.
+
+    Known spellings map to one slug (``nousresearch`` -> ``nous``, ``vertex_ai``
+    -> ``gemini``); gateways and unknown providers pass through lower-cased.
+    """
     if value is None:
         return None
     text = value.strip().lower()
     if not text:
         return None
     return PROVIDER_PREFIXES.get(text) or text
+
+
+def is_gateway_provider(value: str | None) -> bool:
+    """Whether *value* names a gateway (see :data:`GATEWAY_PROVIDERS`)."""
+    return normalize_provider(value) in GATEWAY_PROVIDERS
 
 
 def normalize_model_name(name: str) -> tuple[str | None, str]:
@@ -281,3 +311,28 @@ def normalize_model_name(name: str) -> tuple[str | None, str]:
         hint = PROVIDER_PREFIXES[head] or hint
         text = rest
     return hint, text
+
+
+def model_name_variants(name: str) -> tuple[str, ...]:
+    """The spellings a reported model name may be priced under, most specific first.
+
+    In order: the normalised name (:func:`normalize_model_name`); the name with
+    dots between digits turned into dashes (``claude-sonnet-4.6`` ->
+    ``claude-sonnet-4-6``); dashes between digits turned into dots (``gpt-5-1``
+    -> ``gpt-5.1``); then each of those without an OpenRouter routing suffix
+    (:data:`ROUTING_SUFFIXES`). Duplicates are dropped; an empty name has none.
+    """
+    _hint, base = normalize_model_name(name)
+    if not base:
+        return ()
+    stems = [base]
+    for suffix in ROUTING_SUFFIXES:
+        if base.endswith(suffix) and len(base) > len(suffix):
+            stems.append(base[: -len(suffix)])
+            break
+    variants: list[str] = []
+    for stem in stems:
+        for spelling in (stem, _DOT_BETWEEN_DIGITS.sub("-", stem), _DASH_BETWEEN_DIGITS.sub(".", stem)):
+            if spelling not in variants:
+                variants.append(spelling)
+    return tuple(variants)

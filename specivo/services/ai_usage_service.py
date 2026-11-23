@@ -70,7 +70,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.ai_pricing import TOKEN_CLASSES, TokenCounts, normalize_provider
+from specivo.core.ai_pricing import TOKEN_CLASSES, TokenCounts, model_name_variants, normalize_provider
 from specivo.core.ai_usage import (
     COMMENTS_MAX_LENGTH,
     CONTEXT_MAX_LENGTHS,
@@ -1727,11 +1727,16 @@ class AiUsageService:
     # -- range recompute ------------------------------------------------------------
 
     async def model_names(self, session: AsyncSession, provider: str | None, model: str) -> list[str]:
-        """The normalised *model* and every alias its price rows carry (entries may use either name)."""
+        """The normalised *model*, its spelling variants and every alias its price rows carry.
+
+        Entries keep the spelling they were reported with, so a filter for
+        ``claude-sonnet-4-6`` also finds entries logged as ``claude-sonnet-4.6``.
+        """
         provider_slug = normalize_provider(provider) if provider else None
         name = model_name_for(model, provider_slug or "")
-        names = {name}
-        stmt = select(AiModelPrice.aliases).where(AiModelPrice.model == name)
+        variants = model_name_variants(name) if name else ()
+        names = {name, *variants}
+        stmt = select(AiModelPrice.aliases).where(AiModelPrice.model.in_(variants or (name,)))
         if provider_slug:
             stmt = stmt.where(AiModelPrice.provider == provider_slug)
         for (aliases,) in (await session.execute(stmt)).all():

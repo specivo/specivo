@@ -24,7 +24,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.ai_pricing_seed import FIRST_PERIOD_START, Snapshot
+from specivo.core.ai_pricing_seed import FIRST_PERIOD_START, Snapshot, load_history
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.money import Money
 from specivo.models.ai_model_price import AiModelPrice
@@ -306,6 +306,61 @@ async def test_unpriced_model_never_costs_zero(db_session: AsyncSession, w: Worl
     assert entry.marginal is None
 
 
+async def test_a_dotted_spelling_through_a_gateway_prices_like_the_dashed_row(
+    db_session: AsyncSession, w: World
+) -> None:
+    await _prices.create(
+        db_session,
+        PriceInput(
+            provider="testlab",
+            model="lab-sonnet-4-6",
+            currency="USD",
+            effective_from=utc(2026, 1, 1),
+            prices={"input": "3", "output": "15"},
+        ),
+        actor=w.admin,
+    )
+    dashed = await _svc.log(db_session, w.alice, usage(project_id=w.p.id, model="lab-sonnet-4-6", cost_type="api"))
+    dotted = await _svc.log(
+        db_session,
+        w.alice,
+        usage(project_id=w.p.id, provider="OpenRouter", model="lab-sonnet-4.6", cost_type="api"),
+    )
+    assert dotted.model == "lab-sonnet-4.6"
+    assert dotted.provider == "openrouter"
+    # 1M input x 3 + 0.1M output x 15 = 4.5 USD
+    assert dotted.api_equivalent == dashed.api_equivalent == Money("4.5", "USD")
+    assert dotted.price_id == dashed.price_id
+
+
+async def test_recompute_prices_dotted_entries_once_a_price_lands(db_session: AsyncSession, w: World) -> None:
+    entry = await _svc.log(
+        db_session, w.alice, usage(project_id=w.p.id, provider="nous", model="lab-hermes-9.1", cost_type="api")
+    )
+    assert entry.cost_basis == "unpriced"
+    await _prices.create(
+        db_session,
+        PriceInput(
+            provider="nous",
+            model="lab-hermes-9-1",
+            currency="USD",
+            effective_from=utc(2026, 1, 1),
+            prices={"input": "1", "output": "3"},
+        ),
+        actor=w.admin,
+    )
+    # The model filter names the priced spelling; the entry keeps the reported one.
+    assert (
+        await _svc.count_in_range(db_session, start=utc(2026, 1, 1), end=utc(2027, 1, 1), model="lab-hermes-9-1") == 1
+    )
+    outcome = await _svc.recompute_range(
+        db_session, actor_id=w.admin.id, start=utc(2026, 1, 1), end=utc(2027, 1, 1), model="lab-hermes-9-1"
+    )
+    assert (outcome.entries, outcome.changed) == (1, 1)
+    assert entry.cost_basis == "calculated"
+    assert entry.api_equivalent == Money("1.3", "USD")  # 1M x 1 + 0.1M x 3
+
+
 async def test_partial_when_a_class_with_tokens_has_no_price(db_session: AsyncSession, w: World) -> None:
     entry = await _svc.log(
         db_session,
@@ -396,7 +451,7 @@ async def test_a_seed_that_moves_a_first_period_back_prices_earlier_entries(db_s
     await db_session.flush()
 
     outcome = await _prices.load_seed(
-        db_session, actor=w.admin, snapshot=Snapshot(as_of=JUNE_1, source={}, prices=()), history=()
+        db_session, actor=w.admin, snapshot=Snapshot(as_of=JUNE_1, source={}, prices=()), history=load_history()
     )
     assert outcome.rebased == 1
     await db_session.refresh(row)

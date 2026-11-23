@@ -16,7 +16,7 @@ from specivo.core.ai_pricing_seed import PRICE_COLUMNS, format_price
 from specivo.models.ai_model_price import AiModelPrice
 from specivo.schemas.money import CurrencyCode
 from specivo.services.ai_model_price_seed import SeedOutcome
-from specivo.services.ai_model_price_service import ResolvedPrice
+from specivo.services.ai_model_price_service import PriceLookup, ResolvedPrice
 
 PriceText = StrictStr
 
@@ -138,20 +138,37 @@ class AiModelPriceResolveOut(BaseModel):
 
     status: str = Field(examples=["priced", "unpriced"])
     model: str = Field(description="The normalised name that was looked up")
+    provider: str | None = Field(None, description="The normalised provider that was given, if any")
     at: datetime
-    matched_by: str | None = Field(None, examples=["model", "alias"])
+    variants_tried: list[str] = Field(
+        default_factory=list,
+        description="The spellings matched against model names and aliases, the reported one first",
+        examples=[["claude-sonnet-4.6", "claude-sonnet-4-6"]],
+    )
+    matched_by: str | None = Field(None, examples=["model", "alias", "variant"])
     price: AiModelPriceOut | None = None
 
     @classmethod
-    def build(cls, model: str, at: datetime, resolved: ResolvedPrice | None) -> AiModelPriceResolveOut:
+    def build(
+        cls, lookup: PriceLookup, model: str, at: datetime, resolved: ResolvedPrice | None
+    ) -> AiModelPriceResolveOut:
+        common = {"provider": lookup.provider, "variants_tried": list(lookup.variants)}
         if resolved is None:
-            return cls(status="unpriced", model=model, at=at.astimezone(UTC), matched_by=None, price=None)
+            return cls(
+                status="unpriced",
+                model=lookup.model or model,
+                at=at.astimezone(UTC),
+                matched_by=None,
+                price=None,
+                **common,
+            )
         return cls(
             status="priced",
             model=resolved.model,
             at=resolved.at,
             matched_by=resolved.matched_by,
             price=AiModelPriceOut.from_row(resolved.price),
+            **common,
         )
 
 

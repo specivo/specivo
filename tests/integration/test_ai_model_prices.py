@@ -27,6 +27,7 @@ from specivo.core.ai_pricing_seed import (
     HistoryPeriod,
     SeedPrice,
     Snapshot,
+    load_history,
     load_snapshot,
 )
 from specivo.core.config import get_settings
@@ -238,6 +239,95 @@ async def test_names_are_normalised_and_aliases_match_after_the_model(db_session
     # An explicit provider restricts the match.
     assert await _service.resolve(db_session, "spv-test-claude", T1, provider="openai") is None
     assert await _service.resolve(db_session, "spv-test-claude", T1, provider="Anthropic") is not None
+
+
+async def test_a_dotted_spelling_resolves_to_the_dashed_row(db_session: AsyncSession) -> None:
+    dashed = await _add(db_session, provider="anthropic", model="spv-test-sonnet-4-6", start=T0)
+    for reported in (
+        "spv-test-sonnet-4.6",
+        "Anthropic/SPV-Test-Sonnet-4.6",
+        "openrouter/anthropic/spv-test-sonnet-4.6",
+    ):
+        resolved = await _service.resolve(db_session, reported, T1)
+        assert resolved is not None and resolved.price.id == dashed.id, reported
+        assert resolved.matched_by == "variant"
+        assert resolved.variants[0] == "spv-test-sonnet-4.6" and "spv-test-sonnet-4-6" in resolved.variants
+    exact = await _service.resolve(db_session, "spv-test-sonnet-4-6", T1)
+    assert exact is not None and exact.price.id == dashed.id and exact.matched_by == "model"
+
+
+async def test_a_dashed_spelling_resolves_to_the_dotted_row(db_session: AsyncSession) -> None:
+    dotted = await _add(db_session, provider="openai", model="spv-test-gpt-5.1", start=T0)
+    resolved = await _service.resolve(db_session, "spv-test-gpt-5-1", T1, provider="openai")
+    assert resolved is not None and resolved.price.id == dotted.id and resolved.matched_by == "variant"
+
+
+async def test_the_reported_spelling_wins_over_a_variant_row(db_session: AsyncSession) -> None:
+    await _add(db_session, provider="testprov", model="spv-test-m-2-1", start=T0, source="admin")
+    dotted = await _add(db_session, provider="testprov", model="spv-test-m-2.1", start=T0, input="7")
+    # The seed row spelled as reported beats an admin row that only matches a variant.
+    resolved = await _service.resolve(db_session, "spv-test-m-2.1", T1)
+    assert resolved is not None and resolved.price.id == dotted.id and resolved.matched_by == "model"
+
+
+async def test_an_alias_of_the_reported_spelling_wins_over_a_variant_row(db_session: AsyncSession) -> None:
+    await _add(db_session, provider="testprov", model="spv-test-k-3-5", start=T0)
+    aliased = await _add(db_session, provider="testprov", model="spv-test-k3", aliases=["spv-test-k-3.5"], start=T0)
+    resolved = await _service.resolve(db_session, "spv-test-k-3.5", T1)
+    assert resolved is not None and resolved.price.id == aliased.id and resolved.matched_by == "alias"
+
+
+async def test_variants_also_match_aliases(db_session: AsyncSession) -> None:
+    row = await _add(db_session, provider="testprov", model="spv-test-q", aliases=["spv-test-q-4-2"], start=T0)
+    resolved = await _service.resolve(db_session, "spv-test-q-4.2", T1)
+    assert resolved is not None and resolved.price.id == row.id and resolved.matched_by == "variant"
+
+
+async def test_openrouter_routing_suffixes_are_stripped(db_session: AsyncSession) -> None:
+    row = await _add(db_session, provider="deepseek", model="spv-test-r1", start=T0)
+    resolved = await _service.resolve(db_session, "deepseek/spv-test-r1:free", T1, provider="openrouter")
+    assert resolved is not None and resolved.price.id == row.id and resolved.matched_by == "variant"
+    # A "-fast" model is a different price, never the base model's.
+    assert await _service.resolve(db_session, "spv-test-r1-fast", T1) is None
+
+
+async def test_a_gateway_provider_does_not_restrict_the_match(db_session: AsyncSession) -> None:
+    row = await _add(db_session, provider="anthropic", model="spv-test-opus-5-1", start=T0)
+    for provider in ("openrouter", "OpenRouter", "litellm", "nous", "nous-portal"):
+        resolved = await _service.resolve(db_session, "spv-test-opus-5.1", T1, provider=provider)
+        assert resolved is not None and resolved.price.id == row.id, provider
+    # A row the gateway itself prices wins the tie.
+    own = await _add(db_session, provider="openrouter", model="spv-test-opus-5-1", start=T0)
+    resolved = await _service.resolve(db_session, "spv-test-opus-5.1", T1, provider="openrouter")
+    assert resolved is not None and resolved.price.id == own.id
+    # A first-party provider still restricts.
+    assert await _service.resolve(db_session, "spv-test-opus-5.1", T1, provider="openai") is None
+    assert await _service.resolve(db_session, "spv-test-opus-5.1", T1, provider="custom") is None
+
+
+async def test_nous_names_resolve_to_nous_rows(db_session: AsyncSession) -> None:
+    row = await _add(db_session, provider="nous", model="spv-test-hermes-9-70b", start=T0)
+    for reported, provider in (
+        ("nousresearch/spv-test-hermes-9-70b", None),
+        ("NousResearch/SPV-Test-Hermes-9-70B", "openrouter"),
+        ("spv-test-hermes-9-70b", "nous-portal"),
+        ("openrouter/nousresearch/spv-test-hermes-9-70b", None),
+    ):
+        resolved = await _service.resolve(db_session, reported, T1, provider=provider)
+        assert resolved is not None and resolved.price.id == row.id, reported
+
+
+async def test_an_unknown_model_stays_unpriced(db_session: AsyncSession) -> None:
+    await _add(db_session, provider="anthropic", model="spv-test-sonnet-4-6", start=T0)
+    for reported, provider in (
+        ("spv-test-sonnet-4.7", None),
+        ("openrouter/anthropic/spv-test-sonnet-5", "openrouter"),
+        ("nousresearch/spv-test-unknown-1.0", "nous"),
+        ("spv-test-sonnet-4.6", "openai"),
+    ):
+        assert await _service.resolve(db_session, reported, T1, provider=provider) is None, reported
+    # Before the first period a variant does not reach back to a later price either.
+    assert await _service.resolve(db_session, "spv-test-sonnet-4.6", T0 - TICK) is None
 
 
 async def test_a_naive_instant_is_refused(db_session: AsyncSession) -> None:
@@ -589,7 +679,8 @@ async def test_a_reseed_moves_a_first_period_back_and_leaves_admin_periods(
         _input(provider="seedtest", model="delta-1", effective_from=T0, prices={"input": "0.5", "output": "2"}),
         actor=admin,
     )
-    outcome = await _service.load_seed(db_session, actor=admin, snapshot=_snap(as_of=T1), history=())
+    # The committed history stays loaded: its periods are never first periods to move back.
+    outcome = await _service.load_seed(db_session, actor=admin, snapshot=_snap(as_of=T1), history=load_history())
     assert outcome.rebased == 1 and outcome.changed
     for row in (moved, blocked, mine.price):
         await db_session.refresh(row)
@@ -601,7 +692,7 @@ async def test_a_reseed_moves_a_first_period_back_and_leaves_admin_periods(
     audit = await _audit_rows(db_session, AuditEvent.AI_MODEL_PRICES_SEEDED)
     assert audit[-1].details["rebased"] == 1
 
-    again = await _service.load_seed(db_session, snapshot=_snap(as_of=T1), history=())
+    again = await _service.load_seed(db_session, snapshot=_snap(as_of=T1), history=load_history())
     assert again.rebased == 0 and not again.changed
 
 
@@ -726,10 +817,65 @@ async def test_resolve_endpoint(client: AsyncClient, db_session: AsyncSession, a
     assert unpriced.json() == {
         "status": "unpriced",
         "model": "alpha-1",
+        "provider": "testprov",
         "at": "2026-05-31T23:59:59Z",
+        "variants_tried": ["alpha-1"],
         "matched_by": None,
         "price": None,
     }
+
+
+async def test_resolve_endpoint_shows_the_variants_it_tried(
+    client: AsyncClient, db_session: AsyncSession, admin: User
+) -> None:
+    await _add(db_session, provider="anthropic", model="spv-test-sonnet-4-6", start=T0)
+    await db_session.commit()
+    resp = await client.get(
+        "/api/v1/admin/ai-model-prices/resolve/",
+        params={
+            "model": "openrouter/anthropic/spv-test-sonnet-4.6:beta",
+            "provider": "OpenRouter",
+            "at": "2026-06-01T00:00:00Z",
+        },
+        headers=_bearer(admin),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "priced" and body["matched_by"] == "variant"
+    assert body["provider"] == "openrouter" and body["model"] == "spv-test-sonnet-4.6:beta"
+    assert body["variants_tried"] == [
+        "spv-test-sonnet-4.6:beta",
+        "spv-test-sonnet-4-6:beta",
+        "spv-test-sonnet-4.6",
+        "spv-test-sonnet-4-6",
+    ]
+    assert body["price"]["provider"] == "anthropic" and body["price"]["model"] == "spv-test-sonnet-4-6"
+    assert body["price"]["source"] == "seed"
+
+
+async def test_the_resolve_probe_on_the_price_list_page(
+    client: AsyncClient, db_session: AsyncSession, admin: User
+) -> None:
+    row = await _add(db_session, provider="anthropic", model="spv-test-sonnet-4-6", start=T0)
+    await db_session.commit()
+    resp = await client.get(
+        "/admin/ai-model-prices/",
+        params={"probe_model": "spv-test-sonnet-4.6", "probe_provider": "openrouter", "probe_at": "2026-06-01T00:00"},
+        cookies=_cookies(admin),
+    )
+    assert resp.status_code == 200
+    assert 'data-testid="probe-result"' in resp.text and f'data-price-id="{row.id}"' in resp.text
+    assert "spv-test-sonnet-4-6" in resp.text
+    missing = await client.get(
+        "/admin/ai-model-prices/",
+        params={"probe_model": "spv-test-nothing-1.0", "probe_at": "2026-06-01T00:00"},
+        cookies=_cookies(admin),
+    )
+    assert 'data-testid="probe-unpriced"' in missing.text and "spv-test-nothing-1-0" in missing.text
+    bad = await client.get(
+        "/admin/ai-model-prices/", params={"probe_model": "x", "probe_at": "not-a-time"}, cookies=_cookies(admin)
+    )
+    assert bad.status_code == 200 and 'data-testid="probe-error"' in bad.text
 
 
 async def test_seed_refresh_through_the_api_keeps_admin_rows(

@@ -9,7 +9,8 @@ Two committed files feed ``ai_model_prices`` rows of source ``seed``:
   snapshot carries the instant it describes (``as_of``).
 - ``specivo/data/ai_model_prices_history.json`` -- optional, maintained by
   hand: known earlier periods (``effective_from`` and ``effective_to``), such as
-  a provider's price before a cut.
+  a provider's price before a cut, and open periods (no ``effective_to``) for
+  models the snapshot does not carry, such as the Nous models.
 
 :func:`plan_seed` compares them with the seed rows already stored and returns
 what to write. It **appends periods and never rewrites them**:
@@ -23,6 +24,10 @@ what to write. It **appends periods and never rewrites them**:
 - a changed price closes the open seed period at ``as_of`` and opens a new one
   from ``as_of``;
 - a history period is inserted unless a seed period already covers part of it;
+  an open one (no ``effective_to``) starts at its ``effective_from`` and is never
+  moved back while the file keeps it, so usage before it stays unpriced (never
+  remove a period from the file: end it instead); when the file ends an open
+  period, the stored one is closed there and the following period inserted;
 - a deactivated open period, and every ``admin`` row, is left alone;
 - a model that disappeared from the snapshot keeps its open period (LiteLLM
   dropping a model does not end its price);
@@ -193,11 +198,11 @@ class SeedPrice:
 
 @dataclass(frozen=True, slots=True)
 class HistoryPeriod:
-    """A closed historical period of one model's prices."""
+    """A hand-kept period of one model's prices; ``effective_to`` ``None`` is open (the last period)."""
 
     price: SeedPrice
     effective_from: datetime
-    effective_to: datetime
+    effective_to: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,8 +289,9 @@ def parse_history(document: object) -> tuple[HistoryPeriod, ...]:
         where = f"periods[{i}]"
         price = _seed_price(item, currency, where)
         start = parse_instant(item.get("effective_from"), where=f"{where} effective_from")
-        end = parse_instant(item.get("effective_to"), where=f"{where} effective_to")
-        if end <= start:
+        raw_end = item.get("effective_to")
+        end = None if raw_end is None else parse_instant(raw_end, where=f"{where} effective_to")
+        if end is not None and end <= start:
             raise SeedFormatError(f"{where}: effective_to must be after effective_from")
         result.append(HistoryPeriod(price=price, effective_from=start, effective_to=end))
     by_model: dict[tuple[str, str], list[HistoryPeriod]] = {}
@@ -294,7 +300,7 @@ def parse_history(document: object) -> tuple[HistoryPeriod, ...]:
     for (provider, model), items in by_model.items():
         items.sort(key=lambda p: p.effective_from)
         for before, after in zip(items, items[1:], strict=False):
-            if after.effective_from < before.effective_to:
+            if before.effective_to is None or after.effective_from < before.effective_to:
                 raise SeedFormatError(f"History periods of {provider}/{model} overlap")
     return tuple(result)
 
@@ -556,7 +562,7 @@ def plan_seed(
     for price in snapshot.prices:
         key = (price.provider, price.model)
         _plan_snapshot_price(plan, price, by_model.get(key, []), key in history_models, admin_starts.get(key))
-    for period in history:
+    for period in sorted(history, key=lambda p: p.effective_from):
         _plan_history_period(plan, period, by_model.get((period.price.provider, period.price.model), []))
     return plan
 
@@ -629,13 +635,26 @@ def _plan_history_period(plan: SeedPlan, period: HistoryPeriod, rows: list[Store
     ]
     if exact:
         plan.unchanged += 1
+        if exact[0].is_active and exact[0].effective_to is None and tuple(exact[0].aliases) != price.aliases:
+            plan.alias_updates[exact[0].id] = price.aliases
+        return
+    end = period.effective_to
+    ending = [
+        r
+        for r in rows
+        if r.is_active and r.effective_to is None and r.effective_from == period.effective_from and same_price(r, price)
+    ]
+    if end is not None and ending:
+        # An open history period the file now ends (a newer period follows it).
+        plan.closes[ending[0].id] = end
         return
     planned = [p for p in plan.inserts if (p.price.provider, p.price.model) == (price.provider, price.model)]
     clash_stored = any(
         _overlaps(period.effective_from, period.effective_to, _with_close(r, plan.closes)) for r in rows if r.is_active
     )
     clash_planned = any(
-        (p.effective_to is None or p.effective_to > period.effective_from) and p.effective_from < period.effective_to
+        (p.effective_to is None or p.effective_to > period.effective_from)
+        and (period.effective_to is None or p.effective_from < period.effective_to)
         for p in planned
     )
     if clash_stored or clash_planned:
