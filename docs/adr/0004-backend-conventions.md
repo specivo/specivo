@@ -786,6 +786,14 @@ await audit.log_member_change(session=db, action="added", ...)
 **Scope.** Security and administrative events, and everything agents do through MCP. People's ordinary
 edits to issues and wiki pages are not audit events: they live in issue and wiki history.
 
+**Agent sessions.** An MCP tool call's row names its agent session in the `agent_session_id` column
+(`_log_tool`, from `agent_session_id_var`; no foreign key, as for `user_id` and `project_id`, because audit
+rows outlive sessions), and `agent_sessions.tool_call_count` goes up in the same transaction, so the session
+list needs no join to the partitioned table. A project's session page lists a session's rows in the project
+and its project-less ones (`list_events(agent_session_id=..., project_id=..., include_projectless=True)`), for
+`manage_project` only; opening it writes `RESOURCE_ACCESS` with `resource_type` `agent_session`. Other write
+paths leave the column empty.
+
 **Noise rules.** Each of these was one row per routine request, so it is not written:
 - `access_granted` (the enum value stays so old rows read). `access_denied` is written, only where the
   caller passes `request`; anonymous paths pass none.

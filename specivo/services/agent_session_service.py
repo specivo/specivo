@@ -10,10 +10,10 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, not_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -115,6 +115,20 @@ def connection_hash(connection: str) -> str:
     resume its connection, is never written to the database.
     """
     return hashlib.sha256(connection.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class AgentSessionFilters:
+    """Narrows a project's agent session list; ``None`` leaves a field out.
+
+    *active* ``True`` keeps the open sessions (not ended, last active within
+    ``agent_session_timeout``), ``False`` the others.
+    """
+
+    user_id: int | None = None
+    issue_id: int | None = None
+    active: bool | None = None
+    external_session_id: str | None = None
 
 
 class AgentSessionService:
@@ -439,23 +453,25 @@ class AgentSessionService:
             agent_session.last_activity_at = utcnow()
             await session.flush()
 
-    async def list_for_project(
-        self,
-        session: AsyncSession,
-        project_id: int,
-        user: User,
-        limit: int = 25,
-        external_session_id: str | None = None,
-    ) -> list[AgentSession]:
-        """List the recent agent sessions of a project that *user* may see.
+    def is_active(self, agent_session: AgentSession, now: datetime | None = None) -> bool:
+        """Whether *agent_session* is still open: not ended, and active within the session timeout."""
+        if agent_session.ended_at is not None:
+            return False
+        last = agent_session.last_activity_at
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=UTC)
+        return ((now or utcnow()) - last).total_seconds() < _get_session_timeout()
 
-        *external_session_id* keeps only the sessions with that client session id.
+    async def _project_conditions(
+        self, session: AsyncSession, project_id: int, user: User
+    ) -> list[ColumnElement[bool]]:
+        """The WHERE conditions that make a session one of *project_id*'s that *user* may see.
 
         A session is the project's when its account is a member of the
         project (directly or through a group). A session tied to an issue is
-        listed only when that issue is in the project and *user* may see it,
-        as in the issue list, so the list reveals nothing about other
-        projects or hidden issues.
+        the project's only when that issue is in the project and *user* may
+        see it, as in the issue list, so nothing about other projects or
+        hidden issues is revealed.
         """
         from specivo.models.issue import Issue
         from specivo.models.member import Member
@@ -475,17 +491,101 @@ class AgentSessionService:
         visibility = await IssueService().visible_issues_clause(session, user)
         if visibility is not None:
             visible_issues = visible_issues.where(visibility)
+        return [
+            account_is_member,
+            or_(AgentSession.issue_id.is_(None), AgentSession.issue_id.in_(visible_issues)),
+        ]
 
+    async def list_for_project(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        user: User,
+        filters: AgentSessionFilters | None = None,
+        offset: int = 0,
+        limit: int = 25,
+    ) -> tuple[list[AgentSession], int]:
+        """List the agent sessions of a project that *user* may see, most recently active first.
+
+        Returns ``(page, total)``. *filters* narrows the list (see
+        :class:`AgentSessionFilters`); which sessions count as the project's
+        is decided by ``_project_conditions``.
+        """
+        conditions = await self._project_conditions(session, project_id, user)
+        filters = filters or AgentSessionFilters()
+        if filters.user_id is not None:
+            conditions.append(AgentSession.user_id == filters.user_id)
+        if filters.issue_id is not None:
+            conditions.append(AgentSession.issue_id == filters.issue_id)
+        if filters.external_session_id is not None:
+            conditions.append(AgentSession.external_session_id == filters.external_session_id)
+        if filters.active is not None:
+            since = utcnow() - timedelta(seconds=_get_session_timeout())
+            open_now = and_(AgentSession.ended_at.is_(None), AgentSession.last_activity_at >= since)
+            conditions.append(open_now if filters.active else not_(open_now))
+
+        total = await session.scalar(select(func.count()).select_from(AgentSession).where(*conditions)) or 0
         stmt = (
             select(AgentSession)
-            .where(
-                account_is_member,
-                or_(AgentSession.issue_id.is_(None), AgentSession.issue_id.in_(visible_issues)),
-            )
-            .order_by(AgentSession.last_activity_at.desc())
+            .where(*conditions)
+            .order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc())
+            .offset(offset)
             .limit(limit)
         )
-        if external_session_id is not None:
-            stmt = stmt.where(AgentSession.external_session_id == external_session_id)
         result = await session.execute(stmt)
-        return list(result.scalars().all())
+        return list(result.scalars().all()), int(total)
+
+    async def get_for_project(
+        self, session: AsyncSession, project_id: int, agent_session_id: int, user: User
+    ) -> AgentSession:
+        """Return agent session *agent_session_id* if it is one of *project_id*'s that *user* may see.
+
+        Raises ``NotFoundError`` otherwise: a session of another project and
+        one tied to a hidden issue look the same as a missing one.
+        """
+        conditions = await self._project_conditions(session, project_id, user)
+        stmt = select(AgentSession).where(AgentSession.id == agent_session_id, *conditions)
+        agent_session = (await session.execute(stmt)).scalar_one_or_none()
+        if agent_session is None:
+            raise NotFoundError("Agent session not found")
+        return agent_session
+
+    async def filters_for(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        user: User,
+        *,
+        account: str | None = None,
+        issue_ref: str | None = None,
+        active: bool | None = None,
+        external_session_id: str | None = None,
+    ) -> AgentSessionFilters | None:
+        """Resolve the filters of a session list request, or ``None`` when nothing can match.
+
+        *account* is a login (case-insensitive) and *issue_ref* an issue key
+        such as ``ACME-12``; an unknown login, an issue outside the project
+        and one *user* cannot see all give ``None``, so the list is empty and
+        tells nothing about the issue.
+        """
+        from specivo.models.user import User as UserModel
+        from specivo.services.issue_service import IssueService
+
+        user_id: int | None = None
+        if account and account.strip():
+            user_id = await session.scalar(
+                select(UserModel.id).where(func.lower(UserModel.login) == account.strip().lower())
+            )
+            if user_id is None:
+                return None
+        issue_id: int | None = None
+        if issue_ref and issue_ref.strip():
+            try:
+                issue = await IssueService().get_by_display_key(session, issue_ref.strip().upper(), user=user)
+            except NotFoundError:
+                return None
+            if issue.project_id != project_id:
+                return None
+            issue_id = issue.id
+        external = external_session_id.strip() if external_session_id and external_session_id.strip() else None
+        return AgentSessionFilters(user_id=user_id, issue_id=issue_id, active=active, external_session_id=external)

@@ -1,0 +1,46 @@
+{# The tool calls of one agent session, from the security audit log: metadata only (tool, event type,
+   the ids and keys the row holds). Context: `timeline` from specivo.web.pages.agent_sessions.timeline_context.
+   Embeddable: the pager links reload the whole page without htmx, and swap only this block with it. #}
+{% set t = timeline %}
+<div class="card sp-as-timeline" data-testid="as-timeline">
+  {% if t.rows %}
+  <div class="sp-table-scroll">
+  <table class="sp-table">
+    <thead>
+      <tr>
+        <th>{% trans %}Time{% endtrans %}</th>
+        <th>{% trans %}Tool{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Event{% endtrans %}</th>
+        <th>{% trans %}Targets{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Project{% endtrans %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in t.rows %}
+      <tr data-testid="as-timeline-row">
+        <td class="sp-as-nowrap">{{ r.created_at | localdt(user.timezone) }}</td>
+        <td><span class="sp-as-tool">{{ r.tool or "–" }}</span></td>
+        <td class="sp-as-hide-md"><span class="sp-as-event">{{ r.event_type }}</span></td>
+        <td>
+          {% if r.details %}<span class="sp-as-details">{% for key, value in r.details %}<span class="sp-as-detail"><span class="sp-as-detail-key">{{ key }}</span>{{ value }}</span>{% endfor %}</span>
+          {% else %}<span class="sp-text-muted">–</span>{% endif %}
+        </td>
+        <td class="sp-as-hide-md">{% if r.project_key %}{{ r.project_key }}{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="sp-as-pager">
+    <span>{% trans first=t.offset + 1, last=[t.offset + t.limit, t.total] | min, total=t.total %}%(first)s–%(last)s of %(total)s{% endtrans %}</span>
+    {% if t.total > t.limit %}
+    <span class="sp-as-pager-links">
+      {% if t.offset > 0 %}{% set prev = [t.offset - t.limit, 0] | max %}<a class="sp-page-link" href="{{ base }}{{ t.base_url }}?offset={{ prev }}" hx-get="{{ base }}{{ t.partial_url }}?offset={{ prev }}" hx-target="closest .sp-as-timeline" hx-swap="outerHTML">&laquo; {% trans %}Newer{% endtrans %}</a>{% endif %}
+      {% if t.offset + t.limit < t.total %}{% set next = t.offset + t.limit %}<a class="sp-page-link" href="{{ base }}{{ t.base_url }}?offset={{ next }}" hx-get="{{ base }}{{ t.partial_url }}?offset={{ next }}" hx-target="closest .sp-as-timeline" hx-swap="outerHTML">{% trans %}Older{% endtrans %} &raquo;</a>{% endif %}
+    </span>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="sp-as-empty" data-testid="as-timeline-empty">{% trans %}No tool calls recorded for this session in this project.{% endtrans %}</div>
+  {% endif %}
+</div>

@@ -26,6 +26,7 @@ class AuditLogOut(BaseModel):
     project_id: int | None = None
     project_key: str | None = None
     permission: str | None = None
+    agent_session_id: int | None = None
     ip_address: str | None = None
     request_id: str | None = None
     user_agent: str | None = None

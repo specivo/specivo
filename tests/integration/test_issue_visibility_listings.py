@@ -478,7 +478,7 @@ async def test_agent_sessions_list_only_the_projects_visible_sessions(
     async def listed(user: User) -> set[int]:
         resp = await client.get(f"/api/v1/projects/{w.p.key}/agent-sessions/", headers=await _bearer(client, user))
         assert resp.status_code == 200, resp.text
-        return {item["id"] for item in resp.json()} & {
+        return {item["id"] for item in resp.json()["items"]} & {
             on_public.id,
             on_private.id,
             on_other_project.id,

@@ -507,3 +507,89 @@ async def test_issue_for_external_uses_the_newest_row_then_the_lineage(db_sessio
     # Another user's rows never answer.
     assert await _svc.issue_for_external(db_session, world.other.id, "sess_1") is None
     assert await _svc.issue_for_external(db_session, world.agent.id, "sess_unknown") is None
+
+
+# ---------------------------------------------------------------------------
+# A project's session list: filters, counts and the usage of each session
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def sessions_world(db_session: AsyncSession):
+    from tests.integration.agent_session_world import build_session_world
+
+    clear_role_cache(db_session)
+    yield await build_session_world(db_session, "ASS")
+    clear_role_cache(db_session)
+
+
+async def test_list_for_project_counts_and_filters(db_session: AsyncSession, sessions_world) -> None:
+    from specivo.services.agent_session_service import AgentSessionFilters
+
+    w = sessions_world
+    items, total = await _svc.list_for_project(db_session, w.p.id, w.manager)
+    assert total == 3
+    assert [s.id for s in items] == [w.live.id, w.hidden.id, w.old.id]
+
+    items, total = await _svc.list_for_project(db_session, w.p.id, w.manager, offset=1, limit=1)
+    assert (total, [s.id for s in items]) == (3, [w.hidden.id])
+
+    items, total = await _svc.list_for_project(db_session, w.p.id, w.manager, AgentSessionFilters(active=True))
+    assert (total, [s.id for s in items]) == (1, [w.live.id])
+
+    items, total = await _svc.list_for_project(db_session, w.p.id, w.manager, AgentSessionFilters(issue_id=w.priv.id))
+    assert [s.id for s in items] == [w.hidden.id]
+
+    # The member cannot see the private issue: its session is not counted either.
+    items, total = await _svc.list_for_project(db_session, w.p.id, w.member)
+    assert total == 2
+    assert w.hidden.id not in {s.id for s in items}
+
+
+async def test_filters_for_resolves_or_matches_nothing(db_session: AsyncSession, sessions_world) -> None:
+    w = sessions_world
+    filters = await _svc.filters_for(db_session, w.p.id, w.manager, account=w.agent.login, issue_ref=w.pub.display_key)
+    assert filters is not None
+    assert (filters.user_id, filters.issue_id) == (w.agent.id, w.pub.id)
+    assert await _svc.filters_for(db_session, w.p.id, w.manager, account="no-such-login") is None
+    assert await _svc.filters_for(db_session, w.p.id, w.member, issue_ref=w.priv.display_key) is None
+
+
+async def test_get_for_project_hides_other_projects_and_hidden_issues(db_session: AsyncSession, sessions_world) -> None:
+    w = sessions_world
+    assert (await _svc.get_for_project(db_session, w.p.id, w.live.id, w.manager)).id == w.live.id
+    with pytest.raises(NotFoundError):
+        await _svc.get_for_project(db_session, w.p.id, w.hidden.id, w.member)
+    # The agent is not a member of the manager's other projects: none of its sessions are theirs.
+    with pytest.raises(NotFoundError):
+        await _svc.get_for_project(db_session, w.q.id, w.hidden.id, w.manager)
+
+
+async def test_is_active_needs_recent_activity_and_no_end(sessions_world) -> None:
+    w = sessions_world
+    assert _svc.is_active(w.live)
+    assert not _svc.is_active(w.old)
+    w.live.ended_at = w.live.last_activity_at
+    assert not _svc.is_active(w.live)
+
+
+async def test_usage_by_session_matches_by_client_id_else_by_time(db_session: AsyncSession, sessions_world) -> None:
+    from decimal import Decimal
+
+    from specivo.services.agent_session_usage import session_entries, usage_by_session
+
+    w = sessions_world
+    usage = await usage_by_session(db_session, w.admin, [w.live.id, w.hidden.id, w.old.id])
+    # Excluded entries are left out of the totals.
+    assert usage[w.live.id].entries == 1
+    assert [(m.amount, m.currency) for m in usage[w.live.id].spend] == [(Decimal("1.50"), "USD")]
+    assert usage[w.hidden.id].entries == 1
+    assert [(m.amount, m.currency) for m in usage[w.hidden.id].spend] == [(Decimal("2.00"), "USD")]
+    assert w.old.id not in usage
+
+    entries, total = await session_entries(db_session, w.admin, w.live)
+    assert total == 2
+    assert {e.external_session_id for e in entries} == {f"{'ass'}-live"}
+
+    # Entries are read with the viewer's AI usage visibility: the member reads none of the agent's.
+    assert await usage_by_session(db_session, w.member, [w.live.id]) == {}

@@ -30,7 +30,7 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.client_ip import get_client_ip
@@ -1618,7 +1618,7 @@ class SecurityAuditService:
     # Query
     # ------------------------------------------------------------------
 
-    async def list_events(
+    async def list_events(  # noqa: PLR0913
         self,
         session: AsyncSession,
         event_type: str | None = None,
@@ -1631,13 +1631,18 @@ class SecurityAuditService:
         *,
         event_types: Sequence[str] | None = None,
         ip_address: str | None = None,
+        agent_session_id: int | None = None,
+        include_projectless: bool = False,
     ) -> tuple[list[SecurityAuditLog], int]:
         """Query audit logs with optional filters, newest first. Returns (items, total_count).
 
         ``event_type`` and ``event_types`` both narrow the event type (a row
         must match each one given); an empty ``event_types`` matches nothing.
         ``after`` is inclusive and ``before`` exclusive; a time range lets
-        PostgreSQL skip the partitions outside it.
+        PostgreSQL skip the partitions outside it. ``agent_session_id`` keeps
+        the MCP tool calls of one agent session. With ``include_projectless``
+        a ``project_id`` filter also keeps the rows that name no project (an
+        agent's ``whoami`` or lookups next to its work in the project).
         """
         conditions: list[ColumnElement[bool]] = []
         if event_type is not None:
@@ -1646,8 +1651,13 @@ class SecurityAuditService:
             conditions.append(SecurityAuditLog.event_type.in_(list(event_types)))
         if user_id is not None:
             conditions.append(SecurityAuditLog.user_id == user_id)
+        if agent_session_id is not None:
+            conditions.append(SecurityAuditLog.agent_session_id == agent_session_id)
         if project_id is not None:
-            conditions.append(SecurityAuditLog.project_id == project_id)
+            in_project = SecurityAuditLog.project_id == project_id
+            conditions.append(
+                or_(in_project, SecurityAuditLog.project_id.is_(None)) if include_projectless else in_project
+            )
         if ip_address is not None:
             conditions.append(SecurityAuditLog.ip_address == ip_address)
         if after is not None:

@@ -1,0 +1,16 @@
+{# Shared pieces of the agent session pages (list, detail). Import "with context" for `base`. #}
+
+{% macro session_state(s) -%}
+{% if s.ended_at %}<span class="sp-as-state" data-testid="as-state">{% trans %}Ended{% endtrans %}</span>
+{% elif s.active %}<span class="sp-as-state sp-as-state--active" data-testid="as-state">{% trans %}Active{% endtrans %}</span>
+{% else %}<span class="sp-as-state" data-testid="as-state">{% trans %}Inactive{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro account_cell(s) -%}
+<span class="sp-as-account">{{ s.account_name or s.account_login }}</span>
+{% if s.service_account %}<span class="sp-badge-info">{% trans %}Service account{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro client_type_label(value) -%}
+{% if value == "mcp" %}MCP{% elif value == "rest" %}REST{% elif value == "webhook" %}{% trans %}Webhook{% endtrans %}{% else %}–{% endif %}
+{%- endmacro %}
