@@ -386,6 +386,28 @@ If a tool returns a permission error, the caller's API key user lacks the
 required role on that project. Audit rows are visible to project managers
 in the project security log.
 
+## Tool hints
+
+Every tool declares `readOnlyHint`, `destructiveHint`, `idempotentHint` and
+`openWorldHint` explicitly, and a test keeps them complete, so clients may rely
+on them for approvals and retries:
+
+- **readOnlyHint: true** -- lists, shows, reads, search, `specivo_whoami`,
+  `specivo_setup_guide` and `specivo_ai_usage_report`. Safe to retry after a
+  dropped session.
+- **destructiveHint: true** -- deletes, `specivo_remove_relation`,
+  `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence` and
+  `specivo_ai_subscriptions` (its `delete` op).
+- **idempotentHint: true** -- updates by key, deletes, `specivo_add_relation`,
+  `specivo_tag` and `specivo_ai_usage`: a repeat with the same arguments
+  changes nothing more.
+- Creates, comments, appends, `specivo_edit_description`, `specivo_edit_wiki`,
+  `specivo_log_time`, `specivo_log_ai_usage`, `specivo_timer` and
+  `specivo_metadata` are not idempotent: do not blindly retry them after a
+  timeout; check first whether the first call went through.
+- **openWorldHint** is false everywhere: every tool acts on this instance only.
+  Tools with an `op` argument carry the hints of their most far-reaching op.
+
 ## Anti-patterns
 
 - Do NOT pass numeric IDs for `issue_ref` -- always use display key format `ACME-12`.
