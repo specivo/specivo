@@ -52,6 +52,7 @@ Each release also has a blog post with the details.
 - Fixed a refused bulk update writing part of its changes without a journal
 - Fixed MCP sessions opening before the key was checked, and hardened the importer's file and string handling
 - Fixed a hand-entered commit SHA revealing a commit linked only to issues the reader cannot see
+- Updated `dnspython` to 2.9.2 (excessive memory and CPU use) and `opentelemetry-api` to 1.45.2 (denial of service through `traceparent` parsing)
 
 ### Internal
 - Added migrations 0071 (link graph rebuild time), 0072 (role system keys, role lock version, Developer wiki editing) and 0073 (Automation role listed last)
