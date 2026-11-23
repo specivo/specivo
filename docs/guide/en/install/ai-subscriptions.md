@@ -15,7 +15,9 @@ plans ("seats"). It is used for two things:
   would have cost per token.
 
 Subscriptions are personal: each one belongs to one person. Plans shared by a team are not
-supported yet.
+supported yet. Each subscription is the fee schedule of a personal
+[billing account](ai-billing-accounts.md), created with it, which says who pays for the plan and
+what share of it the employer pays back; the **Billing account** column links to it.
 
 ## Who sees and changes them
 

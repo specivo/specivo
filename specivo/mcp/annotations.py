@@ -128,6 +128,9 @@ _ADDITIVE = (
     # Ops get, set, delete, append, remove: append grows the list on every call. A
     # deleted key can be set again, so the tool is not destructive.
     "specivo_metadata",
+    # Ops list, create, update, deactivate: create adds an account; nothing is ever
+    # deleted (a deactivated account is switched on again with update).
+    "specivo_ai_billing_accounts",
 )
 
 # Ops list, presets, add, update, end, delete: add is not idempotent, and delete

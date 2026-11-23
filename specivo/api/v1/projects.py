@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
+from specivo.core.ai_billing import project_payer_default
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
@@ -149,6 +150,7 @@ def _project_out(
         graph_metadata_keys=list(graph_metadata_keys(project.settings)) if detail else None,
         reporting_currency_code=project.reporting_currency_code,
         reporting_currency=reporting_currency,
+        ai_usage_payer_default=project_payer_default(project.settings) if detail else None,
         id=project.id,
         name=project.name,
         identifier=project.identifier,

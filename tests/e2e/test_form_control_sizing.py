@@ -71,7 +71,13 @@ def wide(admin_page: Page) -> Page:
 
 @pytest.mark.parametrize(
     "path",
-    ["/admin/ai-model-prices/", "/admin/exchange-rates/", "/admin/ai-subscriptions/", "/admin/currencies/"],
+    [
+        "/admin/ai-model-prices/",
+        "/admin/exchange-rates/",
+        "/admin/ai-subscriptions/",
+        "/admin/ai-billing-accounts/",
+        "/admin/currencies/",
+    ],
 )
 def test_admin_form_rows_line_up(wide: Page, path: str) -> None:
     _check(wide, path)

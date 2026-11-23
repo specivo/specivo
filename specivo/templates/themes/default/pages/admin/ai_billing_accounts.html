@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_billing_account_macros.html" import error_text, kind_label, payer_label, cost_type_label, state_badge, routes_cell, tools_cell with context %}
+
+{% block title %}{% trans %}AI billing accounts{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}AI billing accounts{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}AI billing accounts{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}The company's accounts for AI usage: corporate gateways and company plans. Usage whose route matches an account's patterns, or whose record names its slug, is paid through it, by the payer it sets. People manage their own accounts on their profile. Changes here are recorded in the audit log.{% endtrans %} <a href="{{ base }}/admin/ai-subscriptions/">{% trans %}AI subscriptions{% endtrans %} &rarr;</a></p>
+
+{% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account added.{% endtrans %}</div>
+{% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account saved.{% endtrans %}</div>
+{% elif notice == "deactivated" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account switched off.{% endtrans %}</div>
+{% endif %}
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="billing-account-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="instance-billing-accounts-card">
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="instance-billing-accounts-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Account{% endtrans %}</th>
+          <th>{% trans %}Kind{% endtrans %}</th>
+          <th>{% trans %}Who pays{% endtrans %}</th>
+          <th>{% trans %}Routes{% endtrans %}</th>
+          <th>{% trans %}Tools{% endtrans %}</th>
+          <th>{% trans %}Default cost type{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in accounts %}
+        <tr data-account-id="{{ a.id }}">
+          <td><strong>{{ a.name }}</strong> <span class="sp-text-muted-xs">{{ a.slug }}</span></td>
+          <td>{{ kind_label(a.kind) }}</td>
+          <td>{{ payer_label(a.payer) }}</td>
+          <td>{{ routes_cell(a) }}</td>
+          <td>{{ tools_cell(a) }}</td>
+          <td>{% if a.default_cost_type %}{{ cost_type_label(a.default_cost_type) }}{% endif %}</td>
+          <td>{{ state_badge(a) }}</td>
+          <td><a class="sp-btn-sm" href="{{ base }}/admin/ai-billing-accounts/{{ a.id }}/">{% trans %}Edit{% endtrans %}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="sp-text-muted">{% trans %}There are no company accounts yet.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card sp-card-pad" id="new-billing-account" data-testid="new-billing-account-card">
+  <h3 class="sp-card-h3">{% trans %}Add a company account{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}For a gateway such as a LiteLLM proxy, list the route names its users' tools report, for example the provider id it is configured under.{% endtrans %}</p>
+  {% set submit_label = _("Add account") %}
+  {% set edit = False %}
+  {% include "pages/auth/_ai_billing_account_form.html" %}
+</div>
+{% endblock %}

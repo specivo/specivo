@@ -25,6 +25,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded the optional idempotency key on manual, API and MCP AI usage entries (§4).
 **Revised:** 2026-11-23 — recorded AI billing accounts, the payer and route on AI usage entries and the project payer default (§4).
 **Revised:** 2026-11-23 — recorded billing resolution at ingest and the re-resolution when an account changes (§4).
+**Revised:** 2026-11-23 — recorded the AI billing account and project payer default audit events (§18).
 **Revised:** 2026-11-23 — recorded the parent session, unattended flag and agent profile of AI usage entries (§4).
 **Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
 **Status:** Accepted
@@ -896,6 +897,17 @@ only as `{"changed": true}`) are written by `AiSubscriptionService` in the trans
 actor is not the holder (an administrator changing somebody else's). `AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED`
 (`enabled`) is written when the setting changes. Category Administration; `resource_type` `ai_subscription` or
 `setting`. Notes are free text and never logged.
+
+**AI billing account events.** `AI_BILLING_ACCOUNT_CREATED` / `_UPDATED` / `_DEACTIVATED` (details: `account_id`,
+`slug`, `name`, `kind`, `owner` = `instance` or the owner's login, `owner_user_id`, `payer`, `reimburse_share`,
+`route_patterns`, `tool_slugs`, `default_cost_type`, `is_active`; an update adds `changes`, and is `_DEACTIVATED` when
+it switches the account off) are written by `AiBillingAccountService` in the transaction of the change, for every
+change to an instance account and for an administrator's change to somebody else's personal account, only when
+something changed. `AI_USAGE_PAYER_DEFAULT_CHANGED` (`project_key`, `old`, `new`, `entries`, `changed`; `project_id`
+set) is written by `AiBillingAccountService.change_project_payer_default`, the one path for the project update, when the
+value changes; it re-resolves the project's entries in the same transaction. Category Administration; `resource_type`
+`ai_billing_account` or `setting`. MCP changes (`specivo_ai_billing_accounts`) also write `AI_BILLING_ACCOUNTS_CHANGED`
+(category Agents: `op`, `account_ids`, `owner`, `fields`).
 
 **AI usage events** (category AI usage, `resource_type` `ai_usage_entry`, `project_id` set when the entry has one),
 written by `AiUsageService` in the transaction of the change: `AI_USAGE_LOGGED_FOR_OTHER` (an entry created in another
