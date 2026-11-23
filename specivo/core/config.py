@@ -306,6 +306,13 @@ class Settings(BaseSettings):
     # AI usage ingest (``/api/v1/ai-usage/ingest``): batches per minute per account.
     ai_usage_ingest_rate_limit_per_minute: int = Field(default=60, ge=1)
 
+    # Hermes event receiver (``/api/v1/hermes/events/{token}/``): the largest
+    # body accepted (a ``post_tool_call`` carries the tool's raw input and
+    # result, which are read and dropped), and requests per minute per client
+    # address. Hermes treats 413 and 429 as final, so an event over either is lost.
+    hermes_event_max_body_bytes: int = Field(default=1024 * 1024, ge=1024)
+    hermes_event_rate_limit_per_minute: int = Field(default=600, ge=1)
+
     # SCIM provisioning (``/scim/v2/{provider_slug}/``): the largest request
     # body, requests per minute per provider (and per client address for
     # requests that fail authentication), and the most resources one list

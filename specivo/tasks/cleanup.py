@@ -2,7 +2,8 @@
 
 Tasks:
 - cleanup_expired_tokens: Delete expired password reset tokens and refresh tokens,
-  and incoming repository and outgoing webhook deliveries past their retention period.
+  and incoming repository and outgoing webhook deliveries past their retention period,
+  and Hermes delivery ids older than seven days.
 """
 
 from __future__ import annotations
@@ -79,7 +80,15 @@ async def _cleanup_async() -> None:
 
             delivery_count = await purge_old_deliveries(session)
 
+            # Hermes delivery ids, kept seven days for the redelivery check
+            from specivo.services.hermes_event_service import purge_old_deliveries as purge_hermes_deliveries
+
+            hermes_count = await purge_hermes_deliveries(session)
+
             await session.commit()
+
+            if hermes_count:
+                logger.info("Hermes delivery cleanup: deleted %d old delivery ids", hermes_count)
 
             if delivery_count:
                 logger.info("Repository delivery cleanup: deleted %d old deliveries", delivery_count)

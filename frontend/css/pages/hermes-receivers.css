@@ -1,0 +1,33 @@
+/* Hermes event receivers: the panel on /my/hermes-receivers/ and on an account's
+   page in Admin > Users (hermesReceiverManager). */
+
+.sp-hr-panel { padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); }
+.sp-hr-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-space-md);
+  flex-wrap: wrap; margin-bottom: var(--sp-space-md);
+}
+.sp-hr-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin: 0; }
+.sp-hr-intro { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); line-height: 1.5; margin-bottom: var(--sp-space-lg); }
+.sp-hr-create { margin-bottom: var(--sp-space-lg); }
+.sp-hr-create .filter-input { min-width: 16rem; }
+.sp-hr-reveal { margin-bottom: var(--sp-space-lg); }
+.sp-hr-reveal-row { display: flex; align-items: center; gap: var(--sp-space-sm); margin-top: var(--sp-space-xs); }
+.sp-hr-reveal-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-sm); }
+.sp-hr-code {
+  flex: 1; min-width: 0; padding: var(--sp-space-sm) var(--sp-space-md);
+  background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius);
+  font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); word-break: break-all;
+}
+.sp-hr-config {
+  margin: 0; padding: var(--sp-space-md); overflow-x: auto; white-space: pre;
+  background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius);
+  font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); line-height: 1.6;
+}
+.sp-hr-warn { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); margin-top: var(--sp-space-sm); }
+.sp-hr-error { color: var(--sp-danger); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md); }
+.sp-hr-empty { text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); }
+.sp-hr-actions { display: flex; gap: var(--sp-space-xs); flex-wrap: wrap; }
+.sp-hr-muted { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-hr-reveal-body { flex: 1; min-width: 0; }
+.sp-hr-dismiss { align-self: flex-start; }
+.sp-hr-name { font-weight: 500; }

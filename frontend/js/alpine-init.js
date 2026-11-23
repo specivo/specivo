@@ -10,6 +10,7 @@ import { forgotPasswordForm } from './components/forgot-password-form';
 import { resetPasswordForm } from './components/reset-password-form';
 import { changePasswordForm } from './components/change-password-form';
 import { apiKeyManager } from './components/api-key-manager';
+import { hermesReceiverManager } from './components/hermes-receiver-manager';
 import { projectGeneralSettings } from './components/project-general-settings';
 import { projectAnonymousAccess } from './components/project-anonymous-access';
 import { projectMembers } from './components/project-members';
@@ -79,6 +80,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('resetPasswordForm', resetPasswordForm);
   Alpine.data('changePasswordForm', changePasswordForm);
   Alpine.data('apiKeyManager', apiKeyManager);
+  Alpine.data('hermesReceiverManager', hermesReceiverManager);
   Alpine.data('projectGeneralSettings', projectGeneralSettings);
   Alpine.data('projectAnonymousAccess', projectAnonymousAccess);
   Alpine.data('projectMembers', projectMembers);

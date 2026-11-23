@@ -228,9 +228,45 @@ class AuditEvent(StrEnum):
     # MCP tool calls on AI usage (every MCP call is audited): logging, and editing, excluding or including.
     AI_USAGE_LOGGED = "ai_usage_logged"
     AI_USAGE_CHANGED = "ai_usage_changed"
+    # Hermes Agent activity received through a Hermes event receiver: one row per
+    # accepted event, ``user_id`` = the receiver's account, ``agent_session_id``
+    # set, ``details.source = "hermes"`` and ``details.delivery_id``. Metadata
+    # only (tool name, status, durations, ids, approval pattern keys, subagent
+    # role and status); never tool arguments, results, commands or goals.
+    AGENT_SESSION_STARTED = "agent_session_started"
+    AGENT_TOOL_CALLED = "agent_tool_called"
+    AGENT_APPROVAL_REQUESTED = "agent_approval_requested"
+    AGENT_APPROVAL_RESOLVED = "agent_approval_resolved"
+    AGENT_SUBAGENT_STARTED = "agent_subagent_started"
+    AGENT_SUBAGENT_STOPPED = "agent_subagent_stopped"
+    AGENT_SESSION_ENDED = "agent_session_ended"
+    # Hermes event receivers created, changed (``changes``: field names;
+    # ``secret_rotated``) or deleted (details: ``receiver_id``, ``name``,
+    # ``target_user_id``, ``target_login``); never the token or the secret.
+    HERMES_RECEIVER_CREATED = "hermes_receiver_created"
+    HERMES_RECEIVER_UPDATED = "hermes_receiver_updated"
+    HERMES_RECEIVER_DELETED = "hermes_receiver_deleted"
+    # An event a receiver refused (``reason``: ``unknown_receiver``,
+    # ``missing_signature``, ``invalid_signature``, ``secret_unreadable``,
+    # ``stale``; ``receiver_id`` when the receiver is known). Unknown receivers
+    # are written at most once a minute per client address.
+    HERMES_EVENT_REJECTED = "hermes_event_rejected"
 
 
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
+
+#: The events a Hermes event receiver writes for accepted activity.
+_HERMES_ACTIVITY_EVENTS = frozenset(
+    {
+        AuditEvent.AGENT_SESSION_STARTED,
+        AuditEvent.AGENT_TOOL_CALLED,
+        AuditEvent.AGENT_APPROVAL_REQUESTED,
+        AuditEvent.AGENT_APPROVAL_RESOLVED,
+        AuditEvent.AGENT_SUBAGENT_STARTED,
+        AuditEvent.AGENT_SUBAGENT_STOPPED,
+        AuditEvent.AGENT_SESSION_ENDED,
+    }
+)
 
 _EXCHANGE_RATE_ROW_EVENTS = frozenset(
     {
@@ -290,7 +326,8 @@ class AuditCategory(StrEnum):
     AI_USAGE = "ai_usage"
 
 
-#: The category of each event. "Agents" holds the events only MCP tools write;
+#: The category of each event. "Agents" holds the events only MCP tools and the
+#: Hermes event receiver write;
 #: what agents do through actions people can take as well (tags, wiki deletes,
 #: timers) sits in that action's category, with ``details.source = "mcp"``.
 EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
@@ -359,6 +396,14 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.RELATION_ADDED,
             AuditEvent.RELATION_REMOVED,
             AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
+            AuditEvent.AGENT_SESSION_STARTED,
+            AuditEvent.AGENT_TOOL_CALLED,
+            AuditEvent.AGENT_APPROVAL_REQUESTED,
+            AuditEvent.AGENT_APPROVAL_RESOLVED,
+            AuditEvent.AGENT_SUBAGENT_STARTED,
+            AuditEvent.AGENT_SUBAGENT_STOPPED,
+            AuditEvent.AGENT_SESSION_ENDED,
+            AuditEvent.HERMES_EVENT_REJECTED,
         ],
         AuditCategory.AGENTS,
     ),
@@ -409,6 +454,9 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_SUBSCRIPTION_UPDATED,
             AuditEvent.AI_SUBSCRIPTION_DELETED,
             AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED,
+            AuditEvent.HERMES_RECEIVER_CREATED,
+            AuditEvent.HERMES_RECEIVER_UPDATED,
+            AuditEvent.HERMES_RECEIVER_DELETED,
         ],
         AuditCategory.ADMINISTRATION,
     ),
@@ -1612,6 +1660,37 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details=details,
+        )
+
+    async def log_hermes_event(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        *,
+        user_id: int,
+        agent_session_id: int,
+        details: dict[str, Any],
+        project_id: int | None = None,
+    ) -> SecurityAuditLog:
+        """Log one accepted Hermes event against its agent session.
+
+        Written in the caller's transaction **without** a savepoint: the row
+        is what the event is accepted for, so a failed write fails the request
+        (5xx, which Hermes retries once) and takes the delivery record with it.
+        """
+        if event_type not in _HERMES_ACTIVITY_EVENTS:
+            raise ValueError(f"Not a Hermes activity event: {event_type!r}")
+        info = current_request_info()
+        return await self._persist(
+            session,
+            event_type=event_type,
+            user_id=user_id,
+            project_id=project_id,
+            agent_session_id=agent_session_id,
+            details={"source": "hermes", **details},
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
         )
 
     # ------------------------------------------------------------------

@@ -48,6 +48,8 @@ See [Connecting an AI client](connecting.md) for the exact configuration each on
 - **[Common workflows](workflows.md)** — concrete things to ask your agent to do.
 - **[Reporting AI usage to Specivo](reporting-ai-usage.md)** — send the token usage of AI coding
   tools to Specivo, attributed to issues.
+- **[Hermes Agent activity](hermes-events.md)** — record Hermes Agent's sessions, tool calls,
+  approvals and subagents as agent sessions through a signed Hermes receiver.
 
 !!! note "The agent works as a teammate"
     An MCP-connected agent is not a separate integration sitting beside Specivo — it logs in as a

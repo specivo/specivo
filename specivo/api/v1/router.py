@@ -34,6 +34,8 @@ from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
 from specivo.api.v1.currencies import router as currencies_router
 from specivo.api.v1.exchange_rates import router as exchange_rates_router
+from specivo.api.v1.hermes_events import router as hermes_events_router
+from specivo.api.v1.hermes_receivers import router as hermes_receivers_router
 from specivo.api.v1.issues import router as issues_router
 from specivo.api.v1.link_graph_admin import router as link_graph_admin_router
 from specivo.api.v1.links import router as links_router
@@ -94,6 +96,8 @@ api_router.include_router(saved_filters_router)
 api_router.include_router(admin_embedding_models_router)
 api_router.include_router(users_router)
 api_router.include_router(agent_sessions_router)
+api_router.include_router(hermes_events_router)
+api_router.include_router(hermes_receivers_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_user_groups_router)
 api_router.include_router(admin_roles_router)

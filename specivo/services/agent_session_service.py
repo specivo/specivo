@@ -449,6 +449,83 @@ class AgentSessionService:
                 return row.issue_id
         return None
 
+    # ------------------------------------------------------------------
+    # Sessions opened by an event receiver
+    # ------------------------------------------------------------------
+
+    async def open_webhook_session(
+        self,
+        session: AsyncSession,
+        user: User,
+        external_id: str,
+        *,
+        receiver_id: int | None,
+        client: ClientInfo | None = None,
+        parent_external_id: str | None = None,
+    ) -> AgentSession:
+        """Find *user*'s open webhook session with client session id *external_id*, or start one.
+
+        Open means not ended and active within the session timeout, as for
+        ``get_or_create_session``; the newest such row is extended. Only
+        *user*'s webhook rows are read, so an id another account uses (or an
+        MCP connection of the same account) never joins this one. A new row
+        has no API key, ``client_type`` ``webhook`` and the receiver's id; its
+        parent (*parent_external_id*) is resolved and earlier children are
+        linked by ``set_external``, within *user*'s sessions only. When some
+        row of *user* with that id (or its lineage) names an issue, a session
+        without one takes it, so its activity shows on that issue's project.
+
+        Raises ``ValidationError`` for an id of the wrong shape.
+        """
+        check_external_session_id(external_id)
+        now = utcnow()
+        since = now - timedelta(seconds=_get_session_timeout())
+        stmt = (
+            select(AgentSession)
+            .where(
+                AgentSession.user_id == user.id,
+                AgentSession.client_type == CLIENT_TYPE_WEBHOOK,
+                AgentSession.external_session_id == external_id,
+                AgentSession.ended_at.is_(None),
+                AgentSession.last_activity_at >= since,
+            )
+            .order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc())
+            .limit(1)
+        )
+        agent_session = (await session.execute(stmt)).scalar_one_or_none()
+        if agent_session is None:
+            agent_session = AgentSession(
+                api_key_id=None,
+                user_id=user.id,
+                receiver_id=receiver_id,
+                client_type=CLIENT_TYPE_WEBHOOK,
+                client_name=client.name if client else None,
+                client_version=client.version if client else None,
+                started_at=now,
+                last_activity_at=now,
+            )
+            session.add(agent_session)
+            await session.flush()
+            await self.set_external(session, agent_session.id, user, external_id, parent_external_id)
+        else:
+            agent_session.last_activity_at = now
+            if parent_external_id is not None and agent_session.parent_external_session_id is None:
+                await self.set_external(session, agent_session.id, user, None, parent_external_id)
+        if agent_session.issue_id is None:
+            issue_id = await self.issue_for_external(session, user.id, external_id)
+            if issue_id is not None:
+                agent_session.issue_id = issue_id
+        await session.flush()
+        return agent_session
+
+    async def end_session(self, session: AsyncSession, agent_session: AgentSession) -> None:
+        """Mark *agent_session* ended now (the client said so); an ended session stays ended."""
+        now = utcnow()
+        if agent_session.ended_at is None:
+            agent_session.ended_at = now
+        agent_session.last_activity_at = now
+        await session.flush()
+
     async def update_activity(self, session: AsyncSession, session_id: int) -> None:
         """Update last_activity_at timestamp for a session."""
         stmt = select(AgentSession).where(AgentSession.id == session_id)

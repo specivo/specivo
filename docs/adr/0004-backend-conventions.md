@@ -26,6 +26,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded AI billing accounts, the payer and route on AI usage entries and the project payer default (§4).
 **Revised:** 2026-11-23 — recorded billing resolution at ingest and the re-resolution when an account changes (§4).
 **Revised:** 2026-11-23 — recorded the parent session, unattended flag and agent profile of AI usage entries (§4).
+**Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -362,6 +363,22 @@ stored value, so a replay changing one is `updated`. Spend reports group by `att
 `ReportFilters.conditions` so the charts and seat breakdown narrow the same way); a seat fee never matches either
 filter.
 
+**Hermes event receivers.** Hermes Agent posts signed outbound webhooks to
+`POST /api/v1/hermes/events/{token}/` (`specivo.api.v1.hermes_events`, served with and without the slash; no
+`Authorization` header). A receiver (`hermes_receivers`) belongs to one account; its `token` is the URL part and its
+`secret` a `secret_box` token (purpose `hermes-receiver-secret`), both shown once. Hermes treats every 4xx as final and
+retries a 5xx once, so the checks run in this order and each refusal is a 4xx: body size (413,
+`HERMES_EVENT_MAX_BODY_BYTES`), a per-address rate limit (429), the receiver (404 for an unknown or inactive token or an
+account that cannot act; a locked account keeps its receivers, as its API keys), the HMAC-SHA256 of the raw body in
+`X-Hermes-Signature-256` (401 `invalid_signature`), the JSON object and its `delivery_id` (400), `timestamp` within ten
+minutes (401 `stale`), then `(receiver_id, delivery_id)` into `hermes_deliveries` (a conflict is 200 `duplicate`, kept
+seven days). `HermesEventService.map_event` is the one mapping from Hermes events to audit events, metadata only;
+unmapped events answer 200 `ignored`. Sessions are found or opened only among the receiver's account's rows
+(`AgentSessionService.open_webhook_session`: `client_type` `webhook`, no API key, `receiver_id`, the newest open row with
+the id, parents through `set_external`), so an id another account uses never attaches; a new row takes the issue
+`issue_for_external` finds, which puts its events on that project's timeline. `end_session` sets `ended_at`. The receiver
+never writes AI usage or cost.
+
 **MCP transport sessions** are a different thing from agent sessions: the `Mcp-Session-Id` of a Streamable HTTP
 connection. Their Redis entry (`specivo.mcp.session_store`, sliding TTL `mcp_session_ttl_seconds`) is the source of
 truth; the SDK's in-memory transport is a cache that `PersistentStreamableHTTPSessionManager` rebuilds from it after
@@ -564,7 +581,7 @@ Implemented in `specivo.core.security`:
 
 **API keys** use the `spv_` prefix. Locked users can still authenticate via API key (locking is brute-force protection, not agent access control). Deactivated users are blocked from both JWT and API key auth.
 
-**Session-only admin routes.** An admin route that hands out a way to sign in or to act as someone (set a password, create any account other than a service account, unlock/reactivate an account, mint or re-enable API keys or credentials for another user, change the SSO configuration) depends on `require_admin_session_api` (`specivo/api/v1/admin/__init__.py`) instead of `require_admin_api`: API-key auth (`request.state.api_key_id` set) gets 403 `api_key_not_allowed`. The matching web forms use `require_admin_session` (`specivo/web/pages/admin.py`), because the web layer also accepts a Bearer key and a request without a session cookie is not CSRF-checked. Taking access away (lock, deactivate, revoke) and ordinary administration stay key-accessible. `tests/integration/test_admin_api_key_gates.py` lists the gated routes; add a new credential-minting route there.
+**Session-only admin routes.** An admin route that hands out a way to sign in or to act as someone (set a password, create any account other than a service account, unlock/reactivate an account, mint or re-enable API keys or credentials for another user, change the SSO configuration) depends on `require_admin_session_api` (`specivo/api/v1/admin/__init__.py`) instead of `require_admin_api`: API-key auth (`request.state.api_key_id` set) gets 403 `api_key_not_allowed`. The matching web forms use `require_admin_session` (`specivo/web/pages/admin.py`), because the web layer also accepts a Bearer key and a request without a session cookie is not CSRF-checked. Taking access away (lock, deactivate, revoke) and ordinary administration stay key-accessible. Creating a Hermes event receiver for another account (`POST /admin/users/{id}/hermes-receivers/`) is gated too, and its `PATCH` refuses a key when it rotates the secret or switches the receiver on; switching it off and deleting it stay key-accessible. `tests/integration/test_admin_api_key_gates.py` lists the gated routes; add a new credential-minting route there.
 
 **Cookie settings:** httpOnly, SameSite=Lax, Secure when not debug. Refresh token scoped to `/api/v1/auth` path.
 
@@ -903,6 +920,23 @@ and `project_id` is its project. Details: `issue` (display key), `item_type` (`c
 `pull_request`), `item_id`, `item` (the SHA, or `#N` / `!N`), `repository` (full name); a move adds
 `target_issue` and `target_project_id`. Never the commit message or the request's title. Like every
 audit write, it runs in a savepoint and a failure is logged, never failing the change.
+
+**Hermes events.** An accepted Hermes event writes one row through `SecurityAuditService.log_hermes_event`, in the
+request's transaction without a savepoint (a failed write fails the request, which Hermes retries, and takes the delivery
+record with it): `AGENT_SESSION_STARTED` (`model`, `platform`, `profile`), `AGENT_TOOL_CALLED` (`tool`, `status`,
+`error_type`, `duration_ms`, `tool_call_id`, `turn_id`; `tool_call_count` goes up in the same transaction),
+`AGENT_APPROVAL_REQUESTED` (`pattern_key`, `pattern_keys`, `surface`), `AGENT_APPROVAL_RESOLVED` (`choice`,
+`decided_by`, `pattern_key`), `AGENT_SUBAGENT_STARTED` / `_STOPPED` on the parent's session (`child_session_id`,
+`child_agent_session_id`, `child_role`, `child_subagent_id`; a stop adds `child_status`, `duration_ms` and `tools`, the
+tool names only) and `AGENT_SESSION_ENDED` (`completed`, `interrupted`). Every row has `user_id` = the receiver's
+account, `agent_session_id`, `project_id` from the session's issue when it has one, and `details.source = "hermes"`,
+`event` and `delivery_id`. Never tool arguments, results or error messages, approval commands or descriptions, goals,
+summaries or `cwd`. A Hermes tool named like one of `PROJECT_FREE_TOOLS` is stored as `hermes:<name>`. Category
+Agents. `HERMES_EVENT_REJECTED` (Agents; `reason`, `receiver_id` when known, the `X-Hermes-Event` header) is buffered
+with the request so it survives the 4xx; an unknown receiver is written at most once a minute per address.
+`HERMES_RECEIVER_CREATED` / `_UPDATED` / `_DELETED` (Administration; actor = whoever made the change; `receiver_id`,
+`name`, `target_user_id`, `target_login`; an update adds `changes`, `secret_rotated` and `is_active`) never hold the
+token or the secret.
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line
