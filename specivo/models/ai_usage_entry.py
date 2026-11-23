@@ -14,6 +14,10 @@ account; ``route`` is the backend the usage went through. Like ``cost_type``
 they are snapshots, resolved at write time (``billing_method`` says which
 step decided) and again when a billing account changes.
 
+``parent_session_id``, ``unattended`` and ``profile`` say where in an agent's
+work the usage happened: under which parent session, in a run nobody
+attended (cron, scheduled), for which agent profile.
+
 Costs are a **snapshot at write time** (see ``AiUsageService``):
 ``price_id`` and ``priced_at`` record which price row was used and at which
 instant; editing or adding prices never changes an entry by itself. Only an
@@ -31,6 +35,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     ColumnElement,
     Date,
@@ -138,6 +143,7 @@ class AiUsageEntry(Base, TimestampMixin):
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
         Index("ix_ai_usage_entries_project_date", "project_id", "usage_date"),
+        Index("ix_ai_usage_entries_project_unattended_date", "project_id", "unattended", "usage_date"),
         Index("ix_ai_usage_entries_user_date", "user_id", "usage_date"),
         Index("ix_ai_usage_entries_issue_id", "issue_id"),
         Index("ix_ai_usage_entries_reporter_date", "reporter_user_id", "usage_date"),
@@ -220,6 +226,12 @@ class AiUsageEntry(Base, TimestampMixin):
 
     # -- context -------------------------------------------------------------
     external_session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: The client's parent session (a subagent's, a branch's, a compression continuation's); opaque.
+    parent_session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: A run with nobody in the loop (cron, scheduled); existing and hand-logged entries are attended.
+    unattended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    #: The agent profile or home the usage came from, stored verbatim.
+    profile: Mapped[str | None] = mapped_column(String(100), nullable=True)
     git_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
     #: The raw backend id the usage went through (for example a gateway name).
     #: Only selects a billing account; never feeds pricing.

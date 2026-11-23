@@ -74,7 +74,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     ),
     "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
     "specivo_ai_usage_report": (
-        "AI spend report: usage grouped by release, sprint, user, model, tool, project, issue, cost type, branch "
+        "AI spend report: usage grouped by release, sprint, user, model, tool, project, issue, cost type, branch, "
+        "attended or unattended run, agent profile "
         "and period, in one currency"
     ),
     "specivo_ai_subscriptions": (

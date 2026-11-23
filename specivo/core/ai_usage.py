@@ -47,6 +47,8 @@ COMMENTS_MAX_LENGTH = 10_000
 IDEMPOTENCY_KEY_MAX_LENGTH = 128
 CONTEXT_MAX_LENGTHS: dict[str, int] = {
     "external_session_id": 200,
+    "parent_session_id": 200,
+    "profile": 100,
     "git_branch": 255,
     "repo_hint": 255,
     "client_name": 100,

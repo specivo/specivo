@@ -379,7 +379,7 @@ async def _project_charts_view(
     filters and the data version (the project's entries and the plans).
     """
     from specivo.models.ai_subscription import AiSubscription
-    from specivo.services.ai_spend_report_service import ReportFilters
+    from specivo.services.ai_spend_report_service import ReportFilters, session_context_filters
 
     excluded = filters.status == "excluded"
     extra = filters.extra()
@@ -394,6 +394,7 @@ async def _project_charts_view(
         without_version=planning.without_version,
         sprint_id=planning.sprint_id,
         without_sprint=planning.without_sprint,
+        **session_context_filters(filters.attended, filters.profile),
     )
     args: dict[str, Any] = {
         "date_from": _parse_date(filters.from_date),

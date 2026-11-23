@@ -236,6 +236,33 @@ async def test_log_own_usage_with_an_api_key(client: AsyncClient, w: World) -> N
     assert entry["revision"] == 1
 
 
+async def test_log_an_unattended_run_of_a_profile(client: AsyncClient, w: World) -> None:
+    entry = await log(
+        client, w, "alice", unattended=True, profile="research", parent_session_id="20261105_090000_a1b2c3"
+    )
+    assert (entry["unattended"], entry["profile"], entry["parent_session_id"]) == (
+        True,
+        "research",
+        "20261105_090000_a1b2c3",
+    )
+    fetched = await client.get(f"/api/v1/ai-usage/{entry['id']}/", headers=w.auth("alice"))
+    assert fetched.json()["unattended"] is True and fetched.json()["profile"] == "research"
+
+    plain = await log(client, w, "alice")
+    assert (plain["unattended"], plain["profile"], plain["parent_session_id"]) == (False, None, None)
+
+
+async def test_profile_and_unattended_are_checked(client: AsyncClient, w: World) -> None:
+    resp = await client.post("/api/v1/projects/AUAA/ai-usage/", json=body(profile="p" * 101), headers=w.auth("alice"))
+    assert resp.status_code == 422
+    resp = await client.post(
+        "/api/v1/projects/AUAA/ai-usage/", json=body(profile="research\nlab"), headers=w.auth("alice")
+    )
+    assert resp.status_code == 422 and error(resp)["field"] == "profile"
+    resp = await client.post("/api/v1/projects/AUAA/ai-usage/", json=body(unattended="soon"), headers=w.auth("alice"))
+    assert resp.status_code == 422
+
+
 async def test_entry_reports_both_buckets_and_their_total(client: AsyncClient, w: World) -> None:
     created = await log(client, w, "alice", long_context_tokens={"input": 300_000, "output": 20_000})
     assert created["tokens"]["input"] == 1_000_000 and created["long_context_tokens"]["input"] == 300_000

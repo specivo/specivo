@@ -61,7 +61,7 @@ EXPLICIT_ISSUE_METHODS: frozenset[str] = frozenset({"explicit", "env"})
 #: Record properties added within v1, listed in the ``info`` response as
 #: ``optional_fields``: a client sends one only to a server that lists it.
 #: Append a name here when its property joins ``record.schema.json``.
-OPTIONAL_FIELDS: tuple[str, ...] = ("route", "billing_account")
+OPTIONAL_FIELDS: tuple[str, ...] = ("route", "billing_account", "parent_session_id", "unattended", "profile")
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +298,12 @@ class IngestRecord:
     route: str | None = None
     #: Slug of the billing account the record names; resolving it to an account is the service's job.
     billing_account: str | None = None
+    #: Opaque id of the client session this one continues or was started from (a subagent's parent).
+    parent_session_id: str | None = None
+    #: A run with nobody in the loop (cron, scheduled); ``False`` when the record leaves it out.
+    unattended: bool = False
+    #: The agent profile or home the usage came from, stored verbatim.
+    profile: str | None = None
 
 
 def _instant(value: str | None, name: str) -> datetime | None:
@@ -389,6 +395,9 @@ def parse_record(raw: Mapping[str, Any], now: datetime) -> IngestRecord:
         attribution=attribution,
         route=_clean(raw.get("route")),
         billing_account=raw.get("billing_account"),
+        parent_session_id=_clean(raw.get("parent_session_id")),
+        unattended=raw.get("unattended") is True,
+        profile=_clean(raw.get("profile")),
     )
 
 

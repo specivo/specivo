@@ -78,6 +78,10 @@
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-version-filter"><span class="filter-label">{% trans %}Release{% endtrans %}</span>{{ filters.version_label }}</span>{% endif %}
   {% if filters.sprint %}<input type="hidden" name="sprint" value="{{ filters.sprint }}">
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-sprint-filter"><span class="filter-label">{% trans %}Sprint{% endtrans %}</span>{{ filters.sprint_label }}</span>{% endif %}
+  {% if filters.attended %}<input type="hidden" name="attended" value="{{ filters.attended }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-attended-filter"><span class="filter-label">{% trans %}Runs{% endtrans %}</span>{% if filters.attended == "unattended" %}{% trans %}Unattended{% endtrans %}{% else %}{% trans %}Attended{% endtrans %}{% endif %}</span>{% endif %}
+  {% if filters.profile %}<input type="hidden" name="profile" value="{{ filters.profile }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-profile-filter"><span class="filter-label">{% trans %}Agent profile{% endtrans %}</span>{% if filters.profile == "-" %}{% trans %}No profile{% endtrans %}{% else %}{{ filters.profile }}{% endif %}</span>{% endif %}
   {% if chart_bucket %}<input type="hidden" name="bucket" value="{{ chart_bucket }}">{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>

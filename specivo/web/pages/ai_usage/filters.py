@@ -15,6 +15,7 @@ from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
 from specivo.services.ai_spend_planning import PlanningFilter, resolve_planning
+from specivo.services.ai_spend_report_service import ATTENDED_FILTERS, session_context_filters
 from specivo.services.permission_service import ai_usage_visibility
 from specivo.web.pages.ai_usage._common import MY_URL, NONE_VALUE, _issues, _parse_date, _service, _tools
 
@@ -37,6 +38,9 @@ class Filters:
     #: A release (version id) or sprint id from the spend report's drill-through; ``-`` for none.
     version: str = ""
     sprint: str = ""
+    #: ``attended`` or ``unattended`` runs, and an agent profile (``-``: none), from the spend report.
+    attended: str = ""
+    profile: str = ""
     #: How the page names the release and sprint filters (set by the page once resolved).
     version_label: str = ""
     sprint_label: str = ""
@@ -58,6 +62,8 @@ class Filters:
             "branch": self.branch,
             "version": self.version,
             "sprint": self.sprint,
+            "attended": self.attended,
+            "profile": self.profile,
         }
         return urlencode({k: v for k, v in values.items() if v})
 
@@ -66,12 +72,16 @@ class Filters:
         return {"counted": False, "excluded": True}.get(self.status)
 
     def extra(self) -> dict[str, Any]:
-        """The provider, branch, release and sprint filters as ``list_entries`` takes them ("-": none)."""
+        """The provider, branch, release, sprint, run and profile filters as ``list_entries`` takes them."""
+        context = session_context_filters(self.attended, self.profile)
         return {
             "provider": self.provider or None,
             "branch": self.branch if self.branch and self.branch != NONE_VALUE else None,
             "without_branch": self.branch == NONE_VALUE,
             "planning": self.planning,
+            "unattended": context.get("unattended"),
+            "profile": context.get("profile"),
+            "without_profile": context.get("without_profile", False),
         }
 
     @property
@@ -110,6 +120,8 @@ def _filters(  # noqa: PLR0913
     branch: str = "",
     version: str = "",
     sprint: str = "",
+    attended: str = "",
+    profile: str = "",
 ) -> Filters:
     return Filters(
         user_id=user_id.strip() if user_id.strip().isdigit() else "",
@@ -125,6 +137,8 @@ def _filters(  # noqa: PLR0913
         branch=branch.strip()[:255],
         version=_planning_value(version.strip()),
         sprint=_planning_value(sprint.strip()),
+        attended=attended.strip() if attended.strip() in ATTENDED_FILTERS else "",
+        profile=profile.strip()[:100],
     )
 
 

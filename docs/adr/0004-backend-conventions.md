@@ -25,6 +25,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded the optional idempotency key on manual, API and MCP AI usage entries (§4).
 **Revised:** 2026-11-23 — recorded AI billing accounts, the payer and route on AI usage entries and the project payer default (§4).
 **Revised:** 2026-11-23 — recorded billing resolution at ingest and the re-resolution when an account changes (§4).
+**Revised:** 2026-11-23 — recorded the parent session, unattended flag and agent profile of AI usage entries (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -349,7 +350,17 @@ id (`external_session_id`, opaque text, never parsed) and its parent's (`parent_
 about its ids is trusted within its own account, never across accounts. AI usage ingest matches a record's
 `session_id` with `issue_for_external` (the newest row with the id naming an issue, else the nearest one in its
 lineage, depth bounded at `LINEAGE_MAX_DEPTH`) before the time overlap, for the reporting account and then the target
-user; the stored method stays `mcp_session`.
+user; when the record's own id names nothing, its `parent_session_id` is looked up the same way (a subagent's usage
+goes to its parent's issue). The stored method stays `mcp_session`.
+
+Entries also store where in an agent's work the usage happened, all optional on ingest records (listed in
+`optional_fields`), `AiUsageCreate` and `specivo_log_ai_usage`: `parent_session_id` (opaque, like
+`external_session_id`), `unattended` (NOT NULL, default false: a cron or scheduled run; existing and hand-logged
+entries are attended) and `profile` (the agent profile, verbatim). They take part in the replay comparison like every
+stored value, so a replay changing one is `updated`. Spend reports group by `attended` (two rows keyed by the flag) and
+`profile`, and filter by them (`ReportFilters.unattended` / `profile` / `without_profile`, applied in
+`ReportFilters.conditions` so the charts and seat breakdown narrow the same way); a seat fee never matches either
+filter.
 
 **MCP transport sessions** are a different thing from agent sessions: the `Mcp-Session-Id` of a Streamable HTTP
 connection. Their Redis entry (`specivo.mcp.session_store`, sliding TTL `mcp_session_ttl_seconds`) is the source of

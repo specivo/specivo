@@ -190,6 +190,7 @@ _COST_FIELDS: frozenset[str] = frozenset(
 )
 
 _KEY_RE = re.compile(r"^[\x21-\x7e]+$")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 #: Computed amounts are stored with 8 decimal places (``NUMERIC(20, 8)``); totals are stated the same way.
 _STORED_SCALE = Decimal("0.00000001")
@@ -273,6 +274,12 @@ class AiUsageInput:
     route: str | None = None
     #: Slug of the billing account the record names (see :mod:`specivo.services.ai_billing_resolution`).
     billing_account: str | None = None
+    #: The client's parent session (a subagent's, a branch's); opaque, like ``external_session_id``.
+    parent_session_id: str | None = None
+    #: A run with nobody in the loop (cron, scheduled).
+    unattended: bool = False
+    #: The agent profile or home the usage came from.
+    profile: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,6 +528,9 @@ class AiUsageService:
         issue_tree_id: int | None = None,
         external_session_id: str | None = None,
         planning: PlanningFilter | None = None,
+        unattended: bool | None = None,
+        profile: str | None = None,
+        without_profile: bool = False,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
@@ -535,7 +545,9 @@ class AiUsageService:
         issue below it (:func:`issue_subtree_clause`); *external_session_id*
         keeps the entries of one agent session (the id the reporter sends);
         *planning* keeps the entries of one release or sprint, or of none
-        (:mod:`specivo.services.ai_spend_planning`).
+        (:mod:`specivo.services.ai_spend_planning`); *unattended* ``True`` /
+        ``False`` keeps only unattended / attended usage; *profile* matches the
+        agent profile exactly (``without_profile`` keeps entries without one).
         """
         conditions = await self._list_conditions(
             session,
@@ -558,6 +570,9 @@ class AiUsageService:
             issue_tree_id=issue_tree_id,
             external_session_id=external_session_id,
             planning=planning,
+            unattended=unattended,
+            profile=profile,
+            without_profile=without_profile,
         )
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
@@ -595,6 +610,9 @@ class AiUsageService:
         without_branch: bool = False,
         unassigned: bool | None = None,
         planning: PlanningFilter | None = None,
+        unattended: bool | None = None,
+        profile: str | None = None,
+        without_profile: bool = False,
     ) -> UsageSummary:
         """Totals of the entries ``list_entries`` would return with the same filters, excluded ones left out.
 
@@ -622,6 +640,9 @@ class AiUsageService:
             without_branch=without_branch,
             unassigned=unassigned,
             planning=planning,
+            unattended=unattended,
+            profile=profile,
+            without_profile=without_profile,
         )
         counted = AiUsageEntry.excluded_at.is_(None)
         row = (
@@ -678,6 +699,9 @@ class AiUsageService:
         issue_tree_id: int | None = None,
         external_session_id: str | None = None,
         planning: PlanningFilter | None = None,
+        unattended: bool | None = None,
+        profile: str | None = None,
+        without_profile: bool = False,
     ) -> list[ColumnElement[bool]]:
         """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
@@ -720,6 +744,12 @@ class AiUsageService:
             conditions.append(AiUsageEntry.git_branch == branch.strip())
         if without_branch:
             conditions.append(AiUsageEntry.git_branch.is_(None))
+        if unattended is not None:
+            conditions.append(AiUsageEntry.unattended.is_(unattended))
+        if profile and profile.strip():
+            conditions.append(AiUsageEntry.profile == profile.strip())
+        if without_profile:
+            conditions.append(AiUsageEntry.profile.is_(None))
         if excluded is not None:
             conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
         if unassigned is not None:
@@ -1121,6 +1151,11 @@ class AiUsageService:
         for name, max_length in CONTEXT_MAX_LENGTHS.items():
             values[name] = self._text(getattr(data, name), name, max_length)
         values["comments"] = self._text(data.comments, "comments", COMMENTS_MAX_LENGTH)
+        if values["profile"] is not None and _CONTROL_RE.search(values["profile"]):
+            raise _invalid("profile must not contain control characters", "profile")
+        if not isinstance(data.unattended, bool):
+            raise _invalid("unattended must be true or false", "unattended")
+        values["unattended"] = data.unattended
         if data.route is not None and not isinstance(data.route, str):
             raise _invalid("route must be text", "route")
         values["route"] = normalize_route(data.route)
@@ -1693,6 +1728,9 @@ class AiUsageService:
             comments=entry.comments,
             idempotency_key=entry.idempotency_key,
             route=entry.route,
+            parent_session_id=entry.parent_session_id,
+            unattended=entry.unattended,
+            profile=entry.profile,
         )
 
     @staticmethod

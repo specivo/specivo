@@ -117,6 +117,30 @@ async def test_log_writes_an_mcp_entry(db_session: AsyncSession, w: World) -> No
     assert events[0].details["source"] == "mcp"
 
 
+async def test_log_an_unattended_subagent_run_of_a_profile(db_session: AsyncSession, w: World) -> None:
+    text = await _log(
+        w,
+        "alice",
+        issue_ref="MAUA-1",
+        session_id="sess-child",
+        parent_session_id="sess-root",
+        unattended=True,
+        profile="research",
+    )
+    entry = await _entry(db_session, _entry_id(text))
+    assert (entry.parent_session_id, entry.unattended, entry.profile) == ("sess-root", True, "research")
+
+    detail = await server.specivo_ai_usage(op="get", entry_id=entry.id)
+    assert "Session: sess-child (parent sess-root)" in detail
+    assert "Run: unattended (nobody in the loop)  Profile: research" in detail
+    listed = await server.specivo_ai_usage(op="list", project_key="MAUA")
+    assert "profile=research" in listed and "unattended" in listed
+
+    plain = await _entry(db_session, _entry_id(await _log(w, "alice", issue_ref="MAUA-1")))
+    assert (plain.parent_session_id, plain.unattended, plain.profile) == (None, False, None)
+    assert "Run: attended" in await server.specivo_ai_usage(op="get", entry_id=plain.id)
+
+
 async def test_log_falls_back_to_the_agent_sessions_issue(db_session: AsyncSession, w: World) -> None:
     # A first call opens the key's agent session; give it the issue the agent works on.
     unassigned = await _log(w, "alice")
