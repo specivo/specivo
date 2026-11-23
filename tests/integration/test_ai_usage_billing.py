@@ -221,6 +221,60 @@ async def test_a_slug_the_user_has_no_account_for_is_skipped_with_a_warning(
     assert len(messages) == 1
 
 
+async def _let_bob_log_for_others(db: AsyncSession, w: World) -> None:
+    role = Role(
+        name="Bilr Runner",
+        permissions=["view_issues", "view_ai_usage", "log_ai_usage", "log_ai_usage_for_others"],
+        builtin=0,
+        issues_visibility="default",
+        ai_usage_visibility="own",
+    )
+    db.add(role)
+    await db.flush()
+    member = (
+        await db.execute(select(Member).where(Member.project_id == w.p.id, Member.user_id == w.bob.id))
+    ).scalar_one()
+    db.add(MemberRole(member_id=member.id, role_id=role.id))
+    await db.commit()
+    clear_role_cache(db)
+
+
+async def test_a_record_for_someone_else_does_not_name_their_personal_account(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _let_bob_log_for_others(db_session, w)
+    await gateway(
+        db_session, w, "alice-key", owner=w.alice, kind="api_key", payer="employee", route_patterns=["home-*"]
+    )
+    on_behalf = {"on_behalf_of": "bilr_alice", "attribution": {"project_key": "BILR"}}
+
+    routed = await one(client, w, "bob", record("k-ob-route", route="home-1", **on_behalf))
+    # Resolved and stored as usual, but the reporter is not told the name of alice's own account.
+    assert billing(routed) == ("employee", None)
+    entry = await stored(db_session, routed["entry_id"])
+    assert entry.billing_account_id is not None
+
+    # Whether a slug exists among alice's accounts is not revealed either.
+    for index, slug in enumerate(("alice-key", "no-such-account")):
+        result = await one(client, w, "bob", record(f"k-ob-slug-{index}", billing_account=slug, **on_behalf))
+        assert result["warnings"] == [], slug
+        assert result["billing_account"] is None, slug
+
+
+async def test_a_record_for_someone_else_still_names_an_instance_account(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _let_bob_log_for_others(db_session, w)
+    await gateway(db_session, w, "corp-gw")
+    result = await one(
+        client,
+        w,
+        "bob",
+        record("k-ob-gw", route="corp-1", on_behalf_of="bilr_alice", attribution={"project_key": "BILR"}),
+    )
+    assert billing(result) == ("employer", "corp-gw")
+
+
 async def test_an_instance_route_beats_the_users_own_accounts(
     client: AsyncClient, db_session: AsyncSession, w: World
 ) -> None:

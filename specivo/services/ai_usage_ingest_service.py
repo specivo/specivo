@@ -427,8 +427,14 @@ class AiUsageIngestService:
             if entry.billing_account_id is not None
             else None
         )
-        result.billing_account = account.slug if account is not None else None
-        if outcome.billing_slug_unknown:
+        # A reporter logging for someone else learns nothing about that person's own accounts:
+        # neither the name of the one used nor whether a slug it sent exists among them.
+        sees_personal = actor.id == target.id or actor.is_admin
+        if account is not None and (account.owner_user_id is None or sees_personal):
+            result.billing_account = account.slug
+        else:
+            result.billing_account = None
+        if outcome.billing_slug_unknown and sees_personal:
             # One message whether the slug does not exist, is someone else's or is switched off.
             result.warnings.append(
                 Problem(
