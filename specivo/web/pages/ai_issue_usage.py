@@ -32,7 +32,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -88,7 +88,16 @@ ATTRIBUTION_GUIDE_URL = "https://specivo.io/docs/specivo/ai-agents/reporting-ai-
 
 @dataclass
 class TabState:
-    """The tab's state, all of it in the URL: the sub-issue switch and the sessions page."""
+    """The tab's state, all of it in the URL: the sub-issue switch and the sessions page.
+
+    Other lazily loaded issue tabs with the same switch and paging subclass it
+    with their own ``segment`` (the last part of the tab's URLs) and ``page_sizes``.
+    """
+
+    #: The tab's URLs: ``/issue/{key}/<segment>/`` and ``/partials/issues/{key}/<segment>/``.
+    segment: ClassVar[str] = "ai-usage"
+    #: The page sizes the tab offers; the first is the default.
+    page_sizes: ClassVar[tuple[int, ...]] = PAGE_SIZES
 
     issue_key: str
     #: Whether the issue has sub-issues (only then is there a switch).
@@ -101,7 +110,8 @@ class TabState:
     @classmethod
     def read(cls, issue_key: str, has_children: bool, sub: str, offset: str, limit: str) -> TabState:
         """Clean the query: unknown values fall back to the defaults (sub-issues included when there are any)."""
-        size = int(limit) if limit.isdigit() and int(limit) in PAGE_SIZES else PAGE_SIZES[0]
+        sizes = cls.page_sizes
+        size = int(limit) if limit.isdigit() and int(limit) in sizes else sizes[0]
         start = int(offset) if offset.isdigit() and int(offset) < 10_000_000 else 0
         return cls(
             issue_key=issue_key,
@@ -117,7 +127,7 @@ class TabState:
         params = {
             "sub": "0" if self.has_children and not values["sub"] else "",
             "offset": str(values["offset"]) if values["offset"] else "",
-            "limit": str(values["limit"]) if values["limit"] != PAGE_SIZES[0] else "",
+            "limit": str(values["limit"]) if values["limit"] != self.page_sizes[0] else "",
         }
         return urlencode({k: v for k, v in params.items() if v})
 
@@ -126,8 +136,8 @@ class TabState:
         query = self.query(**override)
         suffix = f"?{query}" if query else ""
         return {
-            "href": f"/issue/{self.issue_key}/ai-usage/{suffix}",
-            "hx": f"/partials/issues/{self.issue_key}/ai-usage/{suffix}",
+            "href": f"/issue/{self.issue_key}/{self.segment}/{suffix}",
+            "hx": f"/partials/issues/{self.issue_key}/{self.segment}/{suffix}",
         }
 
 

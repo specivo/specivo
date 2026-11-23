@@ -190,6 +190,46 @@ list (`offset`, `limit`, and the filters `account`, `issue`, `active` and `exter
 and, for project managers, `GET .../agent-sessions/{id}/` returns one session with
 `tool_call_count` and `usage_entry_count`, and `GET .../agent-sessions/{id}/events/` its tool calls.
 
+### The Agents tab on an issue
+
+On an issue, the **Agents** tab shows what agents did for it and what that cost: one block per agent
+session that worked on the issue, newest first, 20 per page. It answers "what did my agent do
+overnight, and what did it cost". Like a session's page, the tab is for project managers (anyone with
+**Manage project**, and administrators), and only on issues they can see.
+
+A session belongs to the issue when it worked on it, or when AI usage reported for the issue carries
+its client session id. Each block starts at the top of the session's parent chain: the sessions above
+it and its subagents are in the same block, the subagents listed under it. When one run is known to
+Specivo twice, as an MCP connection and as [Hermes events](hermes-events.md) with the same client
+session id, the two are shown as one session. An issue with sub-issues has a **With sub-issues** /
+**This issue only** switch; sessions on sub-issues you cannot see are left out.
+
+Each block shows:
+
+- the **account** (with the **Service account** badge), the client, the type (MCP, REST, Webhook),
+  the agent profile when its usage names one and an **unattended** mark for runs nobody watched;
+- the **state**: **Running** (active in the last 30 minutes), **Completed**, **Interrupted** (Hermes
+  said the run was interrupted) or **Idle**, with when it started, when it ended or was last active,
+  and how long it took;
+- the **counters**: tool calls, approvals asked and how they were answered, and subagents;
+- the **AI cost** of the block: the spend and API-equivalent value, tokens and number of entries of
+  the usage reported for its sessions, in the project's reporting currency, without seat cost. The
+  line follows the [AI usage](../projects/ai-usage.md) rules: you need **View AI usage**, and you see
+  only the entries your role lets you read. Until the reporter has sent the usage (every 30 minutes)
+  the line says **Not reported yet**;
+- the subagents, each with its state and a link to its own page;
+- the **steps**: the newest 30 tool calls, approvals and subagent starts and stops of the session and
+  its subagents, as on the session's page. **Show all** and **Open session** lead to that page.
+
+Like the session pages, the tab shows only metadata (tool names, statuses, the keys a call named),
+never what was sent to a tool or what it returned, and leaves out what the sessions did in other
+projects. Opening the tab uses one AI report from your budget, as the **AI usage** tab does. The tab
+also works as a page of its own, `/issue/{key}/agents/`.
+
+The REST API has the same list: `GET /api/v1/issues/{key}/agent-sessions/` returns a paginated list
+(`offset`, `limit` up to 50, `sub=true` to include sub-issues) with each session's ids, account,
+client, state, counters, subagent ids and, for readers who may see AI usage, its `cost`.
+
 The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
 an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about
 the prompts or the conversation is stored.

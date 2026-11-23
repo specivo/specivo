@@ -29,9 +29,10 @@ from specivo.core.security import get_current_user, get_reader
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.user import User
+from specivo.schemas.agent_session import AgentSessionCostOut, IssueAgentSessionOut
 from specivo.schemas.attachment import AttachmentOut
 from specivo.schemas.bulk import BulkDeleteRequest, BulkResult, BulkUpdateRequest
-from specivo.schemas.common import IdName
+from specivo.schemas.common import IdName, PaginatedResponse
 from specivo.schemas.issue import (
     IssueCreate,
     IssueListResponse,
@@ -45,11 +46,13 @@ from specivo.schemas.issue import (
     issue_out,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
+from specivo.schemas.money import MoneyOut
 from specivo.schemas.repository import DevelopmentKind, IssueDevelopmentOut, MoveDevelopmentItemIn
 from specivo.schemas.saved_filter import SavedFilterDefinition
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
+from specivo.services.agent_timeline_service import BLOCKS_PER_PAGE, AgentBlock, AgentPage, AgentTimelineService
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
@@ -85,6 +88,7 @@ _notification_service = NotificationService()
 _mention_service = MentionService()
 _reaction_svc = ReactionService()
 _similar_service = SimilarIssueService()
+_agent_timeline = AgentTimelineService()
 
 # Per user: the new issue form asks at most once a second while someone types.
 _SIMILAR_ISSUES_RATE_LIMIT = ("similar_issues", 60, 60)
@@ -699,6 +703,94 @@ async def get_issue_development(
     if not await check_permission(current_user, issue.project_id, Permission.VIEW_ISSUES, db):
         raise NotFoundError(f"Issue {issue_ref} not found")
     return await development_for_issue(db, issue.id, kinds=kinds, offset=offset, limit=limit)
+
+
+def _agent_session_out(page: AgentPage, block: AgentBlock) -> IssueAgentSessionOut:
+    """One block of an issue's agent sessions as the REST list returns it."""
+    root = block.root
+    primary = root.primary
+    counters = page.counters[root.key]
+    account = page.users.get(primary.user_id)
+    cost = (page.costs or {}).get(root.key)
+    cost_out = None
+    if cost is not None:
+        spend = cost.marginal.total if cost.marginal is not None else None
+        api = cost.api_equivalent.total if cost.api_equivalent is not None else None
+        cost_out = AgentSessionCostOut(
+            entries=cost.entries,
+            tokens=cost.tokens,
+            currency=cost.currency,
+            spend=MoneyOut.from_money(spend) if spend is not None else None,
+            api_equivalent=MoneyOut.from_money(api) if api is not None else None,
+            profiles=cost.profiles,
+            unattended=cost.unattended,
+        )
+    return IssueAgentSessionOut(
+        id=primary.id,
+        session_ids=sorted(root.ids),
+        user_id=primary.user_id,
+        user_login=account.login if account else "",
+        service_account=bool(account and account.is_service_account),
+        client_name=primary.client_name,
+        client_version=primary.client_version,
+        client_types=sorted({row.client_type for row in root.rows if row.client_type}),
+        external_session_id=primary.external_session_id,
+        started_at=root.started_at,
+        last_activity_at=root.last_activity_at,
+        ended_at=root.ended_at,
+        state=_agent_timeline.state_of(root, counters),
+        tool_calls=counters.tool_calls,
+        approvals_requested=counters.approvals_requested,
+        approvals_resolved=counters.approvals_resolved,
+        children=[child.primary.id for child in block.child_nodes()],
+        cost=cost_out,
+    )
+
+
+@router.get(
+    "/issues/{issue_ref}/agent-sessions/",
+    response_model=PaginatedResponse[IssueAgentSessionOut],
+    tags=["agent-sessions"],
+)
+async def list_issue_agent_sessions(
+    issue_ref: str,
+    request: Request,
+    sub: bool = Query(False, description="Include the sessions of the sub-issues the caller may see."),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=BLOCKS_PER_PAGE, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> PaginatedResponse[IssueAgentSessionOut]:
+    """The agent sessions that worked on the issue, one per lineage root, most recently active first.
+
+    A session belongs to the issue when it is on the issue (or, with ``sub``,
+    on a visible sub-issue) or its client session id is on a usage entry of
+    the issue; its parents and subagents join it, flattened to one level
+    (``children``). Rows of one account with the same client session id (the
+    MCP and webhook halves of one run) are one session. ``cost`` sums the
+    session's AI usage in the project that the caller may read.
+
+    An issue the caller cannot see is 404; without ``manage_project`` in its
+    project (or an administrator) the answer is 403, as for the project's
+    agent session endpoints. ``cost`` needs ``view_ai_usage`` too.
+    """
+    issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
+    if issue.project_id is None:
+        raise NotFoundError(f"Issue {issue_ref} not found")
+    project = await _project_service.get_by_key(db, issue.project_key)
+    await _project_service.require_project_access(db, project, current_user)
+    if not await check_permission(current_user, project.id, Permission.MANAGE_PROJECT, db, request=request):
+        raise PermissionDeniedError("You do not have permission to inspect agent sessions in this project")
+    with_cost = await check_permission(current_user, project.id, Permission.VIEW_AI_USAGE, db)
+    page = await _agent_timeline.page(
+        db, current_user, project, issue, include_subtree=sub, offset=offset, limit=limit, with_cost=with_cost
+    )
+    return PaginatedResponse(
+        total_count=page.total,
+        offset=page.offset,
+        limit=limit,
+        items=[_agent_session_out(page, block) for block in page.blocks],
+    )
 
 
 async def _editable_issue(db: AsyncSession, issue_ref: str, user: User) -> Issue:

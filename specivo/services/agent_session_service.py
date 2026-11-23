@@ -604,6 +604,10 @@ class AgentSessionService:
             or_(AgentSession.issue_id.is_(None), AgentSession.issue_id.in_(visible_issues)),
         ]
 
+    async def visible_conditions(self, session: AsyncSession, project_id: int, user: User) -> list[ColumnElement[bool]]:
+        """The conditions keeping *project_id*'s sessions that *user* may see, for queries of other services."""
+        return await self._project_conditions(session, project_id, user)
+
     async def list_for_project(
         self,
         session: AsyncSession,

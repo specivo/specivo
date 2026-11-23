@@ -721,6 +721,26 @@ class GroupAction(StrEnum):
     USER_REMOVED = "user_removed"
 
 
+def project_rows_clause(
+    project_id: int,
+    projectless_tools: Sequence[str] | None = None,
+    projectless_sources: Sequence[str] | None = None,
+) -> ColumnElement[bool]:
+    """The audit rows of *project_id*, plus the project-less rows of the tools and sources listed.
+
+    See ``SecurityAuditService.list_events`` for why only those project-less rows may be shown.
+    """
+    in_project = SecurityAuditLog.project_id == project_id
+    extra: list[ColumnElement[bool]] = []
+    if projectless_tools:
+        extra.append(SecurityAuditLog.details["tool"].astext.in_(list(projectless_tools)))
+    if projectless_sources:
+        extra.append(SecurityAuditLog.details["source"].astext.in_(list(projectless_sources)))
+    if not extra:
+        return in_project
+    return or_(in_project, and_(SecurityAuditLog.project_id.is_(None), or_(*extra)))
+
+
 class SecurityAuditService:
     """Stateless service for security audit event logging and querying."""
 
@@ -1711,7 +1731,9 @@ class SecurityAuditService:
         event_types: Sequence[str] | None = None,
         ip_address: str | None = None,
         agent_session_id: int | None = None,
+        agent_session_ids: Sequence[int] | None = None,
         projectless_tools: Sequence[str] | None = None,
+        projectless_sources: Sequence[str] | None = None,
     ) -> tuple[list[SecurityAuditLog], int]:
         """Query audit logs with optional filters, newest first. Returns (items, total_count).
 
@@ -1719,11 +1741,15 @@ class SecurityAuditService:
         must match each one given); an empty ``event_types`` matches nothing.
         ``after`` is inclusive and ``before`` exclusive; a time range lets
         PostgreSQL skip the partitions outside it. ``agent_session_id`` keeps
-        the MCP tool calls of one agent session. With ``projectless_tools`` a
+        the rows of one agent session, ``agent_session_ids`` those of any of
+        several (an empty list matches nothing). With ``projectless_tools`` a
         ``project_id`` filter also keeps the rows that name no project, but
         only those of the MCP tools listed (``details.tool``): tools that act in
         no project at all, such as ``whoami``. Project-less rows of other tools
         can name issues or pages in projects the reader cannot see.
+        ``projectless_sources`` keeps the project-less rows whose
+        ``details.source`` is listed too: event receivers (``hermes``) whose
+        rows hold metadata only and never name an issue or page.
         """
         conditions: list[ColumnElement[bool]] = []
         if event_type is not None:
@@ -1734,16 +1760,10 @@ class SecurityAuditService:
             conditions.append(SecurityAuditLog.user_id == user_id)
         if agent_session_id is not None:
             conditions.append(SecurityAuditLog.agent_session_id == agent_session_id)
+        if agent_session_ids is not None:
+            conditions.append(SecurityAuditLog.agent_session_id.in_(list(agent_session_ids)))
         if project_id is not None:
-            in_project = SecurityAuditLog.project_id == project_id
-            if projectless_tools:
-                projectless = and_(
-                    SecurityAuditLog.project_id.is_(None),
-                    SecurityAuditLog.details["tool"].astext.in_(list(projectless_tools)),
-                )
-                conditions.append(or_(in_project, projectless))
-            else:
-                conditions.append(in_project)
+            conditions.append(project_rows_clause(project_id, projectless_tools, projectless_sources))
         if ip_address is not None:
             conditions.append(SecurityAuditLog.ip_address == ip_address)
         if after is not None:
