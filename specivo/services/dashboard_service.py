@@ -786,7 +786,7 @@ async def _key_clients(session: AsyncSession, key_ids: set[int]) -> dict[int, st
         .ext(distinct_on(AgentSession.api_key_id))
         .order_by(AgentSession.api_key_id, AgentSession.last_activity_at.desc())
     )
-    return {kid: name or "" for kid, name in (await session.execute(latest)).all()}
+    return {kid: name or "" for kid, name in (await session.execute(latest)).all() if kid is not None}
 
 
 def _target_label(

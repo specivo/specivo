@@ -1,4 +1,4 @@
-"""AgentSessionService: the client a session records, the issue it works on, and the overlap lookup."""
+"""AgentSessionService: the client a session records, the issue it works on, the overlap lookup and external ids."""
 
 from __future__ import annotations
 
@@ -7,15 +7,25 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.models.agent_session import AgentSession
 from specivo.models.auth import ApiKey
 from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
 from specivo.models.role import Role
 from specivo.models.user import User
-from specivo.services.agent_session_service import AgentSessionService, ClientInfo
+from specivo.services.agent_session_service import (
+    CLIENT_TYPE_MCP,
+    CLIENT_TYPE_REST,
+    CLIENT_TYPE_WEBHOOK,
+    CLIENT_TYPES,
+    LINEAGE_MAX_DEPTH,
+    AgentSessionService,
+    ClientInfo,
+)
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.permission_service import clear_role_cache
 from tests.factories.issue import IssueFactory
@@ -279,3 +289,221 @@ async def test_issue_for_prefers_the_longest_overlap(db_session: AsyncSession, w
 async def test_issue_for_accepts_a_reversed_window(db_session: AsyncSession, world: World) -> None:
     await _window(db_session, world, 0, 60, world.issue)
     assert await _svc.issue_for(db_session, world.agent.id, _at(50), _at(10)) == world.issue.id
+
+
+# ---------------------------------------------------------------------------
+# Client type
+# ---------------------------------------------------------------------------
+
+
+async def test_client_type_follows_how_the_session_was_opened(db_session: AsyncSession, world: World) -> None:
+    mcp = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id, connection="conn-a")
+    rest = await _svc.get_or_create_session(db_session, world.key.id, world.agent.id)
+    in_process = await _svc.get_or_create_session(
+        db_session, world.other_key.id, world.other.id, client_type=CLIENT_TYPE_MCP
+    )
+
+    assert mcp.client_type == CLIENT_TYPE_MCP
+    assert rest.client_type == CLIENT_TYPE_REST
+    assert in_process.client_type == CLIENT_TYPE_MCP
+    assert {CLIENT_TYPE_MCP, CLIENT_TYPE_REST, CLIENT_TYPE_WEBHOOK} == set(CLIENT_TYPES)
+
+
+async def test_client_type_outside_the_known_values_is_refused_by_the_database(
+    db_session: AsyncSession, world: World
+) -> None:
+    row = AgentSession(api_key_id=world.key.id, user_id=world.agent.id, client_type="carrier-pigeon")
+    savepoint = await db_session.begin_nested()
+    db_session.add(row)
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await savepoint.rollback()
+
+
+async def test_only_webhook_sessions_may_have_no_api_key(db_session: AsyncSession, world: World) -> None:
+    webhook = AgentSession(api_key_id=None, user_id=world.agent.id, client_type=CLIENT_TYPE_WEBHOOK)
+    db_session.add(webhook)
+    await db_session.flush()
+    assert webhook.id is not None
+
+    savepoint = await db_session.begin_nested()
+    db_session.add(AgentSession(api_key_id=None, user_id=world.agent.id, client_type=CLIENT_TYPE_MCP))
+    with pytest.raises(IntegrityError):
+        await db_session.flush()
+    await savepoint.rollback()
+
+
+# ---------------------------------------------------------------------------
+# External session id
+# ---------------------------------------------------------------------------
+
+
+async def _conn(db: AsyncSession, w: World, connection: str, *, other: bool = False) -> AgentSession:
+    return await _svc.get_or_create_session(
+        db,
+        (w.other_key if other else w.key).id,
+        (w.other if other else w.agent).id,
+        connection=connection,
+    )
+
+
+async def test_set_external_records_the_ids(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+
+    changed = await _svc.set_external(db_session, s.id, world.agent, "sess_abc", None)
+
+    assert changed
+    assert s.external_session_id == "sess_abc"
+    assert s.parent_external_session_id is None
+    assert s.parent_session_id is None
+    # The same values again change nothing.
+    assert not await _svc.set_external(db_session, s.id, world.agent, "sess_abc", None)
+
+
+@pytest.mark.parametrize("bad", ["", " sess", "-leading-dash", "has space", "x" * 201, "sess/abc", "ok\n"])
+async def test_set_external_refuses_ids_outside_the_pattern(db_session: AsyncSession, world: World, bad: str) -> None:
+    s = await _conn(db_session, world, "conn-a")
+
+    with pytest.raises(ValidationError):
+        await _svc.set_external(db_session, s.id, world.agent, bad, None)
+    with pytest.raises(ValidationError):
+        await _svc.set_external(db_session, s.id, world.agent, "sess_ok", bad)
+    assert s.external_session_id is None
+
+
+async def test_set_external_accepts_the_pattern_characters(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+    value = "20261123_142635_ab12:cd-34.e" + "x" * 150
+    await _svc.set_external(db_session, s.id, world.agent, value, None)
+    assert s.external_session_id == value
+
+
+async def test_a_session_cannot_be_its_own_parent(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+    with pytest.raises(ValidationError):
+        await _svc.set_external(db_session, s.id, world.agent, "sess_abc", "sess_abc")
+
+
+async def test_set_external_refuses_another_accounts_session(db_session: AsyncSession, world: World) -> None:
+    theirs = await _conn(db_session, world, "conn-a", other=True)
+
+    with pytest.raises(NotFoundError):
+        await _svc.set_external(db_session, theirs.id, world.agent, "sess_abc", None)
+    assert theirs.external_session_id is None
+
+
+async def test_find_by_external_lists_the_users_rows_newest_first(db_session: AsyncSession, world: World) -> None:
+    first = await _conn(db_session, world, "conn-a")
+    await _svc.set_external(db_session, first.id, world.agent, "sess_abc", None)
+    first.last_activity_at = datetime.now(UTC) - timedelta(minutes=5)
+    # A reconnect: another connection row with the same external id.
+    second = await _conn(db_session, world, "conn-b")
+    await _svc.set_external(db_session, second.id, world.agent, "sess_abc", None)
+    theirs = await _conn(db_session, world, "conn-c", other=True)
+    await _svc.set_external(db_session, theirs.id, world.other, "sess_abc", None)
+
+    found = await _svc.find_by_external(db_session, world.agent.id, "sess_abc")
+
+    assert [s.id for s in found] == [second.id, first.id]
+    assert await _svc.find_by_external(db_session, world.agent.id, "sess_none") == []
+    assert [s.id for s in await _svc.find_by_external(db_session, world.other.id, "sess_abc")] == [theirs.id]
+
+
+async def test_parent_reported_before_the_child_is_linked(db_session: AsyncSession, world: World) -> None:
+    parent = await _conn(db_session, world, "conn-parent")
+    await _svc.set_external(db_session, parent.id, world.agent, "sess_root", None)
+    child = await _conn(db_session, world, "conn-child")
+
+    await _svc.set_external(db_session, child.id, world.agent, "sess_child", "sess_root")
+
+    assert child.parent_external_session_id == "sess_root"
+    assert child.parent_session_id == parent.id
+
+
+async def test_parent_reported_after_the_child_is_back_filled(db_session: AsyncSession, world: World) -> None:
+    child = await _conn(db_session, world, "conn-child")
+    await _svc.set_external(db_session, child.id, world.agent, "sess_child", "sess_root")
+    assert child.parent_session_id is None
+
+    parent = await _conn(db_session, world, "conn-parent")
+    await _svc.set_external(db_session, parent.id, world.agent, "sess_root", None)
+
+    await db_session.refresh(child)
+    assert child.parent_session_id == parent.id
+
+
+async def test_another_users_session_is_never_a_parent(db_session: AsyncSession, world: World) -> None:
+    theirs = await _conn(db_session, world, "conn-theirs", other=True)
+    await _svc.set_external(db_session, theirs.id, world.other, "sess_root", None)
+    child = await _conn(db_session, world, "conn-child")
+
+    await _svc.set_external(db_session, child.id, world.agent, "sess_child", "sess_root")
+    assert child.parent_session_id is None
+
+    # Nor is a child of another user back-filled when this user reports the parent id.
+    their_child = await _conn(db_session, world, "conn-their-child", other=True)
+    await _svc.set_external(db_session, their_child.id, world.other, "sess_kid", "sess_mine")
+    mine = await _conn(db_session, world, "conn-mine")
+    await _svc.set_external(db_session, mine.id, world.agent, "sess_mine", None)
+    await db_session.refresh(their_child)
+    assert their_child.parent_session_id is None
+
+
+async def _chain(db: AsyncSession, w: World, length: int) -> list[AgentSession]:
+    rows: list[AgentSession] = []
+    for n in range(length):
+        row = await _conn(db, w, f"conn-chain-{n}")
+        await _svc.set_external(db, row.id, w.agent, f"sess_{n}", f"sess_{n - 1}" if n else None)
+        rows.append(row)
+    return rows
+
+
+async def test_lineage_walks_ancestors_and_descendants(db_session: AsyncSession, world: World) -> None:
+    rows = await _chain(db_session, world, 4)
+    sibling = await _conn(db_session, world, "conn-sibling")
+    await _svc.set_external(db_session, sibling.id, world.agent, "sess_sibling", "sess_1")
+
+    lineage = await _svc.lineage(db_session, rows[1])
+
+    ids = [s.id for s in lineage]
+    # Ancestors nearest first, then descendants.
+    assert ids[0] == rows[0].id
+    assert set(ids) == {rows[0].id, rows[2].id, rows[3].id, sibling.id}
+    assert rows[1].id not in ids
+
+
+async def test_lineage_is_bounded_in_depth(db_session: AsyncSession, world: World) -> None:
+    rows = await _chain(db_session, world, 15)
+
+    up = await _svc.lineage(db_session, rows[-1])
+    down = await _svc.lineage(db_session, rows[0])
+
+    assert len(up) == LINEAGE_MAX_DEPTH
+    assert len(down) == LINEAGE_MAX_DEPTH
+
+
+async def test_lineage_survives_a_cycle(db_session: AsyncSession, world: World) -> None:
+    a, b = await _chain(db_session, world, 2)
+    # Forge a cycle directly: a's parent is b, b's parent is a.
+    a.parent_session_id = b.id
+    await db_session.flush()
+
+    lineage = await _svc.lineage(db_session, a)
+
+    assert [s.id for s in lineage] == [b.id]
+
+
+async def test_issue_for_external_uses_the_newest_row_then_the_lineage(db_session: AsyncSession, world: World) -> None:
+    root, child = await _chain(db_session, world, 2)
+    assert await _svc.issue_for_external(db_session, world.agent.id, "sess_1") is None
+
+    await _svc.record_issue(db_session, root.id, world.agent, world.issue)
+    # The child names no issue: its parent's is used.
+    assert await _svc.issue_for_external(db_session, world.agent.id, "sess_1") == world.issue.id
+
+    await _svc.record_issue(db_session, child.id, world.agent, world.second)
+    assert await _svc.issue_for_external(db_session, world.agent.id, "sess_1") == world.second.id
+    assert await _svc.issue_for_external(db_session, world.agent.id, "sess_0") == world.issue.id
+    # Another user's rows never answer.
+    assert await _svc.issue_for_external(db_session, world.other.id, "sess_1") is None
+    assert await _svc.issue_for_external(db_session, world.agent.id, "sess_unknown") is None

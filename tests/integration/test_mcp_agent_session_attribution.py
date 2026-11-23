@@ -8,11 +8,15 @@ An issue is recorded when the session's account creates it in an ``active``
 status or assigned to itself, moves it into an ``active`` status, assigns it
 to itself, updates it while it is ``active`` and its own (resuming it), or
 starts a timer on it; the latest one wins.
+
+``specivo_agent_session`` records the client's own session id and its parent
+on the calling connection's agent session, and only ever links to sessions of
+the same account.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -22,19 +26,22 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import NotFoundError
 from specivo.mcp import server
 from specivo.mcp.auth import mcp_raw_key_var
-from specivo.mcp.client_context import agent_session_id_var, mcp_client_var
+from specivo.mcp.client_context import agent_session_id_var, mcp_client_var, mcp_connection_var
 from specivo.mcp.tools import _update_issue
 from specivo.models.agent_session import AgentSession
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
 from specivo.models.member import Member, MemberRole
 from specivo.models.role import Role
+from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
-from specivo.services.agent_session_service import ClientInfo
+from specivo.services.agent_session_service import ClientInfo, connection_hash
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.permission_service import clear_role_cache
+from specivo.services.security_audit_service import AuditEvent
 from tests.factories.issue import IssueFactory
 from tests.factories.lookups import DoneStatusFactory, PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
@@ -293,3 +300,184 @@ async def test_outside_a_tracked_tool_call_nothing_is_recorded(db_session: Async
 
     rows = (await db_session.execute(select(AgentSession).where(AgentSession.api_key_id == world.key_id))).all()
     assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# specivo_agent_session: the client's own session id, its parent and the issue
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def on_connection() -> Iterator[Callable[[str | None], None]]:
+    """Publish the MCP connection the next tool calls come on, as ``ClientInfoMiddleware`` does."""
+    token = mcp_connection_var.set(None)
+
+    def _use(connection: str | None) -> None:
+        mcp_connection_var.set(connection)
+
+    yield _use
+    mcp_connection_var.reset(token)
+
+
+async def _connection_row(db: AsyncSession, w: World, connection: str) -> AgentSession:
+    stmt = select(AgentSession).where(
+        AgentSession.api_key_id == w.key_id, AgentSession.connection_hash == connection_hash(connection)
+    )
+    row = (await db.execute(stmt)).scalar_one()
+    await db.refresh(row)
+    return row
+
+
+async def test_set_writes_the_ids_on_the_calling_connection(
+    db_session: AsyncSession, world: World, on_connection
+) -> None:
+    on_connection("conn-a")
+
+    text = await server.specivo_agent_session(op="set", external_session_id="sess_abc")
+
+    row = await _connection_row(db_session, world, "conn-a")
+    assert row.external_session_id == "sess_abc"
+    assert row.client_type == "mcp"
+    assert "sess_abc" in text
+
+
+async def test_get_returns_the_session(db_session: AsyncSession, world: World, on_connection) -> None:
+    on_connection("conn-a")
+    mcp_client_var.set(ClientInfo("hermes-agent", "0.4.0"))
+    await server.specivo_agent_session(op="set", external_session_id="sess_child", parent_session_id="sess_root")
+
+    text = await server.specivo_agent_session(op="get")
+
+    row = await _connection_row(db_session, world, "conn-a")
+    assert f"id: {row.id}" in text
+    assert "client: hermes-agent 0.4.0" in text
+    assert "client_type: mcp" in text
+    assert "external_session_id: sess_child" in text
+    assert "parent_external_session_id: sess_root" in text
+    assert "issue: (none)" in text
+
+
+async def test_set_with_an_issue_records_the_working_issue(
+    db_session: AsyncSession, world: World, on_connection
+) -> None:
+    on_connection("conn-a")
+    ref, issue_id = world.issue.display_key, world.issue.id
+
+    await server.specivo_agent_session(op="set", external_session_id="sess_abc", issue_ref=ref)
+
+    row = await _connection_row(db_session, world, "conn-a")
+    assert row.issue_id == issue_id
+    assert ref in await server.specivo_agent_session(op="get")
+
+
+async def test_set_with_a_hidden_issue_is_refused(db_session: AsyncSession, world: World, on_connection) -> None:
+    on_connection("conn-a")
+    hidden_ref = world.hidden.display_key
+    await server.specivo_agent_session(op="get")
+
+    with pytest.raises(ToolError, match="not found"):
+        await server.specivo_agent_session(op="set", external_session_id="sess_abc", issue_ref=hidden_ref)
+
+    row = await _connection_row(db_session, world, "conn-a")
+    assert row.issue_id is None
+    assert row.external_session_id is None
+
+
+async def test_set_is_audited_and_setting_the_same_values_again_is_a_no_op(
+    db_session: AsyncSession, world: World, on_connection
+) -> None:
+    on_connection("conn-a")
+    ref = world.issue.display_key
+    agent_id = world.agent.id
+
+    await server.specivo_agent_session(op="set", external_session_id="sess_abc", parent_session_id="sess_root")
+    again = await server.specivo_agent_session(op="set", external_session_id="sess_abc", parent_session_id="sess_root")
+    await server.specivo_agent_session(op="set", issue_ref=ref)
+
+    assert "unchanged" in again.lower()
+    stmt = (
+        select(SecurityAuditLog)
+        .where(
+            SecurityAuditLog.user_id == agent_id,
+            SecurityAuditLog.event_type == str(AuditEvent.AGENT_SESSION_LINKED),
+        )
+        .order_by(SecurityAuditLog.id)
+    )
+    logs = (await db_session.execute(stmt)).scalars().all()
+    assert [log.details.get("external_session_id") for log in logs] == ["sess_abc", "sess_abc"]
+    assert logs[0].details["parent_external_session_id"] == "sess_root"
+    assert logs[0].details["tool"] == "agent_session"
+    assert logs[1].details["issue"] == ref
+
+
+async def test_set_refuses_a_bad_id_and_an_unknown_op(world: World, on_connection) -> None:
+    on_connection("conn-a")
+
+    with pytest.raises(ToolError, match="external_session_id"):
+        await server.specivo_agent_session(op="set", external_session_id="no spaces allowed")
+    with pytest.raises(ToolError, match="op"):
+        await server.specivo_agent_session(op="delete")
+    with pytest.raises(ToolError, match="Nothing to set"):
+        await server.specivo_agent_session(op="set")
+
+
+async def test_a_second_connection_of_the_same_key_creates_no_cross_link(
+    db_session: AsyncSession, world: World, on_connection
+) -> None:
+    on_connection("conn-a")
+    await server.specivo_agent_session(op="set", external_session_id="sess_a")
+    on_connection("conn-b")
+    await server.specivo_agent_session(op="set", external_session_id="sess_b")
+
+    a = await _connection_row(db_session, world, "conn-a")
+    b = await _connection_row(db_session, world, "conn-b")
+    assert (a.external_session_id, b.external_session_id) == ("sess_a", "sess_b")
+    assert a.parent_session_id is None and b.parent_session_id is None
+
+
+async def test_a_child_connection_links_to_its_parent_connection(
+    db_session: AsyncSession, world: World, on_connection
+) -> None:
+    on_connection("conn-root")
+    await server.specivo_agent_session(op="set", external_session_id="sess_root")
+    on_connection("conn-child")
+    await server.specivo_agent_session(op="set", external_session_id="sess_child", parent_session_id="sess_root")
+
+    root = await _connection_row(db_session, world, "conn-root")
+    child = await _connection_row(db_session, world, "conn-child")
+    assert child.parent_session_id == root.id
+
+
+async def test_another_users_external_id_never_becomes_the_parent(
+    db_session: AsyncSession, world: World, on_connection
+) -> None:
+    # The peer's session carries the external id the agent then names as its parent.
+    peer_key, _ = await ApiKeyService().create_key(db_session, user_id=world.peer.id, name="msa-peer-key")
+    peer_row = AgentSession(
+        api_key_id=peer_key.id, user_id=world.peer.id, client_type="mcp", external_session_id="sess_shared"
+    )
+    db_session.add(peer_row)
+    await db_session.commit()
+    peer_row_id = peer_row.id
+
+    on_connection("conn-a")
+    await server.specivo_agent_session(op="set", external_session_id="sess_shared", parent_session_id="sess_peer")
+    on_connection("conn-b")
+    await server.specivo_agent_session(op="set", external_session_id="sess_kid", parent_session_id="sess_shared")
+
+    mine_a = await _connection_row(db_session, world, "conn-a")
+    mine_b = await _connection_row(db_session, world, "conn-b")
+    # The agent's own row with the id is the parent, never the peer's.
+    assert mine_b.parent_session_id == mine_a.id
+    peer = await db_session.get(AgentSession, peer_row_id)
+    assert peer is not None
+    await db_session.refresh(peer)
+    assert peer.parent_session_id is None
+    assert peer.issue_id is None
+
+
+async def test_without_a_tracked_session_the_tool_says_so(db_session: AsyncSession, world: World) -> None:
+    from specivo.mcp.tools.agent_sessions import _agent_session
+
+    with pytest.raises(NotFoundError, match="No agent session"):
+        await _agent_session(db_session, world.agent, "get")

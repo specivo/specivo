@@ -549,6 +549,102 @@ async def test_mcp_session_issue_overlapping_the_window(
     assert results[2]["attribution"]["method"] == "none"
 
 
+async def _external_session(
+    db: AsyncSession, w: World, key: str, user: str, issue: Issue | None, external_id: str, **kw: Any
+) -> AgentSession:
+    row = AgentSession(
+        api_key_id=w.key_ids[key],
+        user_id=w.users[user].id,
+        issue_id=issue.id if issue is not None else None,
+        client_type="mcp",
+        external_session_id=external_id,
+        # Far from every record's window: only the id can match.
+        started_at=datetime(2026, 10, 1, 1, 0, tzinfo=UTC),
+        last_activity_at=datetime(2026, 10, 1, 2, 0, tzinfo=UTC),
+        **kw,
+    )
+    db.add(row)
+    await db.commit()
+    return row
+
+
+async def test_mcp_session_matched_by_the_external_session_id(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _external_session(db_session, w, "bot_mcp", "bot", w.issues[7], "sess_abc")
+    # A session overlapping the window in time names another issue: the id wins.
+    await _session(
+        db_session,
+        w,
+        "bot_mcp",
+        "bot",
+        w.issues[12],
+        datetime(2026, 11, 5, 1, 0, tzinfo=UTC),
+        datetime(2026, 11, 5, 2, 0, tzinfo=UTC),
+    )
+
+    by_id, no_window, unknown = await post(
+        client,
+        w,
+        "bot",
+        record("k-ext-1", session_id="sess_abc", started_at="2026-11-05T01:10:00Z", ended_at="2026-11-05T01:20:00Z"),
+        record("k-ext-2", session_id="sess_abc"),
+        record("k-ext-3", session_id="sess_other", started_at="2026-11-05T01:10:00Z", ended_at="2026-11-05T01:20:00Z"),
+    )
+
+    assert by_id["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
+    # Without a time window the id still attributes.
+    assert no_window["attribution"]["issue_ref"] == "INGX-7"
+    # An unknown id falls back to the time overlap.
+    assert unknown["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+
+async def test_mcp_session_matched_through_the_parent_of_the_external_id(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    root = await _external_session(db_session, w, "bot_mcp", "bot", w.issues[3], "sess_root")
+    await _external_session(
+        db_session,
+        w,
+        "bot_mcp",
+        "bot",
+        None,
+        "sess_child",
+        parent_external_session_id="sess_root",
+        parent_session_id=root.id,
+    )
+
+    [result] = await post(client, w, "bot", record("k-ext-parent", session_id="sess_child"))
+
+    assert result["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-3"}
+
+
+async def test_another_users_external_session_id_is_never_used(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    # bot2 claims the same external id on a session of its own.
+    await _external_session(db_session, w, "bot2", "bot2", w.issues[7], "sess_shared")
+
+    [result] = await post(client, w, "bot", record("k-ext-foreign", session_id="sess_shared"))
+
+    assert result["attribution"]["method"] == "none"
+
+
+async def test_on_behalf_external_session_id_tries_the_reporter_then_the_target(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _external_session(db_session, w, "teammate_mcp", "teammate", w.issues[12], "sess_tm")
+
+    [target_only] = await post(
+        client, w, "bot", record("k-ext-ob1", on_behalf_of="ingx-teammate", session_id="sess_tm")
+    )
+    assert target_only["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+    await _external_session(db_session, w, "bot_mcp", "bot", w.issues[7], "sess_tm")
+    [both] = await post(client, w, "bot", record("k-ext-ob2", on_behalf_of="ingx-teammate", session_id="sess_tm"))
+    assert both["attribution"]["issue_ref"] == "INGX-7"
+
+
 async def test_on_behalf_session_prefers_the_reporter_then_the_target(
     client: AsyncClient, db_session: AsyncSession, w: World
 ) -> None:

@@ -176,3 +176,70 @@ class TestListSessions:
         assert "last_activity_at" in item
         assert item["client_name"] == "claude-code"
         assert item["client_version"] == "1.0"
+
+
+class TestExternalSessionId:
+    async def test_list_filters_by_external_session_id_and_shows_the_new_fields(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        from specivo.models.agent_session import AgentSession
+
+        user = await _make_service_account(db_session, login="agent_ext_user", status="active")
+        await _make_admin(db_session, login="admin_ext_user", status="active")
+        project = await _make_project(db_session, key="EXTS", identifier="exts-proj")
+        db_session.add(Member(user_id=user.id, project_id=project.id))
+        key, _raw = await ApiKeyService().create_key(session=db_session, user_id=user.id, name="ext-key")
+        root = AgentSession(api_key_id=key.id, user_id=user.id, client_type="mcp", external_session_id="sess_root")
+        db_session.add(root)
+        await db_session.flush()
+        child = AgentSession(
+            api_key_id=key.id,
+            user_id=user.id,
+            client_type="mcp",
+            external_session_id="sess_child",
+            parent_external_session_id="sess_root",
+            parent_session_id=root.id,
+        )
+        db_session.add(child)
+        await db_session.commit()
+
+        token = await _login(client, "admin_ext_user")
+        resp = await client.get(
+            f"/api/v1/projects/{project.key}/agent-sessions/",
+            params={"external_session_id": "sess_child"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert resp.status_code == 200, resp.text
+        [item] = resp.json()
+        assert item["id"] == child.id
+        assert item["external_session_id"] == "sess_child"
+        assert item["parent_external_session_id"] == "sess_root"
+        assert item["parent_session_id"] == root.id
+        assert item["client_type"] == "mcp"
+        assert item["ended_at"] is None
+
+        resp = await client.get(
+            f"/api/v1/projects/{project.key}/agent-sessions/",
+            params={"external_session_id": "sess_unknown"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.json() == []
+
+    async def test_rest_requests_open_a_rest_session(self, client: AsyncClient, db_session: AsyncSession):
+        from sqlalchemy import select
+
+        from specivo.models.agent_session import AgentSession
+
+        user = await _make_service_account(db_session, login="agent_rest_user", status="active")
+        project = await _make_project(db_session, key="RSTS", identifier="rsts-proj")
+        key, raw_key = await ApiKeyService().create_key(session=db_session, user_id=user.id, name="rest-key")
+        await db_session.commit()
+
+        resp = await client.get(
+            f"/api/v1/projects/{project.key}/agent-sessions/", headers={"Authorization": f"Bearer {raw_key}"}
+        )
+        assert resp.status_code == 200
+
+        row = (await db_session.execute(select(AgentSession).where(AgentSession.api_key_id == key.id))).scalar_one()
+        assert row.client_type == "rest"

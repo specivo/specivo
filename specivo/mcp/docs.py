@@ -66,6 +66,9 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_remove_relation": "Remove a relation by ID",
     "specivo_log_time": "Log time against a project or issue",
     "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
+    "specivo_agent_session": (
+        "This connection's agent session: op='set' (your client's session id, parent id, issue_ref) or 'get'"
+    ),
     "specivo_log_ai_usage": (
         "Log AI tokens an AI tool used (from a hook, the reporter or /cost output -- never estimated)"
     ),

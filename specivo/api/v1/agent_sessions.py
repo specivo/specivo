@@ -21,11 +21,16 @@ _session_service = AgentSessionService()
 async def list_agent_sessions(
     project_key: str,
     limit: int = Query(25, ge=1, le=100),
+    external_session_id: str | None = Query(
+        None, max_length=200, description="Only the sessions with this client session id."
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> list[AgentSessionOut]:
-    """List recent agent sessions for a project."""
+    """List recent agent sessions for a project, optionally only those with one client session id."""
     project = await _project_service.get_by_key(db, project_key)
     await _project_service.require_project_access(db, project, current_user)
-    sessions = await _session_service.list_for_project(db, project.id, current_user, limit=limit)
+    sessions = await _session_service.list_for_project(
+        db, project.id, current_user, limit=limit, external_session_id=external_session_id
+    )
     return [AgentSessionOut.model_validate(s) for s in sessions]

@@ -82,6 +82,10 @@ class AuditEvent(StrEnum):
     TIME_LOGGED = "time_logged"
     TIMER_STARTED = "timer_started"
     TIMER_DISCARDED = "timer_discarded"
+    # An MCP client recorded its own session id, its parent's or its working
+    # issue on its agent session (details: ``external_session_id``,
+    # ``parent_external_session_id``, ``issue`` as a key only).
+    AGENT_SESSION_LINKED = "agent_session_linked"
     VERSIONS_LISTED = "versions_listed"
     VERSION_CREATED = "version_created"
     VERSION_UPDATED = "version_updated"
@@ -339,6 +343,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.LOOKUPS_READ,
             AuditEvent.TIME_LOGGED,
             AuditEvent.TIMER_STARTED,
+            AuditEvent.AGENT_SESSION_LINKED,
             AuditEvent.VERSIONS_LISTED,
             AuditEvent.VERSION_CREATED,
             AuditEvent.VERSION_UPDATED,
