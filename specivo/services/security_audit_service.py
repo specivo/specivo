@@ -203,6 +203,14 @@ class AuditEvent(StrEnum):
     AI_SUBSCRIPTION_CREATED = "ai_subscription_created"
     AI_SUBSCRIPTION_UPDATED = "ai_subscription_updated"
     AI_SUBSCRIPTION_DELETED = "ai_subscription_deleted"
+    # Company seat plans: the three events above, always (administrators
+    # manage them; ``target_login`` is ``None`` and ``seat_count`` is added),
+    # and a member added, changed (their days) or removed (details:
+    # ``subscription_id``, ``plan_name``, ``member_id``, ``target_user_id``,
+    # ``target_login``, ``starts_on``, ``ends_on``; a change adds ``changes``).
+    AI_SUBSCRIPTION_MEMBER_ADDED = "ai_subscription_member_added"
+    AI_SUBSCRIPTION_MEMBER_UPDATED = "ai_subscription_member_updated"
+    AI_SUBSCRIPTION_MEMBER_REMOVED = "ai_subscription_member_removed"
     AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED = "ai_subscriptions_self_service_toggled"
     # MCP tool calls that change AI subscriptions (``specivo_ai_subscriptions``
     # add, update, end, delete; every MCP call is audited): ``op``,
@@ -318,6 +326,9 @@ _AI_SUBSCRIPTION_ROW_EVENTS = frozenset(
         AuditEvent.AI_SUBSCRIPTION_CREATED,
         AuditEvent.AI_SUBSCRIPTION_UPDATED,
         AuditEvent.AI_SUBSCRIPTION_DELETED,
+        AuditEvent.AI_SUBSCRIPTION_MEMBER_ADDED,
+        AuditEvent.AI_SUBSCRIPTION_MEMBER_UPDATED,
+        AuditEvent.AI_SUBSCRIPTION_MEMBER_REMOVED,
     }
 )
 _AI_SUBSCRIPTION_EVENTS = _AI_SUBSCRIPTION_ROW_EVENTS | {AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED}
@@ -486,6 +497,9 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_SUBSCRIPTION_CREATED,
             AuditEvent.AI_SUBSCRIPTION_UPDATED,
             AuditEvent.AI_SUBSCRIPTION_DELETED,
+            AuditEvent.AI_SUBSCRIPTION_MEMBER_ADDED,
+            AuditEvent.AI_SUBSCRIPTION_MEMBER_UPDATED,
+            AuditEvent.AI_SUBSCRIPTION_MEMBER_REMOVED,
             AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED,
             AuditEvent.AI_BILLING_ACCOUNT_CREATED,
             AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
@@ -1667,7 +1681,8 @@ class SecurityAuditService:
         resource_id: int | None = None,
         request: Request | None = None,
     ) -> SecurityAuditLog:
-        """Log an administrator's change to another user's AI subscription, or the self-service switch.
+        """Log an administrator's change to another user's AI subscription or to a company seat plan
+        and its members, or the self-service switch.
 
         Written in the caller's transaction, in a savepoint, like
         :meth:`log_exchange_rate_change`.

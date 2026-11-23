@@ -1,4 +1,4 @@
-"""AI tools (a lookup) and personal AI subscriptions (flat-rate seats people pay for)."""
+"""AI tools (a lookup), personal AI subscriptions (flat-rate seats people pay for) and company seat plans."""
 
 from __future__ import annotations
 
@@ -60,7 +60,13 @@ class AiTool(Base, TimestampMixin):
 
 
 class AiSubscription(Base, TimestampMixin):
-    """One person's flat-rate AI plan (a personal seat) during a span of days.
+    """One person's flat-rate AI plan (a personal seat), or a company seat plan, during a span of days.
+
+    A **company seat plan** has no holder (``user_id`` ``NULL``) and a
+    ``seat_count``; the people it covers are its members
+    (:class:`AiSubscriptionMember`), each holding one seat for a span of days.
+    Its fee may be zero (a plan whose cost is booked elsewhere); a personal
+    plan's fee is above zero.
 
     ``starts_on`` and ``ends_on`` are UTC days, both inclusive; ``ends_on``
     ``NULL`` means the plan is still running (see
@@ -75,7 +81,11 @@ class AiSubscription(Base, TimestampMixin):
     __tablename__ = "ai_subscriptions"
     __table_args__ = (
         CheckConstraint("billing_period IN ('month', 'year')", name="ck_ai_subscriptions_billing_period"),
-        CheckConstraint("amount > 0", name="ck_ai_subscriptions_amount_positive"),
+        CheckConstraint("amount > 0 OR (user_id IS NULL AND amount >= 0)", name="ck_ai_subscriptions_amount_positive"),
+        CheckConstraint(
+            "(user_id IS NULL) = (seat_count IS NOT NULL) AND (seat_count IS NULL OR seat_count >= 1)",
+            name="ck_ai_subscriptions_company_seats",
+        ),
         CheckConstraint("ends_on IS NULL OR ends_on >= starts_on", name="ck_ai_subscriptions_period"),
         CheckConstraint(f"provider {_PROVIDER_CHECK}", name="ck_ai_subscriptions_provider_format"),
         CheckConstraint("plan_key ~ '^[a-z0-9][a-z0-9-]{0,49}$'", name="ck_ai_subscriptions_plan_key_format"),
@@ -87,7 +97,10 @@ class AiSubscription(Base, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    #: The holder; ``None`` for a company seat plan.
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    #: Seats of a company plan (its fee is split into this many equal shares); ``None`` for a personal plan.
+    seat_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     plan_key: Mapped[str] = mapped_column(String(50), nullable=False)
     plan_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -113,5 +126,45 @@ class AiSubscription(Base, TimestampMixin):
     def fee(self) -> Money:
         return Money(self.amount, self.currency_code)
 
+    @property
+    def is_company(self) -> bool:
+        """Whether this is a company seat plan (no holder)."""
+        return self.user_id is None
+
     def __repr__(self) -> str:
         return f"<AiSubscription {self.id} user={self.user_id} {self.plan_key} {self.starts_on}..{self.ends_on}>"
+
+
+class AiSubscriptionMember(Base, TimestampMixin):
+    """One person's seat on a company seat plan during a span of UTC days (both inclusive).
+
+    Memberships are dated rather than replaced, so the months before a
+    change keep their allocation: removing someone sets ``ends_on``. One
+    person's memberships of one plan never overlap, and on no day do more
+    people hold a seat than the plan has (both checked by the service).
+    """
+
+    __tablename__ = "ai_subscription_members"
+    __table_args__ = (
+        CheckConstraint("ends_on IS NULL OR ends_on >= starts_on", name="ck_ai_subscription_members_period"),
+        Index("ix_ai_subscription_members_subscription", "subscription_id", "starts_on"),
+        Index("ix_ai_subscription_members_user", "user_id", "starts_on"),
+        Index("ix_ai_subscription_members_created_by_id", "created_by_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subscription_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("ai_subscriptions.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AiSubscriptionMember {self.id} plan={self.subscription_id} user={self.user_id} "
+            f"{self.starts_on}..{self.ends_on}>"
+        )

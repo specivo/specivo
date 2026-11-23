@@ -14,7 +14,7 @@
 </div>
 
 <h1 class="sp-page-h1">{% trans %}AI subscriptions{% endtrans %}</h1>
-<p class="sp-text-muted sp-mb-md">{% trans %}The flat-rate AI plans people pay for. Usage from the tools a plan covers counts as covered by it, and spend reports spread the fee over that usage. Your changes to other people's subscriptions are recorded in the audit log.{% endtrans %} <a href="{{ base }}/admin/ai-tools/">{% trans %}AI tools{% endtrans %} &rarr;</a> <a href="{{ base }}/admin/ai-billing-accounts/">{% trans %}AI billing accounts{% endtrans %} &rarr;</a></p>
+<p class="sp-text-muted sp-mb-md">{% trans %}The flat-rate AI plans people pay for. Usage from the tools a plan covers counts as covered by it, and spend reports spread the fee over that usage. Your changes to other people's subscriptions are recorded in the audit log.{% endtrans %} <a href="{{ base }}/admin/ai-tools/">{% trans %}AI tools{% endtrans %} &rarr;</a> <a href="{{ base }}/admin/ai-company-plans/">{% trans %}Company AI plans{% endtrans %} &rarr;</a> <a href="{{ base }}/admin/ai-billing-accounts/">{% trans %}AI billing accounts{% endtrans %} &rarr;</a></p>
 
 {% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription added.{% endtrans %}</div>
 {% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription saved.{% endtrans %}</div>

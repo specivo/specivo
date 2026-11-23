@@ -15,11 +15,14 @@ Resolution, first match wins (``billing_method`` records the step):
 3. ``instance_route``: the first active instance account, oldest first, whose
    ``route_patterns`` match the route and whose ``tool_slugs`` cover the tool.
 4. ``personal_route``: the same over the user's own accounts; then
-   ``subscription``: the user's subscription covering the tool (today's
-   ``subscription_for``), through its billing account. Only while the record
-   asks for no cost type or for ``subscription``, and only while that account
-   is active (a subscription without an account still covers the usage,
-   paid by the employee).
+   ``subscription``: the plan covering the tool
+   (:meth:`AiSubscriptionService.coverages`), through its billing account: a
+   company seat plan the user holds a seat on that day first (its instance
+   account, paid by the employer), then the user's own subscription. Only
+   while the record asks for no cost type or for ``subscription``, and only
+   while that account is active (a plan whose account is switched off is
+   skipped; a personal subscription without an account still covers the
+   usage, paid by the employee).
 5. ``project_default``: no account; the payer is the project's
    ``ai_usage_payer_default``. Otherwise ``none`` and payer ``unknown``.
 
@@ -29,7 +32,9 @@ the one the record asked for, else the account's ``default_cost_type``, else
 entry of cost type ``subscription`` is charged to a subscription only when its
 account is that subscription's (the subscription is the account's fee
 schedule): a record without a cost type that resolves to a corporate gateway
-is no longer charged to the person's own plan.
+is no longer charged to the person's own plan. Usage named or routed to a
+company plan's account is charged to that plan only on the days the user
+holds a seat on it.
 
 ``route`` never feeds pricing.
 """
@@ -175,18 +180,26 @@ class BillingResolver:
 
         subscription_id: int | None = None
         if account is None and requested in (None, "subscription"):
-            coverage = await _subscriptions.subscription_for(session, req.user_id, req.tool_slug, req.provider, req.at)
-            sub = coverage.subscription if coverage is not None else None
-            if isinstance(sub, AiSubscription):
-                if sub.billing_account_id is None:
+            # Company seat plans the user holds a seat on first, then their own subscription.
+            for coverage in await _subscriptions.coverages(session, req.user_id, req.tool_slug, req.provider, req.at):
+                sub = coverage.subscription
+                if not isinstance(sub, AiSubscription):
+                    continue
+                if sub.user_id is None:
+                    instance = await lookups.instance_accounts(session)
+                    candidate = next((a for a in instance if a.id == sub.billing_account_id), None)
+                elif sub.billing_account_id is None:
                     # A subscription without an account (none should be left): the person pays for it.
                     return BillingResolution(
                         BILLING_METHOD_SUBSCRIPTION, None, PAYER_EMPLOYEE, "subscription", sub.id, slug_unknown
                     )
-                account = next((a for a in personal if a.id == sub.billing_account_id), None)
-                if account is not None:
+                else:
+                    candidate = next((a for a in personal if a.id == sub.billing_account_id), None)
+                if candidate is not None:
+                    account = candidate
                     method = BILLING_METHOD_SUBSCRIPTION
                     subscription_id = sub.id
+                    break
 
         if account is not None:
             resolution = await self._with_account(session, req, method, account, account.payer, subscription_id)
@@ -219,6 +232,9 @@ class BillingResolver:
             subscription_id = None
         elif subscription_id is None and account is not None and account.owner_user_id == req.user_id:
             subscription_id = await self._fee_schedule(session, account, req)
+        elif subscription_id is None and account is not None and account.owner_user_id is None:
+            # A company plan's account named or routed to: the plan, while the user holds a seat on it.
+            subscription_id = await _subscriptions.company_plan_for(session, account.id, req.user_id, req.at)
         return BillingResolution(method, account, payer, cost_type, subscription_id)
 
     @staticmethod

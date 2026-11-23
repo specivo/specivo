@@ -980,9 +980,9 @@ class AiUsageService:
         (excluded ones too, the AI usage tab lists them), so the filter never
         names more people than the report or the entry list could show. Without
         one (the instance report, administrators only): everyone with an entry
-        or a subscription, whose fee the instance report counts.
+        a subscription or a company seat, whose fee the instance report counts.
         """
-        from specivo.models.ai_subscription import AiSubscription
+        from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember
         from specivo.services.anonymous_user_service import real_users_clause
 
         if project is None:
@@ -991,6 +991,7 @@ class AiUsageService:
             held = or_(
                 exists().where(AiUsageEntry.user_id == User.id),
                 exists().where(AiSubscription.user_id == User.id),
+                exists().where(AiSubscriptionMember.user_id == User.id),
             )
             return and_(real_users_clause(), held)
         conditions = await self._list_conditions(session, viewer, project=project)
@@ -2211,6 +2212,29 @@ class AiUsageService:
         ]
         return await self._rebill(
             session, conditions, actor_id=actor_id, details={"project_key": project.key}, request=request
+        )
+
+    async def rebill_for_member(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        from_day: date,
+        *,
+        actor_id: int | None,
+        request: Request | None = None,
+    ) -> RecomputeOutcome:
+        """Resolve again, and re-price, *user_id*'s entries from *from_day* on.
+
+        After a company seat plan membership changed: the days it touches may
+        now be covered by the plan, or no longer.
+        """
+        conditions = [AiUsageEntry.user_id == user_id, AiUsageEntry.usage_date >= from_day]
+        return await self._rebill(
+            session,
+            conditions,
+            actor_id=actor_id,
+            details={"target_user_id": user_id, "from": _iso(from_day)},
+            request=request,
         )
 
     async def _rebill(

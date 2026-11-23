@@ -9,6 +9,7 @@ from specivo.web.pages.admin_roles import router as admin_role_pages
 from specivo.web.pages.admin_sso import router as admin_sso_pages
 from specivo.web.pages.agent_sessions import router as agent_session_pages
 from specivo.web.pages.ai_billing_accounts import router as ai_billing_account_pages
+from specivo.web.pages.ai_company_plans import router as ai_company_plan_pages
 from specivo.web.pages.ai_issue_usage import router as ai_issue_usage_pages
 from specivo.web.pages.ai_spend_reports import router as ai_spend_report_pages
 from specivo.web.pages.ai_subscriptions import router as ai_subscription_pages
@@ -62,5 +63,6 @@ web_router.include_router(admin_sso_pages)
 web_router.include_router(admin_exchange_rate_pages)
 web_router.include_router(admin_ai_model_price_pages)
 web_router.include_router(ai_subscription_pages)
+web_router.include_router(ai_company_plan_pages)
 web_router.include_router(ai_billing_account_pages)
 web_router.include_router(ai_usage_pages)

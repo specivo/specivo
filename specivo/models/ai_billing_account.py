@@ -23,6 +23,7 @@ from specivo.core.ai_billing import (
     ACCOUNT_PAYERS,
     BILLING_ACCOUNT_KINDS,
     PAYER_EMPLOYEE,
+    PAYER_EMPLOYER,
 )
 from specivo.models.base import Base, TimestampMixin
 
@@ -133,6 +134,29 @@ def subscription_account(
         kind="subscription",
         owner_user_id=user_id,
         payer=PAYER_EMPLOYEE,
+        reimburse_share=None,
+        route_patterns=[],
+        tool_slugs=[],
+        default_cost_type="subscription",
+        is_active=True,
+        created_by_id=created_by_id,
+    )
+
+
+def company_plan_account(
+    *, subscription_id: int, plan_key: str, plan_name: str, created_by_id: int | None
+) -> AiBillingAccount:
+    """A new instance account for a company seat plan: kind ``subscription``, paid by the employer, no tools.
+
+    The plan keeps its own coverage and members, so the account lists no
+    tools of its own. Its slug follows :func:`subscription_account_slug`.
+    """
+    return AiBillingAccount(
+        slug=subscription_account_slug(plan_key, subscription_id),
+        name=plan_name,
+        kind="subscription",
+        owner_user_id=None,
+        payer=PAYER_EMPLOYER,
         reimburse_share=None,
         route_patterns=[],
         tool_slugs=[],

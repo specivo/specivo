@@ -45,10 +45,14 @@ subscription's currency (at each entry's date). The weights use **all** of the
 user's counted entries of the month, whatever the viewer may see and whatever
 the report period, so an entry's share never depends on who looks or which
 dates the report covers. A month cut by the report period counts the shares of
-the entries inside it.
+the entries inside it. A company seat plan's fee is carried per member: each
+member's month is one seat's share for the days they held it, spread over
+their own entries linked to the plan; its payer is the plan's account's, the
+employer, so it is never reimbursable.
 
 When no entry carries a fee (no linked entries, or none with a value that
-converts), the fee is **unallocated**. Unallocated seat cost appears only in
+converts), the fee is **unallocated**, and so is the fee of a company plan's
+seats nobody held (a row without a person). Unallocated seat cost appears only in
 instance reports with no filter that a fee cannot match (tool, model,
 provider); within the report period it counts the days the period covers.
 
@@ -98,7 +102,14 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.ai_billing import ENTRY_PAYERS, PAYER_EMPLOYEE, PAYER_UNKNOWN
 from specivo.core.ai_pricing import TOKEN_CLASSES, normalize_provider
-from specivo.core.ai_subscriptions import month_first, month_last, months_between, prorated_fee
+from specivo.core.ai_subscriptions import (
+    member_span,
+    month_first,
+    month_last,
+    months_between,
+    prorated_fee,
+    vacant_charges,
+)
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.exchange import (
     ConversionResult,
@@ -110,7 +121,7 @@ from specivo.core.exchange import (
 )
 from specivo.core.money import Money, format_decimal_plain
 from specivo.core.utils import utcnow
-from specivo.models.ai_subscription import AiSubscription
+from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES, AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
@@ -1135,7 +1146,7 @@ class AiSpendReportService:
 
     # -- seat allocation -------------------------------------------------------------
 
-    async def _seat_items(  # noqa: C901, PLR0912
+    async def _seat_items(  # noqa: C901, PLR0912, PLR0915
         self,
         session: AsyncSession,
         builder: _RowBuilder,
@@ -1146,7 +1157,15 @@ class AiSpendReportService:
         user_id: int | None,
         unallocated: bool,
     ) -> list[_SeatItem]:
-        """The seat cost shares, each on its row and its payer's total, in the plan's currency."""
+        """The seat cost shares, each on its row and its payer's total, in the plan's currency.
+
+        A fee is carried per plan, person and month: a personal plan's holder
+        carries all of it, each member of a company seat plan one seat
+        (:func:`specivo.core.ai_subscriptions.prorated_fee` with ``seats``), and
+        a company plan's vacant seats are unallocated and nobody's.
+        """
+        from specivo.services.ai_subscription_service import AiSubscriptionService
+
         first, last = month_first(date_from.year, date_from.month), month_last(date_to.year, date_to.month)
         stmt = select(AiSubscription).where(
             AiSubscription.starts_on <= last,
@@ -1154,7 +1173,11 @@ class AiSpendReportService:
         )
         if unallocated:
             if user_id is not None:
-                stmt = stmt.where(AiSubscription.user_id == user_id)
+                held = select(AiSubscriptionMember.subscription_id).where(AiSubscriptionMember.user_id == user_id)
+                stmt = stmt.where(
+                    (AiSubscription.user_id == user_id)
+                    | (AiSubscription.user_id.is_(None) & AiSubscription.id.in_(held))
+                )
         else:
             used = {r["subscription_id"] for r in raw if r["subscription_id"] is not None}
             if not used:
@@ -1163,15 +1186,39 @@ class AiSpendReportService:
         subscriptions = {s.id: s for s in (await session.execute(stmt)).scalars().all()}
         if not subscriptions:
             return []
+        members = await AiSubscriptionService().members_of(
+            session, (s.id for s in subscriptions.values() if s.user_id is None)
+        )
+
+        def shares(
+            sub: AiSubscription, year: int, month: int, lo: date | None = None, hi: date | None = None
+        ) -> dict[int | None, Decimal]:
+            """The fee of *sub* in a month per person who carries it (narrowed to *lo*-*hi* when given)."""
+            if sub.user_id is not None:
+                fee, days = prorated_fee(
+                    sub.amount, sub.billing_period, sub.starts_on, sub.ends_on, year, month, first=lo, last=hi
+                )
+                return {sub.user_id: fee} if days else {}
+            out: dict[int | None, Decimal] = {}
+            seats = sub.seat_count or 1
+            for member in members.get(sub.id, []):
+                span = member_span(sub, member)
+                if span is None:
+                    continue
+                fee, days = prorated_fee(
+                    sub.amount, sub.billing_period, span[0], span[1], year, month, first=lo, last=hi, seats=seats
+                )
+                if days:
+                    out[member.user_id] = out.get(member.user_id, Decimal(0)) + fee
+            return out
 
         months = list(months_between(date_from, date_to))
-        # The month's whole prorated fee, per subscription and month.
-        fees: dict[tuple[int, int, int], Decimal] = {}
+        # The month's whole fee share, per plan, person carrying it and month.
+        fees: dict[tuple[int, int | None, int, int], Decimal] = {}
         for sub in subscriptions.values():
             for year, month in months:
-                fee, days = prorated_fee(sub.amount, sub.billing_period, sub.starts_on, sub.ends_on, year, month)
-                if days:
-                    fees[(sub.id, year, month)] = fee
+                for holder_id, fee in shares(sub, year, month).items():
+                    fees[(sub.id, holder_id, year, month)] = fee
 
         weights, factors = await self._weights(session, subscriptions, first, last)
         today = utcnow().date()
@@ -1185,51 +1232,38 @@ class AiSpendReportService:
             sub_id = r["subscription_id"]
             if r["cost_type"] != "subscription" or sub_id is None or r["api"] is None or r["api_currency"] is None:
                 continue
-            holder = subscriptions.get(sub_id)
+            plan = subscriptions.get(sub_id)
             day: date = r["usage_date"]
-            if holder is None or (holder.id, day.year, day.month) not in fees:
+            key = (sub_id, r["user"], day.year, day.month)
+            if plan is None or key not in fees:
                 continue
-            total = weights.get((holder.id, day.year, day.month))
-            factor = factors.get((r["api_currency"], holder.currency_code, day))
+            total = weights.get(key)
+            factor = factors.get((r["api_currency"], plan.currency_code, day))
             if not total or factor is None:
                 continue
             weight = r["api"] * factor
-            share = (fees[(holder.id, day.year, day.month)] * weight / total).quantize(
-                _SHARE_EXPONENT, rounding=ROUND_HALF_UP
-            )
+            share = (fees[key] * weight / total).quantize(_SHARE_EXPONENT, rounding=ROUND_HALF_UP)
             items.append(
                 _SeatItem(
                     rows=(builder.row_for(r), builder.payer_row(r["payer"])),
-                    money=Money(share, holder.currency_code),
+                    money=Money(share, plan.currency_code),
                     day=rate_day(day.year, day.month),
                     allocated=True,
                     reimburse=r.get("reimburse"),
                 )
             )
 
-        # Fees no entry carries.
+        # Fees no entry carries: a person's month without usage of the plan, and a company plan's vacant seats.
         if unallocated:
             payers = await _account_payers(session, {s.billing_account_id for s in subscriptions.values()})
-            for (sub_id, year, month), _fee in sorted(fees.items()):
-                if weights.get((sub_id, year, month)):
-                    continue
-                sub = subscriptions[sub_id]
-                part, days = prorated_fee(
-                    sub.amount,
-                    sub.billing_period,
-                    sub.starts_on,
-                    sub.ends_on,
-                    year,
-                    month,
-                    first=date_from,
-                    last=date_to,
-                )
-                if not days or not part:
-                    continue
+
+            def unallocated_item(
+                sub: AiSubscription, holder_id: int | None, part: Decimal, year: int, month: int
+            ) -> _SeatItem:
                 day = max(month_first(year, month), date_from, sub.starts_on)
                 payer = payers.get(sub.billing_account_id, PAYER_UNKNOWN) if sub.billing_account_id else PAYER_UNKNOWN
                 row = builder.seat_row(
-                    user_id=sub.user_id,
+                    user_id=holder_id,
                     provider=sub.provider,
                     subscription_id=sub.id,
                     day=day,
@@ -1237,14 +1271,35 @@ class AiSpendReportService:
                     billing_account=sub.billing_account_id,
                 )
                 amount = Money(part.quantize(_SHARE_EXPONENT, rounding=ROUND_HALF_UP), sub.currency_code)
-                items.append(
-                    _SeatItem(
-                        rows=(row, builder.payer_row(payer)),
-                        money=amount,
-                        day=rate_day(year, month),
-                        allocated=False,
-                    )
+                return _SeatItem(
+                    rows=(row, builder.payer_row(payer)), money=amount, day=rate_day(year, month), allocated=False
                 )
+
+            for sub in sorted(subscriptions.values(), key=lambda s: s.id):
+                for year, month in months:
+                    narrowed = shares(sub, year, month, date_from, date_to)
+                    for holder_id, part in sorted(narrowed.items(), key=lambda kv: kv[0] or 0):
+                        if user_id is not None and holder_id != user_id:
+                            continue
+                        if weights.get((sub.id, holder_id, year, month)) or not part:
+                            continue
+                        items.append(unallocated_item(sub, holder_id, part, year, month))
+                    if sub.user_id is None and user_id is None:
+                        vacant = sum(
+                            (
+                                c.amount.amount
+                                for c in vacant_charges(
+                                    sub,
+                                    sub.seat_count or 1,
+                                    members.get(sub.id, []),
+                                    max(month_first(year, month), date_from),
+                                    min(month_last(year, month), date_to),
+                                )
+                            ),
+                            Decimal(0),
+                        )
+                        if vacant:
+                            items.append(unallocated_item(sub, None, vacant, year, month))
         return items
 
     async def _weights(
@@ -1253,8 +1308,8 @@ class AiSpendReportService:
         subscriptions: dict[int, AiSubscription],
         first: date,
         last: date,
-    ) -> tuple[dict[tuple[int, int, int], Decimal], dict[tuple[str, str, date], Decimal]]:
-        """Allocation weights per subscription and month, and the factors converting values into plan currencies.
+    ) -> tuple[dict[tuple[int, int | None, int, int], Decimal], dict[tuple[str, str, date], Decimal]]:
+        """Allocation weights per plan, person and month, and the factors converting values into plan currencies.
 
         Every counted ``subscription`` entry linked to the plans, whoever may
         see it. A value that cannot be converted into the plan's currency
@@ -1266,6 +1321,7 @@ class AiSpendReportService:
         stmt = (
             select(
                 AiUsageEntry.subscription_id,
+                AiUsageEntry.user_id,
                 AiUsageEntry.usage_date,
                 AiUsageEntry.api_equivalent_currency,
                 func.sum(AiUsageEntry.api_equivalent_amount),
@@ -1277,17 +1333,22 @@ class AiSpendReportService:
                 AiUsageEntry.api_equivalent_amount.is_not(None),
                 AiUsageEntry.usage_date.between(first, last),
             )
-            .group_by(AiUsageEntry.subscription_id, AiUsageEntry.usage_date, AiUsageEntry.api_equivalent_currency)
+            .group_by(
+                AiUsageEntry.subscription_id,
+                AiUsageEntry.user_id,
+                AiUsageEntry.usage_date,
+                AiUsageEntry.api_equivalent_currency,
+            )
         )
-        values: list[tuple[int, date, str, Decimal]] = [
-            (sid, day, str(code), amount)
-            for sid, day, code, amount in (await session.execute(stmt)).all()
+        values: list[tuple[int, int, date, str, Decimal]] = [
+            (sid, uid, day, str(code), amount)
+            for sid, uid, day, code, amount in (await session.execute(stmt)).all()
             if sid is not None and amount is not None
         ]
         factors: dict[tuple[str, str, date], Decimal] = {}
         # Values in another currency than their plan's, converted once per plan currency at the entry date.
         foreign: dict[str, list[tuple[Money, date]]] = defaultdict(list)
-        for sid, day, code, amount in values:
+        for sid, _uid, day, code, amount in values:
             target = subscriptions[sid].currency_code
             if code == target:
                 factors[(code, target, day)] = Decimal(1)
@@ -1299,11 +1360,11 @@ class AiSpendReportService:
             for result in await rates.convert_many(session, items, target):
                 if isinstance(result, Converted):
                     factors[(result.original.currency, target, result.on)] = result.rate.rate
-        weights: dict[tuple[int, int, int], Decimal] = defaultdict(Decimal)
-        for sid, day, code, amount in values:
+        weights: dict[tuple[int, int | None, int, int], Decimal] = defaultdict(Decimal)
+        for sid, uid, day, code, amount in values:
             factor = factors.get((code, subscriptions[sid].currency_code, day))
             if factor is not None:
-                weights[(sid, day.year, day.month)] += amount * factor
+                weights[(sid, uid, day.year, day.month)] += amount * factor
         return dict(weights), factors
 
     # -- conversion and labels ---------------------------------------------------------
@@ -1502,7 +1563,7 @@ class _RowBuilder:
     def seat_row(
         self,
         *,
-        user_id: int,
+        user_id: int | None,
         provider: str,
         subscription_id: int,
         day: date,

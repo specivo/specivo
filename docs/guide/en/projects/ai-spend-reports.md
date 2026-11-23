@@ -90,6 +90,11 @@ paid for:
 For example, a 100 USD plan whose holder used it for 30 USD of API-equivalent value in one project and
 10 USD in another shows a seat cost of 75 USD in the first project and 25 USD in the second.
 
+A [company seat plan](../install/ai-subscriptions.md#company-seat-plans) is shared the same way per
+member: each member carries one seat's share of its fee (fee ÷ seats, for the days they hold it),
+spread over their own usage of the plan. Its seats nobody held are unallocated, on a row without a
+person. The company pays for it, so it is employer spend and never reimbursable.
+
 A month in which a subscription was not used, or only for usage that has no price, cannot be shared.
 Its fee is **unallocated seat cost**. The AI spend page shows it on its own row, with a
 **Subscriptions** link to the person's plans, and in the totals. Project reports never show it.

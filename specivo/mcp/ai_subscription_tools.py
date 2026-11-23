@@ -14,6 +14,13 @@ a lookup, is open to every caller.
 time) and is all or nothing: every period is tried, the failures are reported
 together, and when any fails nothing is added.
 
+**Company seat plans** (administrators only): ``list`` and ``add`` with
+``company=True`` list and add plans the employer pays for (each period with a
+``seat_count``; the fee may be zero); ``update``, ``end`` and ``delete`` take a
+company plan's id too. ``members``, ``add_member``, ``end_member`` and
+``remove_member`` manage who holds a seat, by date: ending a seat keeps the
+months before it, removing one is for mistakes.
+
 Every result that shows subscriptions ends with **warnings** about the plan
 families it touches: two periods of one family that overlap, or a gap between
 them. A family is one person's subscriptions with the same provider and the
@@ -39,7 +46,7 @@ from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedErr
 from specivo.core.i18n import gettext as _
 from specivo.core.money import Money, format_decimal_plain
 from specivo.mcp.tools._common import _log_tool
-from specivo.models.ai_subscription import AiSubscription, AiTool
+from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember, AiTool
 from specivo.models.user import User
 from specivo.services.ai_subscription_service import AiSubscriptionService, SubscriptionInput
 from specivo.services.ai_usage_service import AiUsageService
@@ -48,7 +55,20 @@ from specivo.services.security_audit_service import AuditEvent
 
 _service = AiSubscriptionService()
 
-AI_SUBSCRIPTION_OPS = ("list", "presets", "add", "update", "end", "delete")
+AI_SUBSCRIPTION_OPS = (
+    "list",
+    "presets",
+    "add",
+    "update",
+    "end",
+    "delete",
+    "members",
+    "add_member",
+    "end_member",
+    "remove_member",
+)
+#: Ops on the seats of a company plan.
+MEMBER_OPS = ("members", "add_member", "end_member", "remove_member")
 #: Most periods one ``add`` call takes.
 MAX_PERIODS = 50
 _MAX_LIMIT = 200
@@ -64,6 +84,7 @@ UPDATE_FIELDS = (
     "starts_on",
     "ends_on",
     "notes",
+    "seat_count",
 )
 
 
@@ -90,6 +111,9 @@ class SubscriptionPeriod(BaseModel):
     starts_on: str = Field(description="First day, YYYY-MM-DD (UTC day).")
     ends_on: str | None = Field(None, description="Last day, YYYY-MM-DD (included); leave out while it runs.")
     notes: str | None = Field(None, description="Free text, e.g. the invoice number.")
+    seat_count: int | None = Field(
+        None, description="Company plans only (company=true): how many seats the fee pays for."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +149,7 @@ def _period_input(period: SubscriptionPeriod) -> SubscriptionInput:
         starts_on=_parse_date(period.starts_on, "starts_on"),
         ends_on=_parse_date(period.ends_on, "ends_on"),
         notes=period.notes,
+        seat_count=period.seat_count,
     )
 
 
@@ -220,8 +245,9 @@ def _dates(starts_on: date, ends_on: date | None) -> str:
 
 
 def _line(sub: AiSubscription, tools: _Tools) -> str:
+    seats = f"company plan, {sub.seat_count} seat(s), " if sub.user_id is None else ""
     text = (
-        f"#{sub.id} {sub.plan_name} [{sub.plan_key}] {sub.provider}, "
+        f"#{sub.id} {sub.plan_name} [{sub.plan_key}] {sub.provider}, {seats}"
         f"{_money(sub.amount, sub.currency_code)} {_period(sub.billing_period)}, "
         f"{_dates(sub.starts_on, sub.ends_on)}; covers: {_covers(tools, sub.provider, sub.tool_slugs or [])}"
     )
@@ -290,7 +316,9 @@ def period_warnings(
     return warnings
 
 
-async def _all_of(session: AsyncSession, user_id: int) -> list[AiSubscription]:
+async def _all_of(session: AsyncSession, user_id: int | None) -> list[AiSubscription]:
+    if user_id is None:
+        return []
     rows = await session.execute(
         select(AiSubscription).where(AiSubscription.user_id == user_id).order_by(AiSubscription.starts_on)
     )
@@ -298,7 +326,7 @@ async def _all_of(session: AsyncSession, user_id: int) -> list[AiSubscription]:
 
 
 async def _warnings_block(
-    session: AsyncSession, user_id: int, families: set[tuple[str, tuple[str, ...]]] | None
+    session: AsyncSession, user_id: int | None, families: set[tuple[str, tuple[str, ...]]] | None
 ) -> list[str]:
     warnings = period_warnings(await _all_of(session, user_id), families)
     if not warnings:
@@ -327,26 +355,42 @@ async def _ai_subscriptions(  # noqa: PLR0913
     subscription_id: int | None = None,
     changes: dict[str, Any] | None = None,
     ends_on: str | None = None,
+    starts_on: str | None = None,
     active_on: str | None = None,
+    company: bool = False,
+    member_id: int | None = None,
     offset: int = 0,
     limit: int = 50,
 ) -> str:
-    """List, add, change, end or delete AI subscriptions; see ``specivo_ai_subscriptions``."""
+    """List, add, change, end or delete AI subscriptions and company seats; see ``specivo_ai_subscriptions``."""
     if op not in AI_SUBSCRIPTION_OPS:
         raise ValidationError(
             message=f"Invalid op '{op}'. Must be one of: {', '.join(AI_SUBSCRIPTION_OPS)}", field="op"
         )
     if op == "presets":
         return await _presets(session, caller)
-    _require_person_key(caller)
+    if company or op in MEMBER_OPS:
+        _require_company_admin(caller)
+    else:
+        _require_person_key(caller)
     if op == "list":
+        if company:
+            return await _list_company(session, caller, _parse_date(active_on, "active_on"), offset, limit)
         return await _list(session, caller, user_login, _parse_date(active_on, "active_on"), offset, limit)
     if op == "add":
+        if company:
+            return await _add_company(session, caller, periods or [])
         return await _add(session, caller, user_login, periods or [])
 
     if subscription_id is None:
         raise ValidationError(message=f"op='{op}' needs subscription_id", field="subscription_id")
     sub = await _service.get_visible(session, caller, subscription_id)
+    if op in MEMBER_OPS:
+        return await _member_op(
+            session, caller, op, sub, user_login=user_login, member_id=member_id, starts_on=starts_on, ends_on=ends_on
+        )
+    if sub.user_id is None:
+        _require_company_admin(caller)
     owner = sub.user_id
     family = family_key(sub)
     if op == "delete":
@@ -398,11 +442,13 @@ async def _log_change(
     caller: User,
     op: str,
     ids: list[int],
-    owner_id: int,
+    owner_id: int | None,
     *,
     fields: list[str] | None = None,
 ) -> None:
-    owner = caller if owner_id == caller.id else await session.get(User, owner_id)
+    owner: User | None = None
+    if owner_id is not None:
+        owner = caller if owner_id == caller.id else await session.get(User, owner_id)
     details: dict[str, Any] = {
         "op": op,
         "subscription_ids": ids,
@@ -500,3 +546,169 @@ async def _add(session: AsyncSession, caller: User, user_login: str | None, peri
     lines += [f"  {_line(s, tools)}" for s in sorted(created, key=lambda s: (s.starts_on, s.id))]
     lines += await _warnings_block(session, owner.id, {family_key(s) for s in created})
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Company seat plans
+# ---------------------------------------------------------------------------
+
+
+def _require_company_admin(user: User) -> None:
+    """Company plans: an unlimited key of an administrator."""
+    if is_limited_key():
+        raise PermissionDeniedError(
+            _("Company AI plans belong to the instance, not to a project: connect with an unlimited API key.")
+        )
+    if not is_global_admin(user):
+        raise PermissionDeniedError(_("Only administrators manage company AI plans."))
+
+
+def _member_line(member: AiSubscriptionMember, logins: dict[int, str]) -> str:
+    login = logins.get(member.user_id, str(member.user_id))
+    return f"member #{member.id} {login}, {_dates(member.starts_on, member.ends_on)}"
+
+
+async def _member_block(session: AsyncSession, sub: AiSubscription) -> list[str]:
+    members = await _service.list_members(session, sub)
+    people = await _service.owners(session, (m.user_id for m in members))
+    logins = {uid: u.login for uid, u in people.items()}
+    today = datetime.now(UTC).date()
+    held = sum(1 for m in members if m.starts_on <= today and (m.ends_on is None or m.ends_on >= today))
+    lines = [f"Seats: {held} of {sub.seat_count} held today; every seat, earliest first:"]
+    lines += [f"  {_member_line(m, logins)}" for m in members] or ["  (none)"]
+    return lines
+
+
+async def _list_company(session: AsyncSession, caller: User, active_on: date | None, offset: int, limit: int) -> str:
+    if limit < 1 or limit > _MAX_LIMIT:
+        raise ValidationError(message=f"limit must be between 1 and {_MAX_LIMIT}", field="limit")
+    rows, total = await _service.list_subscriptions(
+        session, company=True, active_on=active_on, offset=offset, limit=limit
+    )
+    await _log_tool(session, caller, AuditEvent.RESOURCE_ACCESS, "ai_subscriptions", {"op": "list", "company": True})
+    tools = await _tools(session)
+    shown = f"{offset + 1}-{offset + len(rows)}" if rows else "none"
+    scope = f" running on {active_on.isoformat()}" if active_on else ""
+    lines = [f"Company AI plans{scope} ({total} total, showing {shown}), newest first:"]
+    lines += [f"  {_line(row, tools)}" for row in rows] or ["  (none)"]
+    lines.append("op='members' with subscription_id lists who holds a seat.")
+    return "\n".join(lines)
+
+
+async def _add_company(session: AsyncSession, caller: User, periods: Sequence[Any]) -> str:
+    if not periods:
+        raise ValidationError(message="op='add' needs periods: one or more plan periods", field="periods")
+    if len(periods) > MAX_PERIODS:
+        raise ValidationError(message=f"Add at most {MAX_PERIODS} periods in one call", field="periods")
+    created: list[AiSubscription] = []
+    errors: list[str] = []
+    for index, raw in enumerate(periods):
+        try:
+            period = raw if isinstance(raw, SubscriptionPeriod) else SubscriptionPeriod.model_validate(raw)
+        except ValueError as exc:
+            errors.append(f"periods[{index}]: {exc}")
+            continue
+        savepoint = await session.begin_nested()
+        try:
+            sub = await _service.create(session, _period_input(period), owner=None, actor=caller)
+            await session.flush()
+        except AppError as exc:
+            await savepoint.rollback()
+            if exc.status_code == 403:
+                raise
+            errors.append(f"{_period_label(index, period)}: {exc.message}")
+            continue
+        await savepoint.commit()
+        created.append(sub)
+    if errors:
+        raise ValidationError(
+            message="Nothing was added. Fix these periods and send them all again:\n"
+            + "\n".join(f"  {e}" for e in errors),
+            field="periods",
+        )
+    for sub in created:
+        await session.refresh(sub)
+    await _log_change(session, caller, "add", [s.id for s in created], None)
+    tools = await _tools(session)
+    lines = [f"Added {len(created)} company AI plan(s):"]
+    lines += [f"  {_line(s, tools)}" for s in sorted(created, key=lambda s: (s.starts_on, s.id))]
+    lines.append("Give people their seats with op='add_member' (subscription_id, user, starts_on).")
+    return "\n".join(lines)
+
+
+async def _member_op(
+    session: AsyncSession,
+    caller: User,
+    op: str,
+    sub: AiSubscription,
+    *,
+    user_login: str | None,
+    member_id: int | None,
+    starts_on: str | None,
+    ends_on: str | None,
+) -> str:
+    if sub.user_id is not None:
+        raise ValidationError(message="Only company plans have members", field="subscription_id")
+    if op == "members":
+        await _log_tool(
+            session,
+            caller,
+            AuditEvent.RESOURCE_ACCESS,
+            "ai_subscriptions",
+            {"op": "members", "subscription_ids": [sub.id]},
+        )
+        return "\n".join([_line(sub, await _tools(session)), *await _member_block(session, sub)])
+
+    if op == "add_member":
+        if not user_login or not user_login.strip():
+            raise ValidationError(message="op='add_member' needs user, the person's login", field="user")
+        person = await AiUsageService.user_by_login(session, user_login)
+        if person is None:
+            raise NotFoundError(f"No user with the login '{user_login.strip()}'")
+        member = await _service.add_member(
+            session,
+            sub,
+            person,
+            starts_on=_parse_date(starts_on, "starts_on") or datetime.now(UTC).date(),
+            ends_on=_parse_date(ends_on, "ends_on"),
+            actor=caller,
+        )
+        verb = f"Gave {person.login} a seat"
+    else:
+        member = await _find_member(session, sub, member_id, user_login)
+        if op == "end_member":
+            member = await _service.update_member(
+                session,
+                sub,
+                member,
+                {"ends_on": _parse_date(ends_on, "ends_on") or datetime.now(UTC).date()},
+                actor=caller,
+            )
+            verb = f"Ended member #{member.id}'s seat"
+        else:
+            await _service.remove_member(session, sub, member, actor=caller)
+            verb = f"Removed member #{member.id}"
+    await session.flush()
+    await _log_tool(
+        session,
+        caller,
+        AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
+        "ai_subscriptions",
+        {"op": op, "subscription_ids": [sub.id], "member_id": member.id},
+    )
+    return "\n".join([f"{verb} on #{sub.id} {sub.plan_name}.", *await _member_block(session, sub)])
+
+
+async def _find_member(
+    session: AsyncSession, sub: AiSubscription, member_id: int | None, user_login: str | None
+) -> AiSubscriptionMember:
+    """The membership *member_id*, or the person *user_login*'s latest seat on the plan."""
+    if member_id is not None:
+        return await _service.get_member(session, sub, member_id)
+    if not user_login or not user_login.strip():
+        raise ValidationError(message="Give member_id, or user (the person's login)", field="member_id")
+    person = await AiUsageService.user_by_login(session, user_login)
+    seats = [m for m in await _service.list_members(session, sub) if person is not None and m.user_id == person.id]
+    if not seats:
+        raise NotFoundError(f"'{user_login.strip()}' holds no seat on this plan")
+    return seats[-1]

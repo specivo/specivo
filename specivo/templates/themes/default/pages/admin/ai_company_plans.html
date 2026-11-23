@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import pagination %}
+{% from "pages/auth/_ai_subscription_macros.html" import error_text, period_label, status_badge, covers with context %}
+
+{% block title %}{% trans %}Company AI plans{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Company AI plans{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}Company AI plans{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}Team and Enterprise plans the company pays for. Each member holds one seat and carries an equal share of the fee for the days they hold it; usage from the tools a plan covers is charged to it before the person's own subscriptions. Changes are recorded in the audit log.{% endtrans %} <a href="{{ base }}/admin/ai-subscriptions/">{% trans %}AI subscriptions{% endtrans %} &rarr;</a> <a href="{{ base }}/admin/ai-billing-accounts/">{% trans %}AI billing accounts{% endtrans %} &rarr;</a></p>
+
+{% if notice == "deleted" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Plan deleted.{% endtrans %}</div>{% endif %}
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="company-plan-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="company-plans-card">
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="company-plans-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Plan{% endtrans %}</th>
+          <th>{% trans %}Covers{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Fee{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Seats held today{% endtrans %}</th>
+          <th>{% trans %}Days{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Billing account{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in plans %}
+        <tr data-plan-id="{{ s.id }}">
+          <td><strong>{{ s.plan_name }}</strong> <span class="sp-text-muted-xs">{{ s.provider }}</span></td>
+          <td>{{ covers(s) }}</td>
+          <td class="sp-sub-num">{{ s.fee }} <span class="sp-text-muted-xs">{{ period_label(s.billing_period) }}</span></td>
+          <td class="sp-sub-num">{{ s.seats_held }} / {{ s.seat_count }}</td>
+          <td class="sp-sub-dates">{{ s.starts_on }} &rarr; {{ s.ends_on or _('open') }}</td>
+          <td>{{ status_badge(s.status) }}</td>
+          <td>{% if s.billing_account_id %}<a href="{{ base }}/admin/ai-billing-accounts/{{ s.billing_account_id }}/">{{ s.billing_account_slug or s.billing_account_id }}</a>{% endif %}</td>
+          <td><a class="sp-btn-sm" href="{{ base }}/admin/ai-company-plans/{{ s.id }}/">{% trans %}Seats and details{% endtrans %}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="sp-text-muted">{% trans %}No company plans yet.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(total, offset, limit, base ~ "/admin/ai-company-plans/", "") }}
+</div>
+
+<div class="card sp-card-pad" id="new-company-plan" data-testid="new-company-plan-card">
+  <h3 class="sp-card-h3">{% trans %}Add a company plan{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}Enter the fee of the whole plan per billing period and the number of seats it pays for. The fee may be zero when its cost is booked elsewhere. Add the members on the plan's page.{% endtrans %}</p>
+  {% set submit_label = _("Add plan") %}
+  {% include "pages/auth/_ai_subscription_form.html" %}
+</div>
+{% endblock %}
