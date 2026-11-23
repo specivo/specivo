@@ -60,7 +60,7 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -84,6 +84,7 @@ from specivo.core.ai_usage import (
     compute_costs,
     priced_at_for,
     token_counts,
+    utc_midnight,
 )
 from specivo.core.constants import MAX_HIERARCHY_DEPTH
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
@@ -1036,6 +1037,9 @@ class AiUsageService:
         ended = self._instant(data.ended_at, "ended_at")
         if started is not None and started.date() != data.usage_date:
             raise _invalid("started_at must fall on usage_date (a UTC day)", "started_at")
+        day_start = utc_midnight(data.usage_date)
+        if ended is not None and not day_start <= ended <= day_start + timedelta(days=1):
+            raise _invalid("ended_at must fall on usage_date (a UTC day) or at its end", "ended_at")
         if started is not None and ended is not None and ended < started:
             raise _invalid("ended_at must not be before started_at", "ended_at")
         return {"usage_date": data.usage_date, "started_at": started, "ended_at": ended}
@@ -1202,16 +1206,48 @@ class AiUsageService:
     ) -> AiUsageEntry:
         """Log one entry written by a person or a client (``manual``, ``api``, ``mcp``), in *target*'s name.
 
-        *target* defaults to the actor. Reporter and import entries go
-        through :meth:`upsert`. Audited when the target is someone else.
+        The entry of :meth:`log_with_status`, for callers that do not need to
+        tell a first write from a replay.
+        """
+        result = await self.log_with_status(
+            session, actor, data, target=target, source=source, api_key_id=api_key_id, request=request
+        )
+        return result.entry
+
+    async def log_with_status(
+        self,
+        session: AsyncSession,
+        actor: User,
+        data: AiUsageInput,
+        *,
+        target: User | None = None,
+        source: str = "manual",
+        api_key_id: int | None = None,
+        request: Request | None = None,
+    ) -> UpsertResult:
+        """Log one entry written by a person or a client (``manual``, ``api``, ``mcp``), in *target*'s name.
+
+        *target* defaults to the actor. With an ``idempotency_key`` the entry
+        is the bucket ``(target, key)`` and goes through :meth:`upsert`, so a
+        client retrying after a timeout never counts twice: ``created``, then
+        ``updated`` (totals replaced, ``revision + 1``) or ``unchanged``. The
+        entry keeps its source and stays editable by people. Without a key
+        every call inserts a new entry (``created``). Reporter and import
+        entries go through :meth:`upsert` directly. Audited when the target is
+        someone else.
         """
         if source in LOCKED_SOURCES:
             raise _invalid("Reporter and import entries are written with upsert", "source")
         target = target or actor
+        if (data.idempotency_key or "").strip():
+            return await self.upsert(
+                session, actor, data, target=target, source=source, api_key_id=api_key_id, request=request
+            )
         values = await self._validated(session, data, source=source)
         project = await self._project(session, data.project_id)
         await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
-        return await self._insert(session, actor, target, data, values, source, api_key_id, request)
+        entry = await self._insert(session, actor, target, data, values, source, api_key_id, request)
+        return UpsertResult(entry, "created")
 
     async def upsert(
         self,
@@ -1627,17 +1663,19 @@ class AiUsageService:
         source: str = "manual",
         api_key_id: int | None = None,
         request: Request | None = None,
-    ) -> AiUsageEntry:
+    ) -> UpsertResult:
         """Log *data* in *project* (None: unassigned), in the name of the login *on_behalf_of* or the actor's.
 
         The login is resolved by :meth:`resolve_target`, so whoever may not log
-        for others there gets the same refusal for every login.
+        for others there gets the same refusal for every login. With an
+        ``idempotency_key`` the result says whether the bucket was ``created``,
+        ``updated`` or left ``unchanged`` (see :meth:`log_with_status`).
         """
         target = await self.resolve_target(session, actor, on_behalf_of, project)
         data.project_id = project.id if project is not None else None
         if data.project_id is None:
             data.attribution_method = "none"
-        return await self.log(
+        return await self.log_with_status(
             session, actor, data, target=target, source=source, api_key_id=api_key_id, request=request
         )
 
