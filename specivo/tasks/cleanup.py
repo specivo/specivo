@@ -4,6 +4,9 @@ Tasks:
 - cleanup_expired_tokens: Delete expired password reset tokens and refresh tokens,
   and incoming repository and outgoing webhook deliveries past their retention period,
   and Hermes delivery ids older than seven days.
+- ensure_audit_partitions: Keep the audit log's monthly partitions and drop those past retention.
+- purge_wiki_trash: Delete wiki pages that have been in the trash longer than
+  ``WIKI_TRASH_RETENTION_DAYS``, with their attachments and files.
 """
 
 from __future__ import annotations
@@ -20,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 _LOCK_KEY = "specivo:cleanup_expired_tokens"
 _LOCK_TIMEOUT = 120  # seconds — max time the lock is held
+
+_WIKI_TRASH_LOCK_KEY = "specivo:purge_wiki_trash"
+_WIKI_TRASH_LOCK_TIMEOUT = 600  # seconds
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
@@ -148,3 +154,46 @@ def _ensure_audit_partitions_at_start(**_kwargs) -> None:
         logger.info("Audit log partitions checked at worker start")
     except Exception as exc:  # a start-up check must not stop the worker  # noqa: BLE001
         logger.warning("Audit partition check at worker start failed: %s", exc)
+
+
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
+def purge_wiki_trash(self) -> None:
+    """Delete wiki pages in the trash longer than ``WIKI_TRASH_RETENTION_DAYS`` (default 90, ``0`` keeps them)."""
+    try:
+        run_async(_purge_wiki_trash_async())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Wiki trash purge failed: %s", exc)
+        raise self.retry(exc=exc)  # noqa: B904
+
+
+async def _purge_wiki_trash_async() -> None:
+    from specivo.core.config import get_settings
+    from specivo.services.wiki_service import WikiService
+    from specivo.tasks._async import task_session
+
+    retention_days = get_settings().wiki_trash_retention_days
+    if retention_days == 0:
+        return
+
+    async with beat_lock(_WIKI_TRASH_LOCK_KEY, _WIKI_TRASH_LOCK_TIMEOUT) as acquired:
+        if not acquired:
+            logger.debug("Wiki trash purge skipped — another worker holds the lock")
+            return
+        async with task_session() as session:
+            purge = await WikiService().hard_delete_expired_pages(session, retention_days=retention_days)
+            await session.commit()
+
+        # Files only go once the rows are committed (best effort: the rows are gone).
+        for path in purge.files:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Could not delete attachment file %s: %s", path, exc)
+
+        if purge.page_ids:
+            logger.info(
+                "Wiki trash purge: deleted %d pages and %d attachments older than %d days",
+                len(purge.page_ids),
+                len(purge.files),
+                retention_days,
+            )

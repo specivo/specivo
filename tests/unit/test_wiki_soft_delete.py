@@ -433,7 +433,7 @@ async def test_hard_delete_expired_removes_old_pages(
     removed = await _svc.hard_delete_expired_pages(db_session, retention_days=90)
     await db_session.commit()
 
-    assert page.id in removed
+    assert page.id in removed.page_ids
 
     # The row should no longer exist in the DB
     from sqlalchemy import select
@@ -456,7 +456,7 @@ async def test_hard_delete_expired_keeps_recent_pages(
     removed = await _svc.hard_delete_expired_pages(db_session, retention_days=90)
     await db_session.commit()
 
-    assert page.id not in removed
+    assert page.id not in removed.page_ids
 
     # The row must still be present
     from sqlalchemy import select

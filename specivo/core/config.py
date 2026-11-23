@@ -206,6 +206,11 @@ class Settings(BaseSettings):
     # kept must not be changeable from an admin session or key.
     audit_log_retention_months: int = Field(default=12, ge=0)
 
+    # Wiki trash: days a deleted page stays restorable before the daily purge
+    # deletes it for good, with its history, comments and attachments. 0 keeps
+    # the trash forever.
+    wiki_trash_retention_days: int = Field(default=90, ge=0)
+
     # MCP Streamable HTTP sessions.
     # How long a session may go unused before it expires: the Redis entry's
     # sliding TTL, refreshed on every request. Until then a client returning

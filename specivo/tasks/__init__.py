@@ -60,6 +60,10 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.cleanup.ensure_audit_partitions",
                 "schedule": 86400,  # daily
             },
+            "purge-wiki-trash": {
+                "task": "specivo.tasks.cleanup.purge_wiki_trash",
+                "schedule": 86400,  # daily
+            },
             "sweep-webhook-deliveries": {
                 "task": "specivo.tasks.webhooks.sweep_webhook_deliveries",
                 "schedule": _WEBHOOK_SWEEP_INTERVAL_SECONDS,

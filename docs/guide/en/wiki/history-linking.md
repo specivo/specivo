@@ -45,11 +45,17 @@ on any page — and click **Restore** next to it. The subpages that were deleted
 back too, in their old places. If another page has taken the deleted page's address (its slug) in the
 meantime, the restore is refused: rename or delete that page first.
 
-!!! warning "Deleting moves a page to trash, not oblivion"
+Pages stay in the trash for **90 days**. After that, the worker deletes them for good, once a day:
+the page with its whole history, its comments, its tags and its attachments (the files too). It can't
+be restored after that. A subpage that went to the trash later stays until its own 90 days are up.
+The administrator sets the period with `WIKI_TRASH_RETENTION_DAYS` (see
+[Configuration](../install/configuration.md)); `0` keeps the trash forever.
+
+!!! warning "Deleting moves a page to trash, then removes it"
     A deleted page disappears from the wiki and from normal navigation, and any `[[links]]` pointing to
     it will no longer resolve until it's restored. Restore it from the trash if you removed it by
-    mistake. Treat deletion as "hide and archive," not as a guaranteed permanent wipe — but still
-    delete deliberately, since readers and links lose the page in the meantime.
+    mistake, before the retention period runs out. Until then the page and its files are still stored,
+    so deleting is not an immediate wipe either.
 
 ## Cross-link pages
 
