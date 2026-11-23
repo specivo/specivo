@@ -480,7 +480,7 @@ class AiUsageIngestService:
 
     # -- attribution ------------------------------------------------------------------
 
-    async def _attribute(
+    async def _attribute(  # noqa: C901, PLR0911, PLR0912
         self,
         session: AsyncSession,
         batch: _Batch,
@@ -737,7 +737,11 @@ class AiUsageIngestService:
         return found
 
     async def _commit_issues(
-        self, session: AsyncSession, batch: _Batch, record: IngestRecord, target: User
+        self,
+        session: AsyncSession,
+        batch: _Batch,  # noqa: ARG002
+        record: IngestRecord,
+        target: User,  # noqa: ARG002
     ) -> list[int]:
         shas = record.attribution.commits
         if not shas:
@@ -756,7 +760,11 @@ class AiUsageIngestService:
         return ranked[:_MAX_CANDIDATES]
 
     async def _branch_issues(
-        self, session: AsyncSession, batch: _Batch, record: IngestRecord, target: User
+        self,
+        session: AsyncSession,
+        batch: _Batch,
+        record: IngestRecord,
+        target: User,  # noqa: ARG002
     ) -> list[int]:
         from specivo.services.project_service import ProjectService
 

@@ -6,20 +6,20 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
   {"label": _("AI usage")}
 ]) }}
 
 <div class="page-header">
   <h1>{% trans %}AI usage{% endtrans %}</h1>
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/ai-usage/report/" class="sp-btn sp-btn-ghost" data-testid="aiu-report-link">
+    <a href="{{ base }}/projects/{{ project.key }}/ai-usage/report/" class="sp-btn sp-btn-ghost" data-testid="aiu-report-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-16"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
       {% trans %}Spend report{% endtrans %}
     </a>
     {% if can_log %}
-    <a href="/projects/{{ project.key }}/ai-usage/new/" class="sp-btn sp-btn-primary" data-testid="aiu-log-link">
+    <a href="{{ base }}/projects/{{ project.key }}/ai-usage/new/" class="sp-btn sp-btn-primary" data-testid="aiu-log-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-16"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}Log AI usage{% endtrans %}
     </a>
@@ -30,7 +30,7 @@
 {% if notice %}<div class="flash flash-success" role="status" data-testid="aiu-notice">{{ notice_text(notice) }}</div>{% endif %}
 {% if error %}<div class="flash flash-error" role="alert" data-testid="aiu-error">{{ list_error_text(error) }}</div>{% endif %}
 
-<form method="get" action="/projects/{{ project.key }}/ai-usage/" class="sp-aiu-filters" data-testid="aiu-filters">
+<form method="get" action="{{ base }}/projects/{{ project.key }}/ai-usage/" class="sp-aiu-filters" data-testid="aiu-filters">
   {{ person_filter_field(person_filter) }}
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}Tool{% endtrans %}</span>
@@ -74,10 +74,14 @@
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-provider-filter"><span class="filter-label">{% trans %}Provider{% endtrans %}</span>{{ filters.provider }}</span>{% endif %}
   {% if filters.branch %}<input type="hidden" name="branch" value="{{ filters.branch }}">
   <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-branch-filter"><span class="filter-label">{% trans %}Branch{% endtrans %}</span>{% if filters.branch == "-" %}{% trans %}No branch{% endtrans %}{% else %}{{ filters.branch }}{% endif %}</span>{% endif %}
+  {% if filters.version %}<input type="hidden" name="version" value="{{ filters.version }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-version-filter"><span class="filter-label">{% trans %}Release{% endtrans %}</span>{{ filters.version_label }}</span>{% endif %}
+  {% if filters.sprint %}<input type="hidden" name="sprint" value="{{ filters.sprint }}">
+  <span class="sp-aiu-filter sp-aiu-filter-chip" data-testid="aiu-sprint-filter"><span class="filter-label">{% trans %}Sprint{% endtrans %}</span>{{ filters.sprint_label }}</span>{% endif %}
   {% if chart_bucket %}<input type="hidden" name="bucket" value="{{ chart_bucket }}">{% endif %}
   <div class="sp-aiu-filter-actions">
     <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
-    {% if page_query %}<a class="sp-btn sp-btn-ghost" href="/projects/{{ project.key }}/ai-usage/">{% trans %}Clear{% endtrans %}</a>{% endif %}
+    {% if page_query %}<a class="sp-btn sp-btn-ghost" href="{{ base }}/projects/{{ project.key }}/ai-usage/">{% trans %}Clear{% endtrans %}</a>{% endif %}
   </div>
 </form>
 {% if issue_unknown %}<div class="flash flash-info" role="status">{% trans %}No issue with that key in this project, or you cannot see it.{% endtrans %}</div>{% endif %}
@@ -90,7 +94,7 @@
 <div class="card">
   {{ entry_table(rows, return_to) }}
 </div>
-{{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/ai-usage/", page_query) }}
+{{ pagination(total, offset, limit, base ~ "/projects/" ~ project.key ~ "/ai-usage/", page_query) }}
 {% else %}
 <div class="card sp-aiu-empty" data-testid="aiu-empty">
   {% if page_query %}{% trans %}No AI usage matches these filters.{% endtrans %}
@@ -101,4 +105,4 @@
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}
-{% block chart_js %}{% if charts and not charts.too_long %}<script src="/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}
+{% block chart_js %}{% if charts and not charts.too_long %}<script src="{{ base }}/static/dist/js/{{ versioned['spend-chart.min.js'] }}" defer></script>{% endif %}{% endblock %}

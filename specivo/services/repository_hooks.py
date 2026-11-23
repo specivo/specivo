@@ -224,7 +224,7 @@ def queue_processing(delivery_ids: Iterable[int]) -> int:
     for delivery_id in delivery_ids:
         try:
             process_repository_delivery.apply_async(args=[delivery_id], retry=False)
-        except Exception as exc:  # noqa: BLE001 - a dead broker must not fail the forge's request
+        except Exception as exc:  # a dead broker must not fail the forge's request  # noqa: BLE001
             logger.warning(
                 "Could not queue repository delivery %d (%s); the sweeper will retry it",
                 delivery_id,
@@ -282,7 +282,7 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
     else:
         try:
             result = await _dispatch(session, integration, delivery.event, delivery.payload or {})
-        except Exception as exc:  # noqa: BLE001 - recorded on the delivery, never lost
+        except Exception as exc:  # recorded on the delivery, never lost
             logger.exception(
                 "Repository delivery %d failed",
                 delivery_pk,
@@ -394,7 +394,7 @@ async def _scope_projects(session: AsyncSession, integration: RepositoryIntegrat
             if project_id != root.id and await check_permission(
                 creator, project_id, Permission.MANAGE_PROJECT, session
             ):
-                allowed[key] = project_id
+                allowed[key] = project_id  # noqa: PERF403
     return allowed
 
 
@@ -535,6 +535,51 @@ async def _link_batch(
         return [], []
 
     batch = [(c, refs) for c, refs in batch if any(k in issue_ids for k in refs)]
+    commit_rows = await _store_commits(session, integration, push, batch)
+    by_sha = {row.sha: row for row in commit_rows}
+    refs_by_link = _refs_by_link(batch, issue_ids, by_sha)
+    # A pair someone detached is never linked again, whoever redelivers the push.
+    from specivo.services.repository_activity import ITEM_COMMIT, detached_pairs
+
+    for pair in await detached_pairs(session, ITEM_COMMIT, refs_by_link):
+        del refs_by_link[pair]
+    if not refs_by_link:
+        return [], []
+    new_links = await _insert_links(session, refs_by_link)
+    by_id = {row.id: row for row in commit_rows}
+    fix_ready = _fix_ready(integration, push, refs_by_link, by_id)
+    claimed = await _claim_fixes(session, fix_ready)
+    if not new_links and not claimed:
+        return [], []
+    links = _link_work(new_links, claimed, fix_ready, refs_by_link, by_id)
+    outcomes = await _record_links(session, integration, links)
+    return new_links, outcomes
+
+
+def _link_work(
+    new_links: list[tuple[int, int]],
+    claimed: set[tuple[int, int]],
+    fix_ready: set[tuple[int, int]],
+    refs_by_link: dict[tuple[int, int], CommitRef],
+    by_id: dict[int, RepositoryCommit],
+) -> list[_LinkWork]:
+    """The new links, then the older links whose ``Fixes`` command this push claimed."""
+    new = set(new_links)
+    links = [
+        _LinkWork(by_id[c], i, refs_by_link[(c, i)], new=True, fix=_fix_state((c, i), claimed, fix_ready))
+        for c, i in new_links
+    ]
+    links += [_LinkWork(by_id[c], i, refs_by_link[(c, i)], new=False, fix="run") for c, i in sorted(claimed - new)]
+    return links
+
+
+async def _store_commits(
+    session: AsyncSession,
+    integration: RepositoryIntegration,
+    push: PushEvent,
+    batch: Sequence[tuple[CommitData, dict[str, CommitRef]]],
+) -> Sequence[RepositoryCommit]:
+    """Insert the batch's commits (a commit stored already is kept as it is) and return their rows."""
     users = await _matched_users(session, (c.author_email for c, _refs in batch))
     await session.execute(
         pg_insert(RepositoryCommit)
@@ -556,34 +601,32 @@ async def _link_batch(
         )
         .on_conflict_do_nothing(constraint="uq_repository_commits_integration_sha")
     )
-    commit_rows = (
-        (
-            await session.execute(
-                select(RepositoryCommit).where(
-                    RepositoryCommit.integration_id == integration.id,
-                    RepositoryCommit.sha.in_([c.sha for c, _refs in batch]),
-                )
-            )
+    rows = await session.execute(
+        select(RepositoryCommit).where(
+            RepositoryCommit.integration_id == integration.id,
+            RepositoryCommit.sha.in_([c.sha for c, _refs in batch]),
         )
-        .scalars()
-        .all()
     )
-    commits = {row.sha: row for row in commit_rows}
+    return rows.scalars().all()
 
-    # Two references to one issue (its old and its current key) make one link.
+
+def _refs_by_link(
+    batch: Sequence[tuple[CommitData, dict[str, CommitRef]]],
+    issue_ids: dict[str, int],
+    by_sha: dict[str, RepositoryCommit],
+) -> dict[tuple[int, int], CommitRef]:
+    """(commit id, issue id) → its reference; two references to one issue (old and current key) make one link."""
     refs_by_link: dict[tuple[int, int], CommitRef] = {}
     for c, refs in batch:
         for display_key, commit_ref in refs.items():
             if display_key in issue_ids:
-                link = (commits[c.sha].id, issue_ids[display_key])
+                link = (by_sha[c.sha].id, issue_ids[display_key])
                 refs_by_link[link] = _stronger(refs_by_link.get(link), commit_ref)
-    # A pair someone detached is never linked again, whoever redelivers the push.
-    from specivo.services.repository_activity import ITEM_COMMIT, detached_pairs
+    return refs_by_link
 
-    for pair in await detached_pairs(session, ITEM_COMMIT, refs_by_link):
-        del refs_by_link[pair]
-    if not refs_by_link:
-        return [], []
+
+async def _insert_links(session: AsyncSession, refs_by_link: dict[tuple[int, int], CommitRef]) -> list[tuple[int, int]]:
+    """Insert the links not stored yet; returns the (commit id, issue id) pairs this call inserted."""
     inserted = await session.execute(
         pg_insert(IssueCommitLink)
         .values(
@@ -600,29 +643,28 @@ async def _link_batch(
         .on_conflict_do_nothing()
         .returning(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
     )
-    new_links = [(commit_id, issue_id) for commit_id, issue_id in inserted.all()]
-    by_id = {row.id: row for row in commit_rows}
-    # A fixing link runs its command the first time its commit is seen on the
-    # default branch: in this push, or because it was first pushed there.
+    return [(commit_id, issue_id) for commit_id, issue_id in inserted.all()]
+
+
+def _fix_ready(
+    integration: RepositoryIntegration,
+    push: PushEvent,
+    refs_by_link: dict[tuple[int, int], CommitRef],
+    by_id: dict[int, RepositoryCommit],
+) -> set[tuple[int, int]]:
+    """The fixing links whose command may run.
+
+    A fixing link runs its command the first time its commit is seen on the
+    default branch: in this push, or because it was first pushed there.
+    """
     on_default = push.branch is not None and push.branch == integration.default_branch
-    fix_ready = {
+    return {
         link
         for link, cr in refs_by_link.items()
         if cr.source == "message"
         and cr.ref.keyword == "fixes"
         and (on_default or by_id[link[0]].branch == integration.default_branch)
     }
-    claimed = await _claim_fixes(session, fix_ready)
-    if not new_links and not claimed:
-        return [], []
-    new = set(new_links)
-    links = [
-        _LinkWork(by_id[c], i, refs_by_link[(c, i)], new=True, fix=_fix_state((c, i), claimed, fix_ready))
-        for c, i in new_links
-    ]
-    links += [_LinkWork(by_id[c], i, refs_by_link[(c, i)], new=False, fix="run") for c, i in sorted(claimed - new)]
-    outcomes = await _record_links(session, integration, links)
-    return new_links, outcomes
 
 
 class _LinkWork(NamedTuple):

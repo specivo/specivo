@@ -1,3 +1,6 @@
+import { apiErrorMessage } from '../lib/api-error';
+import { projectCreateBody } from '../lib/project-form';
+
 export function adminProjects(initial) {
         var i18n = Object.assign({
             saveFailed: 'Failed to save',
@@ -70,46 +73,35 @@ export function adminProjects(initial) {
                 this.showModal = false;
             },
 
+            /* The save request: a PATCH of the editable fields, or the create request. */
+            _saveRequest() {
+                if (this.editMode) {
+                    return spFetch('/api/v1/projects/' + this.form.key + '/', {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            name: this.form.name,
+                            description: this.form.description || null,
+                            color: this.form.color || null
+                        })
+                    });
+                }
+                return spFetch('/api/v1/projects/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(projectCreateBody(this.form))
+                });
+            },
+
             async submitForm() {
                 this.saving = true;
                 this.formError = '';
                 try {
-                    if (this.editMode) {
-                        var res = await spFetch('/api/v1/projects/' + this.form.key + '/', {
-                            method: 'PATCH',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                name: this.form.name,
-                                description: this.form.description || null,
-                                color: this.form.color || null
-                            })
-                        });
-                    } else {
-                        var modules = ['issue_tracking'];
-                        if (this.form.moduleWiki) modules.push('wiki');
-                        if (this.form.moduleTime) modules.push('time_tracking');
-                        var res = await spFetch('/api/v1/projects/', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                name: this.form.name,
-                                identifier: this.form.identifier,
-                                key: this.form.key,
-                                description: this.form.description || null,
-                                parent_key: this.form.parentKey || null,
-                                color: this.form.color || null,
-                                modules: modules
-                            })
-                        });
-                    }
+                    var res = await this._saveRequest();
                     if (res.ok) {
                         location.reload();
                     } else {
-                        var data = await res.json();
-                        this.formError = (data.errors && data.errors[0] && data.errors[0].message)
-                            || (data.detail && data.detail[0] && data.detail[0].msg)
-                            || data.detail
-                            || i18n.saveFailed;
+                        this.formError = apiErrorMessage(await res.json(), i18n.saveFailed);
                     }
                 } catch (_e) {
                     this.formError = i18n.connectFailed;

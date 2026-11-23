@@ -11,9 +11,10 @@ Usage in tests/conftest.py::
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -42,6 +43,10 @@ if _xdist_worker.startswith("gw") and _xdist_worker[2:].isdigit():
     os.environ["REDIS_URL"] = urlunsplit(urlsplit(os.environ["REDIS_URL"])._replace(path=f"/{_redis_db}"))
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-signing")
 os.environ["DEBUG"] = "false"  # Always disable debug in tests (Makefile exports .env)
+# Test users sign in through the real login endpoint on every client fixture; bcrypt at
+# the production cost (12) is ~0.2 s per sign-in, which dominated the runtime of the suite.
+# 4 is bcrypt's minimum. Tests that care about the cost set bcrypt_rounds themselves.
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
 
 # Default to core-only mode (no plugins). Plugin repos set INSTALLED_PLUGINS
@@ -59,7 +64,7 @@ TEST_DB_URL = get_settings().database_url
 
 
 @asynccontextmanager
-async def _test_lifespan(app: FastAPI):
+async def _test_lifespan(app: FastAPI):  # noqa: ARG001
     """No-op lifespan — skip eager DB/Redis checks in tests."""
     yield
 
@@ -88,11 +93,50 @@ async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
     engine = create_async_engine(TEST_DB_URL, poolclass=NullPool)
 
     @sa_event.listens_for(engine.sync_engine, "connect")
-    def _on_connect(dbapi_connection, connection_record):
+    def _on_connect(dbapi_connection, connection_record):  # noqa: ARG001
         dbapi_connection.run_async(_register_ltree_codec)
 
     yield engine
     await engine.dispose()
+
+
+@contextmanager
+def global_engine_on(engine: AsyncEngine) -> Iterator[None]:
+    """Point the process-global database engine at ``engine`` for the block.
+
+    Code that opens its own sessions (the MCP tool calls, API key resolution,
+    anything reached through ``create_app()``) uses the global engine from
+    ``specivo.core.database``. Left alone, that engine is created by whichever
+    test touches it first and stays bound to that test's event loop, so the
+    next test fails with "Event loop is closed" or "attached to a different
+    loop". The previous engine is restored on exit, and the Redis-backed MCP
+    session store is dropped on both sides so it never holds a client from
+    another loop.
+    """
+    from specivo.core import database
+    from specivo.mcp.session_store import reset_mcp_session_store
+
+    saved = database._engine
+    database.set_engine(engine)
+    reset_mcp_session_store()
+    try:
+        yield
+    finally:
+        reset_mcp_session_store()
+        database._engine = saved
+        database._session_factory = None
+
+
+@pytest.fixture
+def tool_engine(db_engine: AsyncEngine) -> Iterator[AsyncEngine]:
+    """Run code that opens its own DB sessions on this test's engine and loop.
+
+    Use it (``pytest.mark.usefixtures("tool_engine")``) in any test that goes
+    through ``create_app()``, the MCP ``Client`` or the MCP HTTP transport, or
+    that calls a helper opening its own session. See ``global_engine_on``.
+    """
+    with global_engine_on(db_engine):
+        yield db_engine
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +191,7 @@ async def db_session(db_engine: AsyncEngine, _test_connection: AsyncConnection) 
 
         async with db_engine.begin() as _cleanup_conn:
             await _cleanup_conn.execute(_text("DELETE FROM security_audit_logs"))
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     # Flush Redis state between tests
@@ -161,7 +205,7 @@ async def db_session(db_engine: AsyncEngine, _test_connection: AsyncConnection) 
         r = aioredis.from_url(os.environ["REDIS_URL"])
         await r.flushdb()
         await r.aclose()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -196,7 +240,7 @@ def _make_test_get_db(connection: AsyncConnection):
 async def client(
     db_engine: AsyncEngine,
     _test_connection: AsyncConnection,
-    db_session: AsyncSession,
+    db_session: AsyncSession,  # noqa: ARG001
 ) -> AsyncGenerator[AsyncClient, None]:
     """Async HTTP client (unauthenticated).
 
@@ -230,7 +274,7 @@ async def unauth_client() -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def auth_client(
-    db_engine: AsyncEngine,
+    db_engine: AsyncEngine,  # noqa: ARG001
     _test_connection: AsyncConnection,
     db_session: AsyncSession,
 ) -> AsyncGenerator[AsyncClient, None]:
@@ -255,7 +299,7 @@ async def auth_client(
             "/api/v1/auth/login/",
             json={"login": user.login, "password": TEST_PASSWORD},
         )
-        assert resp.status_code == 200, f"auth_client login failed: {resp.text}"
+        assert resp.status_code == 200, f"auth_client login failed: {resp.text}"  # noqa: S101
         token = resp.json()["access_token"]
 
         ac.headers["Authorization"] = f"Bearer {token}"
@@ -268,7 +312,7 @@ async def auth_client(
 
 @pytest_asyncio.fixture
 async def admin_client(
-    db_engine: AsyncEngine,
+    db_engine: AsyncEngine,  # noqa: ARG001
     _test_connection: AsyncConnection,
     db_session: AsyncSession,
 ) -> AsyncGenerator[AsyncClient, None]:
@@ -287,7 +331,7 @@ async def admin_client(
             "/api/v1/auth/login/",
             json={"login": user.login, "password": TEST_PASSWORD},
         )
-        assert resp.status_code == 200, f"admin_client login failed: {resp.text}"
+        assert resp.status_code == 200, f"admin_client login failed: {resp.text}"  # noqa: S101
         token = resp.json()["access_token"]
 
         ac.headers["Authorization"] = f"Bearer {token}"
@@ -300,7 +344,7 @@ async def admin_client(
 
 @pytest_asyncio.fixture
 async def agent_client(
-    db_engine: AsyncEngine,
+    db_engine: AsyncEngine,  # noqa: ARG001
     _test_connection: AsyncConnection,
     db_session: AsyncSession,
 ) -> AsyncGenerator[AsyncClient, None]:

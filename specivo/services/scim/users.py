@@ -115,6 +115,21 @@ def _protection(user: User) -> str | None:
     return None
 
 
+def _apply_profile(user: User, attrs: UserAttributes) -> list[str]:
+    """Display name, language and timezone; a language or timezone the IdP leaves out is kept."""
+    changed: list[str] = []
+    if attrs.display_name != user.display_name:
+        user.display_name = attrs.display_name
+        changed.append("displayName")
+    if attrs.language is not None and attrs.language != user.language:
+        user.language = attrs.language
+        changed.append("preferredLanguage")
+    if attrs.timezone is not None and attrs.timezone != user.timezone:
+        user.timezone = attrs.timezone
+        changed.append("timezone")
+    return changed
+
+
 class ScimUserService:
     """Stateless; every method takes the provider whose token authenticated the request."""
 
@@ -419,14 +434,34 @@ class ScimUserService:
         follow_login: bool = True,
     ) -> list[str]:
         """Write ``attrs`` to ``res`` and ``user``; returns the SCIM attribute names that changed."""
-        changed: list[str] = []
         protection = _protection(user)
         if protection is not None and attrs.email.lower() != user.email.lower():
             raise self._refuse(provider, res, user, protection)
+        changed = await self._apply_names(
+            db, provider, res, user, attrs, follow_login=follow_login and protection is None
+        )
+        changed += await self._apply_email(db, provider, user, attrs)
+        changed += _apply_profile(user, attrs)
+        await db.flush()
+        changed += await self._apply_active(db, provider, res, user, attrs)
+        return changed
+
+    async def _apply_names(
+        self,
+        db: AsyncSession,
+        provider: SsoProvider,
+        res: ScimResource,
+        user: User,
+        attrs: UserAttributes,
+        *,
+        follow_login: bool,
+    ) -> list[str]:
+        """``userName`` (the login follows it when free and *follow_login*) and ``externalId`` of a stored resource."""
+        changed: list[str] = []
         if res.id is not None and attrs.user_name != res.user_name:
             if attrs.user_name.lower() != (res.user_name or "").lower():
                 await self._require_user_name_free(db, provider, attrs.user_name, except_id=res.id)
-                if follow_login and protection is None and attrs.login != user.login.lower():
+                if follow_login and attrs.login != user.login.lower():
                     owner = await self._user_with(db, User.login, attrs.login)
                     if owner is None:
                         user.login = attrs.login
@@ -435,7 +470,13 @@ class ScimUserService:
         if res.id is not None and attrs.external_id != res.external_id:
             res.external_id = attrs.external_id
             changed.append("externalId")
+        return changed
 
+    async def _apply_email(
+        self, db: AsyncSession, provider: SsoProvider, user: User, attrs: UserAttributes
+    ) -> list[str]:
+        """The email: a new address is checked and verified by the IdP; a change of case is only stored."""
+        changed: list[str] = []
         if attrs.email.lower() != user.email.lower():
             _check_email_domain(provider, attrs.email)
             if user.password_hash is not None:
@@ -454,42 +495,36 @@ class ScimUserService:
             changed.append("emails")
         if user.email_verified_at is None:
             user.email_verified_at = utcnow()
+        return changed
 
-        if attrs.display_name != user.display_name:
-            user.display_name = attrs.display_name
-            changed.append("displayName")
-        if attrs.language is not None and attrs.language != user.language:
-            user.language = attrs.language
-            changed.append("preferredLanguage")
-        if attrs.timezone is not None and attrs.timezone != user.timezone:
-            user.timezone = attrs.timezone
-            changed.append("timezone")
-        await db.flush()
-
+    async def _apply_active(
+        self, db: AsyncSession, provider: SsoProvider, res: ScimResource, user: User, attrs: UserAttributes
+    ) -> list[str]:
+        """Switch the account on or off as ``active`` says; ``["active"]`` when it changed."""
         if attrs.active and user.status == "deactivated":
             if user.deactivation_reason == SCIM_DEPROVISION_REASON:
                 await UserService().reactivate(db, user, actor_id=None)
-                changed.append("active")
-            else:
-                # Switched off in Specivo (an administrator, an SSO policy):
-                # only an administrator switches it on again.
-                events.logger.info(
-                    "scim.user.reactivation_skipped provider=%s user_id=%s scim_id=%s reason=%s",
-                    provider.slug,
-                    user.id,
-                    res.scim_id,
-                    user.deactivation_reason or "-",
-                )
-        elif attrs.active and user.status == "pending_verification":
+                return ["active"]
+            # Switched off in Specivo (an administrator, an SSO policy):
+            # only an administrator switches it on again.
+            events.logger.info(
+                "scim.user.reactivation_skipped provider=%s user_id=%s scim_id=%s reason=%s",
+                provider.slug,
+                user.id,
+                res.scim_id,
+                user.deactivation_reason or "-",
+            )
+            return []
+        if attrs.active and user.status == "pending_verification":
             # Waiting only for its email to be verified, which the IdP now
             # vouches for; its credentials were removed first (_wipe_if_unproven).
             user.status = "active"
             await db.flush()
-            changed.append("active")
-        elif not attrs.active and user.status != "deactivated":
+            return ["active"]
+        if not attrs.active and user.status != "deactivated":
             await self._deactivate(db, provider, res, user)
-            changed.append("active")
-        return changed
+            return ["active"]
+        return []
 
     async def _update(
         self, db: AsyncSession, provider: SsoProvider, res: ScimResource, user: User, attrs: UserAttributes

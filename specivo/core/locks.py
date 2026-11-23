@@ -8,6 +8,10 @@ from a request: the request takes it before queueing, the worker refreshes it
 as it goes and releases it at the end, and a crashed worker's lock simply
 expires.
 
+``beat_lock`` wraps a ``TokenLock`` on the shared client for periodic (beat)
+tasks that must not run twice at once: take it, do the work if it was taken,
+release it.
+
 ``try_advisory_lock`` takes a session-level ``pg_try_advisory_lock`` on a
 connection the caller keeps open for the duration of the work. Unlike the
 Redis lock it cannot outlive its holder: PostgreSQL drops it when the
@@ -17,6 +21,7 @@ connection ends, however the worker died.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
@@ -24,6 +29,8 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from specivo.core.redis import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +164,26 @@ async def acquire_run_lock(lock: TokenLock, token: str, ttl: int, task_state: Ca
         await lock.release(holder)
         return await lock.acquire(token, ttl)
     return False
+
+
+@asynccontextmanager
+async def beat_lock(key: str, ttl: int) -> AsyncIterator[bool]:
+    """Hold *key* for one run of a periodic task; yields whether it was taken.
+
+    When it was not, another worker is running the task and the caller should
+    skip this tick. The lock lives in the Redis the settings name (the shared
+    client from ``get_redis``) and expires after *ttl* seconds if the worker
+    dies. On exit it is released only while it still holds this run's token.
+    Raises ``LockUnavailableError`` when Redis cannot be asked.
+    """
+    lock = TokenLock(await get_redis(), key)
+    token = uuid.uuid4().hex
+    acquired = await lock.acquire(token, ttl)
+    try:
+        yield acquired
+    finally:
+        if acquired and not await lock.release(token):
+            logger.warning("Lock %s expired before the run finished", key)
 
 
 AdvisoryKey = tuple[int, int, bool]

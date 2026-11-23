@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError
@@ -74,6 +75,7 @@ class BulkService:
         failed: list[BulkResultItem] = []
 
         for issue_id in issue_ids:
+            display_key = f"#{issue_id}"
             try:
                 # Load issue
                 issue = await self._load_visible(session, issue_id, user)
@@ -110,8 +112,18 @@ class BulkService:
 
                 data = IssueUpdate(**update_fields)
 
-                # Apply update via IssueService (handles workflow, journals, etc.)
-                issue = await self._issue_service.update(session, issue, data, user)
+                # Apply update via IssueService (handles workflow, journals, etc.).
+                # It sets fields one by one and may refuse one late (a version
+                # or category of another project): the savepoint undoes what it
+                # flushed, and expiring the issue drops what it had not, so a
+                # refused issue keeps nothing and the next issue's flush cannot
+                # write it without a journal entry.
+                try:
+                    async with session.begin_nested():
+                        issue = await self._issue_service.update(session, issue, data, user)
+                except Exception:
+                    session.expire(issue)
+                    raise
 
                 succeeded.append(
                     BulkResultItem(
@@ -121,21 +133,14 @@ class BulkService:
                     )
                 )
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # Catch any error (workflow denied, validation, etc.) — record and continue
                 code = getattr(exc, "code", "internal_error")
                 message = str(exc)
-                display_key_fallback = f"#{issue_id}"
-                try:
-                    # Try to get display_key if issue was loaded
-                    display_key_fallback = issue.display_key  # type: ignore[union-attr,possibly-undefined]
-                except Exception:
-                    pass
-
                 failed.append(
                     BulkResultItem(
                         id=issue_id,
-                        key=display_key_fallback,
+                        key=display_key,
                         success=False,
                         error={"code": code, "message": message},
                     )
@@ -154,7 +159,15 @@ class BulkService:
         succeeded: list[BulkResultItem] = []
         failed: list[BulkResultItem] = []
 
-        for issue_id in issue_ids:
+        # An issue with subtasks cannot be deleted, so delete deepest first: in
+        # a nested set a subtask's lft is above its parent's, and a selection
+        # holding a parent with all its subtasks is deleted whole, in any order.
+        lft_by_id = dict(
+            (await session.execute(select(Issue.id, Issue.lft).where(Issue.id.in_(issue_ids)))).tuples().all()
+        )
+        ordered = sorted(issue_ids, key=lambda i: lft_by_id.get(i) or 0, reverse=True)
+
+        for issue_id in ordered:
             try:
                 issue = await self._load_visible(session, issue_id, user)
                 if issue is None:
@@ -192,13 +205,13 @@ class BulkService:
                     )
                 )
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 code = getattr(exc, "code", "internal_error")
                 message = str(exc)
                 display_key_fallback = f"#{issue_id}"
-                try:
-                    display_key_fallback = issue.display_key  # type: ignore[union-attr,possibly-undefined]
-                except Exception:
+                try:  # noqa: SIM105
+                    display_key_fallback = issue.display_key  # type: ignore[union-attr]
+                except Exception:  # noqa: BLE001, S110
                     pass
 
                 failed.append(
@@ -211,4 +224,8 @@ class BulkService:
                 )
                 logger.debug("Bulk delete failed for issue %d: %s", issue_id, message)
 
+        # Report in the order the caller listed the issues.
+        position = {issue_id: n for n, issue_id in enumerate(issue_ids)}
+        succeeded.sort(key=lambda item: position[item.id])
+        failed.sort(key=lambda item: position[item.id])
         return BulkResult(succeeded=succeeded, failed=failed)

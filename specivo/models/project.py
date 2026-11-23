@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from specivo.core.utils import utcnow
 from specivo.models.base import Base, TimestampMixin
 
 # ``projects.status`` of a project in use (ck_projects_status). Anonymous
@@ -136,6 +137,13 @@ class Project(Base, TimestampMixin):
 
     # Extensible JSONB settings bag
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+
+    # When the last full link graph rebuild of this project finished. Set on
+    # creation (a new project has nothing to index) and by every full rebuild;
+    # NULL (an upgraded instance, a restored dump) makes the periodic backfill
+    # task queue a rebuild. No server default, so the migration leaves
+    # existing rows NULL.
+    links_rebuilt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=utcnow)
 
     def __repr__(self) -> str:
         return f"<Project id={self.id} key={self.key!r} identifier={self.identifier!r}>"

@@ -20,7 +20,7 @@ export function initHtmxBehaviors() {
         if (el.hasAttribute('data-hx-reload')) {
             window.location.reload();
         } else if (el.hasAttribute('data-hx-redirect')) {
-            window.location.href = el.getAttribute('data-hx-redirect');
+            window.location.href = spUrl(el.getAttribute('data-hx-redirect'));
         }
     });
 }

@@ -5,7 +5,7 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
+  {"label": _("Home"), "url": base ~ "/"},
   {"label": _("Projects")}
 ]) }}
 
@@ -121,7 +121,7 @@
       {% set c_closed = child.closed_count if child.closed_count is defined else 0 %}
       {% set c_total = c_open + c_closed %}
       {% set c_pct = ((c_closed / c_total * 100) | round | int) if c_total > 0 else 0 %}
-      <a href="/projects/{{ cp.key }}/" class="subproject-row" style="text-decoration:none">
+      <a href="{{ base }}/projects/{{ cp.key }}/" class="subproject-row" style="text-decoration:none">
         <span class="subproject-key">{{ cp.key }}</span>
         <span class="subproject-name">{{ cp.name }}</span>
         <div class="subproject-progress">
@@ -142,7 +142,7 @@
   {% set p = item.project if item.project is defined else item %}
   {% set project_color = p.color or '#c49a3c' %}
   <div class="card project-card{% if item.status_label == 'archived' %} project-card-archived{% endif %}" style="border-left-color:{{ project_color }}">
-    <a href="/projects/{{ p.key }}/" style="display:block;text-decoration:none;color:inherit;">
+    <a href="{{ base }}/projects/{{ p.key }}/" style="display:block;text-decoration:none;color:inherit;">
       <div class="project-card-header">
         <div class="project-card-name">
           {{ p.name }}
@@ -189,13 +189,13 @@
       {% endif %}
       <div class="module-badges">
         {% if item.modules.get('issue_tracking') %}
-        <a href="/projects/{{ p.key }}/issues/" class="module-badge enabled" style="text-decoration:none">{% trans %}Issues{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ p.key }}/issues/" class="module-badge enabled" style="text-decoration:none">{% trans %}Issues{% endtrans %}</a>
         {% endif %}
         {% if item.modules.get('wiki') %}
-        <a href="/projects/{{ p.key }}/wiki/" class="module-badge enabled" style="text-decoration:none">{% trans %}Wiki{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ p.key }}/wiki/" class="module-badge enabled" style="text-decoration:none">{% trans %}Wiki{% endtrans %}</a>
         {% endif %}
         {% if item.modules.get('time_tracking') %}
-        <a href="/projects/{{ p.key }}/time-entries/" class="module-badge enabled" style="text-decoration:none">{% trans %}Time{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ p.key }}/time-entries/" class="module-badge enabled" style="text-decoration:none">{% trans %}Time{% endtrans %}</a>
         {% endif %}
       </div>
     </div>

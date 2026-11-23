@@ -11,8 +11,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import ValidationError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
@@ -68,6 +69,9 @@ async def priority(db_session: AsyncSession) -> IssuePriority:
 async def project(db_session: AsyncSession) -> Project:
     proj = ProjectFactory.build(key="ACME", identifier="acme-app")
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
@@ -323,14 +327,15 @@ class TestMcpListIssuesStatusFilter:
 
         await self._seed_two_statuses(db_session, admin, seed)
 
-        result = await _list_issues(db_session, admin, project_key="ACME", status="Nonexistent")
-        assert result.startswith("Error:")
-        assert "Nonexistent" in result
+        with pytest.raises(ValidationError) as refused:
+            await _list_issues(db_session, admin, project_key="ACME", status="Nonexistent")
+        message = refused.value.message
+        assert "Nonexistent" in message
         # The known status names are listed so the caller can correct the call.
-        assert "In Progress" in result
+        assert "In Progress" in message
         # Crucially, no issues leak through as a "successful" listing.
-        assert "Still new" not in result
-        assert "Being worked on" not in result
+        assert "Still new" not in message
+        assert "Being worked on" not in message
 
 
 class TestMcpListIssuesMetadataFilters:
@@ -365,9 +370,7 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         a, b, c = await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["component=frontend"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["component=frontend"])
         assert a.display_key in result
         assert b.display_key in result  # array contains "frontend"
         assert c.display_key not in result
@@ -377,9 +380,7 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         _a, b, _c = await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["component=backend"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["component=backend"])
         # Only bravo has "backend" in its component array; charlie has component="backend"
         # as a scalar so also matches.
         assert b.display_key in result
@@ -404,18 +405,14 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["component=nonexistent"]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["component=nonexistent"])
         assert "(none)" in result
 
     async def test_empty_filter_list_is_noop(self, db_session, admin, seed):
         from specivo.mcp.tools import _list_issues
 
         a, b, c = await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=[]
-        )
+        result = await _list_issues(db_session, admin, project_key="ACME", metadata_filters=[])
         assert a.display_key in result
         assert b.display_key in result
         assert c.display_key in result
@@ -424,21 +421,15 @@ class TestMcpListIssuesMetadataFilters:
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"]
-        )
-        assert result.startswith("Error")
-        assert "key=value" in result
+        with pytest.raises(ValueError, match="key=value"):
+            await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"])
 
     async def test_empty_key_returns_error(self, db_session, admin, seed):
         from specivo.mcp.tools import _list_issues
 
         await self._seed_three(db_session, admin, seed)
-        result = await _list_issues(
-            db_session, admin, project_key="ACME", metadata_filters=["=value"]
-        )
-        assert result.startswith("Error")
-        assert "empty key" in result
+        with pytest.raises(ValueError, match="empty key"):
+            await _list_issues(db_session, admin, project_key="ACME", metadata_filters=["=value"])
 
     async def test_value_with_special_chars_safely_escaped(self, db_session, admin, seed):
         from specivo.mcp.tools import _list_issues
@@ -522,8 +513,8 @@ class TestMcpEditDescription:
         )
         await db_session.commit()
 
-        result = await _edit_description(db_session, admin, issue.display_key, "nonexistent text", "replacement")
-        assert "not found" in result.lower()
+        with pytest.raises(ValidationError, match="search text not found"):
+            await _edit_description(db_session, admin, issue.display_key, "nonexistent text", "replacement")
 
 
 class TestMcpSearch:
@@ -793,16 +784,8 @@ class TestMcpWikiSections:
         await wiki_svc.create_page(db_session, project.id, "No Head", "Some content.", admin)
         await db_session.commit()
 
-        result = await _append_wiki(
-            db_session,
-            admin,
-            "ACME",
-            "no-head",
-            "Extra.",
-            position="after:## Nonexistent",
-        )
-        assert "Error" in result
-        assert "not found" in result
+        with pytest.raises(ValidationError, match="heading '## Nonexistent' not found"):
+            await _append_wiki(db_session, admin, "ACME", "no-head", "Extra.", position="after:## Nonexistent")
 
 
 class TestMcpAddComment:
@@ -891,9 +874,7 @@ class TestMcpListComments:
         result = await _list_comments(db_session, admin, issue.display_key, order="asc")
         assert result.index("first") < result.index("second")
 
-    async def test_show_issue_includes_comments_count(
-        self, db_session: AsyncSession, admin: User, seed: dict
-    ):
+    async def test_show_issue_includes_comments_count(self, db_session: AsyncSession, admin: User, seed: dict):
         from specivo.mcp.tools import _add_comment, _show_issue
 
         issue = await self._make_issue(db_session, admin, seed)
@@ -1163,10 +1144,9 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         # Create sprint directly via service to get its id
         from specivo.schemas.sprint import SprintCreate
         from specivo.services.sprint_service import SprintService
+
         sprint_svc = SprintService()
-        sprint = await sprint_svc.create(
-            db_session, seed["project"], SprintCreate(name="Sprint A")
-        )
+        sprint = await sprint_svc.create(db_session, seed["project"], SprintCreate(name="Sprint A"))
         await db_session.commit()
         sprint_id = sprint.id
 
@@ -1199,12 +1179,8 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         await db_session.commit()
 
         await db_session.refresh(issue)
-        assert issue.fixed_version_id == version_id, (
-            "fixed_version_id was wiped by an update that did not mention it"
-        )
-        assert issue.sprint_id == sprint_id, (
-            "sprint_id was wiped by an update that did not mention it"
-        )
+        assert issue.fixed_version_id == version_id, "fixed_version_id was wiped by an update that did not mention it"
+        assert issue.sprint_id == sprint_id, "sprint_id was wiped by an update that did not mention it"
         assert issue.done_ratio == 50
 
     async def test_update_can_still_set_version_and_sprint_explicitly(
@@ -1229,9 +1205,7 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         assert new_version_id is not None
 
         sprint_svc = SprintService()
-        new_sprint = await sprint_svc.create(
-            db_session, seed["project"], SprintCreate(name="Sprint B")
-        )
+        new_sprint = await sprint_svc.create(db_session, seed["project"], SprintCreate(name="Sprint B"))
         await db_session.commit()
 
         await _create_issue(
@@ -1279,9 +1253,7 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         assert version_id is not None
 
         sprint_svc = SprintService()
-        sprint = await sprint_svc.create(
-            db_session, seed["project"], SprintCreate(name="Sprint C")
-        )
+        sprint = await sprint_svc.create(db_session, seed["project"], SprintCreate(name="Sprint C"))
         await db_session.commit()
 
         await _create_issue(
@@ -1302,7 +1274,5 @@ class TestMcpUpdateIssuePreservesUnrelatedFields:
         svc = IssueService()
         issue = await svc.get_by_display_key(db_session, "ACME-1", user=admin)
         assert "replaced" in (issue.description or "")
-        assert issue.fixed_version_id == version_id, (
-            "edit_description wiped fixed_version_id"
-        )
+        assert issue.fixed_version_id == version_id, "edit_description wiped fixed_version_id"
         assert issue.sprint_id == sprint.id, "edit_description wiped sprint_id"

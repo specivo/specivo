@@ -198,7 +198,7 @@ async def update_attachment(
 
     # Update metadata if provided in payload
     if payload.metadata is not None:
-        attachment.metadata = payload.metadata.model_dump(mode="json")
+        attachment.file_metadata = payload.metadata.model_dump(mode="json")
 
     # Update description only if explicitly provided
     if payload.description is not None:

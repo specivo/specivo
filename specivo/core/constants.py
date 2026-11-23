@@ -161,6 +161,19 @@ ENTITY_LINKS_MAX_LIMIT = 200
 ENTITY_LINKS_MAX_EXPANDED = 50
 # Linked items listed inline by specivo_show_issue / specivo_read_wiki per direction.
 ENTITY_LINKS_INLINE_LIMIT = 20
+# How deep a read from a hub root (tag, component, version, sprint, user) may go; items stop at 2.
+ENTITY_LINKS_HUB_MAX_DEPTH = 3
+# Path finding (specivo_get_links to=): hops at most, and nodes discovered before giving up.
+ENTITY_LINKS_PATH_MAX_HOPS = 4
+ENTITY_LINKS_PATH_NODE_BUDGET = 500
+# Hubs (tags, versions, ...) whose members one hop of path finding reads at most.
+ENTITY_LINKS_PATH_MAX_HUBS = 20
+# Search with expand=1: the top hits (issues and wiki pages) expanded, and neighbours listed per hit.
+SEARCH_EXPAND_HITS = 5
+SEARCH_EXPAND_NEIGHBOURS = 10
+# Project settings graph_metadata_keys: how many keys at most, and how long each may be.
+GRAPH_METADATA_KEYS_MAX = 10
+GRAPH_METADATA_KEY_MAX_LENGTH = 64
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3

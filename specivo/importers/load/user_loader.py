@@ -28,6 +28,7 @@ taken is suffixed rather than merged onto whatever holds it.
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from typing import Any
 
@@ -55,10 +56,10 @@ IMPORT_ACCOUNT_STATE_KEY = "import_account_id"
 
 # Report sections. The section name is printed as the heading of its list, so it
 # has to read as a statement about the accounts under it.
-NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"
+NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"  # noqa: S105
 NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
-NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"
-NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"
+NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"  # noqa: S105
+NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"  # noqa: S105
 NOTE_EXTERNAL_AUTH = "accounts_that_signed_in_through_an_external_directory"
 NOTE_ADMINS_GRANTED = "accounts_imported_as_administrators"
 NOTE_ADMINS_NOT_GRANTED = "source_administrators_imported_without_administrator_rights"
@@ -73,6 +74,10 @@ IMPORT_ACCOUNT_REF = "import_account"
 _PLACEHOLDER_EMAIL_DOMAIN = "invalid"
 
 _MAX_LOGIN = 100
+# The login rule of every other account (schemas.user.UserCreate).
+_MIN_LOGIN = 3
+_LOGIN_DISALLOWED = re.compile(r"[^a-z0-9_-]+")
+_REPEATED_DASH = re.compile(r"-{2,}")
 _MAX_EMAIL = 255
 _MAX_DISPLAY_NAME = 255
 _MAX_GROUP_NAME = 255
@@ -322,12 +327,12 @@ def _imported_password(ctx: PhaseContext, ir: IRUser, login: str) -> str | None:
     # adapter declares; checked again for whatever it actually emitted.
     _require_enabled(credential.algorithm)
     hasher = get_password_hasher_registry().get(credential.algorithm)
-    assert hasher is not None
+    assert hasher is not None  # noqa: S101
     try:
         return hasher.from_source(credential.fields)
     except CredentialImportError as exc:
         ctx.warn("Password could not be carried over; the account will set a new one", login=login, reason=str(exc))
-    except Exception:  # noqa: BLE001 - a plugin hasher's bug must not end the import
+    except Exception:  # a plugin hasher's bug must not end the import
         logger.exception("Password hasher %r failed on an imported account", credential.algorithm)
         ctx.warn(
             "Password could not be carried over; the account will set a new one",
@@ -393,16 +398,32 @@ async def _exists(session: AsyncSession, column: Any, value: str) -> bool:
     return (await session.execute(stmt)).scalar_one_or_none() is not None
 
 
+def normalise_login(raw: str) -> str:
+    """*raw* in the login alphabet: NFKC, lowercase, anything but ``a-z0-9_-`` turned into ``-``."""
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKC", raw).lower()
+    cleaned = _LOGIN_DISALLOWED.sub("-", folded)
+    return _REPEATED_DASH.sub("-", cleaned).strip("-")
+
+
 async def _unique_login(ctx: PhaseContext, ir: IRUser) -> str:
     """Return a login that fits the column and does not collide.
 
     The source login is kept wherever possible — people recognise their own —
-    and only trimmed, replaced when empty, or suffixed on a clash.
+    but it must follow the rule every other account follows (lowercase
+    letters, digits, ``_`` and ``-``): otherwise a bundle could create
+    ``аlex`` with a Cyrillic ``а`` beside the real ``alex``. It is normalised
+    to that rule, replaced when nothing usable is left, and suffixed on a
+    clash; each change is reported.
     """
-    base = (ir.login or "").strip()[:_MAX_LOGIN]
-    if not base:
-        base = f"user-{ir.source_ref}"
-        ctx.warn("Source account has no login; one was generated", source_ref=ir.source_ref, login=base)
+    raw = (ir.login or "").strip()
+    base = normalise_login(raw)[:_MAX_LOGIN].strip("-")
+    if len(base) < _MIN_LOGIN:
+        base = normalise_login(f"user-{ir.source_ref}")[:_MAX_LOGIN]
+        ctx.warn("Source account has no usable login; one was generated", source_ref=ir.source_ref, login=base)
+    elif base != raw:
+        ctx.warn("Login changed to the allowed characters", wanted=raw, login=base)
 
     candidate = base
     suffix = 2

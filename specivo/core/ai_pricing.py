@@ -156,8 +156,8 @@ class ModelPrice:
         if token_class not in TOKEN_CLASSES:
             raise ValueError(f"Unknown token class {token_class!r}")
         # Candidate price columns, most specific first; the first one set wins.
-        billed_as = "output" if token_class == "reasoning" else token_class
-        candidates: list[str] = ["reasoning"] if token_class == "reasoning" else []
+        billed_as = "output" if token_class == "reasoning" else token_class  # noqa: S105
+        candidates: list[str] = ["reasoning"] if token_class == "reasoning" else []  # noqa: S105
         if long_context:
             candidates.append(f"long_{billed_as}")
         candidates.append(billed_as)

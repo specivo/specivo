@@ -59,6 +59,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
+from specivo.core.app_url import prefixed
 from specivo.core.config import Settings, get_settings
 from specivo.core.redis import get_redis
 from specivo.models.auth import RefreshToken
@@ -103,7 +104,7 @@ class SsoLogoutSession:
 def logged_out_path(settings: Settings | None = None) -> str:
     """The signed-out landing path on this site: stealth prefix + :data:`LOGGED_OUT_PATH`."""
     settings = settings or get_settings()
-    return settings.stealth_prefix.rstrip("/") + LOGGED_OUT_PATH
+    return prefixed(LOGGED_OUT_PATH, settings)
 
 
 def post_logout_redirect_uri(settings: Settings | None = None) -> str:
@@ -182,7 +183,7 @@ async def _build_url(target: SsoLogoutSession, settings: Settings) -> str | None
     except SsoError as exc:
         logger.warning("sso.logout.discovery_failed provider=%s code=%s", provider.slug, exc.code)
         return None
-    except Exception as exc:  # noqa: BLE001 - sign-out must never fail because of the IdP
+    except Exception as exc:  # sign-out must never fail because of the IdP  # noqa: BLE001
         logger.warning("sso.logout.discovery_failed provider=%s error=%s", provider.slug, type(exc).__name__)
         return None
     endpoint = metadata.end_session_endpoint
@@ -259,7 +260,7 @@ async def release_logout_jti(jti_key: str, *, redis: Redis | None = None) -> Non
     try:
         redis = redis if redis is not None else await get_redis()
         await redis.delete(jti_key)
-    except Exception as exc:  # noqa: BLE001 - best effort; the key expires on its own
+    except Exception as exc:  # best effort; the key expires on its own  # noqa: BLE001
         logger.warning("sso.backchannel_logout.release_failed error=%s", type(exc).__name__)
 
 
@@ -367,7 +368,7 @@ async def _revoke_named_sessions(db: AsyncSession, provider: SsoProvider, claims
     return revoked
 
 
-async def _deprovision(db: AsyncSession, provider: SsoProvider, identity_id: int, claims: LogoutTokenClaims) -> int:
+async def _deprovision(db: AsyncSession, provider: SsoProvider, identity_id: int, claims: LogoutTokenClaims) -> int:  # noqa: ARG001
     from specivo.models.user import User
     from specivo.services.api_key_service import ApiKeyService
     from specivo.services.auth_utils import is_sso_only_user

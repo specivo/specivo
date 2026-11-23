@@ -29,6 +29,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,6 +102,16 @@ def convert_markup(ctx: PhaseContext, raw: str | None) -> str | None:
 # --------------------------------------------------------------------------
 
 
+# issues.subject is VARCHAR(1024) and IssueCreate refuses a blank one.
+_MAX_SUBJECT = 1024
+
+
+def _subject(ir: IRIssue) -> str:
+    """The issue's subject, fitted to the column; a placeholder when the source has none."""
+    subject = (ir.subject or "").strip()[:_MAX_SUBJECT].strip()
+    return subject or f"Imported issue {ir.source_ref}"
+
+
 async def load_issues(ctx: PhaseContext) -> None:
     """Create every issue in the selected projects, parents before children."""
     await ensure_import_account(ctx)
@@ -129,6 +140,9 @@ async def load_issues(ctx: PhaseContext) -> None:
             if issue is not None and issue.parent_id is not None and ir.parent_ref is not None:
                 parents.add(ir.parent_ref)
         await _restore_parent_timestamps(ctx, parents, updated_at)
+        # Per project only: the parents' timestamps are put back once all of
+        # the project's issues are in, and a resumed run would not do it again.
+        await ctx.checkpoint()
 
 
 async def _restore_parent_timestamps(
@@ -174,7 +188,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
             IssueCreate(
                 project_key=project.key,
                 tracker_id=tracker_id,
-                subject=ir.subject or f"Imported issue {ir.source_ref}",
+                subject=_subject(ir),
                 description=convert_markup(ctx, ir.description),
                 status_id=status_id,
                 priority_id=priority_id,
@@ -198,7 +212,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
             # the source made required later) is kept, and reported above.
             validate_metadata=False,
         )
-    except AppError as exc:
+    except (AppError, PydanticValidationError) as exc:
         ctx.warn("Issue could not be created; skipped", issue=ir.source_ref, reason=str(exc))
         return None
 
@@ -376,6 +390,8 @@ async def load_watchers(ctx: PhaseContext) -> None:
             ctx.session.add(Watcher(issue_id=issue_id, user_id=user_id))
             ctx.summary.record_created(EntityType.WATCHER)
             ctx.tick()
+            await ctx.record_written()
+        await ctx.checkpoint()
     await ctx.session.flush()
 
 
@@ -397,6 +413,8 @@ async def load_journals(ctx: PhaseContext) -> None:
                 ctx.summary.record_skipped(EntityType.JOURNAL)
                 continue
             await _create_journal(ctx, ir, sequences, unresolved, fields)
+            await ctx.record_written()
+        await ctx.checkpoint()
     if unresolved:
         # One warning however many: history routinely names deleted versions and the like.
         ctx.warn(

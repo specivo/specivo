@@ -363,3 +363,95 @@ class TestLimits:
             )
             is None
         )
+
+
+class TestLinkBatchCharacterization:
+    """Pins what one batch of commits links and hands to ``_record_links`` across a feature-branch life cycle."""
+
+    async def test_branch_push_then_default_branch_then_redelivery(self, db_session, setup, monkeypatch):
+        recorded: list[list[tuple]] = []
+        batches: list[tuple[int, int]] = []
+        record_links = repository_hooks._record_links
+        link_batch = repository_hooks._link_batch
+
+        async def spy_record(session, integration, links):
+            recorded.append(
+                [
+                    (w.commit.sha[:6], w.issue_id, w.commit_ref.source, w.commit_ref.ref.keyword, w.new, w.fix)
+                    for w in links
+                ]
+            )
+            return await record_links(session, integration, links)
+
+        async def spy_batch(*args):
+            new_links, outcomes = await link_batch(*args)
+            batches.append((len(new_links), len(outcomes)))
+            return new_links, outcomes
+
+        monkeypatch.setattr(repository_hooks, "_record_links", spy_record)
+        monkeypatch.setattr(repository_hooks, "_link_batch", spy_batch)
+        parent_issue, child_issue = setup["issues"]["RPROC"], setup["issues"]["RPROD"]
+        admin = AdminUserFactory.build(login="rproc_lb_admin")
+        db_session.add(admin)
+        await db_session.commit()
+        integration = await make_integration(
+            db_session, setup["parent"], scope="project_and_subprojects", created_by_id=admin.id
+        )
+        fixing = commit("lb-fix", "Fixes RPROC-1, refs RPROD-1")
+        plain = commit("lb-plain", "Work on RPROC-1")
+        missing = commit("lb-missing", "Refs RPROC-99")
+
+        _row, first = await _deliver(
+            db_session,
+            integration,
+            push_payload("github", [fixing, plain, missing], branch="feat/RPROC-1-login"),
+            delivery_id="lb-1",
+        )
+        _row, second = await _deliver(
+            db_session, integration, push_payload("github", [fixing], branch="main"), delivery_id="lb-2"
+        )
+        _row, third = await _deliver(
+            db_session, integration, push_payload("github", [fixing], branch="main"), delivery_id="lb-3"
+        )
+        _row, fourth = await _deliver(
+            db_session, integration, push_payload("github", [missing], branch="main"), delivery_id="lb-4"
+        )
+
+        # The branch name links every commit of the first push, the one with a missing reference too.
+        fix_sha, plain_sha, missing_sha = fixing["id"][:6], plain["id"][:6], missing["id"][:6]
+        assert recorded == [
+            [
+                (fix_sha, parent_issue.id, "message", "fixes", True, "wait"),
+                (fix_sha, child_issue.id, "message", "refs", True, "wait"),
+                (plain_sha, parent_issue.id, "message", "refs", True, "wait"),
+                (missing_sha, parent_issue.id, "branch", "refs", True, "wait"),
+            ],
+            [(fix_sha, parent_issue.id, "message", "fixes", False, "run")],
+        ]
+        assert batches == [(4, 1), (0, 1), (0, 0), (0, 0)]
+        disabled = " Commands: RPROC-1 commands: commands_disabled."
+        assert [r.detail for r in (first, second, third, fourth)] == [
+            "3 commit(s), 3 with references; 4 new link(s) to 2 issue(s)." + disabled,
+            "1 commit(s), 1 with references; 0 new link(s) to 0 issue(s)." + disabled,
+            "1 commit(s), 1 with references; 0 new link(s) to 0 issue(s).",
+            "1 commit(s), 1 with references; 0 new link(s) to 0 issue(s).",
+        ]
+        links = (
+            await db_session.execute(
+                select(IssueCommitLink.issue_id, IssueCommitLink.source, IssueCommitLink.keyword).order_by(
+                    IssueCommitLink.commit_id, IssueCommitLink.issue_id
+                )
+            )
+        ).all()
+        assert [tuple(r) for r in links] == [
+            (parent_issue.id, "message", "fixes"),
+            (child_issue.id, "message", "refs"),
+            (parent_issue.id, "message", "refs"),
+            (parent_issue.id, "branch", None),
+        ]
+        stored = (await db_session.execute(select(RepositoryCommit).order_by(RepositoryCommit.id))).scalars().all()
+        assert [(c.sha[:6], c.branch) for c in stored] == [
+            (fix_sha, "feat/RPROC-1-login"),
+            (plain_sha, "feat/RPROC-1-login"),
+            (missing_sha, "feat/RPROC-1-login"),
+        ]

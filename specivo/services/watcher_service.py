@@ -85,10 +85,7 @@ class WatcherService:
         pattern (watchers + selectinload user).
         """
         stmt = (
-            select(User)
-            .join(Watcher, Watcher.user_id == User.id)
-            .where(Watcher.issue_id == issue.id)
-            .order_by(User.id)
+            select(User).join(Watcher, Watcher.user_id == User.id).where(Watcher.issue_id == issue.id).order_by(User.id)
         )
         if viewer is not None:
             from specivo.services.permission_service import visible_users_clause

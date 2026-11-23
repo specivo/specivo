@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
@@ -17,7 +17,7 @@ from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ _reaction_svc = ReactionService()
 
 
 @router.get("/issues/table/", response_class=HTMLResponse)
-async def issue_table_partial(
+async def issue_table_partial(  # noqa: PLR0913
     request: Request,
     project_key: str = Query(...),
     db: AsyncSession = DB_SESSION,
@@ -53,7 +53,7 @@ async def issue_table_partial(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -111,7 +111,7 @@ async def issue_activity_partial(
     """Return the activity/journal list as an HTML fragment for htmx swapping."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -121,7 +121,12 @@ async def issue_activity_partial(
 
     from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
 
-    all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
+    all_journals = await _journal_svc.list_for_issue(
+        db,
+        issue.id,
+        include_private=await _journal_svc.can_view_private_notes(db, user, issue.project_id),
+        own_private_of=user.id,
+    )
     # Bare filenames in comments resolve against the issue's own visible attachments.
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
@@ -197,11 +202,10 @@ async def issue_attachments_partial(
     Lazy-loaded on first click of the Attachments tab in the issue detail page
     so the main page render skips the attachments SELECT entirely.
     """
-    import json
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
@@ -218,22 +222,22 @@ async def issue_attachments_partial(
 
     attachments = await _issue_svc.list_attachments(db, issue.id)
 
-    issue_attachments_json = json.dumps(
-        [
-            {
-                "id": att.id,
-                "filename": att.filename,
-                "content_type": att.content_type or "application/octet-stream",
-                "filesize": att.filesize,
-                "author": {
-                    "id": att.author_id,
-                    "name": att.author.display_name or att.author.login,
-                },
-                "created_at": att.created_at.isoformat() if att.created_at else None,
-            }
-            for att in attachments
-        ]
-    )
+    # Rendered with ``| tojson`` in the template, which escapes ``<``, ``>``
+    # and ``&``: file names and display names are user input.
+    issue_attachments = [
+        {
+            "id": att.id,
+            "filename": att.filename,
+            "content_type": att.content_type or "application/octet-stream",
+            "filesize": att.filesize,
+            "author": {
+                "id": att.author_id,
+                "name": att.author.display_name or att.author.login,
+            },
+            "created_at": att.created_at.isoformat() if att.created_at else None,
+        }
+        for att in attachments
+    ]
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -241,7 +245,7 @@ async def issue_attachments_partial(
         "pages/issues/_tab_attachments.html",
         context={
             "issue": issue,
-            "issue_attachments_json": issue_attachments_json,
+            "issue_attachments": issue_attachments,
             "user": user,
         },
     )
@@ -258,7 +262,7 @@ async def _development_reader(request: Request, db: AsyncSession, issue_ref: str
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
     try:
         issue = await _issue_svc.get_by_display_key(db, issue_ref, user=user)
@@ -306,7 +310,7 @@ async def issue_development_partial(
 async def issue_development_timeline_partial(
     issue_ref: str,
     request: Request,
-    kinds: list[str] = Query(default=[]),  # noqa: B008
+    kinds: list[str] = Query(default=[]),
     offset: int = Query(0, ge=0, le=10_000),
     db: AsyncSession = DB_SESSION,
 ) -> Response:

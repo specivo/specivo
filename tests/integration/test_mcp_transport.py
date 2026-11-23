@@ -215,7 +215,7 @@ class TestAuthenticateMcpTool:
         # Should raise
         async with db_engine.begin() as conn:
             session = AsyncSession(bind=conn, expire_on_commit=False)
-            with pytest.raises(Exception):
+            with pytest.raises(Exception):  # noqa: B017
                 await authenticate_mcp_tool(session)
 
     async def test_no_contextvar_raises(self, db_engine):

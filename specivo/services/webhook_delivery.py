@@ -53,7 +53,7 @@ from specivo.services.webhook_events import backoff_seconds, encode_body, signat
 
 logger = logging.getLogger(__name__)
 
-WEBHOOK_SECRET_PURPOSE = "webhook-secret"
+WEBHOOK_SECRET_PURPOSE = "webhook-secret"  # noqa: S105
 _RETRYABLE_STATUS = frozenset({408, 429})
 
 

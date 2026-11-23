@@ -25,26 +25,22 @@ function _blankRecurringForm() {
         };
     }
 
+// Pattern fields copied into the form as they are, an empty value falling
+// back to the blank form's.
+var _PATTERN_FIELDS_OR_BLANK = [
+    'name', 'freq', 'rrule_interval', 'anchor_mode', 'base_date_strategy', 'timezone',
+    'creation_lead_time_days', 'template_tracker_id', 'template_status_id', 'template_priority_id',
+    'template_assigned_to_id', 'template_subject', 'template_description'
+];
+
 function _patternToForm(p) {
         var f = _blankRecurringForm();
-        f.name = p.name || '';
+        _PATTERN_FIELDS_OR_BLANK.forEach(function (key) { f[key] = p[key] || f[key]; });
         f.enabled = p.enabled !== false;
-        f.freq = p.freq || 'weekly';
-        f.rrule_interval = p.rrule_interval || 1;
         f.byday = (p.byday || []).slice();
         f.bymonthday = (p.bymonthday || []).join(', ');
         f.bysetpos = (p.bysetpos || []).join(', ');
-        f.anchor_mode = p.anchor_mode || 'fixed';
-        f.base_date_strategy = p.base_date_strategy || 'scheduled';
-        f.timezone = p.timezone || 'UTC';
-        f.creation_lead_time_days = p.creation_lead_time_days || 30;
         f.dtstart = p.dtstart ? p.dtstart.slice(0, 16) : '';
-        f.template_tracker_id = p.template_tracker_id || null;
-        f.template_status_id = p.template_status_id || null;
-        f.template_priority_id = p.template_priority_id || null;
-        f.template_assigned_to_id = p.template_assigned_to_id || null;
-        f.template_subject = p.template_subject || '';
-        f.template_description = p.template_description || '';
         f.carry_over = Object.assign(f.carry_over, p.carry_over || {});
         f.reset_checklist = p.reset_checklist !== false;
         f.rotation_user_ids = (p.assignee_rotation && p.assignee_rotation.user_ids) ? p.assignee_rotation.user_ids.slice() : [];
@@ -63,15 +59,18 @@ function _parseIntList(raw) {
         return out.length > 0 ? out : null;
     }
 
+// A "YYYY-MM-DDTHH:MM" input value gains seconds; anything else is sent as it is.
+function _withSeconds(dtstart) {
+        return (dtstart && dtstart.length === 16) ? dtstart + ':00' : dtstart;
+    }
+
+function _rotationPayload(userIds) {
+        return (userIds && userIds.length > 0) ? {user_ids: userIds, strategy: 'round_robin'} : null;
+    }
+
 function _formToPayload(form, includeLock) {
-        var dtstart = form.dtstart;
-        if (dtstart && dtstart.length === 16) {
-            dtstart = dtstart + ':00';
-        }
-        var rotation = null;
-        if (form.rotation_user_ids && form.rotation_user_ids.length > 0) {
-            rotation = {user_ids: form.rotation_user_ids, strategy: 'round_robin'};
-        }
+        var dtstart = _withSeconds(form.dtstart);
+        var rotation = _rotationPayload(form.rotation_user_ids);
         var payload = {
             name: form.name.trim(),
             enabled: form.enabled,
@@ -329,7 +328,7 @@ export function recurringPatternForm(initial) {
                 this.previewError = false;
                 try {
                     var days = this.form.creation_lead_time_days || 30;
-                    var url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/occurrences/?days=' + days;
+                    var url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/occurrences/?days=' + days);
                     var res = await spFetch(url);
                     if (res.ok) {
                         var data = await res.json();
@@ -351,10 +350,10 @@ export function recurringPatternForm(initial) {
                 try {
                     var url, method;
                     if (this.editing) {
-                        url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/');
                         method = 'PATCH';
                     } else {
-                        url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/';
+                        url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/');
                         method = 'POST';
                     }
                     var payload = _formToPayload(this.form, this.editing);
@@ -369,7 +368,7 @@ export function recurringPatternForm(initial) {
                         // the browser navigates away.
                         var saved = await res.json();
                         var id = saved.id || this.patternId;
-                        window.location = '/projects/' + this.projectKey + '/recurring-patterns/' + id + '/';
+                        window.location = spUrl('/projects/' + this.projectKey + '/recurring-patterns/' + id + '/');
                         return;
                     }
                     if (res.status === 409) {
@@ -494,7 +493,7 @@ export function recurringPatternDetail(initial) {
                 this.previewError = false;
                 try {
                     var days = this.pattern.creation_lead_time_days || 30;
-                    var url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.pattern.id + '/occurrences/?days=' + days;
+                    var url = spUrl('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.pattern.id + '/occurrences/?days=' + days);
                     var res = await spFetch(url);
                     if (res.ok) {
                         var data = await res.json();

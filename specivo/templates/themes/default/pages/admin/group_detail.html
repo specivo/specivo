@@ -4,11 +4,11 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/groups/">{% trans %}Groups{% endtrans %}</a>
+  <a href="{{ base }}/admin/groups/">{% trans %}Groups{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{{ group.name }}</span>
 </div>
@@ -114,7 +114,7 @@
             {% for p in group_projects %}
             <tr>
               <td>
-                <a href="/projects/{{ p.key }}/settings/" class="sp-text-link">{{ p.name }}</a>
+                <a href="{{ base }}/projects/{{ p.key }}/settings/" class="sp-text-link">{{ p.name }}</a>
                 <span class="sp-text-muted-xs">{{ p.key }}</span>
               </td>
               <td>{{ p.roles | join(', ') }}</td>

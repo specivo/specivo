@@ -91,6 +91,7 @@ class LocalEmbedder:
         import numpy as np
 
         self._ensure_loaded()
+        assert self._tokenizer is not None and self._session is not None  # noqa: S101 - set by _ensure_loaded
 
         # Tokenize
         encoded = self._tokenizer.encode(text)
@@ -118,7 +119,8 @@ class LocalEmbedder:
         if magnitude > 0:
             vector = vector / magnitude
 
-        return vector.tolist()
+        result: list[float] = vector.tolist()
+        return result
 
 
 def get_local_embedder(model_name: str = "multilingual-e5-small") -> LocalEmbedder:

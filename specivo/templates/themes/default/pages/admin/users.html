@@ -5,9 +5,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}Users{% endtrans %}</span>
 </div>
@@ -60,7 +60,7 @@
             <td style="display: flex; align-items: center; gap: var(--sp-space-sm);">
               <span class="avatar-sm" :class="avatarIconClass(u.login)" :style="'background:' + (u.status === 'locked' ? 'var(--sp-text-muted)' : u.avatar_color)" x-text="avatarIconClass(u.login) ? '' : initials(u.display_name)"></span>
               <span>
-                <a :href="'/admin/users/' + u.id + '/'" :style="'font-weight:' + (u.status === 'locked' ? '400' : '500') + (u.status === 'locked' ? ';text-decoration:line-through' : '') + ';color:var(--sp-text-primary)'" x-text="u.display_name"></a><br>
+                <a :href="'{{ base }}/admin/users/' + u.id + '/'" :style="'font-weight:' + (u.status === 'locked' ? '400' : '500') + (u.status === 'locked' ? ';text-decoration:line-through' : '') + ';color:var(--sp-text-primary)'" x-text="u.display_name"></a><br>
                 <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="u.email"></span>
               </span>
             </td>

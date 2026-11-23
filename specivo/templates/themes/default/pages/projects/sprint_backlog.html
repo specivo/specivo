@@ -5,8 +5,8 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
   {"label": _("Backlog")}
 ]) }}
 
@@ -66,12 +66,12 @@
       </div>
     </div>
     <div style="display:flex;gap:var(--sp-space-sm)">
-      <a href="/projects/{{ project.key }}/sprints/{{ active_sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ active_sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         {% trans %}Board{% endtrans %}
       </a>
       <button class="sp-btn sp-btn-success sp-btn-sm"
-              hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ active_sprint.id }}/complete/"
+              hx-post="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ active_sprint.id }}/complete/"
               hx-ext="json-enc"
               hx-vals='{"move_incomplete_to_sprint_id": null}'
               hx-swap="none"
@@ -154,13 +154,13 @@
           {% trans %}No dates set{% endtrans %}
         {% endif %}
       </span>
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         {% trans %}Edit{% endtrans %}
       </a>
       {% if not active_sprint %}
       <button class="sp-btn sp-btn-primary sp-btn-sm"
-              hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/start/"
+              hx-post="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/start/"
               hx-swap="none"
               data-hx-reload>
         {% trans %}Start Sprint{% endtrans %}
@@ -221,13 +221,13 @@
     <svg class="backlog-issue-drag" viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
 
     {# Issue key #}
-    <a href="/issue/{{ issue.display_key }}/" class="backlog-issue-key">{{ issue.display_key }}</a>
+    <a href="{{ base }}/issue/{{ issue.display_key }}/" class="backlog-issue-key">{{ issue.display_key }}</a>
 
     {# Tracker badge #}
     {{ tracker_badge(issue.tracker.name if issue.tracker else 'Unknown') }}
 
     {# Subject #}
-    <a href="/issue/{{ issue.display_key }}/" class="backlog-issue-subject" style="text-decoration:none;color:inherit">{{ issue.subject }}</a>
+    <a href="{{ base }}/issue/{{ issue.display_key }}/" class="backlog-issue-subject" style="text-decoration:none;color:inherit">{{ issue.subject }}</a>
 
     {# Status badge #}
     {{ status_badge(issue.status.name if issue.status else 'Unknown') }}
@@ -253,7 +253,7 @@
             {% for m in members %}
             <div class="assignee-option"
                  x-show="matchesSearch('{{ m.login }}')"
-                 hx-patch="/api/v1/issues/{{ issue.display_key }}/"
+                 hx-patch="{{ base }}/api/v1/issues/{{ issue.display_key }}/"
                  hx-ext="json-enc"
                  hx-vals='{"assigned_to_id": {{ m.user_id }}, "lock_version": {{ issue.lock_version }}}'
                  hx-swap="none"
@@ -276,7 +276,7 @@
         <div class="sprint-picker-dropdown" :class="{ 'open': open }">
           {% for s in all_available_sprints %}
           <div class="sprint-picker-item"
-               hx-patch="/api/v1/issues/{{ issue.display_key }}/"
+               hx-patch="{{ base }}/api/v1/issues/{{ issue.display_key }}/"
                hx-ext="json-enc"
                hx-vals='{"sprint_id": {{ s.id }}, "lock_version": {{ issue.lock_version }}}'
                hx-swap="none"
@@ -292,7 +292,7 @@
   {% endfor %}
 </div>
 
-{{ pagination(backlog_total, offset, limit, "/projects/" ~ project.key ~ "/backlog") }}
+{{ pagination(backlog_total, offset, limit, base ~ "/projects/" ~ project.key ~ "/backlog") }}
 {% else %}
 {{ empty_state(_("Backlog is empty"), _("All issues are assigned to sprints, or no issues exist yet.")) }}
 {% endif %}

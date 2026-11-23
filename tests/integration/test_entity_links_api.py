@@ -88,3 +88,27 @@ async def test_wiki_graph_endpoint(reader_client, db_session, world):
     broken = [e for e in data["edges"] if e["is_broken"]]
     assert [(e["target_slug"], e["target_page_id"]) for e in broken] == [("does-not-exist", None)]
     assert len(data["edges"]) == 3
+
+
+async def test_issue_links_list_structured_nodes_only_when_asked(reader_client, db_session, world):
+    from specivo.models.tag import Tag, TagLink
+
+    root = await issue(db_session, world, world.home, "Root")
+    tag = Tag(project_id=world.home.id, name="backend")
+    db_session.add(tag)
+    await db_session.flush()
+    db_session.add(TagLink(tag_id=tag.id, issue_id=root.id))
+    await db_session.commit()
+
+    default = await reader_client.get(f"/api/v1/issues/{root.display_key}/links/")
+    assert default.status_code == 200, default.text
+    assert default.json()["nodes"] == []
+
+    asked = await reader_client.get(f"/api/v1/issues/{root.display_key}/links/?kinds=tagged")
+    assert asked.status_code == 200, asked.text
+    assert [(n["ref"], n["type"], n["degree"]) for n in asked.json()["nodes"]] == [
+        (f"tag:{world.home.key}/backend", "tag", 1)
+    ]
+    # The issue route never serves a hub root.
+    hub = await reader_client.get(f"/api/v1/issues/user:{world.reader.login}/links/")
+    assert hub.status_code == 404

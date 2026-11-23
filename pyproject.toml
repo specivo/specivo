@@ -1,6 +1,6 @@
 [project]
 name = "specivo"
-version = "0.13.0"
+version = "0.14.0"
 description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -43,8 +43,12 @@ dev = [
     "pytest-cov>=6.0",
     "httpx>=0.28",
     "factory-boy>=3.3",
-    "ruff>=0.8",
+    "ruff>=0.17",
     "mypy>=1.13",
+    "import-linter>=2.16",
+    "diff-cover>=11.0.1",
+    "radon>=6.0.1",
+    "pre-commit>=4.7.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -60,6 +64,8 @@ dev = [
     "pytest-playwright>=0.6.2",
     "pytest-xdist>=3.8.0",
     "types-jsonschema>=4.26.0.20260324",
+    "types-markdown>=3.11.3.20261108",
+    "types-pygments>=2.21.0.20260819",
     "types-python-dateutil>=2.9",
 ]
 
@@ -95,15 +101,118 @@ target-version = "py312"
 line-length = 120
 extend-exclude = ["alembic/versions"]
 
+[tool.ruff.format]
+# Code samples in Markdown docs are laid out by hand.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+# Existing violations of the stricter rules are marked with `# noqa` (a
+# ratchet): new code must comply, old code is fixed as it is touched. Remove
+# a noqa when you fix the line; never add one to new code without a reason.
+select = [
+    "E", "F", "I", "N", "W", "UP",
+    "B",       # bugbear: likely bugs
+    "C90",     # mccabe cyclomatic complexity
+    "PLR0911", "PLR0912", "PLR0913", "PLR0915",  # too many returns/branches/args/statements
+    "ASYNC",   # blocking calls in async code
+    "S",       # bandit security checks
+    "BLE",     # blind except
+    "SIM",     # simplifications
+    "PERF",    # performance anti-patterns
+    "PIE",
+    "RET",
+    "ARG",     # unused arguments
+    "ERA",     # commented-out code
+    "RUF100",  # unused noqa: keeps the ratchet tight as lines get fixed
+]
+ignore = [
+    "RET505", "RET506", "RET507", "RET508",  # else-after-return style is a matter of taste
+    "SIM117",  # nested with statements are often clearer than one long line
+    "SIM114",  # merging if-arms builds long and/or chains that are harder to read
+    "SIM300",  # flags comparisons with UPPER_CASE names that read naturally as written
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-args = 10
+max-branches = 15
+max-returns = 8
+max-statements = 60
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares dependencies and parameters as calls in default arguments.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Form",
+    "fastapi.File", "fastapi.Header", "fastapi.Cookie", "fastapi.Security",
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["F841", "N806"]  # Unused variables and PascalCase locals are common in test setup
+# Unused variables and PascalCase locals are common in test setup; tests use
+# assert, fixed passwords and SQL, and need not meet the complexity limits.
+"tests/**" = [
+    "F841", "N806", "S", "ARG", "ERA", "C90", "PLR09", "BLE001", "PERF", "RET",
+]
+# Route handlers take auth dependencies (current_user, admin) for their side
+# effect, so an unused argument there is the normal FastAPI pattern.
+"specivo/{api,web,scim,mcp}/**" = ["ARG001"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = false
 warn_return_any = true
 warn_unused_configs = true
+# Like ruff's RUF100: an ignore that no longer suppresses anything fails, so
+# remove it when you fix the line.
+warn_unused_ignores = true
+# Reads pydantic field defaults, so models with optional fields can be built
+# without passing every field.
+plugins = ["pydantic.mypy"]
 
+# These ship neither type hints nor a stub package.
+[[tool.mypy.overrides]]
+module = ["celery", "celery.*", "onnxruntime"]
+ignore_missing_imports = true
+
+
+[tool.importlinter]
+root_package = "specivo"
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Models do not depend on services or entry points"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["specivo.models"]
+forbidden_modules = [
+    "specivo.services", "specivo.tasks", "specivo.importers",
+    "specivo.api", "specivo.web", "specivo.mcp", "specivo.scim", "specivo.cli", "specivo.main",
+]
+# Existing exceptions (models/__init__ imports these to register their ORM event
+# listeners); do not add to this list.
+ignore_imports = [
+    "specivo.models -> specivo.services.entity_link_index",
+    "specivo.models -> specivo.services.search_index_service",
+]
+
+[[tool.importlinter.contracts]]
+name = "Services do not depend on entry points"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["specivo.services", "specivo.schemas"]
+forbidden_modules = ["specivo.api", "specivo.web", "specivo.mcp", "specivo.scim", "specivo.cli", "specivo.main"]
+# Existing exceptions; do not add to this list.
+ignore_imports = [
+    "specivo.services.email_change_service -> specivo.web.deps",
+    "specivo.services.sso.flow -> specivo.web.deps",
+]
+
+[[tool.importlinter.contracts]]
+name = "Core does not depend on entry points"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["specivo.core"]
+forbidden_modules = ["specivo.api", "specivo.web", "specivo.mcp", "specivo.scim", "specivo.cli", "specivo.main"]
+# Existing exception; do not add to this list.
+ignore_imports = ["specivo.core.exceptions -> specivo.web.deps"]

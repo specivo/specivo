@@ -56,7 +56,7 @@ def _sanitize(message: str) -> str:
     message = _EMAIL_PATTERN.sub(lambda m: _mask(m.group(1)) + "@" + m.group(2), message)
     # Mask usernames in login=/username= patterns
     message = _USERNAME_PATTERN.sub(lambda m: m.group(0).replace(m.group(2), _mask(m.group(2))), message)
-    return message
+    return message  # noqa: RET504
 
 
 class _SanitizingFilter(logging.Filter):
@@ -72,7 +72,7 @@ class _SanitizingFilter(logging.Filter):
 class _JSONFormatter(logging.Formatter):
     """Emit each log record as a single-line JSON object."""
 
-    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+    def format(self, record: logging.LogRecord) -> str:
         payload: dict = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
@@ -90,7 +90,7 @@ class _JSONFormatter(logging.Formatter):
 class _SanitizedJSONFormatter(_JSONFormatter):
     """JSON formatter that sanitizes sensitive data before writing."""
 
-    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+    def format(self, record: logging.LogRecord) -> str:
         payload: dict = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,

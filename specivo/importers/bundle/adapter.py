@@ -21,9 +21,10 @@ from pathlib import Path
 from typing import Any, ClassVar, TypeVar
 from zipfile import BadZipFile, ZipFile
 
+from specivo.core.files import open_regular
 from specivo.importers.bundle import format as bundle_format
 from specivo.importers.bundle.codec import LOOKUP_TYPES, from_record
-from specivo.importers.bundle.container import BundleContainer, open_bundle, open_regular
+from specivo.importers.bundle.container import BundleContainer, open_bundle
 from specivo.importers.bundle.format import FILES_DIR, LOOKUP_LISTS, MANIFEST, SHA256_RE, RecordFile
 from specivo.importers.bundle.limits import BundleLimits, format_size, parse_size, positive_int
 from specivo.importers.bundle.report import ProblemCode, ValidationReport
@@ -286,7 +287,7 @@ class BundleSourceAdapter(BaseSourceAdapter):
                 self._index = scan_bundle(
                     self._container.root, report, self.limits, files_dir=self._container.files_dir
                 )
-        except Exception as exc:  # noqa: BLE001 - a hostile bundle must give a report, not a traceback
+        except Exception as exc:  # a hostile bundle must give a report, not a traceback
             logger.debug("Reading bundle %s failed", self.path, exc_info=True)
             report.error(ProblemCode.UNREADABLE, self.path.name, f"The bundle could not be read: {exc!r}")
         if not report.ok:
@@ -433,6 +434,10 @@ class BundleSourceAdapter(BaseSourceAdapter):
             raise ValueError(f"Not a stored file name: {attachment.storage_key!r}")
         files_dir = self.index.files_dir or self.index.root / FILES_DIR
         return files_dir / attachment.storage_key
+
+    def expected_attachment_sha256(self, attachment: IRAttachment) -> str | None:
+        """A stored file is named by its sha256, checked by the scan: the load checks it again."""
+        return attachment.storage_key if SHA256_RE.match(attachment.storage_key) else None
 
 
 def _source_from_manifest(path: Path, limits: BundleLimits) -> tuple[str, str]:

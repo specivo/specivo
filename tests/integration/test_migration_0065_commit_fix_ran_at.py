@@ -49,7 +49,7 @@ async def _execute(sql: str, **params) -> list:
 async def _cleanup() -> None:
     await _execute("DELETE FROM projects WHERE key = :key", key=_PROJECT_KEY)
     for table in ("trackers", "issue_statuses", "issue_priorities"):
-        await _execute(f"DELETE FROM {table} WHERE name = :name", name=_NAME)  # noqa: S608
+        await _execute(f"DELETE FROM {table} WHERE name = :name", name=_NAME)
     await _execute("DELETE FROM users WHERE login = 'migfix_author'")
 
 
@@ -64,7 +64,7 @@ async def _seed() -> None:
     )
     await _execute("INSERT INTO users (login, email, display_name) VALUES ('migfix_author', 'migfix@example.com', 'M')")
     for table in ("trackers", "issue_statuses", "issue_priorities"):
-        await _execute(f"INSERT INTO {table} (name) VALUES (:name)", name=_NAME)  # noqa: S608
+        await _execute(f"INSERT INTO {table} (name) VALUES (:name)", name=_NAME)
     await _execute(
         "INSERT INTO issues (project_id, project_key, sequence_number, tracker_id, status_id, priority_id, "
         "author_id, subject, lock_version) "
@@ -84,7 +84,7 @@ async def _seed() -> None:
     for sha, branch in (("a" * 40, "main"), ("b" * 40, "feat/login"), ("c" * 40, "main")):
         await _execute(
             f"INSERT INTO repository_commits (integration_id, sha, branch, message, url, author_name, author_email) "
-            f"VALUES ({_INTEGRATION}, :sha, :branch, '', '', '', '')",  # noqa: S608
+            f"VALUES ({_INTEGRATION}, :sha, :branch, '', '', '', '')",
             key=_PROJECT_KEY,
             sha=sha,
             branch=branch,
@@ -94,7 +94,7 @@ async def _seed() -> None:
         await _execute(
             "INSERT INTO issue_commit_links (commit_id, issue_id, source, keyword) "
             "SELECT c.id, i.id, 'message', :keyword FROM repository_commits c, issues i "
-            f"WHERE c.sha = :sha AND c.integration_id = {_INTEGRATION} AND i.project_key = :key",  # noqa: S608
+            f"WHERE c.sha = :sha AND c.integration_id = {_INTEGRATION} AND i.project_key = :key",
             key=_PROJECT_KEY,
             sha=sha,
             keyword=keyword,
@@ -110,7 +110,7 @@ async def test_backfill_marks_only_fixing_links_first_seen_on_the_default_branch
         _alembic("upgrade", "0065")
         rows = await _execute(
             "SELECT c.sha, l.fix_ran_at IS NOT NULL, l.fix_ran_at = l.created_at FROM issue_commit_links l "
-            f"JOIN repository_commits c ON c.id = l.commit_id WHERE c.integration_id = {_INTEGRATION} "  # noqa: S608
+            f"JOIN repository_commits c ON c.id = l.commit_id WHERE c.integration_id = {_INTEGRATION} "
             "ORDER BY c.sha",
             key=_PROJECT_KEY,
         )

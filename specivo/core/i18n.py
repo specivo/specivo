@@ -65,13 +65,13 @@ _LOCALE_DIR = Path(__file__).resolve().parent.parent / "locale"
 # Extra locale directories registered by plugins: (path, domain)
 _extra_locale_dirs: list[tuple[Path, str]] = []
 
-# Cache: locale -> merged GNUTranslations
-_translations_cache: dict[str, gettext_module.GNUTranslations] = {}
+# Cache: locale -> merged translations (NullTranslations when no catalog exists)
+_translations_cache: dict[str, gettext_module.NullTranslations] = {}
 
 _CORE_DOMAIN = "specivo"
 
 
-def _load_translations(locale: str) -> gettext_module.GNUTranslations:
+def _load_translations(locale: str) -> gettext_module.NullTranslations:
     """Load and merge translation catalogs for *locale*.
 
     Loads the core catalog from ``specivo/locale/``, then merges any
@@ -85,12 +85,16 @@ def _load_translations(locale: str) -> gettext_module.GNUTranslations:
     # Load core translations
     core_trans = Translations.load(str(_LOCALE_DIR), [locale], _CORE_DOMAIN)
 
-    # Merge plugin translations
+    # Merge plugin translations. ``Translations.load`` returns a bare
+    # NullTranslations (which cannot merge) when no catalog exists.
     for locale_dir, domain in _extra_locale_dirs:
         plugin_trans = Translations.load(str(locale_dir), [locale], domain)
-        # Only merge if real translations were found (not NullTranslations)
-        if not isinstance(plugin_trans, gettext_module.NullTranslations) or hasattr(plugin_trans, "_catalog"):
+        if not isinstance(plugin_trans, Translations):
+            continue
+        if isinstance(core_trans, Translations):
             core_trans.merge(plugin_trans)
+        else:
+            core_trans = plugin_trans
 
     _translations_cache[locale] = core_trans
     return core_trans
@@ -110,7 +114,7 @@ def gettext(message: str) -> str:
     try:
         trans = _load_translations(locale)
         return trans.gettext(message)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return message
 
 
@@ -123,7 +127,7 @@ def ngettext(singular: str, plural: str, n: int) -> str:
     try:
         trans = _load_translations(locale)
         return trans.ngettext(singular, plural, n)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return singular if n == 1 else plural
 
 
@@ -144,7 +148,7 @@ def format_date(value: date | datetime, skeleton: str = "yMMMd", locale: str | N
 
     try:
         return format_skeleton(skeleton, value, locale=locale or get_locale())
-    except Exception:
+    except Exception:  # noqa: BLE001
         return format_skeleton(skeleton, value, locale="en")
 
 
@@ -158,7 +162,7 @@ def format_datetime(value: datetime, locale: str | None = None) -> str:
     loc = locale or get_locale()
     try:
         pattern = str(get_datetime_format("medium", locale=loc))
-    except Exception:
+    except Exception:  # noqa: BLE001
         loc = "en"
         pattern = str(get_datetime_format("medium", locale=loc))
     date_part = format_date(value, "yMMMd", loc)
@@ -223,7 +227,7 @@ class LazyString:
         return other + str(self)
 
     def __mod__(self, other: Any) -> str:
-        return str(self) % other
+        return str(str(self) % other)
 
     def format(self, *args: Any, **kwargs: Any) -> str:
         """Format the translated string with the given arguments."""

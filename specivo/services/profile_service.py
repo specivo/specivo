@@ -35,11 +35,11 @@ class ProfileService:
 
     async def upload_avatar(
         self,
-        session: AsyncSession,
+        session: AsyncSession,  # noqa: ARG002
         user: User,
         file_content: bytes,
         content_type: str,
-        filename: str,
+        filename: str,  # noqa: ARG002
     ) -> str:
         """Upload and process avatar image. Returns the new avatar URL."""
         import io
@@ -64,12 +64,11 @@ class ProfileService:
 
         # Open with Pillow (catches non-image files)
         try:
-            img = Image.open(io.BytesIO(file_content))
-            img.verify()  # Verify it's a valid image
+            Image.open(io.BytesIO(file_content)).verify()  # Verify it's a valid image
             # Re-open after verify (verify() leaves file in unusable state)
-            img = Image.open(io.BytesIO(file_content))
-        except Exception:
-            raise ValidationError("Invalid image file.")
+            img: Image.Image = Image.open(io.BytesIO(file_content))
+        except Exception:  # noqa: BLE001
+            raise ValidationError("Invalid image file.")  # noqa: B904
 
         # Strip EXIF metadata by re-encoding
         if img.mode in ("RGBA", "LA", "PA"):
@@ -79,7 +78,7 @@ class ProfileService:
             img = img.convert("RGB")
 
         # Resize to fit within max dimensions
-        img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
         # Generate UUID filename with hash subdirectory
         file_uuid = uuid.uuid4().hex
@@ -105,7 +104,7 @@ class ProfileService:
         user.avatar_url = avatar_url
         return avatar_url
 
-    async def delete_avatar(self, session: AsyncSession, user: User) -> None:
+    async def delete_avatar(self, session: AsyncSession, user: User) -> None:  # noqa: ARG002
         """Remove user's avatar photo."""
         if user.avatar_url:
             self._delete_file(user.avatar_url)

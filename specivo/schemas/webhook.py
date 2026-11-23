@@ -41,7 +41,7 @@ def _validate_url(v: str) -> str:
     if not hostname:
         raise ValueError("url must include a host name")
     try:
-        parsed.port
+        parsed.port  # noqa: B018
     except ValueError:
         raise ValueError("url has an invalid port") from None
     # Host names are resolved and checked again at delivery time.

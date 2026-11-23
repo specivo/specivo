@@ -52,8 +52,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any
 
-from markdown import Markdown  # type: ignore[import-untyped]
-from markdown.extensions import Extension  # type: ignore[import-untyped]
+from markdown import Markdown
+from markdown.extensions import Extension
 
 from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
@@ -246,7 +246,7 @@ def _block_scan_cost(block: str) -> float:
         elif first == "]":
             if brackets:
                 bracket_chars += pos - brackets.pop()
-            if token == "](":
+            if token == "](":  # noqa: S105
                 parens.append((pos + 1, True))
         elif first == "(":
             parens.append((pos, False))
@@ -389,11 +389,11 @@ class RenderDeadline(Extension):
         self.cpu_deadline = _cpu_clock() + cpu_seconds
         self.wall_deadline = _wall_clock() + cpu_seconds * WALL_CLOCK_FACTOR
 
-    def extendMarkdown(self, md: Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: Markdown) -> None:  # Python-Markdown API  # noqa: N802
         for pattern in md.inlinePatterns:
-            pattern.handleMatch = self._checked(pattern.handleMatch)
+            pattern.handleMatch = self._checked(pattern.handleMatch)  # type: ignore[method-assign]  # wrapped on purpose
         for processor in md.parser.blockprocessors:
-            processor.run = self._checked(processor.run)
+            processor.run = self._checked(processor.run)  # type: ignore[method-assign]  # wrapped on purpose
 
     def _checked(self, method: Callable[..., Any]) -> Callable[..., Any]:
         cpu_deadline = self.cpu_deadline
@@ -489,7 +489,7 @@ def _reference_document() -> str:
     """About 9 KB of ordinary Markdown: headings, links, emphasis, lists, tables, code."""
     sections = []
     for i in range(30):
-        sections.append(
+        sections.append(  # noqa: PERF401
             f"## Section {i}\n\n"
             f"See [the docs](https://example.com/p/{i}) and ![chart](https://example.com/c{i}.png), "
             f"**bold** and *emphasis* with `code {i}`.\n\n"

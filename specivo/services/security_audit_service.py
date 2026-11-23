@@ -47,6 +47,10 @@ class AuditEvent(StrEnum):
     SEARCH_QUERY = "search_query"
     MEMBER_CHANGE = "member_change"
     GROUP_CHANGE = "group_change"
+    # A role was created, edited or deleted in Administration -> Roles.
+    ROLE_CREATED = "role_created"
+    ROLE_UPDATED = "role_updated"
+    ROLE_DELETED = "role_deleted"
     ACCESS_GRANTED = "access_granted"
     ACCESS_DENIED = "access_denied"
     AUTH_FAILURE = "auth_failure"
@@ -55,6 +59,7 @@ class AuditEvent(StrEnum):
     ATTACHMENT_DELETED = "attachment_deleted"
     ATTACHMENT_UPDATED = "attachment_description_updated"
     PROJECT_KEY_RENAMED = "project_key_renamed"
+    PROJECT_DELETED = "project_deleted"
     # A connected repository moved to another forge: new hook URL, new secret.
     REPOSITORY_PROVIDER_CHANGED = "repository_provider_changed"
     # A commit or pull request detached from an issue, or moved to another one, by a person.
@@ -84,6 +89,8 @@ class AuditEvent(StrEnum):
     # A sprint was started or completed. Details hold the sprint's name and
     # issue counts (and, on completion, where unfinished issues went); never
     # issue subjects.
+    SPRINT_CREATED = "sprint_created"
+    SPRINT_UPDATED = "sprint_updated"
     SPRINT_STARTED = "sprint_started"
     SPRINT_COMPLETED = "sprint_completed"
     RECURRING_PATTERNS_LISTED = "recurring_patterns_listed"
@@ -104,12 +111,12 @@ class AuditEvent(StrEnum):
     RELATION_LISTED = "relation_listed"
     RELATION_ADDED = "relation_added"
     RELATION_REMOVED = "relation_removed"
-    PASSWORD_RESET_REQUESTED = "password_reset_requested"
-    PASSWORD_RESET_COMPLETED = "password_reset_completed"
-    PASSWORD_RESET_FAILED = "password_reset_failed"
-    PASSWORD_CHANGED = "password_changed"
-    PASSWORD_CHANGE_FAILED = "password_change_failed"
-    PASSWORD_HASH_UPGRADED = "password_hash_upgraded"
+    PASSWORD_RESET_REQUESTED = "password_reset_requested"  # noqa: S105
+    PASSWORD_RESET_COMPLETED = "password_reset_completed"  # noqa: S105
+    PASSWORD_RESET_FAILED = "password_reset_failed"  # noqa: S105
+    PASSWORD_CHANGED = "password_changed"  # noqa: S105
+    PASSWORD_CHANGE_FAILED = "password_change_failed"  # noqa: S105
+    PASSWORD_HASH_UPGRADED = "password_hash_upgraded"  # noqa: S105
     # Self-service email change: requested (details: the new address and
     # whether another account uses it), refused (``reason``), and done, by the
     # person or by an administrator (old and new address, ``by``).
@@ -135,7 +142,7 @@ class AuditEvent(StrEnum):
     SSO_PROVIDER_CREATED = "sso_provider_created"
     SSO_PROVIDER_UPDATED = "sso_provider_updated"
     SSO_PROVIDER_DELETED = "sso_provider_deleted"
-    SSO_PROVIDER_SECRET_CHANGED = "sso_provider_secret_changed"
+    SSO_PROVIDER_SECRET_CHANGED = "sso_provider_secret_changed"  # noqa: S105
     USER_DEPROVISIONED = "user_deprovisioned"
     # SCIM provisioning. The actor is nobody (the IdP); details name the
     # provider (``source: scim``), the SCIM id, the Specivo id and an action.
@@ -308,6 +315,9 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.SEARCH_QUERY,
             AuditEvent.MEMBER_CHANGE,
             AuditEvent.GROUP_CHANGE,
+            AuditEvent.ROLE_CREATED,
+            AuditEvent.ROLE_UPDATED,
+            AuditEvent.ROLE_DELETED,
             AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
             AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
         ],
@@ -355,6 +365,8 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.WIKI_DELETED,
             AuditEvent.WIKI_RESTORED,
             AuditEvent.TIMER_DISCARDED,
+            AuditEvent.SPRINT_CREATED,
+            AuditEvent.SPRINT_UPDATED,
             AuditEvent.SPRINT_STARTED,
             AuditEvent.SPRINT_COMPLETED,
             AuditEvent.TAG_CREATED,
@@ -370,6 +382,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
     **dict.fromkeys(
         [
             AuditEvent.PROJECT_KEY_RENAMED,
+            AuditEvent.PROJECT_DELETED,
             AuditEvent.REPOSITORY_PROVIDER_CHANGED,
             AuditEvent.METADATA_SCHEMA_CREATED,
             AuditEvent.METADATA_SCHEMA_UPDATED,
@@ -679,7 +692,7 @@ class SecurityAuditService:
             await session.flush()
         return log
 
-    async def log_event(
+    async def log_event(  # noqa: PLR0913
         self,
         session: AsyncSession,
         event_type: str | AuditEvent,
@@ -1047,6 +1060,40 @@ class SecurityAuditService:
             details=details,
         )
 
+    async def log_role_change(
+        self,
+        session: AsyncSession,
+        event: AuditEvent,
+        user_id: int,
+        role_id: int,
+        role_name: str,
+        details: dict[str, Any],
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a role created, edited or deleted. Core feature — always persisted.
+
+        A role is global, so ``project_id`` is NULL and the role is
+        identified by ``resource_type``/``resource_id``. *details* carries the
+        event's facts (``RoleService`` returns them); ``role_name`` is always
+        included. Written in the caller's transaction, in a savepoint, so a
+        failed audit insert cannot undo the change.
+        """
+        if event not in (AuditEvent.ROLE_CREATED, AuditEvent.ROLE_UPDATED, AuditEvent.ROLE_DELETED):
+            raise ValueError(f"Not a role event: {event!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event,
+            user_id=user_id,
+            resource_type="role",
+            resource_id=role_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={**details, "role_name": role_name},
+        )
+
     async def log_search_query(
         self,
         session: AsyncSession,
@@ -1318,7 +1365,7 @@ class SecurityAuditService:
             },
         )
 
-    async def log_development_link_change(
+    async def log_development_link_change(  # noqa: PLR0913
         self,
         session: AsyncSession,
         *,

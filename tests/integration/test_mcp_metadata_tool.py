@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
@@ -132,9 +132,7 @@ class TestMetadataSet:
     async def test_set_new_key(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session, admin, issue.display_key, "severity", "set", "high"
-        )
+        result = await _metadata(db_session, admin, issue.display_key, "severity", "set", "high")
         assert "Error" not in result
         assert "severity" in result
         await db_session.refresh(issue)
@@ -160,9 +158,7 @@ class TestMetadataSet:
     async def test_set_complex_value(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session, admin, issue.display_key, "obj", "set", {"a": 1, "b": [2, 3]}
-        )
+        result = await _metadata(db_session, admin, issue.display_key, "obj", "set", {"a": 1, "b": [2, 3]})
         assert "Error" not in result
         await db_session.refresh(issue)
         assert issue.issue_metadata == {"obj": {"a": 1, "b": [2, 3]}}
@@ -226,9 +222,8 @@ class TestMetadataAppend:
         from specivo.mcp.tools import _metadata
 
         await _metadata(db_session, admin, issue.display_key, "k", "set", "string_value")
-        result = await _metadata(db_session, admin, issue.display_key, "k", "append", "x")
-        assert result.startswith("Error")
-        assert "append" in result
+        with pytest.raises(ValidationError, match="append"):
+            await _metadata(db_session, admin, issue.display_key, "k", "append", "x")
 
 
 # ---------------------------------------------------------------------------
@@ -272,12 +267,12 @@ class TestMetadataRemove:
         from specivo.mcp.tools import _metadata
 
         await _metadata(db_session, admin, issue.display_key, "k", "set", "str")
-        result = await _metadata(db_session, admin, issue.display_key, "k", "remove", "x")
-        assert result.startswith("Error")
+        with pytest.raises(ValidationError):
+            await _metadata(db_session, admin, issue.display_key, "k", "remove", "x")
 
 
 # ---------------------------------------------------------------------------
-# Error cases
+# Refusals
 # ---------------------------------------------------------------------------
 
 
@@ -285,33 +280,28 @@ class TestMetadataErrors:
     async def test_invalid_op(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "k", "clobber", "x")
-        assert result.startswith("Error")
-        assert "invalid op" in result
+        with pytest.raises(ValidationError, match="invalid op"):
+            await _metadata(db_session, admin, issue.display_key, "k", "clobber", "x")
 
     async def test_empty_key(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "", "set", "x")
-        assert result.startswith("Error")
+        with pytest.raises(ValidationError):
+            await _metadata(db_session, admin, issue.display_key, "", "set", "x")
 
     async def test_unknown_scheme(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, "nosuch:xyz", "k", "set", "v")
-        assert result.startswith("Error")
-        assert "scheme" in result
+        with pytest.raises(ValidationError, match="scheme"):
+            await _metadata(db_session, admin, "nosuch:xyz", "k", "set", "v")
 
     async def test_missing_entity(self, db_session, admin):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, "ZZZZ-999", "k", "set", "v")
-        assert result.startswith("Error")
-        assert "not found" in result
+        with pytest.raises(NotFoundError, match="not found"):
+            await _metadata(db_session, admin, "ZZZZ-999", "k", "set", "v")
 
-    async def test_permission_denied_raises(
-        self, db_session, limited_user, role_view_only, project, issue
-    ):
+    async def test_permission_denied_raises(self, db_session, limited_user, role_view_only, project, issue):
         from specivo.mcp.tools import _metadata
 
         await _add_member(db_session, project, limited_user, role_view_only)
@@ -322,9 +312,8 @@ class TestMetadataErrors:
         from specivo.mcp.tools import _metadata
 
         big = "x" * (17 * 1024)
-        result = await _metadata(db_session, admin, issue.display_key, "blob", "set", big)
-        assert result.startswith("Error")
-        assert "16384" in result or "exceed" in result
+        with pytest.raises(ValidationError, match="would exceed 16384 bytes"):
+            await _metadata(db_session, admin, issue.display_key, "blob", "set", big)
         await db_session.refresh(issue)
         assert "blob" not in issue.issue_metadata
 
@@ -338,54 +327,36 @@ class TestMetadataLossyNumberGuard:
     async def test_set_scientific_float_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(db_session, admin, issue.display_key, "commits", "set", 4.983e31)
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "commits", "set", 4.983e31)
         await db_session.refresh(issue)
         assert "commits" not in issue.issue_metadata
 
     async def test_append_scientific_float_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session, admin, issue.display_key, "commits", "append", 1.0e20
-        )
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "commits", "append", 1.0e20)
         await db_session.refresh(issue)
         assert "commits" not in issue.issue_metadata
 
     async def test_inf_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session, admin, issue.display_key, "k", "set", float("inf")
-        )
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "k", "set", float("inf"))
 
     async def test_nan_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session, admin, issue.display_key, "k", "set", float("nan")
-        )
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "k", "set", float("nan"))
 
     async def test_list_with_scientific_float_rejected(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
-        result = await _metadata(
-            db_session,
-            admin,
-            issue.display_key,
-            "commits",
-            "append",
-            ["abc1234567", 4.983e31],
-        )
-        assert result.startswith("Error")
-        assert "lost precision" in result
+        with pytest.raises(ValidationError, match="lost precision"):
+            await _metadata(db_session, admin, issue.display_key, "commits", "append", ["abc1234567", 4.983e31])
         await db_session.refresh(issue)
         assert "commits" not in issue.issue_metadata
 
@@ -419,9 +390,7 @@ class TestMetadataLossyNumberGuard:
         )
         assert "Error" not in result
         await db_session.refresh(issue)
-        assert issue.issue_metadata == {
-            "tags": ["49830031000000000000000000000000000e99999"]
-        }
+        assert issue.issue_metadata == {"tags": ["49830031000000000000000000000000000e99999"]}
 
 
 # ---------------------------------------------------------------------------
@@ -437,34 +406,22 @@ class TestMetadataGet:
         result = await _metadata(db_session, admin, issue.display_key, "owner", "get")
         assert result == '"alice"'
 
-    async def test_metadata_get_returns_not_set_when_missing(
-        self, db_session, admin, issue
-    ):
+    async def test_metadata_get_returns_not_set_when_missing(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
         result = await _metadata(db_session, admin, issue.display_key, "nope", "get")
         assert result == "(not set)"
 
-    async def test_metadata_get_returns_complex_value_as_json(
-        self, db_session, admin, issue
-    ):
+    async def test_metadata_get_returns_complex_value_as_json(self, db_session, admin, issue):
         import json
 
         from specivo.mcp.tools import _metadata
 
-        await _metadata(
-            db_session, admin, issue.display_key, "tags", "set", ["a", "b"]
-        )
-        await _metadata(
-            db_session, admin, issue.display_key, "obj", "set", {"x": 1}
-        )
+        await _metadata(db_session, admin, issue.display_key, "tags", "set", ["a", "b"])
+        await _metadata(db_session, admin, issue.display_key, "obj", "set", {"x": 1})
 
-        list_result = await _metadata(
-            db_session, admin, issue.display_key, "tags", "get"
-        )
-        dict_result = await _metadata(
-            db_session, admin, issue.display_key, "obj", "get"
-        )
+        list_result = await _metadata(db_session, admin, issue.display_key, "tags", "get")
+        dict_result = await _metadata(db_session, admin, issue.display_key, "obj", "get")
         assert json.loads(list_result) == ["a", "b"]
         assert json.loads(dict_result) == {"x": 1}
 
@@ -483,19 +440,13 @@ class TestMetadataGet:
 
         # View-only user must NOT be able to set.
         with pytest.raises(PermissionDeniedError, match="edit_issues"):
-            await _metadata(
-                db_session, limited_user, issue.display_key, "owner", "set", "bob"
-            )
+            await _metadata(db_session, limited_user, issue.display_key, "owner", "set", "bob")
 
         # But they MUST be able to get.
-        result = await _metadata(
-            db_session, limited_user, issue.display_key, "owner", "get"
-        )
+        result = await _metadata(db_session, limited_user, issue.display_key, "owner", "get")
         assert result == '"alice"'
 
-    async def test_metadata_get_does_not_bump_lock_version(
-        self, db_session, admin, issue
-    ):
+    async def test_metadata_get_does_not_bump_lock_version(self, db_session, admin, issue):
         from specivo.mcp.tools import _metadata
 
         await _metadata(db_session, admin, issue.display_key, "k", "set", "v")
@@ -506,9 +457,7 @@ class TestMetadataGet:
         await db_session.refresh(issue)
         assert issue.lock_version == before
 
-    async def test_metadata_get_does_not_write_audit_log(
-        self, db_session, admin, issue
-    ):
+    async def test_metadata_get_does_not_write_audit_log(self, db_session, admin, issue):
         from sqlalchemy import func, select
 
         from specivo.mcp.tools import _metadata
@@ -517,20 +466,12 @@ class TestMetadataGet:
         await _metadata(db_session, admin, issue.display_key, "k", "set", "v")
         await db_session.flush()
 
-        before = (
-            await db_session.execute(
-                select(func.count()).select_from(SecurityAuditLog)
-            )
-        ).scalar_one()
+        before = (await db_session.execute(select(func.count()).select_from(SecurityAuditLog))).scalar_one()
 
         await _metadata(db_session, admin, issue.display_key, "k", "get")
         await db_session.flush()
 
-        after = (
-            await db_session.execute(
-                select(func.count()).select_from(SecurityAuditLog)
-            )
-        ).scalar_one()
+        after = (await db_session.execute(select(func.count()).select_from(SecurityAuditLog))).scalar_one()
         assert after == before
 
 
@@ -545,12 +486,16 @@ class TestMetadataJournal:
         await db_session.flush()
 
         rows = (
-            await db_session.execute(
-                select(JournalDetail)
-                .join(Journal, Journal.id == JournalDetail.journal_id)
-                .where(Journal.issue_id == issue.id, JournalDetail.prop_key == "issue_metadata")
+            (
+                await db_session.execute(
+                    select(JournalDetail)
+                    .join(Journal, Journal.id == JournalDetail.journal_id)
+                    .where(Journal.issue_id == issue.id, JournalDetail.prop_key == "issue_metadata")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 1
         assert rows[0].new_value is not None
         assert "severity" in rows[0].new_value

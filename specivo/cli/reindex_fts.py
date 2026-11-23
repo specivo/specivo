@@ -61,7 +61,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         asyncio.run(_reindex(args.project))
-    except Exception as exc:  # pragma: no cover - CLI surface
+    except Exception as exc:  # pragma: no cover - CLI surface  # noqa: BLE001
         logger.error("Reindex failed: %s", exc)
         sys.exit(1)
 

@@ -6,9 +6,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}AI model prices{% endtrans %}</span>
 </div>
@@ -23,7 +23,7 @@
 {% if error %}<div class="flash flash-error" role="alert" data-testid="prices-error">{{ error_text(error) }}</div>{% endif %}
 
 <div class="card sp-card-pad sp-mb-md" data-testid="prices-card">
-  <form method="get" action="/admin/ai-model-prices/" class="sp-mp-filters sp-mb-md">
+  <form method="get" action="{{ base }}/admin/ai-model-prices/" class="sp-mp-filters sp-mb-md">
     <select name="provider" class="form-input" aria-label="{{ _('Provider') }}">
       <option value="">{% trans %}All providers{% endtrans %}</option>
       {% for p in providers %}<option value="{{ p }}" {{ 'selected' if p == filters.provider else '' }}>{{ p }}</option>{% endfor %}
@@ -59,7 +59,7 @@
         {% for p in prices %}
         <tr data-price-id="{{ p.id }}" class="{{ '' if p.is_active else 'sp-mp-inactive' }}">
           <td>
-            <a href="/admin/ai-model-prices/model/?{{ p.history_query }}"><span class="sp-text-muted-xs">{{ p.provider }}/</span>{{ p.model }}</a>
+            <a href="{{ base }}/admin/ai-model-prices/model/?{{ p.history_query }}"><span class="sp-text-muted-xs">{{ p.provider }}/</span>{{ p.model }}</a>
             {% if p.long_context_threshold %}<span class="sp-mp-badge" title="{{ _('Long context prices above this many tokens') }}">&gt;{{ p.long_context_threshold }}</span>{% endif %}
             {% if not p.is_active %}<span class="sp-badge-warning">{% trans %}Deactivated{% endtrans %}</span>{% endif %}
           </td>
@@ -73,7 +73,7 @@
       </tbody>
     </table>
   </div>
-  {{ pagination(total, offset, limit, "/admin/ai-model-prices/", page_query) }}
+  {{ pagination(total, offset, limit, base ~ "/admin/ai-model-prices/", page_query) }}
 </div>
 
 <div class="sp-mp-grid">
@@ -91,7 +91,7 @@
     <p>{% trans count=snapshot.count, as_of=snapshot.as_of %}This version bundles prices of {{ count }} models as of {{ as_of }}.{% endtrans %}</p>
     {% endif %}
     <p class="sp-text-muted">{% trans %}They are loaded when Specivo is installed and whenever a worker starts after an upgrade. Loading never changes a period that already started: a changed price ends the old period at the snapshot's date and starts a new one. Usage from before the first bundled period is unpriced unless you enter an earlier price. Prices you entered are never touched.{% endtrans %}</p>
-    <form method="post" action="/admin/ai-model-prices/seed/">
+    <form method="post" action="{{ base }}/admin/ai-model-prices/seed/">
       <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Load bundled prices now{% endtrans %}</button>
     </form>
     <p class="sp-text-muted-xs sp-mp-attribution" data-testid="litellm-attribution">{% trans %}Source of the bundled prices: LiteLLM's model price list (MIT License, Copyright (c) 2023 Berri AI). Prices are list prices for information; check them against your provider's invoice.{% endtrans %}</p>

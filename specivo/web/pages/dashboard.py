@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 
 from babel.numbers import format_compact_decimal, format_decimal
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import ColumnElement, and_, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,8 +30,8 @@ from specivo.services import dashboard_service as dash
 from specivo.services.ai_spend_report_service import ReportRow
 from specivo.services.notification_service import NotificationService
 from specivo.services.project_service import ProjectService
-from specivo.web.deps import get_current_user_optional, get_templates
-from specivo.web.pages.ai_usage import _money_view
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect, redirect_to
+from specivo.web.pages.ai_usage.rows import _money_view
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ async def _anonymous_landing(request: Request, db: AsyncSession) -> Response:
             logger.warning("Could not resolve anonymous access for the home page", exc_info=True)
             target = "/login/"
 
-    response = RedirectResponse(target, status_code=302)
+    response = redirect_to(target, status_code=302)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Vary"] = "Cookie, Authorization"
     return response
@@ -326,7 +326,7 @@ async def activity_context(db: AsyncSession, scope: dash.DashboardScope, who: st
     groups = await dash.activity_groups(db, scope, who)
     views = []
     for group in groups:
-        views.append(
+        views.append(  # noqa: PERF401
             {
                 "group": group,
                 "summary": _group_summary(group, locale),
@@ -478,7 +478,7 @@ async def notifications_page(
     """Render the notifications page."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     notifications, total = await _notif_svc.list_notifications(

@@ -16,6 +16,7 @@ import re
 import secrets
 import time
 import uuid
+from typing import Any
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -118,7 +119,8 @@ class CSRFMiddleware:
     that the token signature is valid.
 
     Exempt from validation:
-    - Requests with an ``X-API-Key`` header (API key auth, not cookie-based)
+    - Requests with an ``Authorization: Bearer ...`` header (JWT or API key
+      auth, which never reads the session cookie)
     - The exact paths in ``_CSRF_EXEMPT_PATHS`` (login, token refresh,
       password-reset request and confirm)
     - Paths matching an anchored pattern in ``_CSRF_EXEMPT_PATTERNS`` (SSO
@@ -140,7 +142,9 @@ class CSRFMiddleware:
             b"csrf-middleware-v1",
             hashlib.sha256,
         ).digest()
-        sp = settings.stealth_prefix.rstrip("/")
+        from specivo.core.app_url import base_path
+
+        sp = base_path(settings)
         self._exempt_paths = frozenset(sp + p for p in _CSRF_EXEMPT_PATHS)
         self._exempt_mounts = tuple(sp + m for m in _CSRF_EXEMPT_MOUNTS)
         # Trailing slash optional, like the exact paths; fullmatch anchors both ends.
@@ -169,19 +173,23 @@ class CSRFMiddleware:
 
     def _needs_csrf(self, path: str, headers: dict[bytes, bytes]) -> bool:
         """Return True if this request requires CSRF validation."""
-        # Non-cookie auth (API key or Bearer token) is not CSRF-vulnerable
-        if b"x-api-key" in headers or b"authorization" in headers:
+        # A Bearer token (JWT or API key) is the only auth that ignores the
+        # session cookie (security.authenticate_request), so only it is not
+        # CSRF-vulnerable. Any other Authorization scheme, or an X-API-Key
+        # header (not an auth method here), falls back to the cookie and is
+        # checked like any cookie request.
+        if headers.get(b"authorization", b"").startswith(b"Bearer "):
             return False
         # Exempt endpoints (pre-auth auth routes) and mounts (MCP)
         if self._is_exempt_path(path):
             return False
         # No session cookie present — let the auth layer handle the 401
-        cookie_header = headers.get(b"cookie", b"").decode()
+        cookie_header = headers.get(b"cookie", b"").decode("latin-1")
         return any(name in cookie_header for name in _SESSION_COOKIES)
 
     @staticmethod
     def _get_cookie_token(headers: dict[bytes, bytes]) -> str:
-        cookie_header = headers.get(b"cookie", b"").decode()
+        cookie_header = headers.get(b"cookie", b"").decode("latin-1")
         for part in cookie_header.split(";"):
             part = part.strip()
             if part.startswith(f"{_CSRF_COOKIE}="):
@@ -202,7 +210,7 @@ class CSRFMiddleware:
         if is_mutating and self._needs_csrf(path, req_headers):
             cookie_token = self._get_cookie_token(req_headers)
             # Accept token from header (fetch/HTMX) or form body (HTML forms)
-            header_token = req_headers.get(_CSRF_HEADER, b"").decode()
+            header_token = req_headers.get(_CSRF_HEADER, b"").decode("latin-1")
             if not header_token:
                 header_token, receive = await self._extract_form_token(receive, req_headers)
 
@@ -250,7 +258,7 @@ class CSRFMiddleware:
         Returns the token (or empty string) and a new receive callable
         that replays the already-consumed body bytes.
         """
-        content_type = headers.get(b"content-type", b"").decode()
+        content_type = headers.get(b"content-type", b"").decode("latin-1")
         is_urlencoded = "application/x-www-form-urlencoded" in content_type
         is_multipart = "multipart/form-data" in content_type
         if not is_urlencoded and not is_multipart:
@@ -461,12 +469,16 @@ def robots_tag_for(scope: Scope, status: int) -> bytes:
     return ROBOTS_NOINDEX.encode("latin-1")
 
 
+_REQUEST_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
+
+
 class RequestIDMiddleware:
     """Attach a unique request ID and security headers to every HTTP response.
 
-    If the client sends ``X-Request-ID`` that value is reused; otherwise a
-    UUID4 is generated. The ID is stored on ``scope["state"]["request_id"]``
-    and echoed back via the ``X-Request-ID`` response header.
+    If the client sends an ``X-Request-ID`` of 1-64 letters, digits, ``.``,
+    ``_`` or ``-``, that value is reused; otherwise a UUID4 is generated.
+    The ID is stored on ``scope["state"]["request_id"]`` and echoed back via
+    the ``X-Request-ID`` response header.
 
     Security headers (``X-Content-Type-Options``, ``X-Frame-Options``, etc.)
     are appended to every response to harden the API against common web
@@ -484,7 +496,10 @@ class RequestIDMiddleware:
 
         # Extract request ID from incoming headers or generate one
         headers = dict(scope.get("headers", []))
-        request_id = (headers.get(b"x-request-id") or b"").decode() or str(uuid.uuid4())
+        # A client's ID is echoed and logged, so only a short, plain one is
+        # kept; anything else gets a fresh ID.
+        sent = (headers.get(b"x-request-id") or b"").decode("latin-1")
+        request_id = sent if _REQUEST_ID_RE.fullmatch(sent) else str(uuid.uuid4())
 
         # Store in scope state (accessible via request.state.request_id)
         scope.setdefault("state", {})
@@ -591,13 +606,13 @@ class LocaleMiddleware:
         """Determine the best locale for this request."""
         from specivo.core.runtime_settings import get_default_language_override
 
-        available = getattr(settings, "available_languages", ["en"])
+        available: list[str] = getattr(settings, "available_languages", ["en"])
         # The admin workspace override (DB-backed) wins over the config default.
-        default = get_default_language_override() or getattr(settings, "default_language", "en")
-        headers = dict(scope.get("headers", []))
+        default = get_default_language_override() or str(getattr(settings, "default_language", "en"))
+        headers: dict[bytes, bytes] = dict(scope.get("headers", []))
 
         # 1. Check specivo_lang cookie
-        cookie_header = headers.get(b"cookie", b"").decode()
+        cookie_header = headers.get(b"cookie", b"").decode("latin-1")
         if cookie_header:
             for part in cookie_header.split(";"):
                 part = part.strip()
@@ -607,7 +622,7 @@ class LocaleMiddleware:
                         return lang
 
         # 2. Parse Accept-Language header
-        accept_lang = headers.get(b"accept-language", b"").decode()
+        accept_lang = headers.get(b"accept-language", b"").decode("latin-1")
         if accept_lang:
             best = self._parse_accept_language(accept_lang, available)
             if best:
@@ -742,7 +757,7 @@ class TokenRefreshMiddleware:
         async def send_with_refresh_cookies(message: Message) -> None:
             if message["type"] == "http.response.start":
                 state = scope.get("state", {})
-                tokens: dict[str, str] | None = state.get("refreshed_tokens")
+                tokens: dict[str, Any] | None = state.get("refreshed_tokens")
                 if tokens:
                     from specivo.core.config import get_settings
 
@@ -753,7 +768,7 @@ class TokenRefreshMiddleware:
                             access_token=tokens["access_token"],
                             refresh_token=tokens["refresh_token"],
                             settings=settings,
-                            remember=tokens.get("remember", True),
+                            remember=bool(tokens.get("remember", True)),
                         )
                     )
                     message["headers"] = resp_headers
@@ -827,7 +842,7 @@ def install_sql_debug_hooks(engine: object) -> None:
     sync_engine = engine.sync_engine  # type: ignore[attr-defined]
 
     @_event.listens_for(sync_engine, "before_cursor_execute")
-    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
         queries = _sql_debug_queries.get()
         if queries is None:
             return
@@ -835,7 +850,7 @@ def install_sql_debug_hooks(engine: object) -> None:
         queries.append(record)
 
     @_event.listens_for(sync_engine, "after_cursor_execute")
-    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
         queries = _sql_debug_queries.get()
         if queries is None or not queries:
             return

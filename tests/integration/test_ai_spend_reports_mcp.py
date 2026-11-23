@@ -151,3 +151,85 @@ async def test_a_system_account_login_matches_nothing(db_session: AsyncSession, 
     # Its usage counts in the report (totals stay exact), but its login names nobody.
     assert "Git" in await _report(db_session, w.mgr, project_key="RMA")
     assert "Rows (0):" in await _report(db_session, w.mgr, project_key="RMA", user_login="$rm_git")
+
+
+_FULL_TEXT = {
+    "instance": (
+        "AI spend report for the whole instance, 2026-03-01 to 2026-03-31 (UTC days), amounts in USD, "
+        "rate policy entry_date.\n"
+        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
+        "api_equivalent = the same tokens at pay-per-use prices, not a bill.\n"
+        "Rows (3):\n"
+        "  2026-03-01 project=RMA: entries=2 tokens=2200 marginal=4.00 USD seat=75.00 USD spend=79.00 "
+        "USD api_equivalent=34.00 USD leverage=0.40x\n"
+        "  2026-03-01 project=RMB: entries=1 tokens=1100 marginal=0.00 USD seat=25.00 USD spend=25.00 "
+        "USD api_equivalent=10.00 USD leverage=0.40x\n"
+        "  2026-03-01 project=(unallocated seat): entries=0 tokens=0 marginal=0.00 USD seat=0.00 USD "
+        "unallocated_seat=15.00 USD (+ not converted: 100.00000000 EUR no_rate) spend=15.00 USD (+ not "
+        "converted: 100.00000000 EUR no_rate) api_equivalent=0.00 USD leverage=0.00x\n"
+        "Total: entries=3 tokens=3300 marginal=4.00 USD seat=100.00 USD unallocated_seat=15.00 USD (+ "
+        "not converted: 100.00000000 EUR no_rate) spend=119.00 USD (+ not converted: 100.00000000 EUR "
+        "no_rate) api_equivalent=44.00 USD leverage=0.35x"
+    ),
+    "mgr_noseat": (
+        "AI spend report for project RMA, 2026-03-01 to 2026-03-31 (UTC days), amounts in USD, rate "
+        "policy entry_date.\n"
+        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
+        "api_equivalent = the same tokens at pay-per-use prices, not a bill.\n"
+        "Seat cost is left out (include_seat_cost=false).\n"
+        "Rows (2):\n"
+        "  user=Rep Bob model=lab-model-2: entries=1 tokens=1100 spend=4.00 USD api_equivalent=4.00 USD\n"
+        "  user=Rep Alice model=lab-model-1: entries=1 tokens=1100 spend=0.00 USD api_equivalent=30.00 "
+        "USD\n"
+        "Total: entries=2 tokens=2200 spend=4.00 USD api_equivalent=34.00 USD"
+    ),
+    "alice": (
+        "AI spend report for project RMA, 2026-03-01 to 2026-03-31 (UTC days), amounts in USD, rate "
+        "policy entry_date.\n"
+        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
+        "api_equivalent = the same tokens at pay-per-use prices, not a bill.\n"
+        "Seat cost is left out: you do not read every entry of this project in the period.\n"
+        "Rows (1):\n"
+        "  issue=(no issue): entries=1 tokens=1100 spend=0.00 USD api_equivalent=30.00 USD\n"
+        "Total: entries=1 tokens=1100 spend=0.00 USD api_equivalent=30.00 USD"
+    ),
+    "issue": (
+        "AI spend report for issue RMA-1 in project RMA, 2026-03-01 to 2026-03-31 (UTC days), amounts "
+        "in USD, rate policy entry_date.\n"
+        "spend = marginal spend + seat cost (subscription fees spread over the entries that used them); "
+        "api_equivalent = the same tokens at pay-per-use prices, not a bill.\n"
+        "Rows (0):\n"
+        "  (none)\n"
+        "Total: entries=0 tokens=0 marginal=0.00 USD seat=0.00 USD spend=0.00 USD api_equivalent=0.00 "
+        "USD"
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_FULL_TEXT))
+async def test_full_report_text(db_session: AsyncSession, w: World, case: str) -> None:
+    """The whole text of a few reports, line for line (scope line, seat notes, rows, folded total)."""
+    calls: dict[str, tuple[User, dict[str, Any]]] = {
+        "instance": (w.admin, {"group_by": "project", "period": "month"}),
+        "mgr_noseat": (
+            w.mgr,
+            {"project_key": "RMA", "include_seat_cost": False, "group_by": "user,model", "sort": "spend"},
+        ),
+        "alice": (w.alice, {"project_key": "RMA", "group_by": "issue"}),
+        "issue": (w.mgr, {"project_key": "RMA", "issue_ref": w.public_issue.display_key, "group_by": "user"}),
+    }
+    user, kw = calls[case]
+    assert await _report(db_session, user, **kw) == _FULL_TEXT[case]
+
+
+async def test_scope_is_resolved_before_the_dates_are_read(db_session: AsyncSession, w: World) -> None:
+    """An unreachable project is refused before a malformed date is looked at; a bad preset before both."""
+    with pytest.raises(AppError) as exc:
+        await _report(db_session, w.mgr, project_key="RMB", date_from="March")
+    assert exc.value.status_code == 404
+    with pytest.raises(AppError) as exc:
+        await _report(db_session, w.mgr, project_key="RMB", preset="forever")
+    assert (exc.value.status_code, exc.value.field) == (422, "preset")
+    with pytest.raises(AppError) as exc:
+        await _report(db_session, w.admin, project_key="RMB", issue_ref=w.public_issue.display_key, date_from="x")
+    assert exc.value.field == "issue_ref"

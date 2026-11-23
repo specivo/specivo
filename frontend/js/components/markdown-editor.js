@@ -13,7 +13,7 @@ export function markdownEditor(initial) {
         return {
             value: initial.initial || '',
             editor: null,
-            previewUrl: initial.previewUrl || '/api/v1/markdown/preview/',
+            previewUrl: initial.previewUrl || spUrl('/api/v1/markdown/preview/'),
             context: initial.context || 'wiki',
             /* Where the text will be stored, so the preview resolves bare
              * attachment filenames like the saved page: {issue_id} for an

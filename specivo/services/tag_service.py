@@ -9,21 +9,62 @@ recolor, delete) is gated at the API/MCP layer.
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import ConflictError, NotFoundError
-from specivo.models.project import Project
+from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from specivo.models.project import EnabledModule, Project
 from specivo.models.tag import Tag, TagLink
 from specivo.models.user import User
 from specivo.schemas.tag import TagCreate, TagUpdate
+from specivo.services.permission_service import Permission, check_permission
 
 logger = logging.getLogger(__name__)
 
 
+TagTarget = Literal["issue", "wiki"]
+
+
 class TagService:
     """Service layer for Tag operations."""
+
+    # -----------------------------------------------------------------------
+    # Permissions on an issue's or wiki page's tags (REST and MCP alike)
+    # -----------------------------------------------------------------------
+
+    async def require_read(self, session: AsyncSession, user: User, kind: TagTarget, project: Project) -> None:
+        """Raise unless *user* may read the tags of a *kind* target in *project*.
+
+        The caller has already resolved the target with its visibility check;
+        a wiki page additionally needs the wiki module and ``view_wiki``.
+        """
+        if kind == "wiki":
+            await self._require_wiki(session, user, project, Permission.VIEW_WIKI, "view wiki pages")
+
+    async def require_write(self, session: AsyncSession, user: User, kind: TagTarget, project: Project) -> None:
+        """Raise unless *user* may change the tags of a *kind* target in *project*.
+
+        Tagging is editing: issues need ``edit_issues``, wiki pages the wiki
+        module and ``manage_wiki``. Whoever may tag may also create a new tag
+        name on the fly, as the tag field and the MCP ``add`` op do.
+        """
+        if kind == "wiki":
+            await self._require_wiki(session, user, project, Permission.MANAGE_WIKI, "edit wiki pages")
+        elif not await check_permission(user, project.id, Permission.EDIT_ISSUES, session):
+            raise PermissionDeniedError("You do not have permission to edit issues in this project")
+
+    async def _require_wiki(
+        self, session: AsyncSession, user: User, project: Project, permission: Permission, action: str
+    ) -> None:
+        enabled = await session.scalar(
+            select(EnabledModule.id).where(EnabledModule.project_id == project.id, EnabledModule.name == "wiki")
+        )
+        if enabled is None:
+            raise PermissionDeniedError("Wiki module is not enabled for this project")
+        if not await check_permission(user, project.id, permission, session):
+            raise PermissionDeniedError(f"You do not have permission to {action} in this project")
 
     # -----------------------------------------------------------------------
     # Vocabulary lookups

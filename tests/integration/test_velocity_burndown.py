@@ -158,7 +158,10 @@ async def viewer_client(
     viewer = await _make_user(db_session, login="vb_api_noperm")
     # Deliberately grant NO permissions to test 403
     await _add_member_with_permissions(
-        db_session, project, viewer, [],
+        db_session,
+        project,
+        viewer,
+        [],
     )
     token = await _login(client, viewer.login)
     client.headers["Authorization"] = f"Bearer {token}"
@@ -238,7 +241,9 @@ async def test_api_burndown_endpoint(
     tracker, status_open, status_done, priority = lookups
 
     sprint = await _api_create_sprint(
-        authed_client, project.key, "Burndown Sprint",
+        authed_client,
+        project.key,
+        "Burndown Sprint",
         start_date="2026-04-01",
         end_date="2026-04-14",
     )
@@ -248,15 +253,21 @@ async def test_api_burndown_endpoint(
 
     # Create issues with estimated hours
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_done.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_done.id,
+        priority.id,
         "Done Task",
         sprint_id=sprint["id"],
         estimated_hours=8.0,
     )
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_open.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_open.id,
+        priority.id,
         "Open Task",
         sprint_id=sprint["id"],
         estimated_hours=5.0,
@@ -326,7 +337,9 @@ async def test_backlog_page_shows_velocity_table(
     tracker, status_open, status_done, priority = lookups
 
     sprint = await _api_create_sprint(
-        authed_client, project.key, "Velocity Sprint",
+        authed_client,
+        project.key,
+        "Velocity Sprint",
     )
     await authed_client.post(
         f"/api/v1/projects/{project.key}/sprints/{sprint['id']}/start/",
@@ -334,20 +347,29 @@ async def test_backlog_page_shows_velocity_table(
 
     # Create 3 issues: 2 done, 1 open
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_done.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_done.id,
+        priority.id,
         "Done A",
         sprint_id=sprint["id"],
     )
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_done.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_done.id,
+        priority.id,
         "Done B",
         sprint_id=sprint["id"],
     )
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_open.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_open.id,
+        priority.id,
         "Still Open",
         sprint_id=sprint["id"],
     )

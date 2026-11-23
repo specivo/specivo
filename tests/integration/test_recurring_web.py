@@ -212,9 +212,7 @@ async def test_recurring_edit_form_page_renders(
     tracker, _status, _priority = lookups
     pattern = await _create_pattern(manager_client, project.key, tracker.id)
 
-    resp = await manager_client.get(
-        f"/projects/{project.key}/recurring-patterns/{pattern['id']}/edit/"
-    )
+    resp = await manager_client.get(f"/projects/{project.key}/recurring-patterns/{pattern['id']}/edit/")
     assert resp.status_code == 200, resp.text
     html = resp.text
     assert "Edit recurring pattern" in html
@@ -230,9 +228,7 @@ async def test_recurring_edit_form_404_for_nonexistent_pattern(
     project: Project,
 ):
     """Editing a nonexistent pattern id returns 404."""
-    resp = await manager_client.get(
-        f"/projects/{project.key}/recurring-patterns/999999/edit/"
-    )
+    resp = await manager_client.get(f"/projects/{project.key}/recurring-patterns/999999/edit/")
     assert resp.status_code == 404
 
 
@@ -269,10 +265,10 @@ async def test_recurring_list_anonymous_redirects_to_login(
     client: AsyncClient,
     project: Project,
 ):
-    """An anonymous visitor is redirected to the login page."""
+    """An anonymous visitor is redirected to the login page, and back here after it."""
     resp = await client.get(
         f"/projects/{project.key}/recurring-patterns/",
         follow_redirects=False,
     )
     assert resp.status_code == 302
-    assert resp.headers["location"] == "/login/"
+    assert resp.headers["location"] == f"/login/?next=%2Fprojects%2F{project.key}%2Frecurring-patterns%2F"

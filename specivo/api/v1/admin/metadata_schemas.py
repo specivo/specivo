@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.metadata_schema import (
@@ -23,7 +22,7 @@ from specivo.schemas.metadata_schema import (
     MetadataSchemaUsageOut,
 )
 from specivo.services.metadata_schema_service import MetadataSchemaService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
@@ -43,12 +42,8 @@ async def _require_project_manage(
     Mirrors the helper in admin/metadata_presets.py so project managers can
     administer metadata schemas without needing the global is_admin flag.
     """
-    project = await _project_service.get_by_key(db, project_key.upper())
-    if not user.is_admin:
-        allowed = await check_permission(user, project.id, "manage_project", db)
-        if not allowed:
-            raise PermissionDeniedError("manage_project permission required")
-    return project
+    # A project the caller cannot reach is "not found", like a missing key.
+    return await _project_service.get_permitted_by_key(db, project_key.upper(), user, Permission.MANAGE_PROJECT)
 
 
 @router.post(
@@ -66,7 +61,7 @@ async def create_metadata_schema(
     """Create a metadata schema for a project (manage_project permission)."""
     project = await _require_project_manage(project_key, current_user, db)
     schema = await _schema_service.create(db, project.id, data)
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.METADATA_SCHEMA_CREATED,
@@ -83,7 +78,7 @@ async def create_metadata_schema(
             },
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     return MetadataSchemaOut.model_validate(schema)
 
@@ -136,7 +131,7 @@ async def update_metadata_schema(
     schema = await _schema_service.get_by_id(db, schema_id, project.id)
     changed_fields = sorted(data.model_dump(exclude_unset=True).keys())
     updated = await _schema_service.update(db, schema, data)
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.METADATA_SCHEMA_UPDATED,
@@ -153,7 +148,7 @@ async def update_metadata_schema(
             },
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     return MetadataSchemaOut.model_validate(updated)
 
@@ -192,7 +187,7 @@ async def delete_metadata_schema(
     schema_name = schema.name
     schema_tracker_id = schema.tracker_id
     await _schema_service.delete_safe(db, schema)
-    try:
+    try:  # noqa: SIM105
         await _audit.log_event(
             session=db,
             event_type=AuditEvent.METADATA_SCHEMA_DELETED,
@@ -208,5 +203,5 @@ async def delete_metadata_schema(
             },
             request=request,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass

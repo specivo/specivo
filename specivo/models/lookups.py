@@ -104,7 +104,7 @@ class Tracker(Base):
 
     # List of field names hidden from the UI for this tracker type.
     # Replaces the legacy numeric bitmask with a human-readable JSONB list.
-    # Example: ["due_date", "estimated_hours"]
+    # Example: ["due_date", "estimated_hours"]  # noqa: ERA001
     disabled_core_fields: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
 
     # New issues of this type start private; see IssueService.resolve_is_private

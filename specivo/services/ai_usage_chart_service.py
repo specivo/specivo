@@ -134,7 +134,7 @@ def color_slots(keys: Iterable[Any]) -> dict[Any, int]:
     for key in keys:
         if key in out:
             continue
-        if key is None or key == "" or key == OTHER or key == NO_PROJECT or rank >= NEUTRAL_SLOT:
+        if key is None or key == "" or key == OTHER or key == NO_PROJECT or rank >= NEUTRAL_SLOT:  # noqa: SIM109
             out[key] = NEUTRAL_SLOT
         else:
             out[key] = rank
@@ -378,13 +378,101 @@ def _summed(items: Iterable[_Fees]) -> _Fees:
     return out
 
 
+#: The dimensions entries are stacked and broken down by.
+_DIMENSIONS = ("tool", "model", "user", "project")
+
+
+@dataclass
+class _Tally:
+    """Totals and shares per dimension while the rows are added up."""
+
+    totals: dict[str, dict[str, Decimal]] = field(
+        default_factory=lambda: {d: defaultdict(Decimal) for d in _DIMENSIONS}
+    )
+    shares: dict[str, dict[str, Share]] = field(default_factory=lambda: {d: {} for d in _DIMENSIONS})
+
+    def add(
+        self,
+        out: UsageCharts,
+        cell: Bucket,
+        r: dict[str, Any],
+        converted: dict[tuple[int, str], Decimal],
+        unconverted_rows: set[tuple[int, str]],
+        i: int,
+    ) -> None:
+        """Add raw row *i* to its bucket *cell*, the totals and shares, and *out*'s counts."""
+        api = converted.get((i, "api"), Decimal(0))
+        spend = converted.get((i, "spend"), Decimal(0))
+        keys = {
+            "tool": r["tool"],
+            "model": r["model"] or "",
+            "user": str(r["user_id"]),
+            "project": str(r["project_id"]) if r["project_id"] is not None else NO_PROJECT,
+        }
+        cell.entries += r["entries"]
+        cell.unpriced += r["unpriced"]
+        cell.unconverted += sum((i, m) in unconverted_rows for m in ("api", "spend"))
+        cell.api += api
+        cell.spend += spend
+        for dim, key in keys.items():
+            getattr(cell, f"api_by_{dim}")[key] += api
+            self.totals[dim][key] += api
+            share = self.shares[dim].setdefault(key, Share(key=key, label=key))
+            share.api += api
+            share.spend += spend
+            share.entries += r["entries"]
+        for c, n in r["tokens"].items():
+            cell.tokens[c] += n
+        out.entries += r["entries"]
+        out.unpriced += r["unpriced"]
+
+
+async def _convert_rows(
+    session: AsyncSession, raw: list[dict[str, Any]], currency: str, policy: RatePolicy | None
+) -> tuple[dict[tuple[int, str], Decimal], set[tuple[int, str]]]:
+    """Convert every amount of the raw rows at its own day (one batch, two queries).
+
+    Returns the converted amounts and the (row, measure) slots that did not convert, keyed by
+    (row index, ``spend`` or ``api``).
+    """
+    from specivo.services.exchange_rate_service import ExchangeRateService
+
+    items: list[tuple[Money, date]] = []
+    slots: list[tuple[int, str]] = []
+    for i, r in enumerate(raw):
+        for measure, amount, code in (
+            ("spend", r["marginal"], r["marginal_currency"]),
+            ("api", r["api"], r["api_currency"]),
+        ):
+            if amount is not None and code:
+                items.append((Money(amount, code), r["day"]))
+                slots.append((i, measure))
+    converted: dict[tuple[int, str], Decimal] = {}
+    unconverted_rows: set[tuple[int, str]] = set()
+    if items:
+        results = await ExchangeRateService().convert_many(session, items, currency, policy)
+        for slot, result in zip(slots, results, strict=True):
+            if isinstance(result, Converted):
+                converted[slot] = result.money.amount
+            else:
+                unconverted_rows.add(slot)
+    return converted, unconverted_rows
+
+
+async def _project_keys(session: AsyncSession, project_ids: list[int]) -> dict[int, str]:
+    if not project_ids:
+        return {}
+    stmt = select(Project.id, Project.key).where(Project.id.in_(project_ids))
+    return {pid: key for pid, key in (await session.execute(stmt)).all()}
+
+
 class AiUsageChartService:
     """Build the AI usage charts (see the module docstring)."""
 
     def __init__(self) -> None:
         self._usage = AiUsageService()
 
-    async def charts(
+    async def charts(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -433,7 +521,7 @@ class AiUsageChartService:
             )
         return out
 
-    async def report_charts(
+    async def report_charts(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -501,8 +589,9 @@ class AiUsageChartService:
             branch=branch or filters.branch,
             without_branch=without_branch or filters.without_branch,
             excluded=excluded,
+            planning=filters.planning,
         )
-        # The report's own narrowing (the drill-down's project, issue and branch) follows the
+        # The report's own narrowing (the drill-down's project, issue, branch, release and sprint) follows the
         # report's rules: seat shares follow the entries (``seat_breakdown`` takes the same filters).
         conditions = [*conditions, *filters.conditions()]
         out = UsageCharts(currency=currency, scope="instance" if project is None else "project")
@@ -587,95 +676,49 @@ class AiUsageChartService:
         tool_names: dict[str, str] | None,
     ) -> tuple[list[dict[str, Any]], dict[tuple[int, str], Decimal]]:
         """Group the entries into *out*'s buckets, stacks and breakdowns; returns the raw rows and converted amounts."""
-        from specivo.services.ai_subscription_service import AiToolService
-        from specivo.services.exchange_rate_service import ExchangeRateService
-
-        assert out.first is not None and out.last is not None
-        currency = out.currency
-        raw = await self._grouped(session, conditions, out.bucket, currency)
+        assert out.first is not None and out.last is not None  # noqa: S101
+        raw = await self._grouped(session, conditions, out.bucket, out.currency)
         buckets = {start: Bucket(start=start) for start in bucket_starts(out.first, out.last, out.bucket)}
-
-        # Convert every amount at its own day (one batch, two queries).
-        items: list[tuple[Money, date]] = []
-        slots: list[tuple[int, str]] = []
-        for i, r in enumerate(raw):
-            for measure, amount, code in (
-                ("spend", r["marginal"], r["marginal_currency"]),
-                ("api", r["api"], r["api_currency"]),
-            ):
-                if amount is not None and code:
-                    items.append((Money(amount, code), r["day"]))
-                    slots.append((i, measure))
-        converted: dict[tuple[int, str], Decimal] = {}
-        unconverted_rows: set[tuple[int, str]] = set()
-        if items:
-            results = await ExchangeRateService().convert_many(session, items, currency, policy)
-            for slot, result in zip(slots, results, strict=True):
-                if isinstance(result, Converted):
-                    converted[slot] = result.money.amount
-                else:
-                    unconverted_rows.add(slot)
-
-        totals: dict[str, dict[str, Decimal]] = {d: defaultdict(Decimal) for d in ("tool", "model", "user", "project")}
-        shares: dict[str, dict[str, Share]] = {d: {} for d in ("tool", "model", "user", "project")}
+        converted, unconverted_rows = await _convert_rows(session, raw, out.currency, policy)
+        tally = _Tally()
         for i, r in enumerate(raw):
             cell = buckets.get(bucket_start(r["day"], out.bucket))
-            if cell is None:
-                continue
-            api = converted.get((i, "api"), Decimal(0))
-            spend = converted.get((i, "spend"), Decimal(0))
-            keys = {
-                "tool": r["tool"],
-                "model": r["model"] or "",
-                "user": str(r["user_id"]),
-                "project": str(r["project_id"]) if r["project_id"] is not None else NO_PROJECT,
-            }
-            cell.entries += r["entries"]
-            cell.unpriced += r["unpriced"]
-            cell.unconverted += sum((i, m) in unconverted_rows for m in ("api", "spend"))
-            cell.api += api
-            cell.spend += spend
-            for dim, key in keys.items():
-                getattr(cell, f"api_by_{dim}")[key] += api
-                totals[dim][key] += api
-                share = shares[dim].setdefault(key, Share(key=key, label=key))
-                share.api += api
-                share.spend += spend
-                share.entries += r["entries"]
-            for c, n in r["tokens"].items():
-                cell.tokens[c] += n
-            out.entries += r["entries"]
-            out.unpriced += r["unpriced"]
+            if cell is not None:
+                tally.add(out, cell, r, converted, unconverted_rows, i)
         out.unconverted = len(unconverted_rows)
 
-        out.tools = self._stack_keys(totals["tool"], buckets.values(), "api_by_tool")
-        out.models = self._stack_keys(totals["model"], buckets.values(), "api_by_model")
+        out.tools = self._stack_keys(tally.totals["tool"], buckets.values(), "api_by_tool")
+        out.models = self._stack_keys(tally.totals["model"], buckets.values(), "api_by_model")
         if out.scope != "own":
-            out.users = self._stack_keys(totals["user"], buckets.values(), "api_by_user")
-            out.projects = self._stack_keys(totals["project"], buckets.values(), "api_by_project")
+            out.users = self._stack_keys(tally.totals["user"], buckets.values(), "api_by_user")
+            out.projects = self._stack_keys(tally.totals["project"], buckets.values(), "api_by_project")
         out.buckets = list(buckets.values())
+        await self._label_shares(session, out, tally, tool_names)
+        return raw, converted
+
+    async def _label_shares(
+        self, session: AsyncSession, out: UsageCharts, tally: _Tally, tool_names: dict[str, str] | None
+    ) -> None:
+        """Name the tools and projects, and set the breakdowns of *out*."""
+        from specivo.services.ai_subscription_service import AiToolService
 
         names = tool_names
         if names is None:
             names = {t.slug: t.name for t in await AiToolService().list_tools(session, active_only=False)}
-        out.tool_labels = {k: names.get(k, k) for k in totals["tool"]}
-        project_ids = [int(k) for k in shares["project"] if k != NO_PROJECT]
-        project_keys: dict[int, str] = {}
-        if project_ids:
-            stmt = select(Project.id, Project.key).where(Project.id.in_(project_ids))
-            project_keys = {pid: key for pid, key in (await session.execute(stmt)).all()}
-        for key, share in shares["project"].items():
+        out.tool_labels = {k: names.get(k, k) for k in tally.totals["tool"]}
+        project_shares = tally.shares["project"]
+        project_keys = await _project_keys(session, [int(k) for k in project_shares if k != NO_PROJECT])
+        for key, share in project_shares.items():
             if key != NO_PROJECT:
                 share.label = project_keys.get(int(key), "")
-        out.project_labels = {k: s.label for k, s in shares["project"].items()}
-        out.by_project = self._top_shares(shares["project"])
-        out.by_model = self._top_shares(shares["model"])
+        out.project_labels = {k: s.label for k, s in project_shares.items()}
+        out.by_project = self._top_shares(project_shares)
+        out.by_model = self._top_shares(tally.shares["model"])
         if out.scope != "own":
-            for key, share in shares["tool"].items():
+            for key, share in tally.shares["tool"].items():
                 share.label = out.tool_labels.get(key, key)
-            out.by_tool = self._top_shares(shares["tool"])
-            out.by_user = self._top_shares(shares["user"])
-        return raw, converted
+            out.by_tool = self._top_shares(tally.shares["tool"])
+            out.by_user = self._top_shares(tally.shares["user"])
 
     async def _label_people(self, session: AsyncSession, out: UsageCharts) -> None:
         """Name the users the stacks, breakdown and leverage tables show (one query, bounded by what they show)."""
@@ -810,7 +853,7 @@ class AiUsageChartService:
         """
         from specivo.services.ai_spend_report_service import PERIODS
 
-        assert out.first is not None and out.last is not None
+        assert out.first is not None and out.last is not None  # noqa: S101
         if out.bucket not in PERIODS:
             return
         seat = await reports.seat_breakdown(

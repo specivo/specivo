@@ -1,0 +1,43 @@
+"""Security headers on every response, and header handling that cannot be pushed into a 500."""
+
+from __future__ import annotations
+
+import pytest
+from httpx import AsyncClient
+
+pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
+
+
+async def test_a_csrf_refusal_carries_the_security_headers(client: AsyncClient) -> None:
+    """The CSRF middleware answers from inside the request-ID middleware now."""
+    resp = await client.patch(
+        "/api/v1/users/me/preferences/",
+        json={"timezone": "UTC"},
+        cookies={"access_token": "not-a-real-session"},
+    )
+    assert resp.status_code == 403
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert "x-frame-options" in resp.headers
+    assert resp.headers["x-request-id"]
+
+
+@pytest.mark.parametrize("header", [b"cookie", b"accept-language", b"x-csrf-token"])
+async def test_non_utf8_header_bytes_are_not_a_500(unauth_client: AsyncClient, header: bytes) -> None:
+    headers = [(header, b"specivo_lang=\xff\xfe; csrf_token=\xff")]
+    resp = await unauth_client.get("/health/", headers=headers)
+    assert resp.status_code == 200
+    resp = await unauth_client.post("/api/v1/auth/logout/", headers=headers)
+    assert resp.status_code != 500
+
+
+async def test_a_plain_request_id_is_echoed(unauth_client: AsyncClient) -> None:
+    resp = await unauth_client.get("/health/", headers={"X-Request-ID": "trace-01.ab_C"})
+    assert resp.headers["x-request-id"] == "trace-01.ab_C"
+
+
+@pytest.mark.parametrize("sent", ["a" * 65, "<script>", "two words", "line\\nbreak"])
+async def test_an_odd_request_id_is_replaced(unauth_client: AsyncClient, sent: str) -> None:
+    resp = await unauth_client.get("/health/", headers={"X-Request-ID": sent})
+    echoed = resp.headers["x-request-id"]
+    assert echoed != sent
+    assert len(echoed) == 36  # a fresh UUID4

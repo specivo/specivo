@@ -6,9 +6,10 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from specivo.schemas.common import PaginatedResponse
+from specivo.schemas.links import LinkGraphOut
 
 
 class SearchResultType(StrEnum):
@@ -65,6 +66,14 @@ class SearchResult(BaseModel):
     project_key: str
     fts_rank: int | None = None
     sem_rank: int | None = None
+    links: LinkGraphOut | None = Field(
+        default=None,
+        description=(
+            "With expand=1, on the top 5 issue and wiki page hits: their neighbours in the link graph, one hop "
+            "(links, backlinks, relations, parent, children, tags, version, sprint, assignee, commits), at most "
+            "10, only what you may see. Tags, versions and other structured nodes are leaves with a degree."
+        ),
+    )
 
 
 class SearchResponse(PaginatedResponse[SearchResult]):

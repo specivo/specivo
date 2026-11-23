@@ -8,16 +8,17 @@ from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, delete, false, func, or_, select, tuple_, union_all, update
+from sqlalchemy import Select, and_, delete, false, func, or_, select, tuple_, union_all, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.i18n import gettext as _
+from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
-from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import PROJECT_STATUS_ACTIVE, Project, ProjectKeyAlias
 from specivo.models.role import Role
@@ -37,6 +38,9 @@ from specivo.services.watcher_service import WatcherService
 from specivo.services.webhook_events import emit_issue_created, emit_issue_deleted, emit_issue_updated
 
 logger = logging.getLogger(__name__)
+
+# Largest value of an INTEGER column (issue ids and sequence numbers).
+_MAX_INT4 = 2**31 - 1
 
 # Max distinct issue refs resolved per render when validating autolinks. Bounds
 # the DB lookup so text with a huge number of KEY-N tokens cannot turn one page
@@ -58,6 +62,124 @@ _ALLOWED_SORT_FIELDS = frozenset(
         "done_ratio",
     }
 )
+
+
+#: Plain fields an update sets when present (not ``None``), before the category and version ...
+_UPDATE_LEADING_FIELDS: tuple[str, ...] = (
+    "tracker_id",
+    "status_id",
+    "priority_id",
+    "subject",
+    "description",
+    "assigned_to_id",
+)
+#: ... and after them, before the sprint and metadata.
+_UPDATE_TRAILING_FIELDS: tuple[str, ...] = (
+    "start_date",
+    "due_date",
+    "estimated_hours",
+    "original_estimate",
+    "remaining_estimate",
+    "done_ratio",
+    "is_private",
+)
+
+
+def _set_present_fields(issue: Issue, data: IssueUpdate, names: tuple[str, ...]) -> None:
+    """Copy each of *names* that *data* gives a value (not ``None``) onto *issue*."""
+    for name in names:
+        value = getattr(data, name)
+        if value is not None:
+            setattr(issue, name, value)
+
+
+#: The list filters that compare one issue column with a value; ``"none"``
+#: (NO_VALUE) selects the issues without a value where the column may be empty
+#: (see specivo.services.issue_list_filters).
+_EQUALITY_FILTERS: tuple[tuple[str, Any, bool], ...] = (
+    ("tracker_id", Issue.tracker_id, False),
+    ("assigned_to_id", Issue.assigned_to_id, True),
+    ("priority_id", Issue.priority_id, False),
+    ("category_id", Issue.category_id, False),
+    ("author_id", Issue.author_id, False),
+    ("version_id", Issue.fixed_version_id, True),
+    ("sprint_id", Issue.sprint_id, False),
+)
+#: Date bounds: (filter key, column, True for a lower bound).
+_DATE_FILTERS: tuple[tuple[str, Any, bool], ...] = (
+    ("created_after", Issue.created_at, True),
+    ("created_before", Issue.created_at, False),
+    ("updated_after", Issue.updated_at, True),
+    ("updated_before", Issue.updated_at, False),
+)
+
+
+def _field_conditions(filters: dict) -> list[ColumnElement[bool]]:
+    """WHERE conditions of the FK, tag, parent, subject and date filters, in that order."""
+    conditions: list[ColumnElement[bool]] = []
+    for key, column, nullable in _EQUALITY_FILTERS:
+        value = filters.get(key)
+        if nullable and value == NO_VALUE:
+            conditions.append(column.is_(None))
+        elif value is not None:
+            conditions.append(column == value)
+    if filters.get("tag_id") is not None:
+        conditions.append(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
+    if filters.get("parent_id") is not None:
+        conditions.append(Issue.parent_id == filters["parent_id"])
+    if filters.get("subject_contains"):
+        escaped = filters["subject_contains"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append(Issue.subject.ilike(f"%{escaped}%", escape="\\"))
+    for key, column, lower in _DATE_FILTERS:
+        if filters.get(key) is not None:
+            conditions.append(column >= filters[key] if lower else column <= filters[key])
+    return conditions
+
+
+def _metadata_conditions(pairs: Iterable[tuple[str, Any]] | None) -> list[ColumnElement[bool]]:
+    """One condition per metadata ``key=value`` pair (AND-combined by the caller).
+
+    Each pair matches an issue when either:
+      * issue_metadata->>'key' = value          (scalar equality)
+      * issue_metadata->'key' @> '["value"]'    (array contains the value)
+    so callers don't have to know whether the schema stores the key as a
+    scalar string or as a list of strings.
+    """
+    conditions: list[ColumnElement[bool]] = []
+    for key, value in pairs or ():
+        value_str = str(value)
+        # Build a JSONB array literal `[value]` via a parameterised
+        # jsonb_build_array() so the value is properly escaped even when
+        # it contains quotes, backslashes or unicode.
+        array_literal = func.jsonb_build_array(value_str)
+        conditions.append(
+            or_(
+                Issue.issue_metadata[key].astext == value_str,
+                Issue.issue_metadata[key].op("@>")(array_literal),
+            )
+        )
+    return conditions
+
+
+def _issue_order_by(sort: str) -> list[Any]:
+    """ORDER BY of ``field:direction`` pairs (``created_at:desc`` by default), unknown fields skipped.
+
+    A unique last key: issues equal on the chosen sort (same priority, same
+    status) keep one order, so pages neither skip nor repeat them.
+    """
+    order_clauses = []
+    for raw in (sort or "created_at:desc").split(","):
+        part = raw.strip()
+        field, direction = part.rsplit(":", 1) if ":" in part else (part, "asc")
+        field = field.strip().lower()
+        col = getattr(Issue, field, None) if field in _ALLOWED_SORT_FIELDS else None
+        if col is None:
+            continue
+        order_clauses.append(col.desc() if direction.strip().lower() == "desc" else col.asc())
+    if not order_clauses:
+        order_clauses = [Issue.created_at.desc()]
+    order_clauses.append(Issue.id.asc())
+    return order_clauses
 
 
 class IssueService:
@@ -192,6 +314,40 @@ class IssueService:
                 message=_("Cannot assign issues to a %(status)s version") % {"status": version.status},
                 status_code=422,
             )
+
+    async def _validate_category(self, session: AsyncSession, category_id: int, project_id: int) -> None:
+        """Raise a 422 ``AppError`` unless *category_id* is a category of *project_id*.
+
+        Another project's category is refused like a missing one, so the
+        response does not reveal which ids exist elsewhere.
+        """
+        found = await session.scalar(
+            select(IssueCategory.id).where(IssueCategory.id == category_id, IssueCategory.project_id == project_id)
+        )
+        if found is None:
+            raise AppError(
+                code="validation_error",
+                message=_("Category %(id)s not found in this project") % {"id": category_id},
+                status_code=422,
+            )
+
+    async def load_parent(self, session: AsyncSession, parent_id: int, project_id: int, user: User | None) -> Issue:
+        """Return issue *parent_id* as a parent for an issue of *project_id*.
+
+        The parent must be in the same project (subtasks never span projects,
+        as moving an issue requires), within the API key's limit, and visible
+        to *user* when one is given. Anything else is "not found", so the
+        response does not reveal which issue ids exist.
+        """
+        parent = await session.scalar(select(Issue).where(Issue.id == parent_id))
+        if (
+            parent is None
+            or parent.project_id != project_id
+            or not project_in_scope(parent.project_id)
+            or (user is not None and not await self._check_visible(session, parent, user))
+        ):
+            raise NotFoundError(f"Parent issue {parent_id} not found")
+        return parent
 
     async def validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
         """Validate that issues of *project_id* may be put in sprint *sprint_id*.
@@ -578,6 +734,9 @@ class IssueService:
         if data.sprint_id is not None:
             await self.validate_sprint(session, data.sprint_id, project.id)
 
+        if data.category_id is not None:
+            await self._validate_category(session, data.category_id, project.id)
+
         # Strip project-derived (computed) metadata so it is never stored on the
         # issue — it is overlaid on read instead. This makes the field
         # un-settable from any client and impossible to drift.
@@ -600,11 +759,10 @@ class IssueService:
         # Resolve parent if provided
         parent: Issue | None = None
         if data.parent_id is not None:
-            parent_result = await session.execute(select(Issue).where(Issue.id == data.parent_id))
-            parent = parent_result.scalar_one_or_none()
-            # A parent outside the API key's project limit is not found.
-            if parent is None or not project_in_scope(parent.project_id):
-                raise NotFoundError(f"Parent issue {data.parent_id} not found")
+            # Same project and key limit only: whether the caller may see the
+            # parent is the entry point's check (imports and recurring tasks
+            # create under parents their author need not see today).
+            parent = await self.load_parent(session, data.parent_id, project.id, None)
             await self.check_parent(session, None, parent)
 
         issue = Issue(
@@ -656,8 +814,8 @@ class IssueService:
 
         # Store initial description as version 0 so the first edit has a diff baseline
         if issue.description:
-            empty_attrs = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
-            initial_attrs = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
+            empty_attrs: dict[str, str | None] = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
+            initial_attrs: dict[str, str | None] = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
             initial_attrs["description"] = issue.description
             await self._journal_service.record_change(
                 session=session,
@@ -711,7 +869,10 @@ class IssueService:
                     project_key = parts[0].upper()
                     seq = int(parts[1])
                 except ValueError:
-                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
+                if not 0 < seq <= _MAX_INT4:
+                    # Beyond the column's range the query itself would fail.
+                    raise NotFoundError(f"Issue {display_key!r} not found")
 
                 result = await session.execute(
                     select(Issue).where(Issue.project_key == project_key).where(Issue.sequence_number == seq)
@@ -734,7 +895,7 @@ class IssueService:
         try:
             issue_id = int(display_key)
         except ValueError:
-            raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+            raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
         return await self.get_by_id(session, issue_id, user=user)
 
     async def get_by_id(self, session: AsyncSession, issue_id: int, user: User | None = None) -> Issue:
@@ -743,6 +904,8 @@ class IssueService:
         When ``user`` is provided, a visibility check is applied.
         Raises ``NotFoundError`` when the issue does not exist or is not visible.
         """
+        if not 0 < issue_id <= _MAX_INT4:
+            raise NotFoundError(f"Issue {issue_id} not found")
         result = await session.execute(select(Issue).where(Issue.id == issue_id))
         issue = result.scalar_one_or_none()
         if issue is None:
@@ -796,7 +959,10 @@ class IssueService:
                     project_key = parts[0].upper()
                     seq = int(parts[1])
                 except ValueError:
-                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+                    raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
+                if not 0 < seq <= _MAX_INT4:
+                    # Beyond the column's range the query itself would fail.
+                    raise NotFoundError(f"Issue {display_key!r} not found")
 
                 from sqlalchemy.orm import joinedload
 
@@ -833,7 +999,7 @@ class IssueService:
         try:
             issue_id = int(display_key)
         except ValueError:
-            raise NotFoundError(f"Invalid issue reference: {display_key!r}")
+            raise NotFoundError(f"Invalid issue reference: {display_key!r}")  # noqa: B904
         return await self.get_with_relations(session, issue_id, user=user)
 
     async def _resolve_retired_ref(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
@@ -1002,116 +1168,19 @@ class IssueService:
         """
         check_markdown_length(data.description, "description")
         check_markdown_length(notes, "notes")
-
-        if data.lock_version != issue.lock_version:
-            raise ConflictError(
-                message=_("Issue was modified by another request. Reload and retry."),
-                details={"current_lock_version": issue.lock_version},
-            )
-
-        # Workflow validation — before applying changes
-        if data.status_id is not None and data.status_id != issue.status_id:
-            await self.workflow_service.validate_transition(session, issue, data.status_id, user)
-        # Field rules apply on every update, for the status the issue ends up in.
-        target_status_id = data.status_id if data.status_id is not None else issue.status_id
-        await self.workflow_service.validate_field_rules(session, issue, data, user, target_status_id)
+        await self._check_update_allowed(session, issue, data, user)
 
         # Snapshot current values BEFORE applying changes
         old_attrs: dict = {attr: getattr(issue, attr) for attr, _ in _JOURNALIZED_ATTRS}
 
-        if data.tracker_id is not None:
-            issue.tracker_id = data.tracker_id
-        if data.status_id is not None:
-            issue.status_id = data.status_id
-        if data.priority_id is not None:
-            issue.priority_id = data.priority_id
-        if data.subject is not None:
-            issue.subject = data.subject
-        if data.description is not None:
-            issue.description = data.description
-        if data.assigned_to_id is not None:
-            issue.assigned_to_id = data.assigned_to_id
-        if data.category_id is not None:
-            issue.category_id = data.category_id
-        # fixed_version_id: use model_fields_set to distinguish "not provided"
-        # (None default) from "explicitly set to null" (clear the field).
-        if "fixed_version_id" in data.model_fields_set:
-            if data.fixed_version_id is not None:
-                await self._validate_fixed_version(session, data.fixed_version_id, issue.project_id)
-            issue.fixed_version_id = data.fixed_version_id
-        if data.start_date is not None:
-            issue.start_date = data.start_date
-        if data.due_date is not None:
-            issue.due_date = data.due_date
-        if data.estimated_hours is not None:
-            issue.estimated_hours = data.estimated_hours
-        if data.original_estimate is not None:
-            issue.original_estimate = data.original_estimate
-        if data.remaining_estimate is not None:
-            issue.remaining_estimate = data.remaining_estimate
-        if data.done_ratio is not None:
-            issue.done_ratio = data.done_ratio
-        if data.is_private is not None:
-            issue.is_private = data.is_private
-        # Re-sending the sprint the issue is already in is not a change, so it
-        # passes even when that sprint is completed.
-        if "sprint_id" in data.model_fields_set and data.sprint_id != issue.sprint_id:
-            if data.sprint_id is not None:
-                await self.validate_sprint(session, data.sprint_id, issue.project_id)
-            issue.sprint_id = data.sprint_id
-        if data.metadata is not None:
-            # Strip project-derived (computed) metadata — it is never stored and
-            # cannot be set/overridden by a client (see create()).
-            project_settings = await load_project_settings(session, issue.project_id)
-            stored_metadata = strip_computed(data.metadata, project_settings)
-            # Validate the keys this update changes against the schemas of the
-            # effective tracker (it may change in this same update). Keys left
-            # as they were are not judged, so an old invalid value elsewhere
-            # does not block the write, and a tracker change alone re-validates
-            # nothing.
-            effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
-            await self._metadata_schema_service.validate_metadata(
-                session,
-                issue.project_id,
-                effective_tracker_id,
-                stored_metadata,
-                previous=issue.issue_metadata or {},
-            )
-            issue.issue_metadata = stored_metadata
-
-        # --- Hierarchy move (parent_id provided) ---
-        # Convention: parent_id=0 means "move to root"; parent_id=N means "move to N"
-        old_parent_id = issue.parent_id
-        if data.parent_id is not None:
-            target_parent_id = data.parent_id if data.parent_id != 0 else None
-            new_parent: Issue | None = None
-            if target_parent_id is not None:
-                parent_result = await session.execute(select(Issue).where(Issue.id == target_parent_id))
-                new_parent = parent_result.scalar_one_or_none()
-                # A parent outside the API key's project limit is not found.
-                if new_parent is None or not project_in_scope(new_parent.project_id):
-                    raise NotFoundError(f"Parent issue {target_parent_id} not found")
-                await self._nested_set.validate_parent(session, issue, new_parent)
-
-            await self._nested_set.move_to_parent(session, issue, new_parent)
-
-            # Recalculate old parent's attributes (it lost a child)
-            if old_parent_id is not None:
-                old_parent_result = await session.execute(select(Issue).where(Issue.id == old_parent_id))
-                old_parent = old_parent_result.scalar_one_or_none()
-                if old_parent is not None:
-                    await session.refresh(old_parent)
-                    await self._nested_set.recalculate_parent_attributes(session, old_parent)
-
-            # Recalculate new parent's attributes (it gained a child)
-            if new_parent is not None:
-                await session.refresh(new_parent)
-                await self._nested_set.recalculate_parent_attributes(session, new_parent)
-        elif any(
-            field is not None for field in [data.done_ratio, data.start_date, data.due_date, data.estimated_hours]
-        ):
-            # Scalar changes that affect parent derivation
-            await self._nested_set.recalculate_ancestors(session, issue)
+        # The fields are applied in this order, each validation right before
+        # its field, as the queries they run flush what came before.
+        _set_present_fields(issue, data, _UPDATE_LEADING_FIELDS)
+        await self._apply_category_and_version(session, issue, data)
+        _set_present_fields(issue, data, _UPDATE_TRAILING_FIELDS)
+        await self._apply_sprint(session, issue, data)
+        await self._apply_metadata(session, issue, data)
+        await self._apply_hierarchy(session, issue, data, user)
 
         await session.flush()
 
@@ -1146,6 +1215,102 @@ class IssueService:
         )
         return issue, journal
 
+    async def _check_update_allowed(self, session: AsyncSession, issue: Issue, data: IssueUpdate, user: User) -> None:
+        """The optimistic lock, the workflow transition and the field rules of the status the issue ends up in."""
+        if data.lock_version != issue.lock_version:
+            raise ConflictError(
+                message=_("Issue was modified by another request. Reload and retry."),
+                details={"current_lock_version": issue.lock_version},
+            )
+
+        # Workflow validation — before applying changes
+        if data.status_id is not None and data.status_id != issue.status_id:
+            await self.workflow_service.validate_transition(session, issue, data.status_id, user)
+        # Field rules apply on every update, for the status the issue ends up in.
+        target_status_id = data.status_id if data.status_id is not None else issue.status_id
+        await self.workflow_service.validate_field_rules(session, issue, data, user, target_status_id)
+
+    async def _apply_category_and_version(self, session: AsyncSession, issue: Issue, data: IssueUpdate) -> None:
+        """Set the category and the target version, each checked to belong to the issue's project."""
+        if data.category_id is not None:
+            await self._validate_category(session, data.category_id, issue.project_id)
+            issue.category_id = data.category_id
+        # fixed_version_id: use model_fields_set to distinguish "not provided"
+        # (None default) from "explicitly set to null" (clear the field).
+        if "fixed_version_id" in data.model_fields_set:
+            if data.fixed_version_id is not None:
+                await self._validate_fixed_version(session, data.fixed_version_id, issue.project_id)
+            issue.fixed_version_id = data.fixed_version_id
+
+    async def _apply_sprint(self, session: AsyncSession, issue: Issue, data: IssueUpdate) -> None:
+        """Move the issue to the requested sprint (or out of every sprint)."""
+        # Re-sending the sprint the issue is already in is not a change, so it
+        # passes even when that sprint is completed.
+        if "sprint_id" in data.model_fields_set and data.sprint_id != issue.sprint_id:
+            if data.sprint_id is not None:
+                await self.validate_sprint(session, data.sprint_id, issue.project_id)
+            issue.sprint_id = data.sprint_id
+
+    async def _apply_metadata(self, session: AsyncSession, issue: Issue, data: IssueUpdate) -> None:
+        """Store the requested metadata, without computed keys, after validating the keys it changes."""
+        if data.metadata is None:
+            return
+        # Strip project-derived (computed) metadata — it is never stored and
+        # cannot be set/overridden by a client (see create()).
+        project_settings = await load_project_settings(session, issue.project_id)
+        stored_metadata = strip_computed(data.metadata, project_settings)
+        # Validate the keys this update changes against the schemas of the
+        # effective tracker (it may change in this same update). Keys left
+        # as they were are not judged, so an old invalid value elsewhere
+        # does not block the write, and a tracker change alone re-validates
+        # nothing.
+        effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
+        await self._metadata_schema_service.validate_metadata(
+            session,
+            issue.project_id,
+            effective_tracker_id,
+            stored_metadata,
+            previous=issue.issue_metadata or {},
+        )
+        issue.issue_metadata = stored_metadata
+
+    async def _apply_hierarchy(self, session: AsyncSession, issue: Issue, data: IssueUpdate, user: User) -> None:
+        """Move the issue under the requested parent, or refresh its ancestors' derived values.
+
+        Convention: ``parent_id=0`` means "move to root"; ``parent_id=N``
+        means "move under N". Both the old and the new parent recompute
+        their derived attributes.
+        """
+        old_parent_id = issue.parent_id
+        if data.parent_id is None:
+            if any(
+                field is not None for field in [data.done_ratio, data.start_date, data.due_date, data.estimated_hours]
+            ):
+                # Scalar changes that affect parent derivation
+                await self._nested_set.recalculate_ancestors(session, issue)
+            return
+
+        target_parent_id = data.parent_id if data.parent_id != 0 else None
+        new_parent: Issue | None = None
+        if target_parent_id is not None:
+            new_parent = await self.load_parent(session, target_parent_id, issue.project_id, user)
+            await self._nested_set.validate_parent(session, issue, new_parent)
+
+        await self._nested_set.move_to_parent(session, issue, new_parent)
+
+        # Recalculate old parent's attributes (it lost a child)
+        if old_parent_id is not None:
+            old_parent_result = await session.execute(select(Issue).where(Issue.id == old_parent_id))
+            old_parent = old_parent_result.scalar_one_or_none()
+            if old_parent is not None:
+                await session.refresh(old_parent)
+                await self._nested_set.recalculate_parent_attributes(session, old_parent)
+
+        # Recalculate new parent's attributes (it gained a child)
+        if new_parent is not None:
+            await session.refresh(new_parent)
+            await self._nested_set.recalculate_parent_attributes(session, new_parent)
+
     async def move(
         self,
         session: AsyncSession,
@@ -1158,9 +1323,11 @@ class IssueService:
         """Move *issue* to ``target_project``.
 
         Preserves history (journals/comments), relations, attachments, watchers,
-        time entries and stored metadata. A new per-project sequence number is
-        assigned in the target; the old ``KEY-N`` keeps resolving via an
-        ``IssueRefAlias``. The internal ``id`` never changes.
+        time entries, AI usage and stored metadata; time entries, running timers
+        and AI usage logged on the issue move to the target project with it.
+        A new per-project sequence number is assigned in the target; the old
+        ``KEY-N`` keeps resolving via an ``IssueRefAlias``. The internal ``id``
+        never changes.
 
         Project-scoped fields that do not carry across projects are cleared:
         fixed version, sprint, category and tag links. Project-derived
@@ -1229,6 +1396,11 @@ class IssueService:
         await session.execute(
             update(ActiveTimer).where(ActiveTimer.issue_id == issue.id).values(project_id=target_project.id)
         )
+        # AI usage on the issue follows it too: its reports and visibility rules
+        # expect the issue to live in the entry's project.
+        await session.execute(
+            update(AiUsageEntry).where(AiUsageEntry.issue_id == issue.id).values(project_id=target_project.id)
+        )
 
         # Record the move in the issue history (notes-only journal entry).
         snapshot = {attr: getattr(issue, attr) for attr, _label in _JOURNALIZED_ATTRS}
@@ -1258,11 +1430,23 @@ class IssueService:
     async def delete(self, session: AsyncSession, issue: Issue, actor: User | None = None) -> None:
         """Delete an issue permanently.
 
+        An issue with subtasks is refused (``ConflictError``): deleting it would
+        take the whole subtree with it (``root_id`` cascades) or leave the
+        subtasks pointing into a tree that no longer has them. Delete the
+        subtasks, or move them to another parent, first.
+
         When the deleted issue has a parent, recalculate the parent's derived
         attributes after deletion since one child has been removed.
 
         ``actor`` is who deleted it, for the ``issue.deleted`` webhook event.
         """
+        subtasks = await session.scalar(select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id))
+        if subtasks:
+            raise ConflictError(
+                message=_("%(key)s has %(count)d subtask(s). Delete them or move them to another parent first.")
+                % {"key": issue.display_key, "count": subtasks}
+            )
+
         parent_id = issue.parent_id
         display_key = issue.display_key
         issue_id = issue.id
@@ -1350,156 +1534,47 @@ class IssueService:
             selectinload(Issue.assigned_to),
             selectinload(Issue.fixed_version),
         )
-
         if project_id is not None:
             stmt = stmt.where(Issue.project_id == project_id)
+        stmt = await self._visibility_where(session, stmt, project_id, user)
+        stmt = await self._apply_filters(session, stmt, filters)
 
-        # ------------------------------------------------------------------
-        # Visibility filter
-        # ------------------------------------------------------------------
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_count = (await session.execute(count_stmt)).scalar_one()
+
+        stmt = stmt.order_by(*_issue_order_by(sort)).offset(offset).limit(limit)
+        issues = list((await session.execute(stmt)).scalars().all())
+        return issues, total_count
+
+    async def _visibility_where(
+        self, session: AsyncSession, stmt: Select[Any], project_id: int | None, user: User
+    ) -> Select[Any]:
+        """*stmt* narrowed to the issues *user* may see (an API key's project limit included; admins see all)."""
         key_limit = scope_clause(Issue.project_id)
         if key_limit is not None:
             stmt = stmt.where(key_limit)
-        if not user.is_admin:
-            if project_id is not None:
-                project = await session.get(Project, project_id)
-                if project is not None:
-                    in_project = await self.project_visible_issues_clause(session, user, project)
-                    if in_project is not None:
-                        stmt = stmt.where(in_project)
-            else:
-                across_projects = await self.visible_issues_clause(session, user)
-                if across_projects is not None:
-                    stmt = stmt.where(across_projects)
+        if user.is_admin:
+            return stmt
+        if project_id is None:
+            across_projects = await self.visible_issues_clause(session, user)
+            return stmt if across_projects is None else stmt.where(across_projects)
+        project = await session.get(Project, project_id)
+        if project is None:
+            return stmt
+        in_project = await self.project_visible_issues_clause(session, user, project)
+        return stmt if in_project is None else stmt.where(in_project)
 
-        # ------------------------------------------------------------------
-        # Status filter
-        # ------------------------------------------------------------------
+    async def _apply_filters(self, session: AsyncSession, stmt: Select[Any], filters: dict) -> Select[Any]:
+        """*stmt* narrowed by the list filters: status, the FK fields, subject text, dates and metadata pairs."""
         status_filter = filters.get("status", "open")
-        if status_filter == "open":
-            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category != "closed")
-        elif status_filter == "closed":
-            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category == "closed")
+        if status_filter in ("open", "closed"):
+            closed = IssueStatus.category == "closed" if status_filter == "closed" else IssueStatus.category != "closed"
+            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(closed)
         elif status_filter not in (None, "all"):
             sid = await self.resolve_status_filter(session, status_filter)
             stmt = stmt.where(Issue.status_id == sid)
-
-        # ------------------------------------------------------------------
-        # Optional FK filters
-        # ------------------------------------------------------------------
-        if filters.get("tracker_id") is not None:
-            stmt = stmt.where(Issue.tracker_id == filters["tracker_id"])
-        # ``"none"`` (NO_VALUE) selects the issues without an assignee / target
-        # version; see specivo.services.issue_list_filters.
-        if filters.get("assigned_to_id") == NO_VALUE:
-            stmt = stmt.where(Issue.assigned_to_id.is_(None))
-        elif filters.get("assigned_to_id") is not None:
-            stmt = stmt.where(Issue.assigned_to_id == filters["assigned_to_id"])
-        if filters.get("priority_id") is not None:
-            stmt = stmt.where(Issue.priority_id == filters["priority_id"])
-        if filters.get("category_id") is not None:
-            stmt = stmt.where(Issue.category_id == filters["category_id"])
-        if filters.get("author_id") is not None:
-            stmt = stmt.where(Issue.author_id == filters["author_id"])
-        if filters.get("version_id") == NO_VALUE:
-            stmt = stmt.where(Issue.fixed_version_id.is_(None))
-        elif filters.get("version_id") is not None:
-            stmt = stmt.where(Issue.fixed_version_id == filters["version_id"])
-        if filters.get("sprint_id") is not None:
-            stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
-        if filters.get("tag_id") is not None:
-            stmt = stmt.where(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
-        if filters.get("parent_id") is not None:
-            stmt = stmt.where(Issue.parent_id == filters["parent_id"])
-
-        # ------------------------------------------------------------------
-        # Text search
-        # ------------------------------------------------------------------
-        if filters.get("subject_contains"):
-            escaped = filters["subject_contains"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            stmt = stmt.where(Issue.subject.ilike(f"%{escaped}%", escape="\\"))
-
-        # ------------------------------------------------------------------
-        # Date range filters
-        # ------------------------------------------------------------------
-        if filters.get("created_after") is not None:
-            stmt = stmt.where(Issue.created_at >= filters["created_after"])
-        if filters.get("created_before") is not None:
-            stmt = stmt.where(Issue.created_at <= filters["created_before"])
-        if filters.get("updated_after") is not None:
-            stmt = stmt.where(Issue.updated_at >= filters["updated_after"])
-        if filters.get("updated_before") is not None:
-            stmt = stmt.where(Issue.updated_at <= filters["updated_before"])
-
-        # ------------------------------------------------------------------
-        # Metadata filters (key=value, AND-combined across pairs)
-        #
-        # Each pair matches an issue when either:
-        #   * issue_metadata->>'key' = value          (scalar equality)
-        #   * issue_metadata->'key' @> '["value"]'    (array contains the value)
-        # so callers don't have to know whether the schema stores the key as a
-        # scalar string or as a list of strings.
-        # ------------------------------------------------------------------
-        metadata_pairs = filters.get("metadata_filters")
-        if metadata_pairs:
-            for key, value in metadata_pairs:
-                value_str = str(value)
-                # Build a JSONB array literal `[value]` via a parameterised
-                # jsonb_build_array() so the value is properly escaped even when
-                # it contains quotes, backslashes or unicode.
-                array_literal = func.jsonb_build_array(value_str)
-                stmt = stmt.where(
-                    or_(
-                        Issue.issue_metadata[key].astext == value_str,
-                        Issue.issue_metadata[key].op("@>")(array_literal),
-                    )
-                )
-
-        # ------------------------------------------------------------------
-        # Total count (before pagination)
-        # ------------------------------------------------------------------
-        count_stmt = select(func.count()).select_from(stmt.subquery())
-        total_result = await session.execute(count_stmt)
-        total_count = total_result.scalar_one()
-
-        # ------------------------------------------------------------------
-        # Sorting
-        # ------------------------------------------------------------------
-        if not sort:
-            sort = "created_at:desc"
-
-        order_clauses = []
-        for part in sort.split(","):
-            part = part.strip()
-            if ":" in part:
-                field, direction = part.rsplit(":", 1)
-            else:
-                field, direction = part, "asc"
-
-            field = field.strip().lower()
-            direction = direction.strip().lower()
-
-            if field not in _ALLOWED_SORT_FIELDS:
-                continue
-
-            col = getattr(Issue, field, None)
-            if col is None:
-                continue
-
-            if direction == "desc":
-                order_clauses.append(col.desc())
-            else:
-                order_clauses.append(col.asc())
-
-        if not order_clauses:
-            order_clauses = [Issue.created_at.desc()]
-
-        stmt = stmt.order_by(*order_clauses).offset(offset).limit(limit)
-
-        result = await session.execute(stmt)
-        issues = list(result.scalars().all())
-
-        return issues, total_count
+        stmt = stmt.where(*_field_conditions(filters))
+        return stmt.where(*_metadata_conditions(filters.get("metadata_filters")))
 
     async def list_attachments(
         self,

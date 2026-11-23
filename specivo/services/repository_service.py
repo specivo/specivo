@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import secrets
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
@@ -23,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
+from specivo.core.app_url import prefixed
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, ValidationError
 from specivo.hooks.repo_url import (
@@ -43,7 +45,7 @@ from specivo.models.repository import (
     RepositoryIntegration,
     RepositoryRelease,
 )
-from specivo.models.role import Role, RoleBuiltin
+from specivo.models.role import ROLE_SYSTEM_KEY_AUTOMATION, Role, RoleBuiltin
 from specivo.models.user import User
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.repository import (
@@ -68,9 +70,7 @@ from specivo.schemas.repository import (
 
 logger = logging.getLogger(__name__)
 
-REPO_INTEGRATION_SECRET_PURPOSE = "repo-integration-secret"
-#: The seeded role ``$git`` gets for merge automation unless a manager picks another.
-AUTOMATION_ROLE_NAME = "Automation"
+REPO_INTEGRATION_SECRET_PURPOSE = "repo-integration-secret"  # noqa: S105
 
 
 def generate_secret() -> str:
@@ -80,8 +80,7 @@ def generate_secret() -> str:
 
 def hook_path(integration: RepositoryIntegration) -> str:
     """The hook path, stealth prefix included."""
-    prefix = get_settings().stealth_prefix.rstrip("/")
-    return f"{prefix}/hooks/{integration.provider}/{integration.public_id}/"
+    return prefixed(f"/hooks/{integration.provider}/{integration.public_id}/")
 
 
 def hook_url(integration: RepositoryIntegration) -> str:
@@ -166,9 +165,12 @@ class RepositoryAlreadyConnectedError(AppError):
 
 
 async def automation_role(session: AsyncSession) -> Role | None:
-    """The seeded Automation role (created by the migration), if it still exists."""
+    """The Automation role ``$git`` gets for merge automation unless a manager picks another.
+
+    Found by its ``system_key``, so an administrator may rename it.
+    """
     return (
-        await session.execute(select(Role).where(Role.name == AUTOMATION_ROLE_NAME, Role.builtin == RoleBuiltin.CUSTOM))
+        await session.execute(select(Role).where(Role.system_key == ROLE_SYSTEM_KEY_AUTOMATION))
     ).scalar_one_or_none()
 
 
@@ -535,37 +537,41 @@ def branch_url(provider: str, repo_url: str, branch: str) -> str | None:
     return f"{repo_url.rstrip('/')}/{path}/{quote(branch, safe='/')}"
 
 
-async def development_for_issue(
-    session: AsyncSession,
-    issue_id: int,
-    *,
-    kinds: Sequence[str] | None = None,
-    offset: int = 0,
-    limit: int | None = None,
-) -> IssueDevelopmentOut:
-    """Everything developed for an issue: commits, pull requests, branches, reviews, CI, deployments, releases.
+@dataclass
+class _DevelopmentRows:
+    """What :func:`development_for_issue` reads for one issue, before it is shaped for output."""
 
-    Commits newest first (at most ``DEVELOPMENT_COMMIT_LIMIT``, with the
-    total), pull requests open first then newest, and the branches of both
-    except each repository's default branch. Reviews, CI runs, deployments and
-    releases (newest first; CI runs and deployments at most
-    ``DEVELOPMENT_ACTIVITY_PER_ISSUE``), a ``summary`` with counts and combined
-    statuses, and the ``timeline`` of *kinds* (all when None) paged by
-    *offset* and *limit*. The caller has already checked that the user may
-    see the issue: anyone who may sees all of it, and nobody else any of it.
-    """
+    commits: list[RepositoryCommit]
+    commit_total: int
+    pull_requests: list[Any]  # (PullRequest, closing)
+    pull_request_count: int
+    reviews: list[Any]  # (PullRequestReview, PullRequest)
+    ci_runs: list[Any]
+    ci_count: int
+    deployments: list[Any]
+    deployment_count: int
+    releases: list[Any]  # (RepositoryRelease, source, version_id, version_name)
+
+    def integration_ids(self) -> set[int]:
+        ids = {c.integration_id for c in self.commits}
+        ids |= {pr.integration_id for pr, _closing in self.pull_requests}
+        ids |= {pr.integration_id for _review, pr in self.reviews}
+        ids |= {r.integration_id for r in self.ci_runs} | {d.integration_id for d in self.deployments}
+        ids |= {r.integration_id for r, *_rest in self.releases}
+        return ids
+
+
+async def _development_rows(session: AsyncSession, issue_id: int) -> _DevelopmentRows:
+    """The commits, pull requests, reviews, CI runs, deployments and releases of *issue_id* (see the caller)."""
     from specivo.core.constants import (
         DEVELOPMENT_ACTIVITY_PER_ISSUE,
         DEVELOPMENT_COMMIT_LIMIT,
         DEVELOPMENT_PULL_REQUEST_LIMIT,
-        DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
     )
-    from specivo.hooks import development as dev
     from specivo.models.repository import CiRun, Deployment, PullRequestReview
     from specivo.services import repository_activity as activity
 
     commits, total = await commits_for_issue(session, issue_id, DEVELOPMENT_COMMIT_LIMIT)
-    integration_ids = {c.integration_id for c in commits}
     pr_rows = (
         await session.execute(
             select(PullRequest, IssuePullRequestLink.closing)
@@ -621,66 +627,77 @@ async def development_for_issue(
     ).all()
     ci_count = await session.scalar(select(func.count()).select_from(CiRun).where(ci_clause))
     deploy_count = await session.scalar(select(func.count()).select_from(Deployment).where(deploy_clause))
-
-    integration_ids |= {pr.integration_id for pr, _closing in pr_rows}
-    integration_ids |= {pr.integration_id for _review, pr in review_rows}
-    integration_ids |= {r.integration_id for r in ci_rows} | {d.integration_id for d in deploy_rows}
-    integration_ids |= {r.integration_id for r, *_rest in release_rows}
-    selected_kinds = [k for k in DEVELOPMENT_KINDS if kinds is None or k in kinds]
-    page_limit = limit if limit is not None else DEVELOPMENT_TIMELINE_DEFAULT_LIMIT
-    timeline_total, timeline_rows = await activity.timeline(session, issue_id, selected_kinds, offset, page_limit)
-    integration_ids |= {row.integration_id for row in timeline_rows}
-    integrations = (
-        {
-            i.id: i
-            for i in (
-                await session.execute(
-                    select(RepositoryIntegration).where(RepositoryIntegration.id.in_(integration_ids))
-                )
-            ).scalars()
-        }
-        if integration_ids
-        else {}
+    return _DevelopmentRows(
+        commits=commits,
+        commit_total=total,
+        pull_requests=list(pr_rows),
+        pull_request_count=int(pr_count or 0),
+        reviews=list(review_rows),
+        ci_runs=ci_rows,
+        ci_count=int(ci_count or 0),
+        deployments=deploy_rows,
+        deployment_count=int(deploy_count or 0),
+        releases=list(release_rows),
     )
 
-    branches: dict[tuple[int, str], DevelopmentBranchOut] = {}
 
-    def _branch(integration: RepositoryIntegration, name: str | None) -> None:
+async def _integrations_by_id(session: AsyncSession, ids: set[int]) -> dict[int, RepositoryIntegration]:
+    if not ids:
+        return {}
+    rows = await session.execute(select(RepositoryIntegration).where(RepositoryIntegration.id.in_(ids)))
+    return {i.id: i for i in rows.scalars()}
+
+
+def _development_branches(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentBranchOut]:
+    """The branches of the pull requests, then of the commits, once each, without a repository's default branch."""
+    branches: dict[tuple[int, str], DevelopmentBranchOut] = {}
+    named = [(pr.integration_id, pr.source_branch) for pr, _closing in rows.pull_requests]
+    named += [(c.integration_id, c.branch) for c in rows.commits]
+    for integration_id, name in named:
+        integration = integrations[integration_id]
         if not name or name == integration.default_branch or (integration.id, name) in branches:
-            return
+            continue
         branches[(integration.id, name)] = DevelopmentBranchOut(
             name=name,
             url=branch_url(integration.provider, integration.repo_url, name),
             repository=integration.repo_full_name,
             provider=integration.provider,
         )
+    return list(branches.values())
 
-    pull_requests = []
-    for pr, closing in pr_rows:
-        integration = integrations[pr.integration_id]
-        _branch(integration, pr.source_branch)
-        pull_requests.append(
-            DevelopmentPullRequestOut(
-                id=pr.id,
-                number=pr.number,
-                title=pr.title,
-                url=pr.url,
-                state=pr.state,
-                source_branch=pr.source_branch,
-                target_branch=pr.target_branch,
-                author_login=pr.author_login,
-                merged_at=pr.merged_at,
-                closing=closing,
-                repository=integration.repo_full_name,
-                # The forge the request is on, which stays when the integration's provider changes.
-                provider=pr.provider,
-            )
+
+def _development_pull_requests(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentPullRequestOut]:
+    return [
+        DevelopmentPullRequestOut(
+            id=pr.id,
+            number=pr.number,
+            title=pr.title,
+            url=pr.url,
+            state=pr.state,
+            source_branch=pr.source_branch,
+            target_branch=pr.target_branch,
+            author_login=pr.author_login,
+            merged_at=pr.merged_at,
+            closing=closing,
+            repository=integrations[pr.integration_id].repo_full_name,
+            # The forge the request is on, which stays when the integration's provider changes.
+            provider=pr.provider,
         )
-    commits_out = []
-    for c in commits:
+        for pr, closing in rows.pull_requests
+    ]
+
+
+def _development_commits(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentCommitOut]:
+    out = []
+    for c in rows.commits:
         integration = integrations[c.integration_id]
-        _branch(integration, c.branch)
-        commits_out.append(
+        out.append(
             DevelopmentCommitOut(
                 id=c.id,
                 sha=c.sha,
@@ -695,7 +712,13 @@ async def development_for_issue(
                 provider=integration.provider,
             )
         )
-    reviews_out = [
+    return out
+
+
+def _development_reviews(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentReviewOut]:
+    return [
         DevelopmentReviewOut(
             pull_request_id=pr.id,
             pull_request_number=pr.number,
@@ -706,9 +729,14 @@ async def development_for_issue(
             repository=integrations[pr.integration_id].repo_full_name,
             provider=pr.provider,
         )
-        for review, pr in review_rows
+        for review, pr in rows.reviews
     ]
-    ci_out = [
+
+
+def _development_ci_runs(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentCiRunOut]:
+    return [
         DevelopmentCiRunOut(
             id=r.id,
             run_type=r.run_type,
@@ -725,14 +753,20 @@ async def development_for_issue(
             repository=integrations[r.integration_id].repo_full_name,
             provider=r.provider,
         )
-        for r in ci_rows
+        for r in rows.ci_runs
     ]
 
-    def _env_type(d: Deployment) -> str | None:
+
+def _development_deployments(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentDeploymentOut]:
+    from specivo.hooks import development as dev
+
+    def _env_type(d: Any) -> str | None:
         overrides = (integrations[d.integration_id].settings or {}).get("environment_types")
         return dev.environment_type(d.environment, overrides if isinstance(overrides, dict) else None)
 
-    deployments_out = [
+    return [
         DevelopmentDeploymentOut(
             id=d.id,
             environment=d.environment,
@@ -746,9 +780,14 @@ async def development_for_issue(
             repository=integrations[d.integration_id].repo_full_name,
             provider=d.provider,
         )
-        for d in deploy_rows
+        for d in rows.deployments
     ]
-    releases_out = [
+
+
+def _development_releases(
+    rows: _DevelopmentRows, integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentReleaseOut]:
+    return [
         DevelopmentReleaseOut(
             id=r.id,
             tag_name=r.tag_name,
@@ -764,11 +803,16 @@ async def development_for_issue(
             repository=integrations[r.integration_id].repo_full_name,
             provider=r.provider,
         )
-        for r, source, version_id, version_name in release_rows
+        for r, source, version_id, version_name in rows.releases
     ]
 
+
+def _latest_environments(deployments: list[DevelopmentDeploymentOut]) -> list[DevelopmentEnvironmentOut]:
+    """The newest deployed deployment per environment type, production first and untyped last."""
+    from specivo.hooks import development as dev
+
     latest_env: dict[str | None, DevelopmentEnvironmentOut] = {}
-    for d in deployments_out:
+    for d in deployments:
         if d.deployed_at is None:
             continue
         current = latest_env.get(d.environment_type)
@@ -782,34 +826,51 @@ async def development_for_issue(
                 provider=d.provider,
             )
     env_order: dict[str | None, int] = {t: i for i, t in enumerate((*reversed(dev.ENVIRONMENT_TYPES), None))}
-    summary = DevelopmentSummaryOut(
+    return sorted(latest_env.values(), key=lambda e: env_order[e.environment_type])
+
+
+def _development_summary(
+    rows: _DevelopmentRows,
+    integrations: dict[int, RepositoryIntegration],
+    reviews: list[DevelopmentReviewOut],
+    deployments: list[DevelopmentDeploymentOut],
+    releases: list[DevelopmentReleaseOut],
+) -> DevelopmentSummaryOut:
+    from specivo.hooks import development as dev
+
+    return DevelopmentSummaryOut(
         counts={
-            "commit": total,
-            "pull_request": int(pr_count or 0),
-            "review": len(reviews_out),
-            "ci": int(ci_count or 0),
-            "deployment": int(deploy_count or 0),
-            "release": len(releases_out),
+            "commit": rows.commit_total,
+            "pull_request": rows.pull_request_count,
+            "review": len(reviews),
+            "ci": rows.ci_count,
+            "deployment": rows.deployment_count,
+            "release": len(releases),
         },
-        pull_requests=dev.combined_pull_request_state(pr.state for pr, _closing in pr_rows),
-        reviews=dev.combined_review_state(r.state for r in reviews_out),
+        pull_requests=dev.combined_pull_request_state(pr.state for pr, _closing in rows.pull_requests),
+        reviews=dev.combined_review_state(r.state for r in reviews),
         ci=dev.combined_ci_state(
             dev.CiLatest(
                 (r.integration_id, r.run_type, r.name),
                 r.status,
                 dev.ci_order_key(r.attempt, r.provider_updated_at or r.occurred_at, r.status),
             )
-            for r in ci_rows
+            for r in rows.ci_runs
         ),
-        deployments=sorted(latest_env.values(), key=lambda e: env_order[e.environment_type]),
+        deployments=_latest_environments(deployments),
         # The first release the issue made it into comes first.
-        released_in=sorted(releases_out, key=lambda r: (r.released_at or r.occurred_at, r.id)),
+        released_in=sorted(releases, key=lambda r: (r.released_at or r.occurred_at, r.id)),
         repositories=[
             DevelopmentRepositoryOut(name=i.repo_full_name, url=i.repo_url, provider=i.provider)
             for i in sorted(integrations.values(), key=lambda i: i.repo_full_name.lower())
         ],
     )
-    timeline_items = [
+
+
+def _timeline_items(
+    timeline_rows: Sequence[Any], integrations: dict[int, RepositoryIntegration]
+) -> list[DevelopmentTimelineItemOut]:
+    return [
         DevelopmentTimelineItemOut(
             kind=row.kind,
             id=row.id,
@@ -826,17 +887,54 @@ async def development_for_issue(
         )
         for row in timeline_rows
     ]
+
+
+async def development_for_issue(
+    session: AsyncSession,
+    issue_id: int,
+    *,
+    kinds: Sequence[str] | None = None,
+    offset: int = 0,
+    limit: int | None = None,
+) -> IssueDevelopmentOut:
+    """Everything developed for an issue: commits, pull requests, branches, reviews, CI, deployments, releases.
+
+    Commits newest first (at most ``DEVELOPMENT_COMMIT_LIMIT``, with the
+    total), pull requests open first then newest, and the branches of both
+    except each repository's default branch. Reviews, CI runs, deployments and
+    releases (newest first; CI runs and deployments at most
+    ``DEVELOPMENT_ACTIVITY_PER_ISSUE``), a ``summary`` with counts and combined
+    statuses, and the ``timeline`` of *kinds* (all when None) paged by
+    *offset* and *limit*. The caller has already checked that the user may
+    see the issue: anyone who may sees all of it, and nobody else any of it.
+    """
+    from specivo.core.constants import DEVELOPMENT_TIMELINE_DEFAULT_LIMIT
+    from specivo.services import repository_activity as activity
+
+    rows = await _development_rows(session, issue_id)
+    selected_kinds = [k for k in DEVELOPMENT_KINDS if kinds is None or k in kinds]
+    page_limit = limit if limit is not None else DEVELOPMENT_TIMELINE_DEFAULT_LIMIT
+    timeline_total, timeline_rows = await activity.timeline(session, issue_id, selected_kinds, offset, page_limit)
+    integration_ids = rows.integration_ids() | {row.integration_id for row in timeline_rows}
+    integrations = await _integrations_by_id(session, integration_ids)
+
+    reviews = _development_reviews(rows, integrations)
+    deployments = _development_deployments(rows, integrations)
+    releases = _development_releases(rows, integrations)
     return IssueDevelopmentOut(
-        commit_count=total,
-        commits=commits_out,
-        pull_requests=pull_requests,
-        branches=list(branches.values()),
-        reviews=reviews_out,
-        ci_runs=ci_out,
-        deployments=deployments_out,
-        releases=releases_out,
-        summary=summary,
+        commit_count=rows.commit_total,
+        commits=_development_commits(rows, integrations),
+        pull_requests=_development_pull_requests(rows, integrations),
+        branches=_development_branches(rows, integrations),
+        reviews=reviews,
+        ci_runs=_development_ci_runs(rows, integrations),
+        deployments=deployments,
+        releases=releases,
+        summary=_development_summary(rows, integrations, reviews, deployments, releases),
         timeline=PaginatedResponse[DevelopmentTimelineItemOut](
-            total_count=timeline_total, offset=offset, limit=page_limit, items=timeline_items
+            total_count=timeline_total,
+            offset=offset,
+            limit=page_limit,
+            items=_timeline_items(timeline_rows, integrations),
         ),
     )

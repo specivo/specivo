@@ -71,7 +71,7 @@ def to_decimal(value: object) -> Decimal:
     Floats and booleans are refused with ``TypeError``: a float has already lost
     the exact value, and a bool is never an amount.
     """
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, bool) or isinstance(value, float):  # noqa: SIM101
         raise TypeError(f"Money amounts must be Decimal, int or str, not {type(value).__name__}")
     if isinstance(value, Decimal):
         result = value
@@ -276,7 +276,7 @@ def currency_display_name(code: str, locale: str, fallback: str | None = None) -
 
     try:
         name = str(get_currency_name(code, locale=locale.replace("-", "_")))
-    except Exception:
+    except Exception:  # noqa: BLE001
         name = code
     if name == code and fallback:
         return fallback
@@ -289,7 +289,7 @@ def currency_display_symbol(code: str, locale: str) -> str:
 
     try:
         return str(get_currency_symbol(code, locale=locale.replace("-", "_")))
-    except Exception:
+    except Exception:  # noqa: BLE001
         return code
 
 
@@ -309,7 +309,7 @@ def _format_money(amount: Decimal, currency: str, minor_units: int | None, local
     rounded = amount.quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
     try:
         loc, base_pattern = _currency_pattern(locale)
-    except Exception:
+    except Exception:  # noqa: BLE001
         loc, base_pattern = _currency_pattern("en")
     # Fix the fraction digits to the ISO minor units: Babel's own currency
     # precision comes from CLDR and differs for some codes (IQD, LBP, ...).

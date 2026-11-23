@@ -11,9 +11,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Wiki"), "url": base ~ "/projects/" ~ project.key ~ "/wiki"},
   {"label": wiki_page.title}
 ]) }}
 
@@ -22,24 +22,63 @@
   <div>
     <div class="wiki-page-header">
       <h1 class="wiki-page-title">{{ wiki_page.title }}</h1>
-      <div class="wiki-page-actions">
+      <div class="wiki-page-actions" x-data="{ deleteOpen: false }">
         {# Reading one page is the whole of the wiki on the anonymous surface:
            the page list and the history are separate routes that refuse. #}
         {% if not anonymous %}
-        <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">
+        <a href="{{ base }}/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           {% trans %}All pages{% endtrans %}
         </a>
-        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">
+        <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           {% trans %}History{% endtrans %}
         </a>
         {% endif %}
         {% if can_manage_wiki %}
-        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit/" class="sp-btn sp-btn-primary">
+        <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit/" class="sp-btn sp-btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           {% trans %}Edit{% endtrans %}
         </a>
+        {% endif %}
+        {% if can_delete_page %}
+        <button type="button" class="sp-btn sp-btn-danger" @click="deleteOpen = true" data-testid="wiki-delete-button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          {% trans %}Delete{% endtrans %}
+        </button>
+        {# Delete confirmation: a plain form POST, so it works like the trash's Restore. #}
+        <div class="sp-scrim" :class="{ 'open': deleteOpen }" @click.self="deleteOpen = false" @keydown.escape.window="deleteOpen = false" x-cloak>
+          <form method="post" action="{{ base }}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/delete/"
+                class="sp-modal sp-modal--xs" role="dialog" aria-modal="true" aria-labelledby="wiki-delete-title" data-testid="wiki-delete-dialog">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="sp-modal-header">
+              <h2 id="wiki-delete-title">{% trans %}Delete page?{% endtrans %}</h2>
+              <button type="button" class="sp-modal-close" @click="deleteOpen = false" aria-label="{{ _('Close') }}">&times;</button>
+            </div>
+            <div class="sp-modal-body">
+              <p class="sp-modal-lead">
+                {% trans title=wiki_page.title %}<strong>%(title)s</strong> moves to the wiki trash. You can restore it from there with its history.{% endtrans %}
+              </p>
+              {% if descendant_count %}
+              <label class="wiki-delete-cascade">
+                <input type="checkbox" name="cascade_children" value="true" data-testid="wiki-delete-cascade">
+                {% trans count=descendant_count %}Also move its subpage to the trash{% pluralize %}Also move its %(count)s subpages to the trash{% endtrans %}
+              </label>
+              <p class="form-hint">
+                {% if parent_title %}
+                {% trans parent=parent_title %}If you leave this unticked, the subpages stay in the wiki and move up one level, under %(parent)s.{% endtrans %}
+                {% else %}
+                {% trans %}If you leave this unticked, the subpages stay in the wiki and move up to the top level.{% endtrans %}
+                {% endif %}
+              </p>
+              {% endif %}
+            </div>
+            <div class="sp-modal-footer">
+              <button type="button" class="sp-btn sp-btn-ghost" @click="deleteOpen = false">{% trans %}Cancel{% endtrans %}</button>
+              <button type="submit" class="sp-btn sp-btn-danger" data-testid="wiki-delete-confirm">{% trans %}Delete page{% endtrans %}</button>
+            </div>
+          </form>
+        </div>
         {% endif %}
       </div>
       <div class="wiki-page-meta">
@@ -73,15 +112,15 @@
     <div class="wiki-tags" style="margin-bottom: var(--sp-space-lg);">
       {% if can_manage_wiki %}
       {{ tag_field_input(
-           "/api/v1/projects/" ~ project.key ~ "/tags/search/",
-           "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/tags/",
+           base ~ "/api/v1/projects/" ~ project.key ~ "/tags/search/",
+           base ~ "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/tags/",
            (wiki_tags if wiki_tags is defined else []) | tojson,
            _('Add tags...')
          ) }}
       {% else %}
       <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);">
         {% for t in wiki_tags if wiki_tags is defined %}
-          {{ tag_badge(t.name, t.color or '', '/search/?scope=all&tag=' ~ (t.name | urlencode)) }}
+          {{ tag_badge(t.name, t.color or '', base ~ '/search/?scope=all&tag=' ~ (t.name | urlencode)) }}
         {% endfor %}
       </div>
       {% endif %}
@@ -151,7 +190,7 @@
         <div class="attachment-images">
           <template x-for="att in images" :key="att.id">
             <div class="attachment-thumb" @click="openLightbox(att)">
-              <img :src="'/api/v1/attachments/' + att.id + '/download/'" :alt="att.filename">
+              <img :src="'{{ base }}/api/v1/attachments/' + att.id + '/download/'" :alt="att.filename">
               <div class="attachment-thumb-overlay">
                 <span class="attachment-thumb-name" x-text="att.filename"></span>
               </div>
@@ -181,7 +220,7 @@
               <div class="file-icon" :class="fileIconClass(att)" x-text="fileIconLabel(att)"></div>
               <div class="file-info">
                 <div class="file-name">
-                  <a :href="'/api/v1/attachments/' + att.id + '/download/'" x-text="att.filename"></a>
+                  <a :href="'{{ base }}/api/v1/attachments/' + att.id + '/download/'" x-text="att.filename"></a>
                 </div>
                 <div class="file-meta">
                   <span x-text="formatSize(att.filesize)"></span>
@@ -253,7 +292,7 @@
     <details class="sp-linked-from">
       <summary class="sp-linked-from-summary">{% trans %}Linked from{% endtrans %}</summary>
       <div id="wiki-backlinks"
-           hx-get="/partials/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/backlinks/"
+           hx-get="{{ base }}/partials/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/backlinks/"
            hx-trigger="toggle from:closest details once"
            hx-swap="innerHTML">
         <div class="sp-backlinks-empty">{% trans %}Loading links…{% endtrans %}</div>
@@ -302,9 +341,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
       </button>
       {% endif %}
-      <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}/"{% if p.id == wiki_page.id %} class="active"{% endif %}>{{ p.title }}</a>
+      <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ p.slug }}/"{% if p.id == wiki_page.id %} class="active"{% endif %}>{{ p.title }}</a>
       {% if can_manage_wiki %}
-      <a href="/projects/{{ project.key }}/wiki/new/?parent={{ p.id }}" class="wiki-tree-add" title="{{ _('Add child page') }}">
+      <a href="{{ base }}/projects/{{ project.key }}/wiki/new/?parent={{ p.id }}" class="wiki-tree-add" title="{{ _('Add child page') }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </a>
       {% endif %}
@@ -333,12 +372,20 @@
         {{ render_tree(None) }}
       </ul>
     </div>
-    {% if can_manage_wiki %}
+    {% if can_manage_wiki or can_delete_wiki %}
     <div class="wiki-panel-footer">
-      <a href="/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-ghost sp-btn-block-center">
+      {% if can_manage_wiki %}
+      <a href="{{ base }}/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-ghost sp-btn-block-center">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
         {% trans %}New page{% endtrans %}
       </a>
+      {% endif %}
+      {% if can_delete_wiki %}
+      <a href="{{ base }}/projects/{{ project.key }}/wiki/trash/" class="sp-btn sp-btn-ghost sp-btn-block-center" data-testid="wiki-trash-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        {% trans %}Trash{% endtrans %}
+      </a>
+      {% endif %}
     </div>
     {% endif %}
   </div>

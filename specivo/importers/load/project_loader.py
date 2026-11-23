@@ -172,7 +172,8 @@ async def _create_project(
     project = await _project_service.create(
         ctx.session,
         ProjectCreate(
-            name=ir.name or identifier,
+            # projects.name is VARCHAR(255).
+            name=(ir.name or "").strip()[:255].strip() or identifier,
             identifier=identifier,
             key=key,
             description=ir.description,
@@ -180,7 +181,6 @@ async def _create_project(
             is_public=ir.is_public,
             modules=ir.modules or None,
         ),
-        creator_user=await ensure_import_account(ctx),
     )
 
     # ProjectCreate has no status field: a closed or archived project can only
@@ -235,7 +235,8 @@ async def _depth_of(session: AsyncSession, project_id: int) -> int:
 
 async def _unique_identifier(ctx: PhaseContext, identifier: str) -> str:
     """Return a free project identifier, suffixed if the wanted one is taken."""
-    base = re.sub(r"[^a-z0-9-]+", "-", identifier.strip().lower()).strip("-")[:_MAX_IDENTIFIER]
+    # Cut to length before trimming the dashes, so a cut cannot leave one at the end.
+    base = re.sub(r"[^a-z0-9-]+", "-", identifier.strip().lower()).strip("-")[:_MAX_IDENTIFIER].rstrip("-")
     if not base or not base[0].isalpha():
         base = f"p-{base}" if base else f"project-{ctx.summary.created[EntityType.PROJECT] + 1}"
 
@@ -243,7 +244,7 @@ async def _unique_identifier(ctx: PhaseContext, identifier: str) -> str:
     suffix = 2
     while await _identifier_taken(ctx.session, candidate):
         tail = f"-{suffix}"
-        candidate = f"{base[: _MAX_IDENTIFIER - len(tail)]}{tail}"
+        candidate = f"{base[: _MAX_IDENTIFIER - len(tail)].rstrip('-')}{tail}"
         suffix += 1
     if candidate != base:
         ctx.warn("Project identifier already taken; imported under a suffixed one", wanted=base, identifier=candidate)

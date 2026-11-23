@@ -23,6 +23,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import absolute_url
 from specivo.core.config import Settings, get_settings
 from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
@@ -36,7 +37,7 @@ from specivo.services.scim import events
 __all__ = ["SCIM_TOKEN_PREFIX", "ScimConfigService", "hash_scim_token", "scim_base_url"]
 
 #: Every SCIM token starts with this, so a leaked one is recognisable (and is never taken for an API key).
-SCIM_TOKEN_PREFIX = "spvscim_"
+SCIM_TOKEN_PREFIX = "spvscim_"  # noqa: S105
 _TOKEN_ENTROPY_BYTES = 32
 _SHOWN_PREFIX_LENGTH = 14
 # ``scim_last_used_at`` is written at most this often.
@@ -55,8 +56,7 @@ def scim_base_url(slug: str, settings: Settings | None = None) -> str:
 
     Without a trailing slash: clients append ``/Users`` and ``/Groups``.
     """
-    settings = settings or get_settings()
-    return f"{settings.app_url.rstrip('/')}{settings.stealth_prefix.rstrip('/')}/scim/v2/{slug}"
+    return absolute_url(f"/scim/v2/{slug}", settings or get_settings())
 
 
 class ScimConfigService:

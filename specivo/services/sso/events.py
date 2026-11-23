@@ -89,7 +89,7 @@ def _emit(
         return
     try:
         record_event(event, user_id=actor_id, details=details)
-    except Exception as exc:  # noqa: BLE001 - the audit trail must never break the action it records
+    except Exception as exc:  # the audit trail must never break the action it records  # noqa: BLE001
         logger.warning("sso.audit.failed event=%s error=%s", event.value, type(exc).__name__)
 
 

@@ -23,7 +23,7 @@ def deliver_webhook(delivery_id: int, attempts: int = 0) -> None:
     """
     from specivo.services.webhook_delivery import deliver
 
-    async def _run():  # type: ignore[no-untyped-def]
+    async def _run():
         async with task_session() as session:
             return await deliver(session, delivery_id, attempts)
 
@@ -32,7 +32,7 @@ def deliver_webhook(delivery_id: int, attempts: int = 0) -> None:
         return
     try:
         deliver_webhook.apply_async(args=[delivery_id, outcome.attempts], countdown=outcome.retry_in, retry=False)
-    except Exception as exc:  # noqa: BLE001 - the sweeper re-queues the row when it is due
+    except Exception as exc:  # the sweeper re-queues the row when it is due  # noqa: BLE001
         logger.warning("Could not queue retry of webhook delivery %d: %s", delivery_id, type(exc).__name__)
 
 
@@ -42,7 +42,7 @@ def sweep_webhook_deliveries() -> int:
     from specivo.services.webhook_delivery import claim_due
     from specivo.services.webhook_events import dispatch_deliveries
 
-    async def _run():  # type: ignore[no-untyped-def]
+    async def _run():
         async with task_session() as session:
             return await claim_due(session)
 

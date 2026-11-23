@@ -1,0 +1,48 @@
+# Checks that run on `git commit`. Install once with:
+#   uv run pre-commit install
+# The Python hooks run the tools pinned in uv.lock (via `uv run`), so they
+# match CI exactly. Run them all by hand with `uv run pre-commit run -a`.
+# Vendored files and recorded test fixtures are kept byte-for-byte as received.
+exclude: ^(specivo/static/vendor/|tests/fixtures/)
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.(po|pot|svg)$
+      - id: end-of-file-fixer
+        # ESLint writes its suppressions file without a final newline.
+        exclude: (\.(po|pot|svg)|^frontend/eslint-suppressions\.json)$
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: import-linter
+        name: layer contracts (import-linter)
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]
+      # Needs the frontend dependencies: `cd frontend && npm ci` (or
+      # `make lint-js`, which installs them).
+      - id: eslint
+        name: eslint (frontend)
+        entry: npm --prefix frontend run --silent lint
+        language: system
+        pass_filenames: false
+        files: ^frontend/.*\.(js|mjs)$|^frontend/(package\.json|eslint-suppressions\.json)$

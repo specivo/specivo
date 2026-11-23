@@ -1,0 +1,7 @@
+/* The "AI spend" card of the version and sprint pages, and the sprint page's time and spend row. */
+.sp-ai-spend-card .sp-ai-spend-card-note { margin: var(--sp-space-sm) 0 0; }
+.sp-ai-spend-card .sp-ai-spend-card-link { display: inline-block; margin-top: var(--sp-space-md); font-size: var(--sp-font-size-sm); }
+.vd-layout .sp-ai-spend-card { margin-bottom: var(--sp-space-lg); }
+.sp-sprint-plan { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); }
+.sp-sprint-plan .vd-info-card { margin: 0; }
+@media (max-width: 768px) { .sp-sprint-plan { grid-template-columns: 1fr; } }

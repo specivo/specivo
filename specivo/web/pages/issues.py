@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,7 @@ from specivo.services.issue_list_filters import (
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from, is_plain_number, visible_issue_keys
 from specivo.services.journal_service import JournalService
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.relation_service import RelationService
@@ -40,17 +41,23 @@ from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.services.version_service import order_versions
-from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
-    get_current_user_optional,
+    IssueForReader,
+    ProjectForReader,
+    WebUser,
     get_templates,
     get_web_reader,
+    readable_issue,
+    redirect_to,
     refuse_anonymous_web,
 )
+from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
+from specivo.web.pages.ai_issue_usage import tab_entry_count as ai_usage_tab_entry_count
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
     from specivo.models.issue import Issue
+    from specivo.models.journal import JournalDetail
     from specivo.models.project import Project
     from specivo.models.user import User
 
@@ -74,29 +81,6 @@ def _tags_to_dicts(tags: list) -> list[dict]:
     return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
 
-async def _resolve_issue_project(
-    db: AsyncSession,
-    issue_ref: str,
-    user: User,
-) -> tuple:
-    """Resolve project from issue_ref (e.g. 'PROJ-42') and verify access.
-
-    Returns (project, issue).
-    """
-    try:
-        issue = await _issue_svc.get_by_display_key_with_relations(db, issue_ref, user=user)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Issue not found")
-
-    try:
-        project = await _project_svc.get_by_key(db, issue.project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
-
-    return project, issue
-
-
 async def _resolve_issue_project_for_reader(
     db: AsyncSession,
     issue_ref: str,
@@ -110,11 +94,11 @@ async def _resolve_issue_project_for_reader(
     caller turns all three into the one refusal every page produces, so the
     URL cannot be used to find out which issues exist.
 
-    Signed-in users are untouched and keep the 404 ``_resolve_issue_project``
-    has always raised.
+    Signed-in users are untouched and keep the 404 ``readable_issue``
+    (``specivo.web.deps``) raises.
     """
     if not user.is_anonymous:
-        return await _resolve_issue_project(db, issue_ref, user)
+        return await readable_issue(db, user, issue_ref)
 
     from specivo.core.exceptions import AnonymousAccessDeniedError
 
@@ -138,7 +122,7 @@ def _retired_ref_redirect(request: Request, issue_ref: str, issue: Issue, suffix
     url = f"/issue/{current}/{suffix}"
     if request.url.query:
         url = f"{url}?{request.url.query}"
-    return RedirectResponse(url, status_code=302)
+    return redirect_to(url, status_code=302)
 
 
 async def _get_lookups(db: AsyncSession) -> dict:
@@ -217,10 +201,10 @@ async def _filter_chips(db: AsyncSession, project: Project, user: User, params: 
 
 
 @router.get("/projects/{project_key}/issues/", response_class=HTMLResponse)
-async def issues_list(
+async def issues_list(  # noqa: C901, PLR0912, PLR0913, PLR0915
     project_key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
     status: str = Query("open"),
     tracker_id: str = Query(""),
@@ -243,14 +227,13 @@ async def issues_list(
     anonymous = user.is_anonymous
 
     from specivo.core.exceptions import AnonymousAccessDeniedError
-    from specivo.services.permission_service import Permission, check_permission
 
     try:
         project = await _project_svc.get_readable_by_key(db, project_key, user)
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     anon_can_view_wiki = False
     if anonymous:
@@ -387,21 +370,16 @@ async def issues_list(
 
 @router.get("/projects/{project_key}/issues/new/", response_class=HTMLResponse)
 async def issue_create_form(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue creation form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
+    # The form saves through the API, which needs add_issues: without it the
+    # visitor would fill in a form that cannot be saved.
+    if not await check_permission(user, project.id, Permission.ADD_ISSUES, db):
+        raise HTTPException(status_code=403, detail="Permission denied")
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
@@ -411,7 +389,6 @@ async def issue_create_form(
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
     from specivo.services.metadata_schema_service import MetadataSchemaService
-    from specivo.services.permission_service import Permission, check_permission
 
     schema_svc = MetadataSchemaService()
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
@@ -452,7 +429,7 @@ async def imported_issue_redirect(
     system: str,
     ref: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Send a number from the old tracker to the issue it became.
@@ -470,7 +447,7 @@ async def imported_issue_redirect(
     keys = await visible_issue_keys(db, user, system, ref)
     if len(keys) > 1:
         query = f"{system.lower()} #{ref}" if is_plain_number(ref) else ref
-        return RedirectResponse(f"/search/?{urlencode({'q': query})}", status_code=302)
+        return redirect_to(f"/search/?{urlencode({'q': query})}", status_code=302)
     if not keys:
         if user.is_anonymous:
             return refuse_anonymous_web(request)
@@ -480,14 +457,193 @@ async def imported_issue_redirect(
     if resolved is None:
         return refuse_anonymous_web(request)
     _, issue = resolved
-    return RedirectResponse(f"/issue/{issue.display_key}/", status_code=302)
+    return redirect_to(f"/issue/{issue.display_key}/", status_code=302)
+
+
+async def _issue_page_permissions(db: AsyncSession, user: User, project: Project) -> dict[str, bool]:
+    """What the reader may do on the issue page, as template flags (all off for an anonymous visitor)."""
+    anonymous = user.is_anonymous
+    anon_can_view_wiki = False
+    if anonymous:
+        anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
+    # Relation controls are shown only to readers the relations API would accept.
+    can_manage_relations = not anonymous and await check_permission(
+        user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db
+    )
+    # The time tab lists entries only with view_time_entries, and offers the
+    # log-time form only with log_time, as the time entries API requires.
+    can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
+    can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
+    # The tag field writes through the tags API, which requires edit_issues;
+    # without it the sidebar lists the tags read-only.
+    can_tag_issue = not anonymous and await check_permission(user, project.id, Permission.EDIT_ISSUES, db)
+    # The AI usage tab is loaded when opened (/partials/issues/{key}/ai-usage/);
+    # it is offered to those who may view or log AI usage in the project.
+    show_ai_usage_tab = not anonymous and (
+        await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
+        or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
+    )
+    return {
+        "anon_can_view_wiki": anon_can_view_wiki,
+        "can_manage_relations": can_manage_relations,
+        "can_view_time_entries": can_view_time_entries,
+        "can_log_time": can_log_time,
+        "can_tag_issue": can_tag_issue,
+        "show_ai_usage_tab": show_ai_usage_tab,
+    }
+
+
+async def _issue_sidebar(
+    db: AsyncSession, user: User, project: Project, issue: Issue, *, can_view_time_entries: bool
+) -> dict[str, Any]:
+    """Members, sprints, schemas, time entries, watchers and tags of the sidebar and tabs.
+
+    Everything an anonymous visitor cannot see is not loaded at all, rather
+    than loaded and hidden in the template: members and watchers name people,
+    time entries name people and hours, attachments are outside the anonymous
+    scope, and metadata schemas are project configuration.
+    """
+    from specivo.services.metadata_schema_service import MetadataSchemaService
+    from specivo.services.watcher_service import WatcherService
+
+    if user.is_anonymous:
+        return {
+            "members": [],
+            "current_sprint": None,
+            "active_sprint_id": None,
+            "issue_schemas": [],
+            "tab_ctx": {"time_entries": [], "time_entry_count": 0, "time_logged": 0},
+            "watchers": [],
+            "issue_tags": [],
+        }
+    members = await _project_svc.list_members(db, project)
+    # Load the current sprint (if any) for the sidebar autocomplete to pin it.
+    # Versions and sprints lists are no longer prefetched — the sidebar uses
+    # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
+    # for autocomplete.
+    current_sprint = None
+    if issue.sprint_id is not None:
+        current_sprint = await db.get(Sprint, issue.sprint_id)
+    # Derive the current active sprint for project-wide UI bits (e.g. sprint
+    # badge on activity) with a single targeted query.
+    active_sprint_id_result = await db.execute(
+        select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
+    )
+    active_sprint_id = active_sprint_id_result.scalar_one_or_none()
+    issue_schemas = await MetadataSchemaService().list_for_project(db, project.id)
+    # Attachments are lazy-loaded via htmx when the Attachments tab is opened
+    # (see /partials/issues/{key}/attachments/). Time entries stay eager because
+    # the sidebar displays the time_logged sum derived from the list.
+    time_entries = await _time_svc.list_for_issue(db, issue.id, project, user) if can_view_time_entries else []
+    time_logged = sum((te.hours or 0) for te in time_entries)
+    return {
+        "members": members,
+        "current_sprint": current_sprint,
+        "active_sprint_id": active_sprint_id,
+        "issue_schemas": issue_schemas,
+        "tab_ctx": {
+            "time_entries": time_entries,
+            "time_entry_count": len(time_entries),
+            "time_logged": time_logged,
+        },
+        "watchers": await WatcherService().list_watchers(db, issue, viewer=user),
+        "issue_tags": _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id)),
+    }
+
+
+def _activity_window(user: User, all_journals: list[Any], activity_page: int | None) -> dict[str, Any]:
+    """The page of the activity feed to show, with the paging values the template needs."""
+    from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
+
+    activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
+    if activity_per_page not in ACTIVITY_PER_PAGE_OPTIONS:
+        activity_per_page = ACTIVITY_DEFAULT_PER_PAGE
+
+    activity_total = len(all_journals)
+    activity_total_pages = max(1, (activity_total + activity_per_page - 1) // activity_per_page)
+    # When the caller does not pin a page, default to the LAST one — that's
+    # where the newest journal entry lives in the ascending feed. The
+    # description editor's save() does window.location.reload() with no
+    # query params, so without this default the user would land on page 1
+    # (oldest entries) and conclude that history was not updated.
+    if activity_page is None or activity_page > activity_total_pages:
+        activity_page = activity_total_pages
+
+    activity_start = (activity_page - 1) * activity_per_page
+    return {
+        "journals": all_journals[activity_start : activity_start + activity_per_page],
+        "activity_page": activity_page,
+        "activity_per_page": activity_per_page,
+        "activity_total_pages": activity_total_pages,
+        "activity_total": activity_total,
+        "activity_per_page_options": ACTIVITY_PER_PAGE_OPTIONS,
+    }
+
+
+def _last_activity_at(issue: Issue, all_journals: list[Any]) -> Any:
+    """The most recent of the issue's update and its last journal."""
+    last_activity_at = issue.updated_at
+    last_journal_at = all_journals[-1].created_at if all_journals else None
+    if last_journal_at and (not last_activity_at or last_journal_at > last_activity_at):
+        last_activity_at = last_journal_at
+    return last_activity_at
+
+
+async def _member_controls(
+    db: AsyncSession, user: User, issue: Issue, journals: list[Any], issue_schemas: list[Any]
+) -> dict[str, Any]:
+    """Reactions, the issue's metadata schemas and the move targets: none of them for an anonymous visitor."""
+    from specivo.schemas.metadata_schema import MetadataSchemaOut
+
+    if user.is_anonymous:
+        # Reactions are a control, not content: rendering the row would offer
+        # a button that cannot be pressed.
+        return {"reactions_by_journal": {}, "metadata_schemas_data": [], "move_targets": []}
+    # Load emoji reactions for all journals (paginated subset)
+    journal_ids = [j.id for j in journals]
+    reactions_by_journal_raw = await _reaction_svc.list_reactions_bulk(db, journal_ids, user.id)
+    reactions_by_journal = {
+        jid: [{"emoji": r.emoji, "count": r.count, "reacted_by_me": r.reacted_by_me} for r in groups]
+        for jid, groups in reactions_by_journal_raw.items()
+    }
+    # Filter to applicable schemas (project-wide + issue's tracker)
+    applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+    metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas]
+    # Candidate target projects for the "Move" action (visible to the user,
+    # excluding the issue's current project).
+    visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
+    return {
+        "reactions_by_journal": reactions_by_journal,
+        "metadata_schemas_data": metadata_schemas_data,
+        "move_targets": [p for p in visible_projects if p.id != issue.project_id],
+    }
+
+
+async def _issue_development(db: AsyncSession, user: User, project: Project, issue: Issue) -> dict[str, Any]:
+    """Branch name and development activity. Neither is shown to a visitor without an account:
+    commit authors and forge logins are not theirs to read."""
+    from specivo.web.issue_development import can_edit_development, development_context, load_development
+
+    if user.is_anonymous:
+        return {"branch_name": None, **development_context(None, can_edit=False)}
+    from specivo.services.branch_name import BranchNameSettings, make_branch_name
+
+    branch_name = make_branch_name(
+        BranchNameSettings.from_project_settings(project.settings),
+        tracker_name=issue.tracker.name if issue.tracker else "",
+        display_key=issue.display_key,
+        subject=issue.subject,
+    )
+    development = await load_development(db, issue)
+    can_edit_dev = await can_edit_development(db, user, project.id)
+    return {"branch_name": branch_name, **development_context(development, can_edit=can_edit_dev)}
 
 
 @short_router.get("/issue/{issue_ref}/", response_class=HTMLResponse)
 async def issue_detail(
     issue_ref: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     activity_page: int | None = Query(None, ge=1),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
@@ -504,33 +660,8 @@ async def issue_detail(
     if redirect := _retired_ref_redirect(request, issue_ref, issue):
         return redirect
 
-    from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
-    from specivo.schemas.metadata_schema import MetadataSchemaOut
-    from specivo.services.metadata_schema_service import MetadataSchemaService
-    from specivo.services.watcher_service import WatcherService
-
-    schema_svc = MetadataSchemaService()
-    watcher_svc = WatcherService()
-
-    from specivo.services.permission_service import Permission, check_permission
-
-    anon_can_view_wiki = False
-    if anonymous:
-        anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
-    # Relation controls are shown only to readers the relations API would accept.
-    can_manage_relations = not anonymous and await check_permission(
-        user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db
-    )
-    # The time tab lists entries only with view_time_entries, and offers the
-    # log-time form only with log_time, as the time entries API requires.
-    can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
-    can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
-    # The AI usage tab is loaded when opened (/partials/issues/{key}/ai-usage/);
-    # it is offered to those who may view or log AI usage in the project.
-    show_ai_usage_tab = not anonymous and (
-        await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
-        or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
-    )
+    flags = await _issue_page_permissions(db, user, project)
+    ai_usage_count = await ai_usage_tab_entry_count(db, user, project, issue) if flags["show_ai_usage_tab"] else 0
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -541,7 +672,12 @@ async def issue_detail(
     # state, so gather breaks integration tests. Left sequential; real
     # wins come from the joinedload/JOIN collapses below and from
     # htmx-deferred tabs.
-    all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
+    all_journals = await _journal_svc.list_for_issue(
+        db,
+        issue.id,
+        include_private=await _journal_svc.can_view_private_notes(db, user, issue.project_id),
+        own_private_of=user.id,
+    )
     lookups = await _get_lookups(db)
 
     # Relations are visibility-filtered in the service, so one pointing at an
@@ -549,102 +685,11 @@ async def issue_detail(
     # list below that an anonymous visitor still gets.
     relations = await _relation_svc.list_for_issue(db, issue, user)
 
-    if anonymous:
-        # Everything an anonymous visitor cannot see is not loaded at all,
-        # rather than loaded and hidden in the template: members and watchers
-        # name people, time entries name people and hours, attachments are
-        # outside the anonymous scope, metadata schemas and the move target
-        # list are project configuration, and reactions belong to a person who
-        # could make them.
-        members: list = []
-        current_sprint: Sprint | None = None
-        active_sprint_id = None
-        issue_schemas: list = []
-        time_entries: list = []
-        tab_ctx = {"time_entries": [], "time_entry_count": 0, "time_logged": 0}
-        watchers: list = []
-        issue_tags: list = []
-    else:
-        members = await _project_svc.list_members(db, project)
-        # Load the current sprint (if any) for the sidebar autocomplete to pin it.
-        # Versions and sprints lists are no longer prefetched — the sidebar uses
-        # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
-        # for autocomplete.
-        current_sprint = None
-        if issue.sprint_id is not None:
-            current_sprint = await db.get(Sprint, issue.sprint_id)
-        # Derive the current active sprint for project-wide UI bits (e.g. sprint
-        # badge on activity) with a single targeted query.
-        active_sprint_id_result = await db.execute(
-            select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
-        )
-        active_sprint_id = active_sprint_id_result.scalar_one_or_none()
-        issue_schemas = await schema_svc.list_for_project(db, project.id)
-        # Attachments are lazy-loaded via htmx when the Attachments tab is opened
-        # (see /partials/issues/{key}/attachments/). Time entries stay eager because
-        # the sidebar displays the time_logged sum derived from the list.
-        time_entries = await _time_svc.list_for_issue(db, issue.id, project, user) if can_view_time_entries else []
-        time_logged = sum((te.hours or 0) for te in time_entries)
-        tab_ctx = {
-            "time_entries": time_entries,
-            "time_entry_count": len(time_entries),
-            "time_logged": time_logged,
-        }
-        watchers = await watcher_svc.list_watchers(db, issue, viewer=user)
-        issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
-
-    # Paginate activity feed
-    activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
-    if activity_per_page not in ACTIVITY_PER_PAGE_OPTIONS:
-        activity_per_page = ACTIVITY_DEFAULT_PER_PAGE
-
-    activity_total = len(all_journals)
-    activity_total_pages = max(1, (activity_total + activity_per_page - 1) // activity_per_page)
-    # When the caller does not pin a page, default to the LAST one — that's
-    # where the newest journal entry lives in the ascending feed. The
-    # description editor's save() does window.location.reload() with no
-    # query params, so without this default the user would land on page 1
-    # (oldest entries) and conclude that history was not updated.
-    if activity_page is None:
-        activity_page = activity_total_pages
-    elif activity_page > activity_total_pages:
-        activity_page = activity_total_pages
-
-    activity_start = (activity_page - 1) * activity_per_page
-    journals = all_journals[activity_start : activity_start + activity_per_page]
-    thread_tree = build_thread_tree(journals)
-
-    # Latest activity: most recent of issue.updated_at and last journal
-    last_activity_at = issue.updated_at
-    last_journal_at = all_journals[-1].created_at if all_journals else None
-    if last_journal_at and (not last_activity_at or last_journal_at > last_activity_at):
-        last_activity_at = last_journal_at
-
-    if anonymous:
-        # Reactions are a control, not content: rendering the row would offer
-        # a button that cannot be pressed.
-        reactions_by_journal: dict = {}
-        metadata_schemas_data: list = []
-        move_targets: list = []
-    else:
-        # Load emoji reactions for all journals (paginated subset)
-        journal_ids = [j.id for j in journals]
-        reactions_by_journal_raw = await _reaction_svc.list_reactions_bulk(db, journal_ids, user.id)
-        reactions_by_journal = {
-            jid: [{"emoji": r.emoji, "count": r.count, "reacted_by_me": r.reacted_by_me} for r in groups]
-            for jid, groups in reactions_by_journal_raw.items()
-        }
-
-        # Filter to applicable schemas (project-wide + issue's tracker)
-        applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
-        metadata_schemas_data = [
-            MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas
-        ]
-
-        # Candidate target projects for the "Move" action (visible to the user,
-        # excluding the issue's current project).
-        visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
-        move_targets = [p for p in visible_projects if p.id != issue.project_id]
+    sidebar = await _issue_sidebar(db, user, project, issue, can_view_time_entries=flags["can_view_time_entries"])
+    members = sidebar["members"]
+    window = _activity_window(user, all_journals, activity_page)
+    journals = window["journals"]
+    controls = await _member_controls(db, user, issue, journals, sidebar["issue_schemas"])
 
     # Resolve which KEY-123 references in the rendered text are issues the
     # reader may see (anonymous visitors by the anonymous rules), so the
@@ -671,33 +716,11 @@ async def issue_detail(
 
     # The people and versions the issue's user and version fields hold, named as history names them.
     value_names = (
-        {} if anonymous else await metadata_value_names(db, user, issue_schemas, issue.issue_metadata, members=members)
+        {}
+        if anonymous
+        else await metadata_value_names(db, user, sidebar["issue_schemas"], issue.issue_metadata, members=members)
     )
-
-    # Derive from the already-loaded watchers list (list[User])
-    is_watching = any(w.id == user.id for w in watchers)
-
-    # Relations count (list already loaded via gather above)
-    relation_count = len(relations)
-
-    # Branch name and development activity. Neither is shown to a visitor
-    # without an account: commit authors and forge logins are not theirs to read.
-    from specivo.web.issue_development import can_edit_development, development_context, load_development
-
-    branch_name = None
-    development = None
-    can_edit_dev = False
-    if not anonymous:
-        from specivo.services.branch_name import BranchNameSettings, make_branch_name
-
-        branch_name = make_branch_name(
-            BranchNameSettings.from_project_settings(project.settings),
-            tracker_name=issue.tracker.name if issue.tracker else "",
-            display_key=issue.display_key,
-            subject=issue.subject,
-        )
-        development = await load_development(db, issue)
-        can_edit_dev = await can_edit_development(db, user, project.id)
+    development = await _issue_development(db, user, project, issue)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -707,45 +730,34 @@ async def issue_detail(
             "user": user,
             "anonymous": anonymous,
             "anon_can_view_issues": anonymous,
-            "anon_can_view_wiki": anon_can_view_wiki,
             "active_page": "issues",
             "active_project": project,
             "project": project,
             "issue": issue,
-            "journals": journals,
-            "thread_tree": thread_tree,
+            "thread_tree": build_thread_tree(journals),
             "members": members,
             "lookup_maps": lookup_maps,
             "imported_from": issue_imported_from,
-            "reactions_by_journal": reactions_by_journal,
-            **tab_ctx,
-            "relation_count": relation_count,
-            "branch_name": branch_name,
-            **development_context(development, can_edit=can_edit_dev),
-            "current_sprint": current_sprint,
+            **sidebar["tab_ctx"],
+            "relation_count": len(relations),
+            **development,
+            "current_sprint": sidebar["current_sprint"],
             "relations": relations,
-            "can_manage_relations": can_manage_relations,
-            "can_view_time_entries": can_view_time_entries,
-            "can_log_time": can_log_time,
-            "show_ai_usage_tab": show_ai_usage_tab,
-            "issue_tags": issue_tags,
-            "metadata_schemas_data": metadata_schemas_data,
+            **flags,
+            "ai_usage_count": ai_usage_count,
+            "issue_tags": sidebar["issue_tags"],
+            **controls,
             "metadata_value_names": value_names,
             # Computed metadata is derived from the project's configuration,
             # which is not part of what an anonymous visitor may read.
             "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),
-            "move_targets": move_targets,
             "known_issue_refs": known_issue_refs,
             "attachment_map": attachment_map,
-            "watchers": watchers,
-            "is_watching": is_watching,
-            "last_activity_at": last_activity_at,
-            "activity_page": activity_page,
-            "activity_per_page": activity_per_page,
-            "activity_total_pages": activity_total_pages,
-            "activity_total": activity_total,
-            "activity_per_page_options": ACTIVITY_PER_PAGE_OPTIONS,
-            "active_sprint_id": active_sprint_id,
+            "watchers": sidebar["watchers"],
+            "is_watching": any(w.id == user.id for w in sidebar["watchers"]),
+            "last_activity_at": _last_activity_at(issue, all_journals),
+            **window,
+            "active_sprint_id": sidebar["active_sprint_id"],
             **lookups,
         },
     )
@@ -755,17 +767,16 @@ async def issue_detail(
 async def issue_edit_form(
     issue_ref: str,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue edit form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
+    project, issue = reader_issue
     if redirect := _retired_ref_redirect(request, issue_ref, issue, "edit/"):
         return redirect
+    if not await check_permission(user, project.id, Permission.EDIT_ISSUES, db):
+        raise HTTPException(status_code=403, detail="Permission denied")
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
@@ -775,7 +786,6 @@ async def issue_edit_form(
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
     from specivo.services.metadata_schema_service import MetadataSchemaService
-    from specivo.services.permission_service import Permission, check_permission
 
     schema_svc = MetadataSchemaService()
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
@@ -808,32 +818,43 @@ async def issue_edit_form(
     )
 
 
+async def _description_change(db: AsyncSession, issue: Issue, journal_id: int, user: User) -> JournalDetail | None:
+    """The description change recorded in *journal_id*, if that journal belongs to *issue*.
+
+    The journal id comes from the URL, so it must be checked against the issue
+    whose access was verified; private journals need View private notes (or
+    to be the reader's own), as in the activity feed.
+    """
+    from specivo.models.journal import Journal, JournalDetail
+
+    stmt = (
+        select(JournalDetail)
+        .join(Journal, JournalDetail.journal_id == Journal.id)
+        .where(
+            JournalDetail.journal_id == journal_id,
+            JournalDetail.prop_key == "description",
+            Journal.issue_id == issue.id,
+        )
+    )
+    stmt = stmt.where(await _journal_svc.readable_clause(db, user, issue.project_id))
+    return (await db.execute(stmt)).scalars().first()
+
+
 @short_router.get("/issue/{issue_ref}/versions/{journal_id}/", response_class=HTMLResponse)
 async def issue_description_diff(
     issue_ref: str,
     journal_id: int,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a description diff page for a specific journal entry."""
     import difflib
 
-    from specivo.models.journal import JournalDetail
+    project, issue = reader_issue
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
-
-    journal_result = await db.execute(
-        select(JournalDetail).where(
-            JournalDetail.journal_id == journal_id,
-            JournalDetail.prop_key == "description",
-        )
-    )
-    detail = journal_result.scalar_one_or_none()
+    detail = await _description_change(db, issue, journal_id, user)
     if detail is None:
         raise HTTPException(status_code=404, detail="Description change not found")
 
@@ -851,7 +872,7 @@ async def issue_description_diff(
     )
 
     # Load all description versions for the history table
-    from specivo.models.journal import Journal
+    from specivo.models.journal import Journal, JournalDetail
     from specivo.models.user import User as UserModel
 
     all_desc_changes = (
@@ -869,7 +890,11 @@ async def issue_description_diff(
             )
             .join(Journal, JournalDetail.journal_id == Journal.id)
             .join(UserModel, Journal.user_id == UserModel.id)
-            .where(JournalDetail.prop_key == "description", Journal.issue_id == issue.id)
+            .where(
+                JournalDetail.prop_key == "description",
+                Journal.issue_id == issue.id,
+                await _journal_svc.readable_clause(db, user, issue.project_id),
+            )
             .order_by(Journal.created_at.desc(), Journal.id.desc())
         )
     ).all()
@@ -929,8 +954,8 @@ async def issue_description_diff(
 
     # Find selected version number for display
     selected_version = next((v for v in versions if v["is_selected"]), None)
-    selected_num = selected_version["num"] if selected_version else "?"
-    prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
+    selected_num: int | None = selected_version["num"] if selected_version else None
+    prev_num = selected_num - 1 if selected_num is not None and selected_num > 1 else None
 
     known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, user, old_text, new_text)
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
@@ -962,29 +987,18 @@ async def restore_description_version(
     issue_ref: str,
     journal_id: int,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a previous description version by PATCHing the issue."""
-    from specivo.models.journal import JournalDetail
-    from specivo.services.permission_service import check_permission
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
+    project, issue = reader_issue
 
     if not await check_permission(user, issue.project_id, "edit_issues", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    detail_result = await db.execute(
-        select(JournalDetail).where(
-            JournalDetail.journal_id == journal_id,
-            JournalDetail.prop_key == "description",
-        )
-    )
-    detail = detail_result.scalar_one_or_none()
+    detail = await _description_change(db, issue, journal_id, user)
     if detail is None:
         raise HTTPException(status_code=404, detail="Description version not found")
 
@@ -994,7 +1008,7 @@ async def restore_description_version(
     update_data = IssueUpdate(description=detail.old_value or "", lock_version=issue.lock_version)
     await _issue_svc.update(db, issue, update_data, user)
 
-    return RedirectResponse(
+    return redirect_to(
         f"/issue/{issue_ref}/",
         status_code=302,
     )
@@ -1004,20 +1018,16 @@ async def restore_description_version(
 async def move_issue_form(
     issue_ref: str,
     request: Request,
+    user: WebUser,
+    reader_issue: IssueForReader,
     target_project_key: str = Form(...),
     notes: str | None = Form(None),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Move an issue to another project from the web UI, then redirect to it."""
     from specivo.core.exceptions import ValidationError
-    from specivo.services.permission_service import check_permission
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    _project, issue = await _resolve_issue_project(db, issue_ref, user)
+    _project, issue = reader_issue
     if not await check_permission(user, issue.project_id, "edit_issues", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
@@ -1031,4 +1041,4 @@ async def move_issue_form(
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
 
-    return RedirectResponse(f"/issue/{moved.display_key}/", status_code=302)
+    return redirect_to(f"/issue/{moved.display_key}/", status_code=302)

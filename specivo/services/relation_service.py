@@ -6,6 +6,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import TypedDict
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,12 +24,19 @@ logger = logging.getLogger(__name__)
 # Relation type metadata
 # ---------------------------------------------------------------------------
 
+
 # Maps every user-facing type label to:
 #   "sym"     — the label shown when looking at the relation from the other side
 #   "reverse" — the canonical DB type to store when this is used as the "from" side
 #               (None means it IS the canonical type and is stored as-is)
 #   "canonical" — the DB-stored form
-RELATION_TYPES: dict[str, dict[str, str | None]] = {
+class RelationTypeInfo(TypedDict):
+    sym: str
+    reverse: str | None
+    canonical: str
+
+
+RELATION_TYPES: dict[str, RelationTypeInfo] = {
     "relates": {"sym": "relates", "reverse": None, "canonical": "relates"},
     "duplicates": {"sym": "duplicated", "reverse": None, "canonical": "duplicates"},
     "duplicated": {"sym": "duplicates", "reverse": "duplicates", "canonical": "duplicates"},
@@ -69,8 +77,14 @@ class RelationService:
         issue_to: Issue,
         relation_type: str,
         delay: int | None = None,
+        *,
+        actor: User | None = None,
     ) -> IssueRelation:
         """Create an issue relation with normalisation and validation.
+
+        With *actor* (a person or an agent linking the issues, over REST or
+        MCP alike) the change is recorded in both issues' history; imports
+        pass none, since their history comes from the source.
 
         Steps:
         1. Normalise reverse types → canonical form, swapping from/to if needed.
@@ -132,7 +146,7 @@ class RelationService:
             )
 
         # Step 5: circular dependency check for blocking / scheduling chains
-        if canonical_type in _CIRCULAR_CHECK_TYPES:
+        if canonical_type in _CIRCULAR_CHECK_TYPES:  # noqa: SIM102
             if await self._check_circular(session, from_id, to_id, canonical_type):
                 raise ValidationError(
                     message=(f"Creating this '{canonical_type}' relation would introduce a circular dependency."),
@@ -162,7 +176,22 @@ class RelationService:
         if canonical_type == "precedes" and delay is not None:
             await self._reschedule_successor(session, issue_from, issue_to, delay)
 
+        if actor is not None:
+            await self._record_change(session, actor, issue_from, issue_to, relation_type, added=True)
         return relation
+
+    async def _record_change(
+        self, session: AsyncSession, actor: User, issue_from: Issue, issue_to: Issue, relation_type: str, *, added: bool
+    ) -> None:
+        """Note the relation in both issues' history, each from its own side (``blocks`` / ``blocked``)."""
+        from specivo.services.journal_service import JournalService
+
+        journals = JournalService()
+        sym_type = RELATION_TYPES[relation_type]["sym"]
+        await journals.record_relation_change(
+            session, issue_from, actor, relation_type, issue_to.display_key, added=added
+        )
+        await journals.record_relation_change(session, issue_to, actor, sym_type, issue_from.display_key, added=added)
 
     # ------------------------------------------------------------------
     # Delete
@@ -223,6 +252,7 @@ class RelationService:
         await session.delete(relation)
         await session.flush()
         logger.info("Deleted relation id=%d by user=%d", relation_id, user.id)
+        await self._record_change(session, user, issue_from, issue_to, relation.relation_type, added=False)
         return removed
 
     # ------------------------------------------------------------------

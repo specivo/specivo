@@ -56,6 +56,12 @@ _ENTITY_TYPES: dict[ContainerKind, EntityType] = {
 _attachment_service = AttachmentService()
 
 
+def _expected_sha256(ctx: PhaseContext, ir: IRAttachment) -> str | None:
+    """The digest the source promises for *ir*'s file; adapters without the hook promise none."""
+    hook = getattr(ctx.adapter, "expected_attachment_sha256", None)
+    return hook(ir) if hook is not None else None
+
+
 async def load_attachments(ctx: PhaseContext, kinds: tuple[ContainerKind, ...] | None = None) -> None:
     """Copy in the files attached to imported issues and wiki pages.
 
@@ -73,6 +79,8 @@ async def load_attachments(ctx: PhaseContext, kinds: tuple[ContainerKind, ...] |
                 ctx.summary.record_skipped(EntityType.ATTACHMENT)
                 continue
             await _load_one(ctx, ir)
+            await ctx.record_written()
+        await ctx.checkpoint()
 
 
 async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:
@@ -108,6 +116,9 @@ async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:
             content_type=content_type,
             # A dry run rolls the database back; a copied file would stay.
             copy_file=not ctx.options.dry_run,
+            # The file may have changed since the scan (a separately synced
+            # files directory): bytes that no longer match are not imported.
+            expected_sha256=_expected_sha256(ctx, ir),
         )
     except FileNotFoundError:
         # The row outlived its file. A download that fails is worse than an

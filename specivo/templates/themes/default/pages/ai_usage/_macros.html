@@ -100,7 +100,7 @@
   </p>
   {%- endif %}
   {%- if user is defined and user and user.is_admin %}
-  <p class="sp-text-muted-xs"><a href="/admin/ai-model-prices/" data-testid="aiu-unpriced-prices-link">{% trans %}Add or load prices{% endtrans %}</a></p>
+  <p class="sp-text-muted-xs"><a href="{{ base }}/admin/ai-model-prices/" data-testid="aiu-unpriced-prices-link">{% trans %}Add or load prices{% endtrans %}</a></p>
   {%- endif %}
 </div>
 {%- endif %}
@@ -157,7 +157,7 @@
 {%- if links %}
 <nav class="sp-aiu-chart-switch" aria-label="{{ _('Groups shown') }}" data-testid="aiu-chart-show-{{ name }}">
   {%- for l in links %}
-  <a class="sp-aiu-chart-switch-option{{ ' active' if l.active }}" href="{{ l.url }}"{% if l.active %} aria-current="true"{% endif %} data-show="{{ l.value }}">{{ l.value }}</a>
+  <a class="sp-aiu-chart-switch-option{{ ' active' if l.active }}" href="{{ l.url | prefixed }}"{% if l.active %} aria-current="true"{% endif %} data-show="{{ l.value }}">{{ l.value }}</a>
   {%- endfor %}
 </nav>
 {%- endif %}
@@ -200,7 +200,7 @@
       {%- if bucket_links %}
       <nav class="sp-aiu-chart-switch" aria-label="{{ _('Time buckets') }}" data-testid="aiu-chart-buckets">
         {%- for b in bucket_links %}
-        <a class="sp-aiu-chart-switch-option{{ ' active' if b.active }}" href="{{ b.url }}"{% if b.active %} aria-current="true"{% endif %} data-bucket="{{ b.value or 'auto' }}">{{ b.label }}</a>
+        <a class="sp-aiu-chart-switch-option{{ ' active' if b.active }}" href="{{ b.url | prefixed }}"{% if b.active %} aria-current="true"{% endif %} data-bucket="{{ b.value or 'auto' }}">{{ b.label }}</a>
         {%- endfor %}
       </nav>
       {%- endif %}
@@ -440,12 +440,12 @@
       {% if not compact %}<td>{{ cost_type_label(r.cost_type) }}</td>{% endif %}
       <td class="sp-aiu-num">{{ r.marginal or "–" }}</td>
       <td class="sp-aiu-num">{{ r.api_equivalent or "–" }}</td>
-      {% if show_project %}<td>{% if r.project_key %}<a href="/projects/{{ r.project_key }}/ai-usage/">{{ r.project_key }}</a>{% else %}<span class="sp-text-muted">{% trans %}Unassigned{% endtrans %}</span>{% endif %}</td>{% endif %}
-      {% if show_issue %}<td>{% if r.issue_key %}<a class="issue-key" href="/issue/{{ r.issue_key }}/">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
+      {% if show_project %}<td>{% if r.project_key %}<a href="{{ base }}/projects/{{ r.project_key }}/ai-usage/">{{ r.project_key }}</a>{% else %}<span class="sp-text-muted">{% trans %}Unassigned{% endtrans %}</span>{% endif %}</td>{% endif %}
+      {% if show_issue %}<td>{% if r.issue_key %}<a class="issue-key" href="{{ base }}/issue/{{ r.issue_key }}/">{{ r.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>{% endif %}
       <td class="sp-aiu-actions">
         {% if r.editable %}
-        <a class="sp-btn-sm" href="/ai-usage/{{ r.id }}/edit/?next={{ return_to | urlencode }}" data-testid="aiu-edit">{% trans %}Edit{% endtrans %}</a>
-        <form method="post" action="/ai-usage/{{ r.id }}/{{ 'include' if r.excluded else 'exclude' }}/" class="sp-aiu-inline-form">
+        <a class="sp-btn-sm" href="{{ base }}/ai-usage/{{ r.id }}/edit/?next={{ return_to | urlencode }}" data-testid="aiu-edit">{% trans %}Edit{% endtrans %}</a>
+        <form method="post" action="{{ base }}/ai-usage/{{ r.id }}/{{ 'include' if r.excluded else 'exclude' }}/" class="sp-aiu-inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ return_to }}">
           {% if r.excluded %}
@@ -456,7 +456,7 @@
         </form>
         {% endif %}
         {% if r.deletable %}
-        <form method="post" action="/ai-usage/{{ r.id }}/delete/" class="sp-aiu-inline-form">
+        <form method="post" action="{{ base }}/ai-usage/{{ r.id }}/delete/" class="sp-aiu-inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ return_to }}">
           <button type="submit" class="sp-btn-sm danger" data-confirm="{{ _('Delete this AI usage entry?') }}" data-testid="aiu-delete">{% trans %}Delete{% endtrans %}</button>

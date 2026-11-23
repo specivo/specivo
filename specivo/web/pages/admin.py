@@ -1,4 +1,4 @@
-"""Web admin pages: dashboard, workflows, roles, trackers, settings, email, presets."""
+"""Web admin pages: dashboard, workflows, trackers, settings, email, presets."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import prefixed
 from specivo.core.config import get_settings
 from specivo.core.database import DB_SESSION
 from specivo.models.user import User
@@ -30,7 +31,7 @@ from specivo.services.security_audit_service import (
 from specivo.services.settings_service import SettingsService
 from specivo.services.version_service import VersionService
 from specivo.services.workflow_service import WorkflowService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, redirect_to
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 
@@ -58,10 +59,10 @@ async def require_admin(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        raise HTTPException(status_code=307, headers={"Location": "/login/"})
+        raise HTTPException(status_code=307, headers={"Location": prefixed("/login/")})
     if not isinstance(user_obj, User) or not is_global_admin(user_obj):
         raise HTTPException(status_code=403, detail="Admin access required")
-    return user_obj  # type: ignore[return-value]
+    return user_obj
 
 
 async def require_admin_session(
@@ -263,8 +264,7 @@ async def _target_or_404(db: AsyncSession, user_id: int) -> User:
 
 
 def _user_page_redirect(user_id: int, account: str) -> RedirectResponse:
-    prefix = get_settings().stealth_prefix.rstrip("/")
-    return RedirectResponse(f"{prefix}/admin/users/{user_id}/?account={account}", status_code=303)
+    return redirect_to(prefixed(f"/admin/users/{user_id}/?account={account}"), status_code=303)
 
 
 @router.post("/admin/users/{user_id}/deactivate/", response_model=None)
@@ -457,7 +457,7 @@ async def admin_group_detail(
     try:
         group = await svc.get(db, group_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Group not found")
+        raise HTTPException(status_code=404, detail="Group not found")  # noqa: B904
 
     users, user_total = await svc.list_users(db, group_id, limit=GROUP_LIST_CAP)
     projects = await svc.list_projects(db, group_id)
@@ -482,7 +482,7 @@ async def admin_group_detail(
 
 
 # ---------------------------------------------------------------------------
-# Versions (cross-project)
+# Versions (cross-project)  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 
@@ -551,62 +551,8 @@ async def admin_workflows(
 
 
 # ---------------------------------------------------------------------------
-# Roles and trackers: visibility settings
+# Trackers: private-by-default flag (roles live in ``admin_roles``)
 # ---------------------------------------------------------------------------
-
-
-@router.get("/admin/roles/", response_class=HTMLResponse)
-async def admin_roles(
-    request: Request,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """Render the roles page: each role's user, time entry and AI usage visibility."""
-    from specivo.models.role import Role
-
-    roles = (await db.execute(select(Role).order_by(Role.builtin, Role.position, Role.id))).scalars().all()
-    templates = get_templates()
-    return templates.TemplateResponse(
-        request,
-        "pages/admin/roles.html",
-        context={"user": user, "active_page": "admin", "roles": list(roles)},
-    )
-
-
-@router.post("/admin/roles/{role_id}/", response_model=None)
-async def admin_role_update(
-    role_id: int,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = DB_SESSION,
-    users_visibility: str = Form(""),
-    time_entries_visibility: str = Form(""),
-    ai_usage_visibility: str = Form(""),
-) -> Response:
-    """Save a role's ``users_visibility``, ``time_entries_visibility`` and ``ai_usage_visibility``.
-
-    Unknown values are ignored (left unchanged), like the settings form.
-    Builtin roles are editable here too: only their ``builtin`` is protected.
-    """
-    from fastapi import HTTPException
-
-    from specivo.models.role import (
-        AI_USAGE_VISIBILITY_VALUES,
-        TIME_ENTRIES_VISIBILITY_VALUES,
-        USERS_VISIBILITY_VALUES,
-        Role,
-    )
-
-    role = await db.get(Role, role_id)
-    if role is None:
-        raise HTTPException(status_code=404, detail="Role not found")
-    if users_visibility in USERS_VISIBILITY_VALUES:
-        role.users_visibility = users_visibility
-    if time_entries_visibility in TIME_ENTRIES_VISIBILITY_VALUES:
-        role.time_entries_visibility = time_entries_visibility
-    if ai_usage_visibility in AI_USAGE_VISIBILITY_VALUES:
-        role.ai_usage_visibility = ai_usage_visibility
-    await db.commit()
-    return RedirectResponse("/admin/roles/", status_code=303)
 
 
 @router.get("/admin/trackers/", response_class=HTMLResponse)
@@ -647,7 +593,7 @@ async def admin_tracker_update(
     await db.commit()
     # The issue form reads trackers from the process-local lookup cache.
     invalidate_lookups()
-    return RedirectResponse("/admin/trackers/", status_code=303)
+    return redirect_to("/admin/trackers/", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -727,7 +673,7 @@ async def admin_currencies(
 def _currencies_redirect(show: str, q: str, error: str = "") -> RedirectResponse:
     params = {k: v for k, v in (("show", show), ("q", q.strip()), ("error", error)) if v and v != "all"}
     url = "/admin/currencies/" + (f"?{urlencode(params)}" if params else "")
-    return RedirectResponse(url, status_code=303)
+    return redirect_to(url, status_code=303)
 
 
 @router.post("/admin/currencies/reporting/", response_model=None)
@@ -768,7 +714,7 @@ async def admin_currency_toggle(
     try:
         await CurrencyService().set_active(db, code, is_active == "1", user, request=request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Currency not found")
+        raise HTTPException(status_code=404, detail="Currency not found")  # noqa: B904
     await db.commit()
     return _currencies_redirect(show if show in _CURRENCY_FILTERS else "all", q)
 
@@ -931,7 +877,7 @@ async def admin_settings_defaults(
         if "default_language" in to_set:
             set_default_language_override(to_set["default_language"])
 
-    return RedirectResponse("/admin/settings/", status_code=303)
+    return redirect_to("/admin/settings/", status_code=303)
 
 
 @router.post("/admin/settings/search-engines/", response_model=None)
@@ -952,7 +898,7 @@ async def admin_settings_search_engines(
     if search_engine_indexing in ("true", "false"):
         await _settings_svc.set_many(db, {SEARCH_ENGINE_INDEXING_SETTING_KEY: search_engine_indexing})
         await db.commit()
-    return RedirectResponse("/admin/settings/", status_code=303)
+    return redirect_to("/admin/settings/", status_code=303)
 
 
 def _render_anonymous_access_confirm(
@@ -979,7 +925,7 @@ async def admin_settings_anonymous_access(
     db: AsyncSession = DB_SESSION,
     enabled: str = Form(""),
     confirm: str = Form(""),
-    confirmed_projects: list[str] = Form(default=[]),  # noqa: B008
+    confirmed_projects: list[str] = Form(default=[]),
 ) -> Response:
     """Turn the anonymous access switch on or off.
 
@@ -1004,11 +950,11 @@ async def admin_settings_anonymous_access(
             request=request,
         )
     except AnonymousAccessConfirmationRequiredError:
-        return RedirectResponse("/admin/settings/anonymous-access/confirm/", status_code=303)
+        return redirect_to("/admin/settings/anonymous-access/confirm/", status_code=303)
     except AnonymousAccessConfirmationStaleError as exc:
         return _render_anonymous_access_confirm(request, user, exc.projects, stale=True, status_code=409)
     await db.commit()
-    return RedirectResponse("/admin/settings/", status_code=303)
+    return redirect_to("/admin/settings/", status_code=303)
 
 
 @router.get("/admin/settings/anonymous-access/confirm/", response_class=HTMLResponse)
@@ -1024,7 +970,7 @@ async def admin_settings_anonymous_access_confirm(
     )
 
     if await is_anonymous_access_enabled(db):
-        return RedirectResponse("/admin/settings/", status_code=303)
+        return redirect_to("/admin/settings/", status_code=303)
     return _render_anonymous_access_confirm(request, user, await list_projects_with_anonymous_permissions(db))
 
 
@@ -1153,7 +1099,7 @@ def _parse_day(value: str) -> date | None:
 
 
 @router.get("/admin/audit-log/", response_class=HTMLResponse)
-async def admin_audit_log(
+async def admin_audit_log(  # noqa: C901, PLR0912, PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,

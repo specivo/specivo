@@ -18,6 +18,7 @@ from specivo.models.user import User
 from specivo.web.deps import (
     get_current_user_optional,
     get_templates,
+    redirect_to,
     require_user,
     safe_next_path,
 )
@@ -32,11 +33,11 @@ router = APIRouter(tags=["web-auth"], include_in_schema=False)
 async def login_page(
     request: Request,
     db: AsyncSession = DB_SESSION,
-    reset: str = Query(""),  # noqa: B008
-    next_url: str = Query("", alias="next"),  # noqa: B008
-    sso_error: str = Query(""),  # noqa: B008
-    logged_out: str = Query(""),  # noqa: B008
-    local: str = Query(""),  # noqa: B008
+    reset: str = Query(""),
+    next_url: str = Query("", alias="next"),
+    sso_error: str = Query(""),
+    logged_out: str = Query(""),
+    local: str = Query(""),
 ) -> HTMLResponse | RedirectResponse:
     """Render the login page (standalone layout, no sidebar).
 
@@ -88,7 +89,7 @@ async def login_page(
         and not sso_error
         and any(p.slug == redirect_slug for p in providers)
     ):
-        response = RedirectResponse(sso_login_path(redirect_slug, next_path), status_code=302)
+        response = redirect_to(sso_login_path(redirect_slug, next_path), status_code=302)
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -130,7 +131,7 @@ async def logout_confirm_page(
     """
     user = await get_current_user_optional(request, db)
     if user is None:
-        return RedirectResponse("/login/", status_code=302)
+        return redirect_to("/login/", status_code=302)
     templates = get_templates()
     return templates.TemplateResponse(request, "pages/auth/logout_confirm.html", context={"user": user})
 
@@ -166,7 +167,7 @@ async def logout(
     await db.commit()
 
     target = (await end_session_url(sso_session) if sso_session is not None else None) or logged_out_path()
-    response = RedirectResponse(target, status_code=302)
+    response = redirect_to(target, status_code=302)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return response
@@ -194,7 +195,7 @@ async def _token_owner_is_sso_only(db: AsyncSession, user_id: int) -> bool:
 async def reset_password_form(
     request: Request,
     db: AsyncSession = DB_SESSION,
-    token: str = Query(""),  # noqa: B008
+    token: str = Query(""),
 ) -> HTMLResponse:
     """Render the reset password form.
 
@@ -237,12 +238,12 @@ async def profile_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
     db: AsyncSession = DB_SESSION,
-    sso_linked: str = Query(""),  # noqa: B008
-    sso_unlinked: str = Query(""),  # noqa: B008
-    sso_error: str = Query(""),  # noqa: B008
-    email: str = Query(""),  # noqa: B008
-    email_error: str = Query(""),  # noqa: B008
-    email_reauth: str = Query(""),  # noqa: B008
+    sso_linked: str = Query(""),
+    sso_unlinked: str = Query(""),
+    sso_error: str = Query(""),
+    email: str = Query(""),
+    email_error: str = Query(""),
+    email_reauth: str = Query(""),
 ) -> Response:
     """Render the user profile page, with its "Email address" and "Connected accounts" sections.
 
@@ -279,7 +280,7 @@ async def update_profile(
         user.display_name = display_name
         await db.commit()
 
-    return RedirectResponse("/my/profile/", status_code=303)
+    return redirect_to("/my/profile/", status_code=303)
 
 
 @router.get("/my/preferences/", response_model=None)
@@ -396,7 +397,7 @@ async def update_preferences(
 
     await db.commit()
 
-    return RedirectResponse("/my/preferences/", status_code=303)
+    return redirect_to("/my/preferences/", status_code=303)
 
 
 @router.post("/my/profile/avatar/", response_model=None)
@@ -413,7 +414,7 @@ async def upload_avatar(
     svc = ProfileService()
     await svc.upload_avatar(db, user, content, file.content_type or "", file.filename or "avatar")
 
-    return RedirectResponse("/my/profile/", status_code=303)
+    return redirect_to("/my/profile/", status_code=303)
 
 
 @router.post("/my/profile/avatar/delete/", response_model=None)
@@ -427,7 +428,7 @@ async def delete_avatar(
 
     await ProfileService().delete_avatar(db, user)
 
-    return RedirectResponse("/my/profile/", status_code=303)
+    return redirect_to("/my/profile/", status_code=303)
 
 
 @router.get("/my/api-keys/", response_model=None)

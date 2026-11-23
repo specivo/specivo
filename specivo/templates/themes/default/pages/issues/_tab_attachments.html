@@ -1,6 +1,6 @@
 {# Attachments tab partial — rendered via htmx when tab opens.
-   Expects: issue, issue_attachments_json (pre-serialized JSON string). #}
-<script type="application/json" id="att-data-issue-{{ issue.id }}">{{ issue_attachments_json | safe }}</script>
+   Expects: issue, issue_attachments (list of dicts; tojson escapes < > & '). #}
+<script type="application/json" id="att-data-issue-{{ issue.id }}">{{ issue_attachments | tojson }}</script>
 <div class="attachments-section" style="margin-top:0"
      x-data="issueAttachments({ containerId: {{ issue.id }}, dataElementId: 'att-data-issue-{{ issue.id }}' })"
      data-msg-delete-failed="{{ _('Delete failed') }}"
@@ -49,7 +49,7 @@
     <div class="attachment-images">
       <template x-for="att in images" :key="att.id">
         <div class="attachment-thumb" @click="openLightbox(att)">
-          <img :src="'/api/v1/attachments/' + att.id + '/download/'" :alt="att.filename">
+          <img :src="'{{ base }}/api/v1/attachments/' + att.id + '/download/'" :alt="att.filename">
           <div class="attachment-thumb-overlay">
             <span class="attachment-thumb-name" x-text="att.filename"></span>
           </div>
@@ -77,7 +77,7 @@
           <div class="file-icon" :class="fileIconClass(att)" x-text="fileIconLabel(att)"></div>
           <div class="file-info">
             <div class="file-name">
-              <a :href="'/api/v1/attachments/' + att.id + '/download/'" x-text="att.filename"></a>
+              <a :href="'{{ base }}/api/v1/attachments/' + att.id + '/download/'" x-text="att.filename"></a>
             </div>
             <div class="file-meta">
               <span x-text="formatSize(att.filesize)"></span>

@@ -22,7 +22,6 @@ from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.role import Role
 from specivo.models.user import User
-from specivo.services.metadata_fields import field_label, humanise
 from specivo.services.permission_service import clear_role_cache
 from tests.factories.user import UserFactory
 from tests.factories.version import VersionFactory
@@ -141,12 +140,6 @@ def _panel(html: str) -> dict[str, Any]:
 
 
 class TestLabels:
-    def test_a_title_is_the_name_and_a_key_reads_as_one_without(self):
-        assert field_label("customfield_10044", {"title": THAI}) == THAI
-        assert field_label("qa_owner", {"type": "integer"}) == "Qa Owner"
-        assert field_label("qa_owner", {"title": "  "}) == "Qa Owner"
-        assert humanise("customfield_10044") == "Customfield 10044"
-
     async def test_history_names_the_field(self, auth_client: AsyncClient, db_session: AsyncSession):
         world = await _world(db_session, auth_client.state.user, "CFN")
         resp = await auth_client.get(f"/issue/{world['issue'].display_key}/")

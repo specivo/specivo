@@ -11,12 +11,14 @@ from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.reaction import AddReactionRequest, ReactionGroupOut, ReactionOut, ReactionUserOut
 from specivo.services.issue_service import IssueService
+from specivo.services.journal_service import JournalService
 from specivo.services.permission_service import check_permission
 from specivo.services.reaction_service import ReactionService
 
 router = APIRouter(tags=["reactions"])
 _service = ReactionService()
 _issue_service = IssueService()
+_journal_service = JournalService()
 
 
 @router.post(
@@ -35,6 +37,7 @@ async def add_reaction(
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, "view_issues", db):
         raise PermissionDeniedError("You do not have permission to react in this project")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     reaction = await _service.add_reaction(
         session=db,
@@ -67,6 +70,7 @@ async def remove_reaction(
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, "view_issues", db):
         raise PermissionDeniedError("You do not have permission to manage reactions in this project")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     await _service.remove_reaction(
         session=db,
@@ -90,6 +94,7 @@ async def list_reactions(
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, "view_issues", db):
         raise PermissionDeniedError("You do not have permission to view reactions in this project")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     groups = await _service.list_reactions(session=db, journal_id=journal_id)
     return [

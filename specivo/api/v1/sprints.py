@@ -287,10 +287,7 @@ async def get_board(
     # Serialize issues to dicts for JSON response
     result: dict[str, list[dict]] = {}
     for status_name, issues in board.items():
-        result[status_name] = [
-            {"id": i.id, "subject": i.subject, "status_id": i.status_id}
-            for i in issues
-        ]
+        result[status_name] = [{"id": i.id, "subject": i.subject, "status_id": i.status_id} for i in issues]
     return result
 
 
@@ -305,7 +302,4 @@ async def get_backlog(
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
     issues, _total = await _sprint_service.backlog_issues(db, project.id, current_user)
-    return [
-        {"id": i.id, "subject": i.subject, "sprint_id": i.sprint_id}
-        for i in issues
-    ]
+    return [{"id": i.id, "subject": i.subject, "sprint_id": i.sprint_id} for i in issues]

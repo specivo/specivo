@@ -69,6 +69,19 @@ allowed to see, so a private issue never shows up in a number you could not clic
 Click a version to see the issues assigned to it, grouped by status, so you can drill from the
 high-level plan straight into the work.
 
+## AI spend of a version
+
+A version's page has an **AI spend** card next to the time logged. It shows the version's spend,
+API-equivalent value, tokens and the number of people. It counts the AI usage on the version's
+issues and on their sub-issues that have no version of their own, as far as you may see it. **Open the
+AI spend report** opens the project's [spend report](ai-spend-reports.md#release-and-sprint)
+narrowed to the version, over the days its usage covers.
+
+![A version page with its issues and the AI spend card](../../assets/img/version-page.webp)
+
+An entry counts toward the version its issue has now, so moving an issue to another version moves
+its AI spend too.
+
 ## Creating and managing versions
 
 Versions are created and edited by a project **Manager** in the project's settings. Set the name and

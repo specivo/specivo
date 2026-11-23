@@ -285,6 +285,45 @@ async def test_bad_parameters_are_422(db_session: AsyncSession, w: World) -> Non
         assert exc.value.status_code in (404, 422), kw
 
 
+async def test_parameter_errors_name_their_field_and_come_before_access(db_session: AsyncSession, w: World) -> None:
+    """Argument checks run before any access check: a non-administrator's bad instance report is a 422, not a 403."""
+    cases: list[tuple[dict[str, Any], str]] = [
+        ({"period": "year"}, "period"),
+        ({"sort": "rank"}, "sort"),
+        ({"date_from": MARCH_31, "date_to": MARCH_1}, "to_date"),
+        ({"date_from": date(2020, 1, 1), "date_to": date(2026, 1, 1)}, "to_date"),
+        ({"filters": ReportFilters(cost_type="barter")}, "cost_type"),
+        ({"period": "year", "sort": "rank"}, "period"),
+        ({"sort": "rank", "date_from": MARCH_31, "date_to": MARCH_1}, "sort"),
+    ]
+    for kw, field in cases:
+        with pytest.raises(AppError) as exc:
+            await run(db_session, w.alice, **kw)
+        assert (exc.value.status_code, exc.value.field) == (422, field), kw
+
+
+async def test_project_and_project_set_together_are_refused(db_session: AsyncSession, w: World) -> None:
+    with pytest.raises(AppError) as exc:
+        await run(db_session, w.admin, w.p, projects=[w.q])
+    assert (exc.value.status_code, exc.value.field) == (422, "project")
+    # Access to the set is checked before the rate policy and the currency are read.
+    with pytest.raises(AppError) as unreachable:
+        await run(db_session, w.mgr, projects=[w.q], rate_policy="yesterday")
+    assert unreachable.value.status_code == 404
+    with pytest.raises(PermissionDeniedError):
+        await run(db_session, w.mgr, rate_policy="yesterday")
+
+
+async def test_scope_and_period_coarsening(db_session: AsyncSession, w: World) -> None:
+    project = await run(db_session, w.mgr, w.p, period="month")
+    assert (project.scope, project.project, project.period, project.requested_period) == ("project", w.p, "month", None)
+    wide = await run(db_session, w.admin, period="day", date_from=date(2025, 1, 1), date_to=date(2026, 3, 31))
+    assert wide.scope == "instance" and wide.period != "day" and wide.requested_period == "day"
+    assert wide.unallocated_shown and wide.seat_cost_shown and not wide.seat_cost_hidden
+    no_seats = await run(db_session, w.admin, include_seat_cost=False)
+    assert not no_seats.seat_cost_shown and not no_seats.seat_cost_hidden and not no_seats.unallocated_shown
+
+
 async def test_instance_report_is_for_administrators(db_session: AsyncSession, w: World) -> None:
     for name in ("mgr", "alice"):
         with pytest.raises(PermissionDeniedError):
@@ -318,6 +357,9 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         "model": {"lab-model-1", "lab-model-2"},
         "cost_type": {"api", "free"},
         "branch": {"feat/a", None},
+        # Planning dimensions come from the issue: none of these issues is planned.
+        "version": {None},
+        "sprint": {None},
     }[dim]
     assert keys == expected
     labels = {r.labels[dim] for r in report.rows}

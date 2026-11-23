@@ -6,16 +6,34 @@ from pydantic import BaseModel, Field
 
 
 class LinkNodeOut(BaseModel):
-    """An issue, wiki page, attachment, commit or pull request in a link graph."""
+    """An issue, wiki page, attachment, commit or pull request, or a tag, component, metadata value, version,
+    sprint or user, in a link graph."""
 
     model_config = {"from_attributes": True}
 
-    ref: str = Field(description="ACME-12, wiki:ACME/slug, attachment:ID, commit:SHA or pr:ID")
-    type: str = Field(description="issue, wiki_page, attachment, commit or pull_request")
+    ref: str = Field(
+        description=(
+            "ACME-12, wiki:ACME/slug, attachment:ID, commit:SHA, pr:ID, tag:ACME/name, component:ACME/value, "
+            "metadata:ACME/key/value, version:ACME/name, sprint:ACME/name or user:login"
+        )
+    )
+    type: str = Field(
+        description=(
+            "issue, wiki_page, attachment, commit, pull_request, tag, component, metadata, version, sprint or user"
+        )
+    )
     title: str
-    status: str | None = Field(default=None, description="Issue status name, or pull request state")
+    status: str | None = Field(
+        default=None, description="Issue status name, pull request state, or version or sprint status"
+    )
     url: str | None = None
-    project: str | None = Field(default=None, description="Project key of an issue or wiki page")
+    project: str | None = Field(default=None, description="Project key of an issue, wiki page or project-level node")
+    degree: int | None = Field(
+        default=None,
+        description=(
+            "For a tag, component, metadata value, version, sprint or user: the items you may see that point at it"
+        ),
+    )
 
 
 class LinkEdgeOut(BaseModel):
@@ -28,7 +46,8 @@ class LinkEdgeOut(BaseModel):
     kind: str = Field(
         description=(
             "Text links: wiki_link, mention, attachment_link. "
-            "Structured: relation, parent, child, attachment, commit, pull_request."
+            "Structured: relation, parent, child, attachment, commit, pull_request. "
+            "Structured nodes: tagged, in_component, in_metadata, targets_version, in_sprint, assigned_to."
         )
     )
     direction: str | None = Field(

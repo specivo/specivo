@@ -339,7 +339,7 @@ async def recheck_guard(refresh_row_id: int, *, settings: Settings | None = None
 
         redis = await get_redis()
         acquired = bool(await redis.set(key, "1", nx=True, px=ttl_ms))
-    except Exception as exc:  # noqa: BLE001 - any Redis failure means no guard
+    except Exception as exc:  # any Redis failure means no guard  # noqa: BLE001
         logger.warning("sso.session.recheck_guard_unavailable error=%s", type(exc).__name__)
         acquired = False
     if not acquired:
@@ -348,9 +348,9 @@ async def recheck_guard(refresh_row_id: int, *, settings: Settings | None = None
     try:
         yield True
     except BaseException:
-        try:
+        try:  # noqa: SIM105
             await redis.delete(key)
-        except Exception:  # noqa: BLE001 - the key expires on its own
+        except Exception:  # the key expires on its own  # noqa: BLE001, S110
             pass
         raise
 

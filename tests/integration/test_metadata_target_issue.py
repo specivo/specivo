@@ -98,9 +98,7 @@ class TestIssueMetadataTarget:
 
     async def test_set_metadata_persists(self, db_session, admin, issue):
         target = IssueMetadataTarget()
-        updated = await target.set_metadata(
-            db_session, issue, {"severity": "high"}, admin
-        )
+        updated = await target.set_metadata(db_session, issue, {"severity": "high"}, admin)
         assert updated.issue_metadata == {"severity": "high"}
         assert target.project_id_of(updated) == issue.project_id
         assert target.display_ref(updated) == issue.display_key

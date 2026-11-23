@@ -244,7 +244,7 @@ async def _hash_counts(session: AsyncSession) -> dict[str, int]:
     algorithm = _algorithm_of_hash_expr()
     rows = await session.execute(select(algorithm, func.count()).where(_legacy_hash_clause()).group_by(algorithm))
     for name, count in rows.all():
-        counts[name] = count
+        counts[name] = count  # noqa: PERF403
     return counts
 
 
@@ -255,7 +255,7 @@ def _print_hashers(registry: PasswordHasherRegistry, counts: dict[str, int]) -> 
     for algorithm, entry in sorted(registry.legacy().items()):
         rows.append((algorithm, entry.origin, "yes" if algorithm in enabled else "no", counts.get(algorithm, 0)))
     for algorithm in sorted(set(counts) - {"bcrypt"} - set(registry.legacy())):
-        rows.append((algorithm, "NOT REGISTERED", "no", counts[algorithm]))
+        rows.append((algorithm, "NOT REGISTERED", "no", counts[algorithm]))  # noqa: PERF401
 
     print(f"{'ALGORITHM':<24} {'ORIGIN':<40} {'ENABLED':<8} USERS")
     for algorithm, origin, is_enabled, count in rows:
@@ -270,7 +270,7 @@ def _print_hashers(registry: PasswordHasherRegistry, counts: dict[str, int]) -> 
         print(f"\nLEGACY_PASSWORD_HASHES_EXPIRE_AT: {cutoff.isoformat()} ({state})")
 
 
-async def _run_password_hashers(args: argparse.Namespace) -> None:
+async def _run_password_hashers(args: argparse.Namespace) -> None:  # noqa: ARG001
     registry = get_password_hasher_registry()
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
@@ -370,7 +370,7 @@ async def expire_legacy_passwords(session: AsyncSession, algorithm: str | None =
     return count
 
 
-async def _run_legacy_report(args: argparse.Namespace) -> None:
+async def _run_legacy_report(args: argparse.Namespace) -> None:  # noqa: ARG001
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
     factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
@@ -429,7 +429,7 @@ def _session_factory() -> tuple[async_sessionmaker[AsyncSession], AsyncEngine]:
     return async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False), engine
 
 
-async def _run_import_map_list(args: argparse.Namespace) -> int:
+async def _run_import_map_list(args: argparse.Namespace) -> int:  # noqa: ARG001
     factory, engine = _session_factory()
     try:
         async with factory() as session:
@@ -582,7 +582,7 @@ def format_purge(system: str, instance: str, count: int, *, dry_run: bool) -> st
 
 async def _run_import_map_pending(args: argparse.Namespace) -> int:
     path = Path(args.links_file)
-    if not os.path.lexists(path):
+    if not os.path.lexists(path):  # noqa: ASYNC240
         print(format_pending(path, None, 0, {}))
         return 0
     try:
@@ -640,7 +640,7 @@ _IMPORT_MAP_RUNNERS = {
 }
 
 
-def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:
     import_map = sub.add_parser(
         "import-map",
         help="Inspect and rename the scopes of the import identifier map",

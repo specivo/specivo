@@ -18,7 +18,8 @@ from specivo.core.ai_usage import (
     priced_at_for,
 )
 from specivo.core.money import Money
-from specivo.services.permission_service import PERMISSIONS, Permission
+from specivo.services.permission_catalogue import CATALOGUE_ORDER
+from specivo.services.permission_service import Permission
 
 pytestmark = pytest.mark.unit
 
@@ -172,7 +173,7 @@ def test_ai_usage_permissions_are_in_the_catalogue() -> None:
         Permission.MANAGE_AI_USAGE,
         Permission.LOG_AI_USAGE_FOR_OTHERS,
     ):
-        assert permission in PERMISSIONS
+        assert permission in CATALOGUE_ORDER
 
 
 def test_entry_token_views_keep_the_buckets_apart_and_sum_them() -> None:

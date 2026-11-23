@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from specivo.api.v1.router import api_router
+from specivo.core.app_url import base_path
 from specivo.core.config import get_settings
 from specivo.core.database import DB_SESSION, get_engine
 from specivo.core.exceptions import (
@@ -51,7 +52,7 @@ from specivo.web.router import web_router
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # noqa: ARG001
     settings = get_settings()
     setup_logging(debug=settings.debug)
 
@@ -147,11 +148,11 @@ def get_plugin_manager() -> PluginManager:
     return _plugin_manager
 
 
-def create_app() -> FastAPI:
-    global _plugin_manager  # noqa: PLW0603
+def create_app() -> FastAPI:  # noqa: C901, PLR0915
+    global _plugin_manager
 
     settings = get_settings()
-    sp = settings.stealth_prefix.rstrip("/")
+    sp = base_path(settings)
 
     # Disable built-in docs/openapi endpoints — we mount admin-only versions below.
     application = FastAPI(
@@ -172,9 +173,6 @@ def create_app() -> FastAPI:
     _openapi_url = f"{sp}{settings.api_v1_prefix}/openapi.json"
     _docs_url = f"{sp}/docs"
     _redoc_url = f"{sp}/redoc"
-
-    # Request ID — added first so it is outermost (runs before CORS).
-    application.add_middleware(RequestIDMiddleware)
 
     # CSRF — double-submit cookie pattern for state-changing requests.
     application.add_middleware(CSRFMiddleware)
@@ -229,6 +227,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Request ID and security headers — added LAST so it is the outermost
+    # middleware: add_middleware inserts at the front of the stack, so the
+    # last one added runs first. Responses made by the middleware inside it
+    # (CSRF 403, TrustedHost 400, CORS preflight) then carry the security
+    # headers too. Starlette's ServerErrorMiddleware (unhandled 500s) always
+    # wraps the whole stack and cannot be reached from here.
+    application.add_middleware(RequestIDMiddleware)
+
     # Plugin system — load plugins and build the process-wide registries
     # (services, features, password hashers). Shared with the import CLI and
     # the Celery worker through ``bootstrap`` so every process sees the same
@@ -257,12 +263,13 @@ def create_app() -> FastAPI:
         for locale_dir, domain in plugin.get_locale_dirs():
             _extra_locale_dirs.append((locale_dir, domain))
 
-    # Mount plugin static directories (plugin CSS/JS).
+    # Mount plugin static directories (plugin CSS/JS), under the prefix like
+    # every other page asset.
     for plugin in pm.plugins:
         for dir_path, url_path in plugin.get_static_dirs():
             if dir_path.exists():
                 application.mount(
-                    url_path,
+                    f"{sp}{url_path}",
                     StaticFiles(directory=str(dir_path)),
                     name=f"static_{plugin.name}",
                 )
@@ -280,12 +287,13 @@ def create_app() -> FastAPI:
     for plugin in pm.plugins:
         plugin.on_startup(application)
 
-    # Error handlers — register most specific first.
-    application.add_exception_handler(RequestValidationError, request_validation_error_handler)
-    application.add_exception_handler(AppError, app_error_handler)
+    # Error handlers — register most specific first. Starlette types every
+    # handler as taking a plain Exception, so the narrower ones need an ignore.
+    application.add_exception_handler(RequestValidationError, request_validation_error_handler)  # type: ignore[arg-type]
+    application.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
     application.add_exception_handler(ScimError, scim_error_handler)
-    application.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
+    application.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
     application.add_exception_handler(Exception, unhandled_exception_handler)
 
     # robots.txt and the sitemap — always at the root, not behind the stealth
@@ -295,7 +303,9 @@ def create_app() -> FastAPI:
     application.include_router(search_engines_router)
 
     # PWA manifest — dynamic so it reflects the current brand_name setting.
-    @application.get("/manifest.json", include_in_schema=False)
+    # Under the prefix, and so are its start URL, scope and icon: the
+    # installed app opens, and stays, inside the prefix.
+    @application.get(f"{sp}/manifest.json", include_in_schema=False)
     async def pwa_manifest():
         from specivo.web.deps import get_brand_name
 
@@ -304,13 +314,14 @@ def create_app() -> FastAPI:
             "name": name,
             "short_name": name,
             "description": f"{name} — project tracking and knowledge base",
-            "start_url": "/",
+            "start_url": f"{sp}/",
+            "scope": f"{sp}/",
             "display": "standalone",
             "background_color": "#12102e",
             "theme_color": "#12102e",
             "icons": [
                 {
-                    "src": "/static/img/favicon.svg",
+                    "src": f"{sp}/static/img/favicon.svg",
                     "sizes": "any",
                     "type": "image/svg+xml",
                     "purpose": "any maskable",
@@ -335,13 +346,13 @@ def create_app() -> FastAPI:
     # SCIM provisioning (identity providers) — behind stealth prefix
     application.include_router(scim_router, prefix=sp)
 
-    # Static files — always at /static (not behind stealth prefix)
-    application.mount("/static", StaticFiles(directory="specivo/static"), name="static")
+    # Static files — behind the stealth prefix, like the pages that load them.
+    application.mount(f"{sp}/static", StaticFiles(directory="specivo/static"), name="static")
 
-    # Serve user avatar photos from the external data mount
+    # Serve user avatar photos from the external data mount (prefixed too).
     _avatar_dir = Path(settings.avatar_upload_dir)
     _avatar_dir.mkdir(parents=True, exist_ok=True)
-    application.mount("/data/avatars", StaticFiles(directory=str(_avatar_dir)), name="avatars")
+    application.mount(f"{sp}/data/avatars", StaticFiles(directory=str(_avatar_dir)), name="avatars")
 
     # MCP server — Streamable HTTP + SSE transports, behind stealth prefix.
     # Must be mounted BEFORE the web router (catch-all paths).
@@ -369,14 +380,14 @@ def create_app() -> FastAPI:
             engine = get_engine()
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).error("Health check DB error: %s", exc)
             db_status = "error"
 
         try:
             r = await get_redis()
             await r.ping()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).error("Health check Redis error: %s", exc)
             redis_status = "error"
 
@@ -408,7 +419,7 @@ def create_app() -> FastAPI:
 
         try:
             user = await _get_user(request, db_dep)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
         return bool(user.is_admin)
 

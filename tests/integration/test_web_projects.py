@@ -31,7 +31,7 @@ async def _create_project(
 ) -> object:
     """Create a project via the service layer and commit."""
     data = ProjectCreate(name=name, identifier=identifier, key=key, is_public=is_public)
-    project = await _svc.create(db_session, data, user)
+    project = await _svc.create(db_session, data)
     await db_session.commit()
     await db_session.refresh(project)
     return project
@@ -173,7 +173,7 @@ async def test_projects_list_shows_subproject_nested(
     user = admin_client.state.user
     parent = await _create_project(db_session, user, name="TreeParent", key="TPAR", identifier="tree-parent")
     child_data = ProjectCreate(name="TreeChild", identifier="tree-child", key="TCHD", parent_key="TPAR")
-    child = await _svc.create(db_session, child_data, user)
+    child = await _svc.create(db_session, child_data)
     await db_session.commit()
 
     token = admin_client.state.token
@@ -201,7 +201,7 @@ async def test_projects_list_private_parent_shows_child_as_root(
         key="PPAR",
         is_public=False,
     )
-    parent = await _svc.create(db_session, parent_data, admin)
+    parent = await _svc.create(db_session, parent_data)
     await db_session.commit()
 
     # Create public child under the private parent
@@ -212,7 +212,7 @@ async def test_projects_list_private_parent_shows_child_as_root(
         parent_key="PPAR",
         is_public=True,
     )
-    child = await _svc.create(db_session, child_data, admin)
+    child = await _svc.create(db_session, child_data)
     await db_session.commit()
 
     # Regular user can see the public child but not the private parent.
@@ -234,7 +234,7 @@ async def test_project_detail_shows_subprojects(
     user = admin_client.state.user
     parent = await _create_project(db_session, user, name="DetailPar", key="DPAR", identifier="detail-parent")
     child_data = ProjectCreate(name="DetailChild", identifier="detail-child", key="DCHD", parent_key="DPAR")
-    await _svc.create(db_session, child_data, user)
+    await _svc.create(db_session, child_data)
     await db_session.commit()
 
     token = admin_client.state.token

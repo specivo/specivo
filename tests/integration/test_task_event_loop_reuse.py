@@ -100,7 +100,7 @@ async def real_db_session() -> AsyncIterator[AsyncSession]:
     try:
         yield session
     finally:
-        try:
+        try:  # noqa: SIM105
             await session.close()
         except Exception:
             pass

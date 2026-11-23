@@ -5,11 +5,11 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/projects/">{% trans %}Projects{% endtrans %}</a>
+  <a href="{{ base }}/projects/">{% trans %}Projects{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/">{{ project.name }}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}Settings{% endtrans %}</span>
 </div>
@@ -32,7 +32,7 @@
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, reportingCurrency: {{ (project.reporting_currency_code or "") | tojson }}, i18n: {{ {
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, graphMetadataKeys: {{ graph_metadata_keys | tojson }}, reportingCurrency: {{ (project.reporting_currency_code or "") | tojson }}, i18n: {{ {
     "saved": _("Saved successfully."),
     "errorWithMessage": _("Error: %(message)s"),
     "saveFailed": _("Failed to save"),
@@ -72,8 +72,13 @@
         {% if similar_issues_instance %}
         <div class="form-hint">{% trans %}While someone types a subject, issues of this project with a similar subject are listed, to help avoid duplicates.{% endtrans %}</div>
         {% else %}
-        <div class="form-hint" data-testid="similar-issues-instance-off">{% trans %}This setting has no effect while similar issues are turned off for the whole instance.{% endtrans %}{% if user.is_admin %} <a href="/admin/settings/">{% trans %}Instance settings{% endtrans %}</a>{% endif %}</div>
+        <div class="form-hint" data-testid="similar-issues-instance-off">{% trans %}This setting has no effect while similar issues are turned off for the whole instance.{% endtrans %}{% if user.is_admin %} <a href="{{ base }}/admin/settings/">{% trans %}Instance settings{% endtrans %}</a>{% endif %}</div>
         {% endif %}
+      </div>
+      <div class="form-group sp-form-group-mb-md">
+        <label class="form-label" for="project-graph-metadata-keys">{% trans %}Metadata keys in the link graph{% endtrans %}</label>
+        <input class="form-input" type="text" id="project-graph-metadata-keys" x-model="graphMetadataKeys" maxlength="700" placeholder="component" aria-describedby="project-graph-metadata-keys-hint" data-testid="project-graph-metadata-keys">
+        <div class="form-hint" id="project-graph-metadata-keys-hint">{% trans %}Comma-separated issue metadata keys, at most 10. Each value of these keys becomes a node in the link graph, so agents can list everything in a component. Leave empty for none.{% endtrans %}</div>
       </div>
       <div class="form-group sp-form-group-mb-md">
         <label class="form-label" for="project-reporting-currency">{% trans %}Reporting currency{% endtrans %}</label>
@@ -83,10 +88,10 @@
           <option value="{{ c.code }}">{{ c.code }} · {{ c.name }}</option>
           {% endfor %}
         </select>
-        <div class="form-hint">{% trans %}The currency this project's money reports are shown in.{% endtrans %}{% if user.is_admin %} <a href="/admin/currencies/">{% trans %}Currencies{% endtrans %}</a>{% endif %}</div>
+        <div class="form-hint">{% trans %}The currency this project's money reports are shown in.{% endtrans %}{% if user.is_admin %} <a href="{{ base }}/admin/currencies/">{% trans %}Currencies{% endtrans %}</a>{% endif %}</div>
       </div>
-      <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
-      <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>
+      <div x-show="message" class="flash sp-mb-md" x-text="message" role="status" data-testid="project-general-message"></div>
+      <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving" data-testid="project-general-save">{% trans %}Save{% endtrans %}</button>
     </div>
 
     {% if user.is_admin and project.is_public %}
@@ -98,7 +103,7 @@
       {% if anonymous_access_enabled %}
       <p class="sp-text-muted sp-mb-md" data-testid="anonymous-access-switch-on">{% trans %}Anonymous access is turned on for the whole instance.{% endtrans %}</p>
       {% else %}
-      <p class="sp-text-muted sp-mb-md" data-testid="anonymous-access-switch-off">{% trans %}These settings have no effect while anonymous access is turned off for the whole instance.{% endtrans %} <a href="/admin/settings/#anonymous-access">{% trans %}Instance settings{% endtrans %}</a></p>
+      <p class="sp-text-muted sp-mb-md" data-testid="anonymous-access-switch-off">{% trans %}These settings have no effect while anonymous access is turned off for the whole instance.{% endtrans %} <a href="{{ base }}/admin/settings/#anonymous-access">{% trans %}Instance settings{% endtrans %}</a></p>
       {% endif %}
       <div class="sp-module-row">
         <input type="checkbox" id="anonymous-view-issues" value="view_issues" x-model="permissions" :disabled="saving" class="sp-checkbox-accent-pointer">
@@ -399,7 +404,7 @@
                   <svg class="drag-handle" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
                 </td>
                 <td>
-                  <a class="version-name" :href="'/projects/' + projectKey + '/roadmap/#version-' + v.id" x-text="v.name"></a>
+                  <a class="version-name" :href="'{{ base }}/projects/' + projectKey + '/roadmap/#version-' + v.id" x-text="v.name"></a>
                   <div class="version-desc" x-show="v.description" x-text="v.description"></div>
                 </td>
                 <td>
@@ -531,7 +536,7 @@
           <span class="sp-listcard-title">{% trans %}Recurring tasks{% endtrans %}</span>
           <span class="sp-text-muted-xs-ml-sm" x-text="'(' + patterns.length + ')'"></span>
         </div>
-        <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
+        <a class="sp-btn sp-btn-primary" href="{{ base }}/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
           {% trans %}New pattern{% endtrans %}
         </a>
@@ -542,7 +547,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
           <p x-text="canManage ? labels.emptyCanManage : labels.emptyReadOnly"></p>
-          <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
+          <a class="sp-btn sp-btn-primary" href="{{ base }}/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
             {% trans %}Create first pattern{% endtrans %}
           </a>
         </div>
@@ -563,7 +568,7 @@
             <template x-for="p in patterns" :key="p.id">
               <tr>
                 <td>
-                  <a class="version-name" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/'" x-text="p.name"></a>
+                  <a class="version-name" :href="'{{ base }}/projects/' + projectKey + '/recurring-patterns/' + p.id + '/'" x-text="p.name"></a>
                 </td>
                 <td><span class="date-val" x-text="scheduleLabel(p)"></span></td>
                 <td><span class="date-val" x-text="anchorLabel(p)"></span></td>
@@ -574,7 +579,7 @@
                   <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? labels.disable : labels.enable" :aria-label="p.enabled ? labels.disable : labels.enable">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 11-12.77.04"/></svg>
                   </button>
-                  <a class="action-link" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                  <a class="action-link" :href="'{{ base }}/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                   </a>
                   <button type="button" class="action-link danger" @click="confirmDelete(p)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">
@@ -1721,7 +1726,7 @@
   <div x-show="tab === 'search'" x-cloak>
     {% from "pages/_fts_i18n.html" import fts_i18n %}
     <div class="card" style="padding: var(--sp-space-lg); max-width: 720px;"
-         x-data='ftsReindex({ baseUrl: "/api/v1/projects/{{ project.key }}/search", isProject: true, canManage: {{ can_manage_search | tojson }}, language: {{ fts_language | tojson }}, allowed: {{ fts_allowed | tojson }}, instanceDefault: {{ fts_instance_default | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }}, i18n: {{ fts_i18n() }} })'>
+         x-data='ftsReindex({ baseUrl: "{{ base }}/api/v1/projects/{{ project.key }}/search", isProject: true, canManage: {{ can_manage_search | tojson }}, language: {{ fts_language | tojson }}, allowed: {{ fts_allowed | tojson }}, instanceDefault: {{ fts_instance_default | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }}, i18n: {{ fts_i18n() }} })'>
       <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Search indexing{% endtrans %}</h2>
       <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
         {% trans %}Full-text search analyzer language for this project. Leave on Inherit to use the instance default.{% endtrans %}
@@ -1730,7 +1735,7 @@
     </div>
     {% if can_manage_search %}
     {% from "pages/_link_graph_card.html" import link_graph_card %}
-    {{ link_graph_card("/api/v1/projects/" ~ project.key ~ "/links", can_manage_search) }}
+    {{ link_graph_card(base ~ "/api/v1/projects/" ~ project.key ~ "/links", can_manage_search, project, user.timezone) }}
     {% endif %}
   </div>
 </div>

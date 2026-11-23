@@ -40,6 +40,37 @@ function repoSegments(segments, provider) {
 }
 
 /**
+ * The parts of a URL-form address: {scheme, port, host, path}, or null.
+ * An SSH address keeps the https scheme and drops its port, which says
+ * nothing about the web address.
+ */
+function splitUrl(text) {
+    var m = URL_PARTS.exec(text);
+    if (!m) return null;
+    var givenScheme = m[1].toLowerCase();
+    var isWeb = givenScheme === 'http' || givenScheme === 'https';
+    if (!isWeb && SSH_SCHEMES.indexOf(givenScheme) === -1) return null;
+    if (!m[2]) return null;
+    var givenPort = m[3] || '';
+    if (givenPort !== '' && (!/^\d+$/.test(givenPort) || Number(givenPort) > 65535)) return null;
+    if (!isWeb) return { scheme: 'https', port: '', host: m[2], path: m[4] || '' };
+    // The web port stays.
+    return { scheme: givenScheme, port: Number(givenPort) ? ':' + Number(givenPort) : '', host: m[2], path: m[4] || '' };
+}
+
+/** The parts of *text* in the SCP form (git@host:owner/repo.git) or a URL form, or null. */
+function splitAddress(text) {
+    var scp = text.indexOf('://') === -1 ? SCP.exec(text) : null;
+    if (scp) return { scheme: 'https', port: '', host: scp[1], path: scp[2] };
+    return splitUrl(text);
+}
+
+/** The known provider of *host* (without "www."), or null. */
+function knownProvider(bare) {
+    return Object.prototype.hasOwnProperty.call(KNOWN_HOSTS, bare) ? KNOWN_HOSTS[bare] : null;
+}
+
+/**
  * What *raw* says, or null: {provider, knownHost, host, repoFullName, url}.
  * *provider* is the one chosen in the form, used for hosts that are not known.
  */
@@ -48,52 +79,26 @@ export function parseRepoAddress(raw, provider) {
     var text = raw.trim();
     if (!text || text.length > 2048 || /\s/.test(text)) return null;
 
-    var scheme = 'https';
-    var port = '';
-    var host;
-    var path;
-    var scp = text.indexOf('://') === -1 ? SCP.exec(text) : null;
-    if (scp) {
-        host = scp[1];
-        path = scp[2];
-    } else {
-        var m = URL_PARTS.exec(text);
-        if (!m) return null;
-        var givenScheme = m[1].toLowerCase();
-        var isWeb = givenScheme === 'http' || givenScheme === 'https';
-        if (!isWeb && SSH_SCHEMES.indexOf(givenScheme) === -1) return null;
-        if (!m[2]) return null;
-        var givenPort = m[3] || '';
-        if (givenPort !== '' && (!/^\d+$/.test(givenPort) || Number(givenPort) > 65535)) return null;
-        host = m[2];
-        path = m[4] || '';
-        if (isWeb) {
-            scheme = givenScheme;
-            // The web port stays; an SSH port says nothing about the web address.
-            port = Number(givenPort) ? ':' + Number(givenPort) : '';
-        }
-    }
-    host = host.toLowerCase().replace(/\.$/, '');
+    var parts = splitAddress(text);
+    if (!parts) return null;
+    var host = parts.host.toLowerCase().replace(/\.$/, '');
     if (!HOST.test(host)) return null;
     var bare = host.indexOf('www.') === 0 ? host.slice(4) : host;
-    var known = Object.prototype.hasOwnProperty.call(KNOWN_HOSTS, bare) ? KNOWN_HOSTS[bare] : null;
-    if (known) {
-        host = bare;
-        scheme = 'https';
-        port = '';
-    }
+    var known = knownProvider(bare);
+    // A known host is always served over https on the default port.
+    var origin = known ? 'https://' + bare : parts.scheme + '://' + host + parts.port;
     var effective = known || provider || null;
 
-    var segments = path.split('/').filter(function (s) { return s !== ''; });
+    var segments = parts.path.split('/').filter(function (s) { return s !== ''; });
     var repo = repoSegments(segments, effective);
     if (!repo) return null;
     var fullName = repo.join('/');
     return {
         provider: effective,
         knownHost: known !== null,
-        host: host,
+        host: known ? bare : host,
         repoFullName: fullName,
-        url: scheme + '://' + host + port + '/' + fullName
+        url: origin + '/' + fullName
     };
 }
 

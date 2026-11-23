@@ -15,9 +15,7 @@ _D = date(2026, 6, 18)
 @pytest.mark.unit
 class TestExpandMacros:
     def test_all_macros_english(self) -> None:
-        out = expand_macros(
-            "{{weekday}} {{day}} {{month}} {{month_num}} {{year}} {{quarter}}", _D, "en"
-        )
+        out = expand_macros("{{weekday}} {{day}} {{month}} {{month_num}} {{year}} {{quarter}}", _D, "en")
         assert out == "Thursday 18 June 06 2026 Q2"
 
     def test_case_insensitive_and_whitespace_tolerant(self) -> None:

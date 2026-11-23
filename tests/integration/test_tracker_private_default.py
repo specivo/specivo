@@ -325,19 +325,24 @@ async def test_admin_edits_role_visibility(admin_client: AsyncClient, db_session
     assert page.status_code == 200
     assert "Privdef Contractor" in page.text
 
-    resp = await admin_client.post(
-        f"/admin/roles/{role.id}/",
-        data={"users_visibility": "members_of_visible_projects", "time_entries_visibility": "own"},
-        follow_redirects=False,
+    resp = await admin_client.patch(
+        f"/api/v1/admin/roles/{role.id}/",
+        json={
+            "lock_version": role.lock_version,
+            "users_visibility": "members_of_visible_projects",
+            "time_entries_visibility": "own",
+        },
     )
-    assert resp.status_code == 303
+    assert resp.status_code == 200, resp.text
     await db_session.refresh(role)
     assert (role.users_visibility, role.time_entries_visibility) == ("members_of_visible_projects", "own")
 
-    # Unknown values leave the role unchanged.
-    await admin_client.post(
-        f"/admin/roles/{role.id}/", data={"users_visibility": "everyone", "time_entries_visibility": "x"}
+    # Unknown values are refused and leave the role unchanged.
+    resp = await admin_client.patch(
+        f"/api/v1/admin/roles/{role.id}/",
+        json={"lock_version": role.lock_version, "users_visibility": "everyone", "time_entries_visibility": "x"},
     )
+    assert resp.status_code == 422
     await db_session.refresh(role)
     assert (role.users_visibility, role.time_entries_visibility) == ("members_of_visible_projects", "own")
 

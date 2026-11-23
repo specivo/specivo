@@ -81,9 +81,7 @@ def test_board_progress_bar(admin_page: Page, project_with_issues: str) -> None:
     expect(admin_page.locator(".board-progress").first).to_be_visible(timeout=5000)
 
 
-def test_created_issue_appears(
-    admin_page: Page, api_client: httpx.Client, project_with_issues: str
-) -> None:
+def test_created_issue_appears(admin_page: Page, api_client: httpx.Client, project_with_issues: str) -> None:
     """An issue created via API appears in the list after reload."""
     subject = f"Dynamic issue {unique_key()}"
     create_issue(api_client, project_with_issues, subject)

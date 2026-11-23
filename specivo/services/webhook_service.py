@@ -40,7 +40,7 @@ def _validate_webhook_url(url: str) -> None:
     if not parsed.hostname:
         raise ValidationError("Webhook URL must include a hostname", field="url")
     try:
-        parsed.port
+        parsed.port  # noqa: B018
     except ValueError:
         raise ValidationError("Webhook URL has an invalid port", field="url") from None
     if is_blocked_literal(parsed.hostname):

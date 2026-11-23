@@ -24,7 +24,7 @@ from sqlalchemy.pool import NullPool
 from specivo.core.config import get_settings
 
 
-def run_async(coro):  # type: ignore[no-untyped-def]
+def run_async(coro):
     """Run an async coroutine in a new event loop (for Celery sync tasks)."""
     loop = asyncio.new_event_loop()
     try:
@@ -34,7 +34,7 @@ def run_async(coro):  # type: ignore[no-untyped-def]
 
 
 @asynccontextmanager
-async def task_session():  # type: ignore[no-untyped-def]
+async def task_session():
     """Yield a session on a per-call engine bound to the current event loop.
 
     Celery's prefork worker reuses one child process for many tasks, each run

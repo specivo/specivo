@@ -44,7 +44,7 @@ def _name(stem: str) -> str:
 
 async def _create_project(db: AsyncSession, user, *, key: str, identifier: str):
     data = ProjectCreate(name=f"Members Tab {key}", identifier=identifier, key=key)
-    project = await _svc.create(db, data, user)
+    project = await _svc.create(db, data)
     await db.commit()
     await db.refresh(project)
     return project

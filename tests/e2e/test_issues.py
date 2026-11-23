@@ -1,5 +1,7 @@
 """E2E tests for issue list, create, and detail pages."""
 
+import re
+
 import httpx
 import pytest
 from playwright.sync_api import Page, expect
@@ -57,7 +59,6 @@ def test_issue_list_empty_state(admin_page: Page, api_client: httpx.Client) -> N
     expect(issues.empty_state).to_be_visible()
 
 
-@pytest.mark.skip(reason="Alpine.js x-model binding not triggered by Playwright fill — investigate separately")
 def test_create_issue_via_form(admin_page: Page, api_client: httpx.Client) -> None:
     """Create an issue through the Alpine.js form and verify redirect."""
     project = _create_project(api_client)
@@ -72,9 +73,9 @@ def test_create_issue_via_form(admin_page: Page, api_client: httpx.Client) -> No
     expect(form.submit_button).to_be_enabled(timeout=3000)
     form.submit()
 
-    # Should redirect to issue detail or issue list
-    admin_page.wait_for_url(f"**/projects/{project['key']}/issues/**", timeout=10000)
-    expect(admin_page.locator(f"text={subject}")).to_be_visible()
+    # Lands on the new issue's own page (not a 404 that merely echoes the URL).
+    admin_page.wait_for_url(re.compile(rf"/issue/{project['key']}-\d+/$"), timeout=10000)
+    expect(admin_page.locator("h1.issue-title", has_text=subject).first).to_be_visible()
 
 
 def test_new_issue_form_renders(admin_page: Page, api_client: httpx.Client) -> None:

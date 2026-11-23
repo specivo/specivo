@@ -6,6 +6,16 @@ one project, over a date range, grouped by any of :data:`GROUP_BY` plus an
 optional period bucket (:data:`PERIODS`; coarsened past :data:`MAX_PERIODS`
 buckets, so no caller can ask for a day per row over three years).
 
+Release and sprint
+------------------
+``version`` and ``sprint`` are attributes of an entry's issue, not columns of
+the entry: the issue's version or sprint now, else its nearest ancestor's
+(:mod:`specivo.services.ai_spend_planning`). A version shared with other
+projects is one group, labelled with its project's key when it belongs to
+another project than the report's. Entries without an issue, on an issue
+without one, on an issue the viewer cannot see, or with a version or sprint
+of a project the viewer cannot open, form the "none" row.
+
 Rows
 ----
 Only entries the viewer may read (``AiUsageService`` visibility) count;
@@ -80,9 +90,9 @@ from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, exists, false, func, or_, select
+from sqlalchemy import and_, exists, false, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -105,11 +115,33 @@ from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
+from specivo.services.ai_spend_planning import (
+    PLANNING_DIMENSIONS,
+    PlanningFilter,
+    planning_joins,
+    planning_labels,
+    planning_visibility,
+)
 from specivo.services.ai_usage_service import AiUsageService, issue_subtree_clause, unpriced_models
 from specivo.services.api_key_scope import is_global_admin
 
-#: Dimensions a report can be grouped by, in their canonical order.
-GROUP_BY: tuple[str, ...] = ("user", "project", "issue", "tool", "provider", "model", "cost_type", "branch")
+if TYPE_CHECKING:
+    from specivo.services.exchange_rate_service import ExchangeRateService
+
+#: Dimensions a report can be grouped by, in their canonical order. ``version`` (the release) and
+#: ``sprint`` come from the entry's issue (:data:`PLANNING_DIMENSIONS`), the others are entry columns.
+GROUP_BY: tuple[str, ...] = (
+    "version",
+    "sprint",
+    "user",
+    "project",
+    "issue",
+    "tool",
+    "provider",
+    "model",
+    "cost_type",
+    "branch",
+)
 #: Period buckets: a UTC day, an ISO week (from Monday) or a calendar month.
 PERIODS: tuple[str, ...] = ("day", "week", "month")
 #: Row orders: by the grouping key (default), or by total spend, largest first.
@@ -127,7 +159,7 @@ SEAT_RATE_DAY = "month_end"
 
 #: Dimensions an unallocated seat fee can fill (the rest stay empty, so it gets a row of its own).
 _SEAT_DIMENSIONS = frozenset({"user", "provider", "cost_type", "subscription"})
-#: Column of each dimension.
+#: Column of each dimension stored on the entry (the planning dimensions are expressions, see ``_dimension_columns``).
 _COLUMNS = {
     "user": AiUsageEntry.user_id,
     "project": AiUsageEntry.project_id,
@@ -150,6 +182,20 @@ _SHARE_EXPONENT = Decimal("0.00000001")
 
 def _invalid(message: str, field_name: str) -> AppError:
     return AppError(code="ai_spend_report_invalid", message=message, status_code=422, field=field_name)
+
+
+def _check_report_args(date_from: date, date_to: date, period: str | None, sort: str, filters: ReportFilters) -> None:
+    """422 for a report argument out of range, in the order the fields are checked."""
+    if period is not None and period not in PERIODS:
+        raise _invalid(f"period must be one of {', '.join(PERIODS)}", "period")
+    if sort not in SORTS:
+        raise _invalid(f"sort must be one of {', '.join(SORTS)}", "sort")
+    if date_to < date_from:
+        raise _invalid("The last day cannot be before the first day", "to_date")
+    if (date_to - date_from).days + 1 > MAX_RANGE_DAYS:
+        raise _invalid(f"A report covers at most {MAX_RANGE_DAYS} days", "to_date")
+    if filters.cost_type is not None and filters.cost_type not in AI_USAGE_COST_TYPES:
+        raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
 
 
 def period_start(day: date, period: str | None) -> date | None:
@@ -210,9 +256,13 @@ class ReportFilters:
     ``project_id`` and ``unassigned`` (entries without a project) narrow an
     instance report to one project; a project report is one project already.
     ``issue_id`` / ``without_issue`` and ``branch`` / ``without_branch`` keep
-    the entries of one issue or branch (or of none). The drill-down of the
-    report pages sets them; callers resolve keys and visibility first (an
-    issue the viewer cannot see is no filter they may use).
+    the entries of one issue or branch (or of none); ``version_id`` /
+    ``without_version`` and ``sprint_id`` / ``without_sprint`` those of one
+    release or sprint (or of none), by the rule of
+    :mod:`specivo.services.ai_spend_planning`. The drill-down of the report
+    pages sets them; callers resolve keys and visibility first (an issue the
+    viewer cannot see is no filter they may use). A release or sprint id the
+    viewer may not see matches nothing by itself.
     """
 
     user_id: int | None = None
@@ -226,14 +276,28 @@ class ReportFilters:
     without_issue: bool = False
     branch: str | None = None
     without_branch: bool = False
+    version_id: int | None = None
+    without_version: bool = False
+    sprint_id: int | None = None
+    without_sprint: bool = False
     #: Internal: only these entries (the sessions page of the drill-down prices its page of entries).
     entry_ids: tuple[int, ...] | None = None
     #: The entries of this issue and of every issue below it (the issue page's AI usage tab).
     issue_tree_id: int | None = None
 
     @property
+    def planning(self) -> PlanningFilter:
+        """The release and sprint filters."""
+        return PlanningFilter(
+            version_id=self.version_id,
+            without_version=self.without_version,
+            sprint_id=self.sprint_id,
+            without_sprint=self.without_sprint,
+        )
+
+    @property
     def excludes_seats(self) -> bool:
-        """Whether a fee cannot match these filters (it has no tool, model, project, issue or branch)."""
+        """Whether a fee cannot match these filters (it has no tool, model, project, issue, branch or release)."""
         narrowed = (
             self.project_id is not None
             or self.unassigned
@@ -243,6 +307,7 @@ class ReportFilters:
             or self.without_branch
             or self.entry_ids is not None
             or self.issue_tree_id is not None
+            or self.planning.active
         )
         return (
             narrowed or bool(self.tool or self.model or self.provider) or self.cost_type not in (None, "subscription")
@@ -277,6 +342,10 @@ class ReportFilters:
             self.without_branch,
             list(self.entry_ids) if self.entry_ids is not None else None,
             self.issue_tree_id,
+            self.version_id,
+            self.without_version,
+            self.sprint_id,
+            self.without_sprint,
         ]
 
 
@@ -390,7 +459,7 @@ class AiSpendReportService:
     def __init__(self) -> None:
         self._usage = AiUsageService()
 
-    async def report(
+    async def report(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -475,7 +544,7 @@ class AiSpendReportService:
             sort="key",
         )
 
-    async def _report(
+    async def _report(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -492,71 +561,26 @@ class AiSpendReportService:
         sort: str,
         projects: Sequence[Project] | None = None,
     ) -> SpendReport:
-        from specivo.services.currency_service import CurrencyService
-        from specivo.services.exchange_rate_service import ExchangeRateService, parse_policy
-        from specivo.services.project_service import ProjectService
+        from specivo.services.exchange_rate_service import ExchangeRateService
 
         filters = filters or ReportFilters()
-        if period is not None and period not in PERIODS:
-            raise _invalid(f"period must be one of {', '.join(PERIODS)}", "period")
-        if sort not in SORTS:
-            raise _invalid(f"sort must be one of {', '.join(SORTS)}", "sort")
-        if date_to < date_from:
-            raise _invalid("The last day cannot be before the first day", "to_date")
-        if (date_to - date_from).days + 1 > MAX_RANGE_DAYS:
-            raise _invalid(f"A report covers at most {MAX_RANGE_DAYS} days", "to_date")
-        if filters.cost_type is not None and filters.cost_type not in AI_USAGE_COST_TYPES:
-            raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
+        _check_report_args(date_from, date_to, period, sort, filters)
         requested_period = period
         period = coarsen_period(date_from, date_to, period)
-
-        project_set: list[Project] | None = None
-        if projects is not None:
-            if project is not None:
-                raise _invalid("Give one project or a set of projects, not both", "project")
-            project_set = list({p.id: p for p in projects}.values())
-            for member in project_set:
-                await ProjectService().require_project_access(session, member, viewer)
-        elif project is None:
-            if not is_global_admin(viewer):
-                raise PermissionDeniedError("Only administrators can see the instance AI spend report")
-        else:
-            await ProjectService().require_project_access(session, project, viewer)
+        project_set = await self._resolve_scope(session, viewer, project, projects)
 
         rates = ExchangeRateService()
-        if isinstance(rate_policy, RatePolicy):
-            policy = rate_policy
-        else:
-            policy = parse_policy(rate_policy, (await rates.get_settings(session)).max_age_days)
-        if currency:
-            target = (await CurrencyService().require_selectable(session, currency, field="currency")).code
-        else:
-            target = await CurrencyService().reporting_currency_for(session, project)
+        policy, target = await self._policy_and_currency(session, rates, project, rate_policy, currency)
 
-        # Who may see seat cost (see the module docstring).
-        if project_set is not None:
-            seats_allowed = True
-            for member in project_set:
-                if not await self.sees_every_entry(session, viewer, member, date_from, date_to):
-                    seats_allowed = False
-                    break
-        elif project is None:
-            seats_allowed = True
-        else:
-            seats_allowed = await self.sees_every_entry(session, viewer, project, date_from, date_to)
+        seats_allowed = await self._seats_allowed(session, viewer, project, project_set, date_from, date_to)
         seat_shown = include_seat_cost and seats_allowed
         unallocated_shown = seat_shown and project is None and project_set is None and not filters.excludes_seats
 
         conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
         if project_set is not None:
             conditions.append(await self._set_clause(session, viewer, project_set))
-        raw = await self._grouped_rows(session, conditions, dims)
-        visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
-        builder = _RowBuilder(dims, period)
-        for r in raw:
-            if "issue" in dims and r["issue"] is not None and r["issue"] not in visible_issues:
-                r["issue"] = HIDDEN_ISSUE
-            builder.add_usage(r)
+        raw = await self._grouped_rows(session, conditions, dims, *await self._dimension_columns(session, viewer, dims))
+        builder = await self._usage_rows(session, viewer, raw, dims, period)
 
         seat_items: list[tuple[ReportRow, Money, date, bool]] = []
         if seat_shown:
@@ -575,7 +599,7 @@ class AiSpendReportService:
         totals = _totals_row(rows)
         for row in [*rows, totals]:
             _finish(row, target, seat_shown)
-        await self._label(session, viewer, rows, dims)
+        await self._label(session, project, rows, dims)
         rows.sort(key=_sort_key(dims, period, sort))
         missing = await unpriced_models(session, conditions) if totals.unpriced_entries else []
         return SpendReport(
@@ -599,6 +623,88 @@ class AiSpendReportService:
             requested_period=requested_period if requested_period != period else None,
         )
 
+    async def _resolve_scope(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        projects: Sequence[Project] | None,
+    ) -> list[Project] | None:
+        """Check *viewer* may read the report's scope; the de-duplicated project set, or None for one project or all."""
+        from specivo.services.project_service import ProjectService
+
+        if projects is not None:
+            if project is not None:
+                raise _invalid("Give one project or a set of projects, not both", "project")
+            project_set = list({p.id: p for p in projects}.values())
+            for member in project_set:
+                await ProjectService().require_project_access(session, member, viewer)
+            return project_set
+        if project is None:
+            if not is_global_admin(viewer):
+                raise PermissionDeniedError("Only administrators can see the instance AI spend report")
+        else:
+            await ProjectService().require_project_access(session, project, viewer)
+        return None
+
+    @staticmethod
+    async def _policy_and_currency(
+        session: AsyncSession,
+        rates: ExchangeRateService,
+        project: Project | None,
+        rate_policy: str | RatePolicy | None,
+        currency: str | None,
+    ) -> tuple[RatePolicy, str]:
+        """The rate policy (the instance's maximum rate age by default) and the currency the report is in."""
+        from specivo.services.currency_service import CurrencyService
+        from specivo.services.exchange_rate_service import parse_policy
+
+        if isinstance(rate_policy, RatePolicy):
+            policy = rate_policy
+        else:
+            policy = parse_policy(rate_policy, (await rates.get_settings(session)).max_age_days)
+        if currency:
+            target = (await CurrencyService().require_selectable(session, currency, field="currency")).code
+        else:
+            target = await CurrencyService().reporting_currency_for(session, project)
+        return policy, target
+
+    async def _seats_allowed(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        project_set: list[Project] | None,
+        date_from: date,
+        date_to: date,
+    ) -> bool:
+        """Whether *viewer* may see seat cost (see the module docstring): they read every entry of the scope."""
+        if project_set is not None:
+            for member in project_set:
+                if not await self.sees_every_entry(session, viewer, member, date_from, date_to):
+                    return False
+            return True
+        if project is None:
+            return True
+        return await self.sees_every_entry(session, viewer, project, date_from, date_to)
+
+    async def _usage_rows(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        raw: list[dict[str, Any]],
+        dims: tuple[str, ...],
+        period: str | None,
+    ) -> _RowBuilder:
+        """A row builder holding the usage of *raw*, issues *viewer* cannot see folded into one hidden key."""
+        visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
+        builder = _RowBuilder(dims, period)
+        for r in raw:
+            if "issue" in dims and r["issue"] is not None and r["issue"] not in visible_issues:
+                r["issue"] = HIDDEN_ISSUE
+            builder.add_usage(r)
+        return builder
+
     async def _set_clause(self, session: AsyncSession, viewer: User, projects: list[Project]) -> ColumnElement[bool]:
         """Entries of *projects* that *viewer* may read, each project by its own rule (``visible_entries_clause``)."""
         if not projects:
@@ -615,8 +721,8 @@ class AiSpendReportService:
         session: AsyncSession,
         viewer: User,
         project: Project | None,
-        date_from: date,
-        date_to: date,
+        date_from: date | None,
+        date_to: date | None,
         filters: ReportFilters,
     ) -> list[Any]:
         """The WHERE conditions of the counted entries a report of *viewer* covers (visibility included)."""
@@ -636,8 +742,27 @@ class AiSpendReportService:
             branch=filters.branch,
             without_branch=filters.without_branch,
             excluded=False,
+            planning=filters.planning,
         )
         return [*conditions, *filters.conditions()]
+
+    @staticmethod
+    async def _dimension_columns(
+        session: AsyncSession, viewer: User, dims: Collection[str]
+    ) -> tuple[dict[str, Any], list[Any]]:
+        """The SQL expression of each of *dims*, and the laterals they need joined (``outerjoin(l, true())``).
+
+        Entry columns need none; the release and the sprint, as *viewer* may
+        see them, are one ``LEFT JOIN LATERAL`` each
+        (:func:`specivo.services.ai_spend_planning.planning_joins`).
+        """
+        columns: dict[str, Any] = {d: _COLUMNS[d] for d in dims if d in _COLUMNS}
+        planned = [d for d in dims if d in PLANNING_DIMENSIONS]
+        if not planned:
+            return columns, []
+        visibility = await planning_visibility(session, viewer)
+        joined, laterals = planning_joins(planned, AiUsageEntry.issue_id, visibility)
+        return {**columns, **joined}, laterals
 
     async def entry_spend(
         self,
@@ -711,9 +836,13 @@ class AiSpendReportService:
             )
         ).one()
         facts.people, facts.days = int(people or 0), int(days or 0)
-        if dim is not None and dim != "user" and dim in _COLUMNS and (keys is None or keys):
-            column = _COLUMNS[dim]
-            stmt = select(column, func.count(func.distinct(AiUsageEntry.user_id))).where(*conditions).group_by(column)
+        if dim is not None and dim != "user" and dim in GROUP_BY and (keys is None or keys):
+            dim_columns, laterals = await self._dimension_columns(session, viewer, (dim,))
+            column = dim_columns[dim]
+            stmt = _joined(
+                select(column, func.count(func.distinct(AiUsageEntry.user_id))).select_from(AiUsageEntry), laterals
+            )
+            stmt = stmt.where(*conditions).group_by(column)
             if keys is not None:
                 values = [k for k in keys if k is not None and k != HIDDEN_ISSUE]
                 wanted: ColumnElement[bool] | None = column.in_(values) if values else None
@@ -807,14 +936,20 @@ class AiSpendReportService:
 
     @staticmethod
     async def _grouped_rows(
-        session: AsyncSession, conditions: list[Any], dims: tuple[str, ...]
+        session: AsyncSession,
+        conditions: list[Any],
+        dims: tuple[str, ...],
+        dim_columns: dict[str, Any],
+        laterals: list[Any],
     ) -> list[dict[str, Any]]:
         """One row per group x day x user x subscription x currencies, with the sums.
 
         The day, user, subscription and cost type are always in the grouping:
         conversion goes by day and allocation by user, month and subscription.
+        *dim_columns* holds the expression of each of *dims* and *laterals*
+        the joins they need (``_dimension_columns``).
         """
-        keys = {
+        keys: dict[str, Any] = {
             "usage_date": AiUsageEntry.usage_date,
             "user": AiUsageEntry.user_id,
             "subscription_id": AiUsageEntry.subscription_id,
@@ -823,7 +958,7 @@ class AiSpendReportService:
             "api_currency": AiUsageEntry.api_equivalent_currency,
         }
         for dim in dims:
-            keys.setdefault(dim, _COLUMNS[dim])
+            keys.setdefault(dim, dim_columns[dim])
         names = list(keys)
         columns = [keys[n].label(f"k_{n}") for n in names]
         aggregates = [
@@ -834,7 +969,8 @@ class AiSpendReportService:
             func.sum(AiUsageEntry.marginal_amount).label("marginal"),
             func.sum(AiUsageEntry.api_equivalent_amount).label("api"),
         ]
-        stmt = select(*columns, *aggregates).where(*conditions).group_by(*[keys[n] for n in names])
+        stmt = _joined(select(*columns, *aggregates).select_from(AiUsageEntry), laterals)
+        stmt = stmt.where(*conditions).group_by(*[keys[n] for n in names])
         out: list[dict[str, Any]] = []
         for row in (await session.execute(stmt)).mappings():
             item = {n: row[f"k_{n}"] for n in names}
@@ -865,7 +1001,7 @@ class AiSpendReportService:
 
     # -- seat allocation -------------------------------------------------------------
 
-    async def _seat_items(
+    async def _seat_items(  # noqa: C901, PLR0912
         self,
         session: AsyncSession,
         builder: _RowBuilder,
@@ -1039,8 +1175,10 @@ class AiSpendReportService:
             row._results[measure].append(result)
 
     @staticmethod
-    async def _label(session: AsyncSession, viewer: User, rows: list[ReportRow], dims: tuple[str, ...]) -> None:
-        """Fill ``labels``: user names, project keys, issue keys, tool names (one query each)."""
+    async def _label(
+        session: AsyncSession, project: Project | None, rows: list[ReportRow], dims: tuple[str, ...]
+    ) -> None:
+        """Fill ``labels``: user names, project keys, issue keys, tool names, releases and sprints (one query each)."""
         from specivo.services.ai_subscription_service import AiToolService
 
         user_ids = {r.key.get("user") for r in rows if r.key.get("user") is not None}
@@ -1061,6 +1199,11 @@ class AiSpendReportService:
         tools: dict[str, str] = {}
         if "tool" in dims:
             tools = {t.slug: t.name for t in await AiToolService().list_tools(session, active_only=False)}
+        planned = {
+            dim: await planning_labels(session, dim, {r.key.get(dim) for r in rows} - {None}, project)
+            for dim in dims
+            if dim in PLANNING_DIMENSIONS
+        }
         for row in rows:
             for dim in dims:
                 value = row.key.get(dim)
@@ -1074,6 +1217,8 @@ class AiSpendReportService:
                     row.labels[dim] = issues.get(value, "") if value != HIDDEN_ISSUE else ""
                 elif dim == "tool":
                     row.labels[dim] = tools.get(value, value)
+                elif dim in planned:
+                    row.labels[dim] = planned[dim].get(value, "")
                 else:
                     row.labels[dim] = str(value)
 
@@ -1138,6 +1283,13 @@ class _RowBuilder:
         return list(self._rows.values())
 
 
+def _joined(stmt: Any, laterals: list[Any]) -> Any:
+    """*stmt* (selecting from the entries) with each lateral of ``_dimension_columns`` left-joined."""
+    for lateral in laterals:
+        stmt = stmt.outerjoin(lateral, true())
+    return stmt
+
+
 def fold_rows(rows: list[ReportRow], currency: str, seat_shown: bool) -> ReportRow:
     """One row summing *rows* (an "other" group of a long report), finished like any row."""
     row = _totals_row(rows)
@@ -1177,7 +1329,7 @@ def _finish(row: ReportRow, currency: str, seat_shown: bool) -> None:
         row.total_spend = row.marginal
 
 
-def _sort_key(dims: tuple[str, ...], period: str | None, sort: str) -> Any:
+def _sort_key(dims: tuple[str, ...], period: str | None, sort: str) -> Any:  # noqa: ARG001
     def key(row: ReportRow) -> tuple[Any, ...]:
         parts: list[Any] = []
         if sort == "spend":

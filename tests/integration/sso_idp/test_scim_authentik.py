@@ -82,12 +82,12 @@ class ScimForwarder:
                 self.end_headers()
                 self.wfile.write(content)
 
-            do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _forward  # noqa: N815 - BaseHTTPRequestHandler API
+            do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _forward  # BaseHTTPRequestHandler API  # noqa: N815
 
-            def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - BaseHTTPRequestHandler API
+            def log_message(self, format: str, *args: Any) -> None:  # BaseHTTPRequestHandler API
                 return
 
-        self.server = ThreadingHTTPServer(("0.0.0.0", seed.SCIM_PORT), Handler)  # noqa: S104 - the IdP container calls in
+        self.server = ThreadingHTTPServer(("0.0.0.0", seed.SCIM_PORT), Handler)  # the IdP container calls in
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
     async def _send(self, method: str, path: str, headers: dict[str, str], body: bytes | None):

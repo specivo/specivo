@@ -137,7 +137,7 @@ export function moneyFormatters(locale, currency) {
         try {
             const fmt = new Intl.NumberFormat(tag, { style: 'currency', currency, ...options });
             return (v) => fmt.format(v);
-        } catch (e) {
+        } catch (_e) {
             return (v) => `${Number(v).toFixed(digits)} ${currency}`;
         }
     };
@@ -345,7 +345,7 @@ function readData(el) {
     let data;
     try {
         data = JSON.parse(el.getAttribute('data-sp-spend-chart') || '{}');
-    } catch (e) {
+    } catch (_e) {
         return null;
     }
     if (!data || !data.currency) return null;
@@ -389,7 +389,7 @@ export function mountSpendChart(el) {
         watchSize(el, state);
         watchTheme();
         el.setAttribute('data-sp-drawn', '');
-    } catch (e) {
+    } catch (_e) {
         unmountSpendChart(el);
         el.hidden = true;
     }

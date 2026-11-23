@@ -139,7 +139,7 @@ class EmbeddingService:
                     "Local embedding model %r is not available (missing ONNX/tokenizer files)",
                     model.model_name,
                 )
-                return None  # type: ignore[return-value]
+                return None
             return embedder.encode(prefixed_text)
 
         if model.provider == "mock":
@@ -265,7 +265,7 @@ class EmbeddingService:
             return None
 
         # Journal (comment) gating: check settings before indexing
-        if source_type == SearchSourceType.JOURNAL:
+        if source_type == SearchSourceType.JOURNAL:  # noqa: SIM102
             if await self._should_skip_comment(session, entity_id):
                 return None
 

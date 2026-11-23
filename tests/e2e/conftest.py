@@ -14,6 +14,7 @@ from specivo.testing.e2e_base import (  # noqa: F401
     _admin_auth,
     _flush_redis,
     _login_and_get_token,
+    _prefixed_admin_auth,
     _run_migrations,
     _seed_lookups,
     _user_auth,
@@ -23,8 +24,11 @@ from specivo.testing.e2e_base import (  # noqa: F401
     auth_context,
     auth_page,
     e2e_base_url,
+    e2e_prefixed_server,
     e2e_seed_data,
     e2e_server,
+    prefixed_admin_page,
+    prefixed_api,
 )
 
 # ---------------------------------------------------------------------------
@@ -61,7 +65,7 @@ def _seed_avatar_palette(e2e_server, _admin_auth):  # noqa: F811
     guarantees a palette with multiple colors is present so E2E tests that
     count swatches are stable.
     """
-    token, _ = _admin_auth  # noqa: F811
+    token, _ = _admin_auth
     palette = ["#c49a3c", "#5B8C5A", "#7B68AE", "#E07B6C", "#4A90B8"]
     resp = httpx.patch(
         f"{e2e_server}/api/v1/admin/settings/",
@@ -197,7 +201,10 @@ def viewport_size(viewport_name: str) -> dict:
 
 @pytest.fixture
 def responsive_page(
-    browser, e2e_server, _admin_auth, viewport_name: str  # noqa: F811
+    browser,
+    e2e_server,  # noqa: F811
+    _admin_auth,  # noqa: F811
+    viewport_name: str,
 ) -> Generator[Page, None, None]:
     """Authenticated page (admin) at the parametrized viewport size."""
     _, cookies = _admin_auth

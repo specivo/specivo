@@ -26,8 +26,24 @@ glance. See [Creating & editing pages](editing.md#every-save-is-a-new-version).
 
 ## Delete and restore
 
-Deleting a wiki page is a **soft delete** — the page moves to a **trash** rather than being destroyed.
-From the trash you can **restore** a page, bringing it back with its history intact.
+Deleting a wiki page is a **soft delete** — the page moves to the wiki's **trash** rather than being
+destroyed, and you can **restore** it from there with its history intact. Both need the
+**Delete wiki pages** permission (see [Roles](../install/roles.md)); without it, the page shows no
+**Delete** button and the wiki shows no **Trash** link.
+
+To delete a page, open it, click **Delete** and confirm. You land on the list of all pages. The Home
+page has no **Delete** button: every wiki keeps one.
+
+If the page has subpages, the dialog asks what happens to them:
+
+- Leave **Also move its subpages to the trash** unticked and only the page goes. Its direct subpages
+  move up one level, under the deleted page's parent (or to the top level), and stay in the wiki.
+- Tick it and the whole branch goes to the trash with the page.
+
+To restore a page, open **Trash** — on the list of all pages, or at the bottom of the **Pages** panel
+on any page — and click **Restore** next to it. The subpages that were deleted together with it come
+back too, in their old places. If another page has taken the deleted page's address (its slug) in the
+meantime, the restore is refused: rename or delete that page first.
 
 !!! warning "Deleting moves a page to trash, not oblivion"
     A deleted page disappears from the wiki and from normal navigation, and any `[[links]]` pointing to
@@ -92,13 +108,24 @@ in the **Link graph** card:
   are written, next to the project's relations, parent links and attachments;
 - how many links point at something that doesn't exist yet, with the most common ones (a misspelled
   `[[page]]` or an issue key that was never created) — only from texts you can read;
-- when the graph last changed, and the result of the last full rebuild.
+- when the graph last changed, and the result of the last full rebuild;
+- **Last rebuilt:** with the date and time of the last full rebuild in your timezone. A project that has never been rebuilt shows **Not indexed yet — rebuild queued**.
+
+Projects whose graph was never fully built are rebuilt automatically. An hourly background task
+queues a rebuild for each such project (at most 50 per run, never while one is already queued or
+running), and the card shows it as a normal running rebuild started by **automatic backfill**. A
+rebuild counts as done even when some texts failed, so a text that keeps failing does not start a
+new rebuild every hour; the failures show in the last result. This needs the background worker and
+scheduler to be running.
 
 **Rebuild link graph** re-reads every text of the project and links what can be linked. You rarely need
 it: imports rebuild the graph themselves. Use it after a large data import from outside Specivo, after
 an upgrade that changes what counts as a link, or when links look out of date. The rebuild runs in the
 background with a progress count, and only one runs per project at a time. From the command line,
 `make rebuild-links` (or `make rebuild-links PROJECT=ACME`) does the same.
+
+Tags, versions, sprints, assignees and the values of some metadata keys are part of the graph too,
+for AI agents: see [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph).
 
 ## What's next
 

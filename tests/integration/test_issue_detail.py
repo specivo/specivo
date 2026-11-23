@@ -6,6 +6,9 @@ human-readable activity, and tab content (time, relations, attachments).
 
 from __future__ import annotations
 
+import json
+import re
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -692,6 +695,40 @@ async def test_attachments_partial_returns_404_for_unknown_issue(
         cookies={"access_token": token},
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.integration
+async def test_attachments_partial_escapes_hostile_filename(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _issue,
+) -> None:
+    """A file name cannot close the JSON <script> block and inject markup."""
+    hostile = "</script><img src=x onerror=alert(1)>.png"
+    db_session.add(
+        Attachment(
+            container_type="Issue",
+            container_id=_issue.id,
+            filename=hostile,
+            disk_filename="hostile-abcdef.png",
+            filesize=10,
+            content_type="image/png",
+            author_id=admin_client.state.user.id,
+        )
+    )
+    await db_session.commit()
+
+    resp = await admin_client.get(
+        f"/partials/issues/{_issue.display_key}/attachments/",
+        cookies={"access_token": admin_client.state.token},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert "<img src=x" not in resp.text
+    match = re.search(r'<script type="application/json" id="att-data-issue-\d+">(.*?)</script>', resp.text, re.S)
+    assert match is not None
+    assert "<" not in match.group(1)
+    assert [a["filename"] for a in json.loads(match.group(1))] == [hostile]
 
 
 @pytest.mark.integration

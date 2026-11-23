@@ -1,7 +1,7 @@
 """TDD red-phase tests for MCP tool permission enforcement.
 
 These tests FAIL until ``_require_permission`` is implemented in
-``specivo/mcp/tools.py`` and wired into each mutating tool function.
+``specivo/mcp/tools/_common.py`` and wired into each mutating tool function.
 
 The contract under test:
 - Every write/manage tool checks the caller's project-scoped permissions.
@@ -32,10 +32,10 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.role import Role
 from specivo.models.time_entry import TimeEntryActivity
 from specivo.models.user import User
@@ -122,6 +122,9 @@ async def public_project(db_session: AsyncSession) -> Project:
     """Public project used as the default test project."""
     proj = ProjectFactory.build(key="MPUB", name="MCP Permission Public", is_public=True)
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
@@ -132,6 +135,9 @@ async def private_project(db_session: AsyncSession) -> Project:
     """Private project — non-members cannot access any resource here."""
     proj = ProjectFactory.build(key="MPRV", name="MCP Permission Private", is_public=False)
     db_session.add(proj)
+    await db_session.flush()
+    # The MCP wiki tools need the wiki module, as the REST routes do.
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
@@ -252,164 +258,99 @@ async def existing_wiki_page(db_session: AsyncSession, public_project: Project, 
 # ---------------------------------------------------------------------------
 
 
+# (tool, required permission, call kwargs from the project and the seeded fixtures)
+_DENIED_CASES = [
+    pytest.param(
+        "_create_issue",
+        "add_issues",
+        lambda project, f: {
+            "project_key": project.key,
+            "tracker_id": f["seed"]["tracker"].id,
+            "subject": "Should be denied",
+        },
+        id="create_issue-add_issues",
+    ),
+    pytest.param(
+        "_update_issue",
+        "edit_issues",
+        lambda project, f: {"issue_ref": f["existing_issue"].display_key, "subject": "Should be denied"},
+        id="update_issue-edit_issues",
+    ),
+    pytest.param(
+        "_add_comment",
+        "add_issue_notes",
+        lambda project, f: {
+            "issue_ref": f["existing_issue"].display_key,
+            "notes": "This comment should be denied",
+        },
+        id="add_comment-add_issue_notes",
+    ),
+    pytest.param(
+        "_create_wiki",
+        "manage_wiki",
+        lambda project, f: {"project_key": project.key, "title": "Should Not Exist", "text": "Denied content"},
+        id="create_wiki-manage_wiki",
+    ),
+    pytest.param(
+        "_edit_wiki",
+        "manage_wiki",
+        lambda project, f: {
+            "project_key": project.key,
+            "slug": f["existing_wiki_page"].slug,
+            "search_text": "Initial content",
+            "replace_text": "Denied replacement",
+        },
+        id="edit_wiki-manage_wiki",
+    ),
+    pytest.param(
+        "_log_time",
+        "log_time",
+        lambda project, f: {
+            "project_key": project.key,
+            "hours": Decimal("1.5"),
+            "activity_id": f["seed"]["activity"].id,
+        },
+        id="log_time-log_time",
+    ),
+    pytest.param(
+        "_create_version",
+        "manage_versions",
+        lambda project, f: {"project_key": project.key, "name": "v1.0-denied"},
+        id="create_version-manage_versions",
+    ),
+]
+
+
 class TestMcpPermissionDenied:
     """Each write tool raises PermissionDeniedError when the user's role
     does not include the required permission.
 
-    All tests in this class use ``limited_user`` who is a member of
-    ``public_project`` with ``role_view_issues_only`` (only ``view_issues``
-    and ``view_wiki``).
+    All cases use ``limited_user`` who is a member of ``public_project`` with
+    ``role_view_issues_only`` (only ``view_issues`` and ``view_wiki``).
     """
 
-    async def test_create_issue_denied_without_add_issues(
+    @pytest.mark.parametrize(("tool", "permission", "build_kwargs"), _DENIED_CASES)
+    async def test_write_tool_denied_without_permission(
         self,
         db_session: AsyncSession,
         limited_user: User,
         public_project: Project,
         role_view_issues_only: Role,
         seed: dict,
-    ):
-        """_create_issue raises PermissionDeniedError when user lacks add_issues."""
-        from specivo.mcp.tools import _create_issue
-
-        await _add_member(db_session, public_project, limited_user, role_view_issues_only)
-
-        with pytest.raises(PermissionDeniedError, match="add_issues"):
-            await _create_issue(
-                session=db_session,
-                user=limited_user,
-                project_key=public_project.key,
-                tracker_id=seed["tracker"].id,
-                subject="Should be denied",
-            )
-
-    async def test_update_issue_denied_without_edit_issues(
-        self,
-        db_session: AsyncSession,
-        limited_user: User,
-        public_project: Project,
-        role_view_issues_only: Role,
         existing_issue,
-    ):
-        """_update_issue raises PermissionDeniedError when user lacks edit_issues."""
-        from specivo.mcp.tools import _update_issue
-
-        await _add_member(db_session, public_project, limited_user, role_view_issues_only)
-
-        with pytest.raises(PermissionDeniedError, match="edit_issues"):
-            await _update_issue(
-                session=db_session,
-                user=limited_user,
-                issue_ref=existing_issue.display_key,
-                subject="Should be denied",
-            )
-
-    async def test_add_comment_denied_without_add_issue_notes(
-        self,
-        db_session: AsyncSession,
-        limited_user: User,
-        public_project: Project,
-        role_view_issues_only: Role,
-        existing_issue,
-    ):
-        """_add_comment raises PermissionDeniedError when user lacks add_issue_notes."""
-        from specivo.mcp.tools import _add_comment
-
-        await _add_member(db_session, public_project, limited_user, role_view_issues_only)
-
-        with pytest.raises(PermissionDeniedError, match="add_issue_notes"):
-            await _add_comment(
-                session=db_session,
-                user=limited_user,
-                issue_ref=existing_issue.display_key,
-                notes="This comment should be denied",
-            )
-
-    async def test_create_wiki_denied_without_manage_wiki(
-        self,
-        db_session: AsyncSession,
-        limited_user: User,
-        public_project: Project,
-        role_view_issues_only: Role,
-    ):
-        """_create_wiki raises PermissionDeniedError when user lacks manage_wiki."""
-        from specivo.mcp.tools import _create_wiki
-
-        await _add_member(db_session, public_project, limited_user, role_view_issues_only)
-
-        with pytest.raises(PermissionDeniedError, match="manage_wiki"):
-            await _create_wiki(
-                session=db_session,
-                user=limited_user,
-                project_key=public_project.key,
-                title="Should Not Exist",
-                text="Denied content",
-            )
-
-    async def test_edit_wiki_denied_without_manage_wiki(
-        self,
-        db_session: AsyncSession,
-        limited_user: User,
-        public_project: Project,
-        role_view_issues_only: Role,
         existing_wiki_page,
+        tool: str,
+        permission: str,
+        build_kwargs,
     ):
-        """_edit_wiki raises PermissionDeniedError when user lacks manage_wiki."""
-        from specivo.mcp.tools import _edit_wiki
+        """The tool raises PermissionDeniedError naming the missing permission."""
+        from specivo.mcp import tools
 
+        fixtures = {"seed": seed, "existing_issue": existing_issue, "existing_wiki_page": existing_wiki_page}
         await _add_member(db_session, public_project, limited_user, role_view_issues_only)
 
-        with pytest.raises(PermissionDeniedError, match="manage_wiki"):
-            await _edit_wiki(
-                session=db_session,
-                user=limited_user,
-                project_key=public_project.key,
-                slug=existing_wiki_page.slug,
-                search_text="Initial content",
-                replace_text="Denied replacement",
-            )
-
-    async def test_log_time_denied_without_log_time_permission(
-        self,
-        db_session: AsyncSession,
-        limited_user: User,
-        public_project: Project,
-        role_view_issues_only: Role,
-        seed: dict,
-    ):
-        """_log_time raises PermissionDeniedError when user lacks log_time."""
-        from specivo.mcp.tools import _log_time
-
-        await _add_member(db_session, public_project, limited_user, role_view_issues_only)
-
-        with pytest.raises(PermissionDeniedError, match="log_time"):
-            await _log_time(
-                session=db_session,
-                user=limited_user,
-                project_key=public_project.key,
-                hours=Decimal("1.5"),
-                activity_id=seed["activity"].id,
-            )
-
-    async def test_create_version_denied_without_manage_versions(
-        self,
-        db_session: AsyncSession,
-        limited_user: User,
-        public_project: Project,
-        role_view_issues_only: Role,
-    ):
-        """_create_version raises PermissionDeniedError when user lacks manage_versions."""
-        from specivo.mcp.tools import _create_version
-
-        await _add_member(db_session, public_project, limited_user, role_view_issues_only)
-
-        with pytest.raises(PermissionDeniedError, match="manage_versions"):
-            await _create_version(
-                session=db_session,
-                user=limited_user,
-                project_key=public_project.key,
-                name="v1.0-denied",
-            )
+        with pytest.raises(PermissionDeniedError, match=permission):
+            await getattr(tools, tool)(session=db_session, user=limited_user, **build_kwargs(public_project, fixtures))
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +429,7 @@ class TestMcpNonMemberPrivateProject:
         seed: dict,
         admin_user: User,
     ):
-        """_list_issues raises PermissionDeniedError for non-member on private project.
+        """_list_issues raises NotFoundError for a non-member on a private project.
 
         An issue is seeded by admin first so the project isn't empty; the
         non-member should still be denied before any data is returned.
@@ -509,7 +450,8 @@ class TestMcpNonMemberPrivateProject:
         )
         await db_session.commit()
 
-        with pytest.raises(PermissionDeniedError):
+        # Not found, like a missing key, so private keys cannot be enumerated (ADR-0004).
+        with pytest.raises(NotFoundError):
             await _list_issues(
                 session=db_session,
                 user=non_member_user,
@@ -522,85 +464,73 @@ class TestMcpNonMemberPrivateProject:
 # ---------------------------------------------------------------------------
 
 
+# (tool, call kwargs from the project and the seeded fixtures, substrings of the result)
+_ADMIN_CASES = [
+    pytest.param(
+        "_create_issue",
+        lambda project, f: {
+            "project_key": project.key,
+            "tracker_id": f["seed"]["tracker"].id,
+            "subject": "Admin bypass test",
+        },
+        lambda project: ("Admin bypass test",),
+        id="create_issue",
+    ),
+    pytest.param(
+        "_create_wiki",
+        lambda project, f: {"project_key": project.key, "title": "Admin Wiki Bypass", "text": "Content here."},
+        lambda project: ("Admin Wiki Bypass",),
+        id="create_wiki",
+    ),
+    pytest.param(
+        "_log_time",
+        lambda project, f: {
+            "project_key": project.key,
+            "hours": Decimal("2.0"),
+            "activity_id": f["seed"]["activity"].id,
+        },
+        lambda project: ("2", project.key),
+        id="log_time",
+    ),
+    pytest.param(
+        "_create_version",
+        lambda project, f: {"project_key": project.key, "name": "v2.0-admin-bypass"},
+        lambda project: ("v2.0-admin-bypass",),
+        id="create_version",
+    ),
+]
+
+
 class TestMcpAdminBypass:
     """Admin users have ``is_admin=True``.  ``check_permission`` short-circuits
     to ``True`` for them, so no PermissionDeniedError is ever raised regardless
     of project membership or role configuration.
     """
 
-    async def test_admin_can_create_issue_without_membership(
+    @pytest.mark.parametrize(("tool", "build_kwargs", "expected"), _ADMIN_CASES)
+    async def test_admin_can_use_write_tool_without_membership(
         self,
         db_session: AsyncSession,
         admin_user: User,
         public_project: Project,
         seed: dict,
+        existing_issue,
+        existing_wiki_page,
+        tool: str,
+        build_kwargs,
+        expected,
     ):
-        """Admin creates issue with no Member row — check_permission bypassed."""
-        from specivo.mcp.tools import _create_issue
+        """Admin has no Member row — check_permission is bypassed."""
+        from specivo.mcp import tools
 
-        result = await _create_issue(
-            session=db_session,
-            user=admin_user,
-            project_key=public_project.key,
-            tracker_id=seed["tracker"].id,
-            subject="Admin bypass test",
+        fixtures = {"seed": seed, "existing_issue": existing_issue, "existing_wiki_page": existing_wiki_page}
+
+        result = await getattr(tools, tool)(
+            session=db_session, user=admin_user, **build_kwargs(public_project, fixtures)
         )
-        assert "Admin bypass test" in result
 
-    async def test_admin_can_create_wiki_without_membership(
-        self,
-        db_session: AsyncSession,
-        admin_user: User,
-        public_project: Project,
-    ):
-        """Admin creates a wiki page with no Member row — check_permission bypassed."""
-        from specivo.mcp.tools import _create_wiki
-
-        result = await _create_wiki(
-            session=db_session,
-            user=admin_user,
-            project_key=public_project.key,
-            title="Admin Wiki Bypass",
-            text="Content here.",
-        )
-        assert "Admin Wiki Bypass" in result
-
-    async def test_admin_can_log_time_without_membership(
-        self,
-        db_session: AsyncSession,
-        admin_user: User,
-        public_project: Project,
-        seed: dict,
-    ):
-        """Admin logs time with no Member row — check_permission bypassed."""
-        from specivo.mcp.tools import _log_time
-
-        result = await _log_time(
-            session=db_session,
-            user=admin_user,
-            project_key=public_project.key,
-            hours=Decimal("2.0"),
-            activity_id=seed["activity"].id,
-        )
-        assert "2" in result
-        assert public_project.key in result
-
-    async def test_admin_can_create_version_without_membership(
-        self,
-        db_session: AsyncSession,
-        admin_user: User,
-        public_project: Project,
-    ):
-        """Admin creates a version with no Member row — check_permission bypassed."""
-        from specivo.mcp.tools import _create_version
-
-        result = await _create_version(
-            session=db_session,
-            user=admin_user,
-            project_key=public_project.key,
-            name="v2.0-admin-bypass",
-        )
-        assert "v2.0-admin-bypass" in result
+        for text in expected(public_project):
+            assert text in result
 
 
 # ---------------------------------------------------------------------------

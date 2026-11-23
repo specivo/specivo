@@ -147,6 +147,7 @@ def _messages(delay: MagicMock) -> dict[str, EmailMessage]:
     messages: dict[str, EmailMessage] = {}
     for call in delay.call_args_list:
         smtp = MagicMock()
+        smtp.__enter__.return_value = smtp
         with patch("specivo.tasks.notifications.smtplib.SMTP", return_value=smtp):
             send_notification_email(*call.args, **call.kwargs)
         message = message_from_string(smtp.sendmail.call_args.args[2], policy=policy.default)

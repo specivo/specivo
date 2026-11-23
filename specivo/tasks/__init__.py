@@ -7,8 +7,8 @@ that fail in CI/test environments where env vars aren't yet set.
 import os
 
 from celery import Celery
-from celery.schedules import crontab  # type: ignore[import-untyped]
-from celery.signals import worker_init  # type: ignore[import-untyped]
+from celery.schedules import crontab
+from celery.signals import worker_init
 
 from specivo.core.celery_beat import default_schedule_file
 
@@ -68,6 +68,10 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.repositories.sweep_repository_deliveries",
                 "schedule": _REPOSITORY_SWEEP_INTERVAL_SECONDS,
             },
+            "queue-link-graph-backfill": {
+                "task": "specivo.tasks.entity_links.queue_link_graph_backfill",
+                "schedule": 3600,  # every hour
+            },
             "generate-recurring-tasks": {
                 "task": "specivo.tasks.recurring.generate_recurring_tasks",
                 "schedule": _RECURRING_BEAT_INTERVAL_SECONDS,
@@ -107,7 +111,7 @@ def _warn_about_app_url() -> None:
         from specivo.core.config import get_settings
 
         log_app_url_warning(get_settings(), component="worker")
-    except Exception as exc:  # noqa: BLE001 - a start-up check must not stop the worker
+    except Exception as exc:  # a start-up check must not stop the worker  # noqa: BLE001
         logging.getLogger(__name__).warning("APP_URL check at worker start failed: %s", exc)
 
 

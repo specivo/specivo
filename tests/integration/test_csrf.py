@@ -122,9 +122,7 @@ async def test_mutating_request_without_csrf_rejected(client: AsyncClient, db_se
     assert "CSRF" in resp.json()["detail"]
 
 
-async def test_mutating_request_with_wrong_token_rejected(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_mutating_request_with_wrong_token_rejected(client: AsyncClient, db_session: AsyncSession):
     """POST with mismatched CSRF cookie and header returns 403."""
     user = UserFactory.build(login="csrf_mismatch_user", status="active")
     db_session.add(user)
@@ -162,9 +160,7 @@ async def test_mutating_request_with_wrong_token_rejected(
 # ---------------------------------------------------------------------------
 
 
-async def test_mutating_request_with_valid_csrf_succeeds(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_mutating_request_with_valid_csrf_succeeds(client: AsyncClient, db_session: AsyncSession):
     """PATCH with matching CSRF cookie + header succeeds."""
     user = UserFactory.build(login="csrf_ok_user", status="active")
     db_session.add(user)
@@ -198,9 +194,7 @@ async def test_mutating_request_with_valid_csrf_succeeds(
     assert resp.status_code != 403, f"CSRF should have passed: {resp.text}"
 
 
-async def test_csrf_token_in_form_body_accepted(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_csrf_token_in_form_body_accepted(client: AsyncClient, db_session: AsyncSession):
     """CSRF token in URL-encoded form body is accepted."""
     user = UserFactory.build(login="csrf_form_user", status="active")
     db_session.add(user)
@@ -249,15 +243,41 @@ async def test_bearer_auth_bypasses_csrf(auth_client: AsyncClient):
     assert resp.status_code != 403
 
 
-async def test_api_key_header_bypasses_csrf(client: AsyncClient, db_session: AsyncSession):
-    """Requests with X-API-Key header skip CSRF validation."""
+async def _session_cookie(client: AsyncClient, db_session: AsyncSession, login: str) -> dict[str, str]:
+    """Sign a new user in and return their access_token cookie."""
+    user = UserFactory.build(login=login, status="active")
+    db_session.add(user)
+    await db_session.flush()
+    resp = await client.post("/api/v1/auth/login/", json={"login": user.login, "password": TEST_PASSWORD})
+    assert resp.status_code == 200
+    for key, val in resp.headers.multi_items():
+        if key.lower() == "set-cookie" and "access_token=" in val:
+            return {"access_token": val.split("access_token=")[1].split(";")[0]}
+    raise AssertionError("no access_token cookie")
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        {"X-API-Key": "spv_fake_key_for_csrf_bypass_test"},
+        {"Authorization": "Basic Zm9vOmJhcg=="},
+        {"Authorization": "bearer-ish"},
+    ],
+)
+async def test_non_bearer_auth_header_does_not_skip_csrf_for_a_cookie_session(
+    client: AsyncClient, db_session: AsyncSession, header: dict[str, str]
+):
+    """Only ``Authorization: Bearer`` ignores the cookie, so only it skips CSRF.
+
+    Any other header falls back to the session cookie for authentication, so
+    a request carrying one must still present the CSRF token.
+    """
+    cookies = await _session_cookie(client, db_session, "csrf_header_user")
     resp = await client.patch(
-        "/api/v1/users/me/preferences/",
-        json={"timezone": "UTC"},
-        headers={"X-API-Key": "spv_fake_key_for_csrf_bypass_test"},
+        "/api/v1/users/me/preferences/", json={"timezone": "UTC"}, cookies=cookies, headers=header
     )
-    # Should NOT be 403 CSRF — it will fail with 401 (bad key) instead
-    assert resp.status_code != 403
+    assert resp.status_code == 403
+    assert "CSRF" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -353,8 +373,7 @@ def test_csrf_secret_rotates_when_settings_secret_key_changes(monkeypatch):
         object.__setattr__(settings, "secret_key", "x" * 64)
         mw_b = CSRFMiddleware(_noop)
         assert not mw_b._validate_token(token), (
-            "rotating settings.secret_key must invalidate tokens signed "
-            "under the previous key"
+            "rotating settings.secret_key must invalidate tokens signed under the previous key"
         )
     finally:
         object.__setattr__(settings, "secret_key", original_key)

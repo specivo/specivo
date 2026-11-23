@@ -90,7 +90,7 @@ def _attribute(match: re.Match[str], resource_type: ResourceType) -> str:
     if resource_type == "User" and name == "emails":
         if sub is None or sub.lower() != "value":
             raise ScimError.invalid_filter("Only emails.value can be filtered on.")
-        if has_filter:
+        if has_filter:  # noqa: SIM102
             if (
                 match.group("fattr").lower() != "type"
                 or match.group("fop").lower() != "eq"

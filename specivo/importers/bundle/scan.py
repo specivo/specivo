@@ -44,8 +44,8 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 
+from specivo.core.files import open_regular
 from specivo.importers.bundle.codec import LOOKUP_TYPES, value_problems
-from specivo.importers.bundle.container import open_regular
 from specivo.importers.bundle.format import (
     ATTACHMENTS,
     CATEGORIES,
@@ -90,6 +90,8 @@ from specivo.importers.core.ir import (
 from specivo.importers.core.placeholders import LABELLED_KINDS, PlaceholderKind, find_placeholders
 
 _HASH_CHUNK = 1024 * 1024
+# _stored_file's answer for a stored file that exists but cannot be read.
+_UNREADABLE_FILE = -2
 # Long values (a whole description) make a schema message unreadable.
 _MAX_MESSAGE = 300
 _EARLIEST = datetime.min.replace(tzinfo=UTC)
@@ -694,12 +696,12 @@ class _Scanner:
     # Called with records that passed their schema, so every required
     # property is there and every value has the right type.
 
-    def _check_users(self, line: int, offset: int, record: dict[str, Any]) -> None:
+    def _check_users(self, line: int, offset: int, record: dict[str, Any]) -> None:  # noqa: ARG002
         credential = record.get("credential")
         if credential:
             self.index.credential_algorithms.add(credential["algorithm"])
 
-    def _check_groups(self, line: int, offset: int, record: dict[str, Any]) -> None:
+    def _check_groups(self, line: int, offset: int, record: dict[str, Any]) -> None:  # noqa: ARG002
         for ref in record.get("member_refs") or []:
             self._ref(GROUPS.name, line, "member_refs", EntityType.USER, ref)
 
@@ -712,7 +714,7 @@ class _Scanner:
     def _in_project(self, record_file: RecordFile, project_ref: str, offset: int) -> None:
         self.index.by_project.setdefault(record_file.name, {}).setdefault(project_ref, []).append(offset)
 
-    def _scoped(self, record_file: RecordFile, line: int, offset: int, record: dict[str, Any]) -> str:
+    def _scoped(self, record_file: RecordFile, line: int, offset: int, record: dict[str, Any]) -> str:  # noqa: ARG002
         project_ref: str = record["project_ref"]
         self._ref(record_file.name, line, "project_ref", EntityType.PROJECT, project_ref)
         return project_ref
@@ -737,7 +739,7 @@ class _Scanner:
         self._in_project(SPRINTS, project_ref, offset)
         self.sprint_project.setdefault(record["source_ref"], project_ref)
 
-    def _check_custom_fields(self, line: int, offset: int, record: dict[str, Any]) -> None:
+    def _check_custom_fields(self, line: int, offset: int, record: dict[str, Any]) -> None:  # noqa: ARG002
         key = record["key"]
         if any(known == key for known, _ in self.custom_fields.values()):
             self.report.error(
@@ -987,6 +989,10 @@ class _Scanner:
         size = self._stored_file(sha256)
         if size is None:
             self.report.error(ProblemCode.MISSING_FILE, name, f"files/{sha256} is not in the bundle", line=line)
+        elif size == _UNREADABLE_FILE:
+            # Reported against the stored file, not the attachments file, and
+            # the rest of the attachments are still checked.
+            self.report.error(ProblemCode.UNREADABLE, f"files/{sha256}", "could not be read", line=line)
         elif size < 0:
             self.report.error(ProblemCode.HASH_MISMATCH, name, f"files/{sha256} does not hash to its name", line=line)
         elif record.get("filesize") is not None and record["filesize"] != size:
@@ -998,7 +1004,8 @@ class _Scanner:
             )
 
     def _stored_file(self, sha256: str) -> int | None:
-        """Return the size of ``files/<sha256>``, ``None`` if absent, or -1 if its bytes do not match.
+        """Return the size of ``files/<sha256>``, ``None`` if absent, -1 if its bytes do not match,
+        or ``_UNREADABLE_FILE`` if it cannot be read.
 
         Each file is hashed once, however many attachments share it.
         """
@@ -1009,11 +1016,15 @@ class _Scanner:
             else:
                 digest = hashlib.sha256()
                 size = 0
-                with open_regular(path) as handle:
-                    while chunk := handle.read(_HASH_CHUNK):
-                        digest.update(chunk)
-                        size += len(chunk)
-                self.stored_files[sha256] = size if digest.hexdigest() == sha256 else -1
+                try:
+                    with open_regular(path) as handle:
+                        while chunk := handle.read(_HASH_CHUNK):
+                            digest.update(chunk)
+                            size += len(chunk)
+                except OSError:
+                    self.stored_files[sha256] = _UNREADABLE_FILE
+                else:
+                    self.stored_files[sha256] = size if digest.hexdigest() == sha256 else -1
         return self.stored_files[sha256]
 
     def _check_time_entries(self, line: int, offset: int, record: dict[str, Any]) -> None:

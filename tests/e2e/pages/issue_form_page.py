@@ -12,7 +12,7 @@ class IssueFormPage:
         self.tracker_select = page.locator("#tracker")
         self.description_input = page.locator("#description")
         self.priority_select = page.locator("#priority")
-        self.submit_button = page.locator("button.btn-primary")
+        self.submit_button = page.locator("button.sp-btn-primary")
         self.cancel_link = page.locator("a.cancel-link")
 
     def navigate_new(self, project_key: str) -> None:

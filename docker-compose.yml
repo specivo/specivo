@@ -1,10 +1,13 @@
 services:
   nginx:
     image: nginx:1-alpine
+    environment:
+      STEALTH_PREFIX: ${STEALTH_PREFIX:-}
     ports:
       - "${SPECIVO_PORT:-9933}:80"
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # A template, rendered to conf.d/default.conf with STEALTH_PREFIX filled in.
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
       - ${SPECIVO_DATA_DIR:-./specivo-data}/logs/nginx:/var/log/nginx
     # nginx sits alone with the api on the `proxy` network, at a fixed address,
     # so the api can trust exactly that address for X-Forwarded-For.

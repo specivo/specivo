@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from celery.signals import worker_ready  # type: ignore[import-untyped]
+from celery.signals import worker_ready
 
 from specivo.tasks import celery_app
 from specivo.tasks._async import run_async
@@ -48,8 +48,8 @@ async def load_bundled_ai_model_prices_async() -> None:
 
 
 @worker_ready.connect
-def _load_bundled_prices_at_start(**_kwargs) -> None:  # type: ignore[no-untyped-def]
+def _load_bundled_prices_at_start(**_kwargs) -> None:
     try:
         run_async(load_bundled_ai_model_prices_async())
-    except Exception as exc:  # noqa: BLE001 - a start-up step must not stop the worker
+    except Exception as exc:  # a start-up step must not stop the worker  # noqa: BLE001
         logger.warning("Loading the bundled AI model prices at worker start failed: %s", exc)

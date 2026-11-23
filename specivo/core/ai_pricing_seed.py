@@ -153,7 +153,7 @@ def format_price(value: Decimal | None) -> str | None:
     if value is None:
         return None
     text = format(value.normalize(), "f")
-    return text
+    return text  # noqa: RET504
 
 
 def format_instant(value: datetime) -> str:
@@ -544,15 +544,30 @@ def plan_seed(
     of its active admin rows: a model priced by an administrator before a
     bundled period keeps that period's start.
     """
-    as_of = snapshot.as_of
     history = tuple(history)
     admin_starts = admin_starts or {}
-    plan = SeedPlan(as_of=as_of)
+    plan = SeedPlan(as_of=snapshot.as_of)
     by_model: dict[tuple[str, str], list[StoredSeedRow]] = {}
     for row in stored:
         by_model.setdefault((row.provider, row.model), []).append(row)
     history_models = {(p.price.provider, p.price.model) for p in history}
 
+    _plan_rebases(plan, by_model, history_models, admin_starts)
+    for price in snapshot.prices:
+        key = (price.provider, price.model)
+        _plan_snapshot_price(plan, price, by_model.get(key, []), key in history_models, admin_starts.get(key))
+    for period in history:
+        _plan_history_period(plan, period, by_model.get((period.price.provider, period.price.model), []))
+    return plan
+
+
+def _plan_rebases(
+    plan: SeedPlan,
+    by_model: Mapping[tuple[str, str], list[StoredSeedRow]],
+    history_models: set[tuple[str, str]],
+    admin_starts: Mapping[tuple[str, str], datetime],
+) -> None:
+    """Move each model's first seed period back to :data:`FIRST_PERIOD_START` where nothing priced it before."""
     for key, rows in sorted(by_model.items()):
         first = min(rows, key=lambda r: (r.effective_from, r.id))
         admin_start = admin_starts.get(key)
@@ -566,76 +581,77 @@ def plan_seed(
         plan.rebases[first.id] = FIRST_PERIOD_START
         plan.backfills.append(Backfill(provider=key[0], model=key[1], until=first.effective_from))
 
-    for price in snapshot.prices:
-        key = (price.provider, price.model)
-        rows = by_model.get(key, [])
-        open_rows = sorted((r for r in rows if r.effective_to is None), key=lambda r: r.effective_from)
-        current = open_rows[-1] if open_rows else None
-        name = f"{price.provider}/{price.model}"
-        if current is None:
-            if any(_overlaps(as_of, None, r) for r in rows if r.is_active):
-                plan.skipped.append(f"{name}: a seed period already covers {format_instant(as_of)}")
-                continue
-            admin_start = admin_starts.get(key)
-            first_known = not rows and key not in history_models and (admin_start is None or admin_start >= as_of)
-            start = FIRST_PERIOD_START if first_known and as_of > FIRST_PERIOD_START else as_of
-            plan.inserts.append(PlannedRow(price=price, effective_from=start, effective_to=None))
-            if start < as_of:
-                plan.backfills.append(Backfill(provider=price.provider, model=price.model, until=as_of))
-            continue
-        if not current.is_active:
-            plan.unchanged += 1
-            continue
-        if same_price(current, price):
-            plan.unchanged += 1
-            if tuple(current.aliases) != price.aliases:
-                plan.alias_updates[current.id] = price.aliases
-            continue
-        if current.effective_from >= as_of:
-            plan.skipped.append(f"{name}: the stored seed price starts at or after the snapshot's as_of")
-            continue
-        plan.closes[current.id] = as_of
-        plan.inserts.append(PlannedRow(price=price, effective_from=as_of, effective_to=None, supersedes_id=current.id))
 
-    for period in history:
-        price = period.price
-        name = f"{price.provider}/{price.model}"
-        rows = by_model.get((price.provider, price.model), [])
-        exact = [
-            r
-            for r in rows
-            if r.effective_from == period.effective_from
-            and r.effective_to == period.effective_to
-            and same_price(r, price)
-        ]
-        if exact:
-            plan.unchanged += 1
-            continue
-        planned = [p for p in plan.inserts if (p.price.provider, p.price.model) == (price.provider, price.model)]
-        clash_stored = any(
-            _overlaps(period.effective_from, period.effective_to, _with_close(r, plan.closes))
-            for r in rows
-            if r.is_active
+def _plan_snapshot_price(
+    plan: SeedPlan,
+    price: SeedPrice,
+    rows: list[StoredSeedRow],
+    in_history: bool,
+    admin_start: datetime | None,
+) -> None:
+    """Plan the snapshot's *price* against the stored seed *rows* of its model."""
+    as_of = plan.as_of
+    open_rows = sorted((r for r in rows if r.effective_to is None), key=lambda r: r.effective_from)
+    current = open_rows[-1] if open_rows else None
+    name = f"{price.provider}/{price.model}"
+    if current is None:
+        if any(_overlaps(as_of, None, r) for r in rows if r.is_active):
+            plan.skipped.append(f"{name}: a seed period already covers {format_instant(as_of)}")
+            return
+        first_known = not rows and not in_history and (admin_start is None or admin_start >= as_of)
+        start = FIRST_PERIOD_START if first_known and as_of > FIRST_PERIOD_START else as_of
+        plan.inserts.append(PlannedRow(price=price, effective_from=start, effective_to=None))
+        if start < as_of:
+            plan.backfills.append(Backfill(provider=price.provider, model=price.model, until=as_of))
+        return
+    if not current.is_active:
+        plan.unchanged += 1
+        return
+    if same_price(current, price):
+        plan.unchanged += 1
+        if tuple(current.aliases) != price.aliases:
+            plan.alias_updates[current.id] = price.aliases
+        return
+    if current.effective_from >= as_of:
+        plan.skipped.append(f"{name}: the stored seed price starts at or after the snapshot's as_of")
+        return
+    plan.closes[current.id] = as_of
+    plan.inserts.append(PlannedRow(price=price, effective_from=as_of, effective_to=None, supersedes_id=current.id))
+
+
+def _plan_history_period(plan: SeedPlan, period: HistoryPeriod, rows: list[StoredSeedRow]) -> None:
+    """Plan a bundled history *period* unless it is stored already or overlaps a stored or planned period."""
+    price = period.price
+    exact = [
+        r
+        for r in rows
+        if r.effective_from == period.effective_from and r.effective_to == period.effective_to and same_price(r, price)
+    ]
+    if exact:
+        plan.unchanged += 1
+        return
+    planned = [p for p in plan.inserts if (p.price.provider, p.price.model) == (price.provider, price.model)]
+    clash_stored = any(
+        _overlaps(period.effective_from, period.effective_to, _with_close(r, plan.closes)) for r in rows if r.is_active
+    )
+    clash_planned = any(
+        (p.effective_to is None or p.effective_to > period.effective_from) and p.effective_from < period.effective_to
+        for p in planned
+    )
+    if clash_stored or clash_planned:
+        plan.skipped.append(
+            f"{price.provider}/{price.model}: the history period from "
+            f"{format_instant(period.effective_from)} overlaps a seed period"
         )
-        clash_planned = any(
-            (p.effective_to is None or p.effective_to > period.effective_from)
-            and p.effective_from < period.effective_to
-            for p in planned
+        return
+    plan.inserts.append(
+        PlannedRow(
+            price=price,
+            effective_from=period.effective_from,
+            effective_to=period.effective_to,
+            from_history=True,
         )
-        if clash_stored or clash_planned:
-            plan.skipped.append(
-                f"{name}: the history period from {format_instant(period.effective_from)} overlaps a seed period"
-            )
-            continue
-        plan.inserts.append(
-            PlannedRow(
-                price=price,
-                effective_from=period.effective_from,
-                effective_to=period.effective_to,
-                from_history=True,
-            )
-        )
-    return plan
+    )
 
 
 def _with_close(row: StoredSeedRow, closes: Mapping[int, datetime]) -> StoredSeedRow:

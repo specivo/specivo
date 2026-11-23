@@ -269,6 +269,20 @@ async def _serve_and_report_status(app: ASGIApp, scope: Scope, receive: Receive,
     return status
 
 
+def _session_unauthorized() -> Response:
+    """The answer to opening a session with a key that is not valid (401)."""
+    return Response(
+        content=JSONRPCError(
+            jsonrpc="2.0",
+            id=None,
+            error=ErrorData(code=INVALID_REQUEST, message="Invalid or expired API key"),
+        ).model_dump_json(by_alias=True, exclude_unset=True),
+        status_code=HTTPStatus.UNAUTHORIZED,
+        media_type="application/json",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 def _session_not_found() -> Response:
     """The 404 the SDK answers for an unknown session id (JSON-RPC error, no id)."""
     body = JSONRPCError(
@@ -288,10 +302,10 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
 
     def __init__(
         self,
-        *args,  # type: ignore[no-untyped-def]
+        *args,
         store_provider: StoreProvider | None = None,
         owner_resolver: OwnerResolver | None = None,
-        **kwargs,  # type: ignore[no-untyped-def]
+        **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._store_provider: StoreProvider | None = store_provider
@@ -338,11 +352,12 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             logger.warning("MCP session owner lookup failed", exc_info=True)
             return None
 
-    async def _persist_new_session(self, session_id: str, scope: Scope) -> None:
+    async def _persist_new_session(self, session_id: str, scope: Scope, owner: tuple[int, int] | None = None) -> None:
         store = await self._get_store()
         if store is None:
             return
-        owner = await self._resolve_owner(scope)
+        if owner is None:
+            owner = await self._resolve_owner(scope)
         if owner is None:
             # An entry without a verified owner could never be rehydrated,
             # so do not write one.
@@ -407,9 +422,9 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         headers = dict(scope.get("headers") or [])
         ua = headers.get(b"user-agent")
         if ua:
-            try:
+            try:  # noqa: SIM105
                 meta["user_agent"] = ua.decode("latin-1")
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover  # noqa: BLE001, S110
                 pass
         return meta
 
@@ -468,7 +483,18 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
 
         # ---- Brand-new session (no header at all) -----------------------
         if request_mcp_session_id is None:
-            await self._create_and_run_session(scope, receive, send, session_id=None, requestor=requestor)
+            # The transport-level check is format-only. A session holds a
+            # slot of max_sessions for up to the idle timeout, so the key is
+            # verified (revoked, expired, deactivated owner) before one is
+            # opened: random well-formed tokens cannot fill the slots.
+            owner: tuple[int, int] | None = None
+            if self._owner_resolver is not None:
+                owner = await self._resolve_owner(scope)
+                if owner is None:
+                    logger.warning("Refusing to open an MCP session: the API key is not valid")
+                    await _session_unauthorized()(scope, receive, send)
+                    return
+            await self._create_and_run_session(scope, receive, send, session_id=None, requestor=requestor, owner=owner)
             return
 
         # ---- Header present but unknown to in-memory dict ---------------
@@ -596,6 +622,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         *,
         session_id: str | None,
         requestor: AuthorizationContext | None,
+        owner: tuple[int, int] | None = None,
     ) -> None:
         """Create a fresh transport (either brand new or rehydrated).
 
@@ -628,7 +655,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         # after a restart the first client to reconnect would lock out all the
         # rest indefinitely.
         new_session_id = transport.mcp_session_id
-        assert new_session_id is not None
+        assert new_session_id is not None  # noqa: S101
         if session_id is not None:
             await self._serve_existing_session(new_session_id, transport, scope, receive, send)
             return
@@ -641,7 +668,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             if not established:
                 await self._discard_session(new_session_id, transport)
         if established:
-            await self._persist_new_session(new_session_id, scope)
+            await self._persist_new_session(new_session_id, scope, owner)
 
     async def _start_session_transport(
         self,
@@ -660,7 +687,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         from uuid import uuid4
 
         is_rehydration = session_id is not None
-        assert self._task_group is not None
+        assert self._task_group is not None  # noqa: S101
         headers = dict(scope.get("headers") or [])
         raw_version = headers.get(MCP_PROTOCOL_VERSION_HEADER.encode("ascii"))
         protocol_version = raw_version.decode("latin-1") if raw_version else None
@@ -683,7 +710,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
                 retry_interval=self.retry_interval,
                 idle_timeout=self.session_idle_timeout,
             )
-            assert http_transport.mcp_session_id is not None
+            assert http_transport.mcp_session_id is not None  # noqa: S101
             self._server_instances[new_session_id] = http_transport
             if requestor is not None:
                 self._session_owners[new_session_id] = requestor

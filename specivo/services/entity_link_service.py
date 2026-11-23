@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import (
     ENTITY_LINKS_DEFAULT_LIMIT,
+    ENTITY_LINKS_HUB_MAX_DEPTH,
     ENTITY_LINKS_MAX_EXPANDED,
     ENTITY_LINKS_MAX_LIMIT,
     ENTITY_LINKS_MAX_PER_SOURCE,
@@ -62,6 +63,16 @@ from specivo.models.relation import IssueRelation
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.services.api_key_scope import admin_reaches, is_global_admin
+from specivo.services.entity_link_nodes import (
+    HUB_KIND_OF,
+    HUB_KINDS,
+    HUB_TYPES,
+    HubReader,
+    attachment_counts,
+    is_hub_ref,
+    item_hub_edges,
+    resolve_hub_root,
+)
 from specivo.services.markdown_service import FoundLink, extract_links
 
 logger = logging.getLogger(__name__)
@@ -82,11 +93,19 @@ KIND_COMMIT = "commit"
 KIND_PULL_REQUEST = "pull_request"
 TEXT_LINK_KINDS = frozenset({KIND_WIKI_LINK, KIND_MENTION, KIND_ATTACHMENT_LINK})
 STRUCTURED_KINDS = frozenset({KIND_RELATION, KIND_PARENT, KIND_CHILD, KIND_ATTACHMENT, KIND_COMMIT, KIND_PULL_REQUEST})
-ALL_KINDS = TEXT_LINK_KINDS | STRUCTURED_KINDS
+# What the REST API and the web pages read when no kinds are given: links between items, no hubs.
+ITEM_KINDS = TEXT_LINK_KINDS | STRUCTURED_KINDS
+# Edges from an issue or page to a tag, metadata value, version, sprint or assignee (``entity_link_nodes``).
+ALL_KINDS = ITEM_KINDS | HUB_KINDS
+# What ``specivo_get_links`` reads when no types are given: files are counted on the nodes instead.
+AGENT_DEFAULT_KINDS = ALL_KINDS - {KIND_ATTACHMENT}
 
 DIRECTIONS = ("in", "out", "both")
 
-NodeKey = tuple[str, int]  # ("issue" | "wiki_page" | "attachment" | "commit" | "pull_request", id)
+# ("issue" | "wiki_page" | "attachment" | "commit" | "pull_request", id), or a structured node of
+# ``entity_link_nodes``: ("tag" | "version" | "sprint" | "user", id), ("component" | "metadata",
+# (project id, key, value)) and ("commit", "<sha12>") for a hand-entered commit no repository knows.
+NodeKey = tuple[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +167,7 @@ def _instance_origin() -> str | None:
 
     try:
         return get_settings().app_url
-    except Exception:  # noqa: BLE001 - outside a configured environment no URL is this instance's
+    except Exception:  # outside a configured environment no URL is this instance's  # noqa: BLE001
         return None
 
 
@@ -297,7 +316,7 @@ class EntityLinkService:
             savepoint = await session.begin_nested()
             try:
                 await self.rebuild_source(session, source_type, source_id)
-            except Exception as exc:  # noqa: BLE001 - one bad text must not stop the others
+            except Exception as exc:  # one bad text must not stop the others  # noqa: BLE001
                 if savepoint.is_active:
                     await savepoint.rollback()
                 logger.warning("Could not rebuild links of %s %d: %s", source_type, source_id, exc)
@@ -505,13 +524,13 @@ class EntityLinkService:
             return {}
         found: dict[str, int] = {}
         for key, project_id in await session.execute(select(Project.key, Project.id).where(Project.key.in_(keys))):
-            found[key] = project_id
+            found[key] = project_id  # noqa: PERF403
         missing = keys - found.keys()
         if missing:
             for key, project_id in await session.execute(
                 select(ProjectKeyAlias.old_key, ProjectKeyAlias.project_id).where(ProjectKeyAlias.old_key.in_(missing))
             ):
-                found[key] = project_id
+                found[key] = project_id  # noqa: PERF403
         return found
 
     async def _resolve_wiki_targets(self, session: AsyncSession, rows: list[_Row]) -> None:
@@ -532,7 +551,7 @@ class EntityLinkService:
                         WikiPage.wiki_id == wiki_id, WikiPage.slug.in_(batch), WikiPage.deleted_at.is_(None)
                     )
                 ):
-                    pages[slug] = page_id
+                    pages[slug] = page_id  # noqa: PERF403
                 # A renamed page is still reached under its old slug, as on the page.
                 missing = [s for s in batch if s not in pages]
                 if missing:
@@ -548,7 +567,7 @@ class EntityLinkService:
                             WikiPage.deleted_at.is_(None),
                         )
                     ):
-                        pages[old] = page_id
+                        pages[old] = page_id  # noqa: PERF403
             for row in project_rows:
                 row.target_wiki_page_id = pages.get(row.target_ref)
 
@@ -624,7 +643,7 @@ class EntityLinkService:
             .where(scope, Attachment.filename.in_(names))
             .order_by(Attachment.created_at.asc(), Attachment.id.asc())
         ):
-            files[filename] = attachment_id  # the newest wins, as when rendering
+            files[filename] = attachment_id  # the newest wins, as when rendering  # noqa: PERF403
         for row in by_name:
             row.target_attachment_id = files.get(row.target_ref)
 
@@ -640,68 +659,74 @@ class EntityLinkService:
         depth: int = 1,
         kinds: Iterable[str] | None = None,
         limit: int = ENTITY_LINKS_DEFAULT_LIMIT,
+        default_kinds: frozenset[str] = ALL_KINDS,
+        count_attachments: bool = False,
+        reader: _Reader | None = None,
     ) -> LinkGraph:
-        """Return the neighbours of *root* (an issue or a wiki page) that *user* may see.
+        """Return the neighbours of *root* that *user* may see.
 
-        The caller has already checked that *user* may see *root*.
+        *root* is an issue, a wiki page or a hub (``entity_link_nodes``: a tag,
+        metadata value, version, sprint or user). The caller has already
+        checked that *user* may see it.
 
-        - ``direction``: ``out`` (what *root* links to, plus its relations,
-          parent, children, attachments, commits and pull requests), ``in``
-          (text links to *root*: backlinks) or ``both``.
+        - ``direction``: ``out`` (what *root* links to, plus all its relations,
+          its parent, children, attachments, commits, pull requests and hubs),
+          ``in`` (what points at *root*: text links to it, relations stored
+          towards it and the symmetric ones, its parent and its children; for
+          a hub, its members) or ``both``. ``in`` and ``out`` together give
+          the neighbours of ``both``.
         - ``depth``: 1, or 2 to expand the issue and wiki-page neighbours once
-          more (at most ``ENTITY_LINKS_MAX_EXPANDED`` of them).
-        - ``kinds``: only these edge kinds (``ALL_KINDS``); all when None.
+          more (at most ``ENTITY_LINKS_MAX_EXPANDED`` of them); 3 only from a
+          hub root, so version -> issues -> tags -> pages is one read. A link met from
+          both of its ends is listed once, as first met. A hub neighbour is
+          expanded only when its edge kind is in *kinds*; otherwise it is a
+          leaf with its ``degree``.
+        - ``kinds``: only these edge kinds (``ALL_KINDS``); *default_kinds*
+          when None. A hub root always lists its members, whatever *kinds*.
         - ``limit``: at most this many neighbour nodes besides *root*
           (capped at ``ENTITY_LINKS_MAX_LIMIT``); ``truncated`` says when
           more were left out.
+        - ``count_attachments``: give each issue and wiki page node the number
+          of files attached to it.
+        - ``reader``: a ``_Reader`` to share between several reads by the same
+          user (its visibility answers are cached).
         """
-        if direction not in DIRECTIONS:
-            raise ValueError(f"direction must be one of {', '.join(DIRECTIONS)}")
-        if depth not in (1, 2):
-            raise ValueError("depth must be 1 or 2")
-        wanted = ALL_KINDS if kinds is None else frozenset(kinds)
-        unknown = wanted - ALL_KINDS
-        if unknown:
-            raise ValueError(f"Unknown link kind(s): {', '.join(sorted(unknown))}")
+        wanted, explicit = _check_read(direction, depth, kinds, default_kinds, hub_root=root[0] in HUB_TYPES)
+        if root[0] in HUB_TYPES:
+            wanted |= {HUB_KIND_OF[root[0]]}
         limit = max(1, min(limit, ENTITY_LINKS_MAX_LIMIT))
 
-        reader = _Reader(session, user)
-        graph = LinkGraph()
-        seen_nodes: set[NodeKey] = {root}
-        order: list[NodeKey] = [root]
+        reader = reader or _Reader(session, user)
+        walk = _Walk(root, limit)
         frontier: list[NodeKey] = [root]
         for hop in range(depth):
             raw: list[_RawEdge] = []
             for node in frontier:
-                raw.extend(await self._raw_edges(session, node, direction, wanted))
-            edges = await reader.filter(raw)
-            next_frontier: list[NodeKey] = []
-            for edge in edges:
-                for endpoint in (edge.source, edge.target):
-                    if endpoint is None or endpoint in seen_nodes:
-                        continue
-                    if len(seen_nodes) - 1 >= limit:
-                        graph.truncated = True
-                        break
-                    seen_nodes.add(endpoint)
-                    order.append(endpoint)
-                    if endpoint[0] in ("issue", "wiki_page"):
-                        next_frontier.append(endpoint)
-                if (edge.source is None or edge.source in seen_nodes) and (
-                    edge.target is None or edge.target in seen_nodes
-                ):
-                    graph.raw_edges.append((edge, hop == 0 and root in (edge.source, edge.target)))
-            if len(next_frontier) > ENTITY_LINKS_MAX_EXPANDED:
+                raw.extend(await self._raw_edges(session, node, direction, wanted, hubs=reader.hubs, cap=limit + 1))
+            next_frontier = walk.take(await reader.filter(raw), hop, explicit)
+            # The last frontier is never expanded, so capping it would leave nothing out.
+            if hop < depth - 1 and len(next_frontier) > ENTITY_LINKS_MAX_EXPANDED:
                 next_frontier = next_frontier[:ENTITY_LINKS_MAX_EXPANDED]
-                graph.truncated = True
+                walk.graph.truncated = True
             frontier = next_frontier
-        await reader.describe(graph, root, order)
-        return graph
+        await reader.describe(walk.graph, root, walk.order, count_attachments=count_attachments)
+        return walk.graph
 
     async def _raw_edges(
-        self, session: AsyncSession, node: NodeKey, direction: str, kinds: frozenset[str]
+        self,
+        session: AsyncSession,
+        node: NodeKey,
+        direction: str,
+        kinds: frozenset[str],
+        *,
+        hubs: HubReader | None = None,
+        cap: int = ENTITY_LINKS_MAX_LIMIT + 1,
     ) -> list[_RawEdge]:
-        node_type, node_id = node
+        if node[0] in HUB_TYPES:
+            # A hub's members point at it; *hubs* lists only those the reader may see.
+            if direction == "out" or hubs is None:
+                return []
+            return await hubs.member_edges(node, kinds, cap)
         edges: list[_RawEdge] = []
         text_kinds = kinds & TEXT_LINK_KINDS
         if text_kinds and direction in ("out", "both"):
@@ -709,77 +734,92 @@ class EntityLinkService:
         if text_kinds and direction in ("in", "both"):
             edges.extend(await self._text_edges_in(session, node, text_kinds))
         if direction == "in":
+            edges.extend(await self._structured_edges_in(session, node, kinds))
             return edges
+        if node[0] == "issue":
+            edges.extend(await self._issue_edges_out(session, node, kinds))
+        elif node[0] == "wiki_page":
+            edges.extend(await _hierarchy_edges(session, WikiPage, node, kinds))
+            edges.extend(await _attachment_edges(session, "WikiPage", node, kinds))
+            edges.extend(await item_hub_edges(session, node, kinds))
+        return edges
 
+    @staticmethod
+    async def _issue_edges_out(session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
+        """An issue's relations, parent, children, attachments, commits, pull requests and hubs, in that order."""
+        edges: list[_RawEdge] = []
+        if KIND_RELATION in kinds:
+            edges.extend(await _relation_edges(session, node))
+        edges.extend(await _hierarchy_edges(session, Issue, node, kinds))
+        edges.extend(await _attachment_edges(session, "Issue", node, kinds))
+        if KIND_COMMIT in kinds or KIND_PULL_REQUEST in kinds:
+            from specivo.models.repository import IssueCommitLink, IssuePullRequestLink
+
+            if KIND_COMMIT in kinds:
+                stmt = select(IssueCommitLink.commit_id).where(IssueCommitLink.issue_id == node[1])
+                edges.extend(
+                    _RawEdge(node, ("commit", commit_id), KIND_COMMIT)
+                    for commit_id in (await session.execute(stmt)).scalars()
+                )
+            if KIND_PULL_REQUEST in kinds:
+                stmt = select(IssuePullRequestLink.pull_request_id).where(IssuePullRequestLink.issue_id == node[1])
+                edges.extend(
+                    _RawEdge(node, ("pull_request", pr_id), KIND_PULL_REQUEST)
+                    for pr_id in (await session.execute(stmt)).scalars()
+                )
+        linked = {e.target for e in edges if e.kind == KIND_COMMIT}
+        edges.extend(await item_hub_edges(session, node, kinds, linked_commits=linked))
+        return edges
+
+    async def _structured_edges_in(self, session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
+        """Relations, parent and children of *node*, each drawn as pointing at *node*.
+
+        A relation points at the issue it is stored towards (``A blocks B``
+        points at B); a ``relates`` relation has no direction and points at
+        both ends. The parent and the children are drawn from the other end:
+        the parent with its ``child`` edge, each child with its ``parent`` edge.
+        Attachments, commits and pull requests belong to *node* and only go out.
+        """
+        node_type, node_id = node
+        model: type[Issue] | type[WikiPage]
         if node_type == "issue":
-            if KIND_RELATION in kinds:
-                from specivo.services.relation_service import RELATION_TYPES
-
-                for rel in (
-                    await session.execute(
-                        select(IssueRelation).where(
-                            or_(IssueRelation.issue_from_id == node_id, IssueRelation.issue_to_id == node_id)
-                        )
-                    )
-                ).scalars():
-                    label: str | None
-                    if rel.issue_from_id == node_id:
-                        other, label = rel.issue_to_id, rel.relation_type
-                    else:
-                        other, label = rel.issue_from_id, RELATION_TYPES[rel.relation_type]["sym"]
-                    edges.append(_RawEdge(node, ("issue", other), KIND_RELATION, relation_type=label))
-            if KIND_PARENT in kinds:
-                parent_id = await session.scalar(select(Issue.parent_id).where(Issue.id == node_id))
-                if parent_id is not None:
-                    edges.append(_RawEdge(node, ("issue", parent_id), KIND_PARENT))
-            if KIND_CHILD in kinds:
-                for child_id in (await session.execute(select(Issue.id).where(Issue.parent_id == node_id))).scalars():
-                    edges.append(_RawEdge(node, ("issue", child_id), KIND_CHILD))
-            if KIND_ATTACHMENT in kinds:
-                for attachment_id in (
-                    await session.execute(
-                        select(Attachment.id).where(
-                            Attachment.container_type == "Issue", Attachment.container_id == node_id
-                        )
-                    )
-                ).scalars():
-                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))
-            if KIND_COMMIT in kinds or KIND_PULL_REQUEST in kinds:
-                from specivo.models.repository import IssueCommitLink, IssuePullRequestLink
-
-                if KIND_COMMIT in kinds:
-                    for commit_id in (
-                        await session.execute(
-                            select(IssueCommitLink.commit_id).where(IssueCommitLink.issue_id == node_id)
-                        )
-                    ).scalars():
-                        edges.append(_RawEdge(node, ("commit", commit_id), KIND_COMMIT))
-                if KIND_PULL_REQUEST in kinds:
-                    for pr_id in (
-                        await session.execute(
-                            select(IssuePullRequestLink.pull_request_id).where(IssuePullRequestLink.issue_id == node_id)
-                        )
-                    ).scalars():
-                        edges.append(_RawEdge(node, ("pull_request", pr_id), KIND_PULL_REQUEST))
+            model = Issue
         elif node_type == "wiki_page":
-            if KIND_PARENT in kinds:
-                parent_id = await session.scalar(select(WikiPage.parent_id).where(WikiPage.id == node_id))
-                if parent_id is not None:
-                    edges.append(_RawEdge(node, ("wiki_page", parent_id), KIND_PARENT))
-            if KIND_CHILD in kinds:
-                for child_id in (
-                    await session.execute(select(WikiPage.id).where(WikiPage.parent_id == node_id))
-                ).scalars():
-                    edges.append(_RawEdge(node, ("wiki_page", child_id), KIND_CHILD))
-            if KIND_ATTACHMENT in kinds:
-                for attachment_id in (
-                    await session.execute(
-                        select(Attachment.id).where(
-                            Attachment.container_type == "WikiPage", Attachment.container_id == node_id
+            model = WikiPage
+        else:
+            return []
+        edges: list[_RawEdge] = []
+        if node_type == "issue" and KIND_RELATION in kinds:
+            from specivo.services.relation_service import RELATION_TYPES
+
+            symmetric = [name for name, info in RELATION_TYPES.items() if info["sym"] == name]
+            for rel in (
+                await session.execute(
+                    select(IssueRelation).where(
+                        or_(
+                            IssueRelation.issue_to_id == node_id,
+                            (IssueRelation.issue_from_id == node_id) & IssueRelation.relation_type.in_(symmetric),
                         )
                     )
-                ).scalars():
-                    edges.append(_RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT))
+                )
+            ).scalars():
+                other = rel.issue_from_id if rel.issue_to_id == node_id else rel.issue_to_id
+                edges.append(
+                    _RawEdge(
+                        ("issue", other),
+                        node,
+                        KIND_RELATION,
+                        relation_type=rel.relation_type,
+                        identity=(KIND_RELATION, rel.id),
+                    )
+                )
+        if KIND_CHILD in kinds:
+            parent_id = await session.scalar(select(model.parent_id).where(model.id == node_id))
+            if parent_id is not None:
+                edges.append(_hierarchy_edge(node_type, node_id, parent_id, from_child=False))
+        if KIND_PARENT in kinds:
+            for child_id in (await session.execute(select(model.id).where(model.parent_id == node_id))).scalars():
+                edges.append(_hierarchy_edge(node_type, child_id, node_id, from_child=True))  # noqa: PERF401
         return edges
 
     async def _text_edges_out(self, session: AsyncSession, node: NodeKey, kinds: frozenset[str]) -> list[_RawEdge]:
@@ -808,6 +848,7 @@ class EntityLinkService:
                     broken_ref=None if target is not None else _broken_ref(link),
                     broken_project_id=link.target_project_id,
                     broken_target_type=link.target_type,
+                    identity=("text", link.id),
                 )
             )
         return edges
@@ -839,7 +880,14 @@ class EntityLinkService:
             if source == node:
                 continue
             edges.append(
-                _RawEdge(source, node, link.kind, label=link.display_text, via_journal_id=link.source_journal_id)
+                _RawEdge(
+                    source,
+                    node,
+                    link.kind,
+                    label=link.display_text,
+                    via_journal_id=link.source_journal_id,
+                    identity=("text", link.id),
+                )
             )
         return edges
 
@@ -882,6 +930,76 @@ class EntityLinkService:
         return {"nodes": nodes, "edges": edges}
 
 
+def _check_read(
+    direction: str,
+    depth: int,
+    kinds: Iterable[str] | None,
+    default_kinds: frozenset[str],
+    *,
+    hub_root: bool = False,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Validate a read; return the kinds to read and those asked for explicitly (which expand hubs).
+
+    A hub root (tag, component, metadata, version, sprint, user) may read
+    three hops deep; an issue or wiki page at most two.
+    """
+    if direction not in DIRECTIONS:
+        raise ValueError(f"direction must be one of {', '.join(DIRECTIONS)}")
+    if depth == ENTITY_LINKS_HUB_MAX_DEPTH and not hub_root:
+        raise ValueError(
+            f"depth={ENTITY_LINKS_HUB_MAX_DEPTH} is only for a tag, component, metadata, version, sprint or user root"
+        )
+    if depth not in range(1, ENTITY_LINKS_HUB_MAX_DEPTH + 1):
+        raise ValueError(f"depth must be 1 or 2 (up to {ENTITY_LINKS_HUB_MAX_DEPTH} from a hub root)")
+    explicit = frozenset() if kinds is None else frozenset(kinds)
+    wanted = explicit or default_kinds
+    unknown = wanted - ALL_KINDS
+    if unknown:
+        raise ValueError(f"Unknown link kind(s): {', '.join(sorted(unknown))}")
+    return wanted, explicit
+
+
+class _Walk:
+    """The nodes and edges a breadth-first read has taken so far, within its node limit."""
+
+    def __init__(self, root: NodeKey, limit: int) -> None:
+        self.root = root
+        self.limit = limit
+        self.graph = LinkGraph()
+        self.seen_nodes: set[NodeKey] = {root}
+        self.seen_edges: set[tuple[Any, ...]] = set()
+        self.order: list[NodeKey] = [root]
+
+    def take(self, edges: list[_RawEdge], hop: int, explicit: frozenset[str]) -> list[NodeKey]:
+        """Add the new nodes and edges of one hop; return the nodes to expand on the next."""
+        next_frontier: list[NodeKey] = []
+        for edge in edges:
+            for endpoint in (edge.source, edge.target):
+                if endpoint is None or endpoint in self.seen_nodes:
+                    continue
+                if len(self.seen_nodes) - 1 >= self.limit:
+                    self.graph.truncated = True
+                    break
+                self.seen_nodes.add(endpoint)
+                self.order.append(endpoint)
+                if _expands(endpoint, explicit):
+                    next_frontier.append(endpoint)
+            if (
+                (edge.source is None or edge.source in self.seen_nodes)
+                and (edge.target is None or edge.target in self.seen_nodes)
+                and _first_sighting(self.seen_edges, edge)
+            ):
+                self.graph.raw_edges.append((edge, hop == 0 and self.root in (edge.source, edge.target)))
+        return next_frontier
+
+
+def _expands(node: NodeKey, explicit: frozenset[str]) -> bool:
+    """Whether a neighbour is read again on the next hop: issues and pages, and hubs whose kind was asked for."""
+    if node[0] in ("issue", "wiki_page"):
+        return True
+    return node[0] in HUB_TYPES and HUB_KIND_OF[node[0]] in explicit
+
+
 class _CapReachedError(Exception):
     """Raised inside ``_resolve`` when a source holds more links than are stored."""
 
@@ -903,6 +1021,81 @@ class _RawEdge:
     broken_ref: str | None = None
     broken_project_id: int | None = None
     broken_target_type: str | None = None
+    # What the edge stands for, the same from either end: a relation, a text link or a parent/child
+    # pair. None for edges read from one end only (attachments, commits, pull requests).
+    identity: tuple[Any, ...] | None = None
+    # A repository commit matched from the source issue's ``commits`` metadata: the bare
+    # ``commit:<sha12>`` node shown instead when the reader may not see that commit.
+    fallback: NodeKey | None = None
+
+
+def _first_sighting(seen: set[tuple[Any, ...]], edge: _RawEdge) -> bool:
+    """Whether *edge* is met for the first time; the far end of an edge reads it again on the next hop."""
+    if edge.identity is None:
+        return True
+    if edge.identity in seen:
+        return False
+    seen.add(edge.identity)
+    return True
+
+
+async def _relation_edges(session: AsyncSession, node: NodeKey) -> list[_RawEdge]:
+    """The issue's relations, each labelled as seen from the issue."""
+    from specivo.services.relation_service import RELATION_TYPES
+
+    node_id = node[1]
+    rows = await session.execute(
+        select(IssueRelation).where(or_(IssueRelation.issue_from_id == node_id, IssueRelation.issue_to_id == node_id))
+    )
+    edges: list[_RawEdge] = []
+    for rel in rows.scalars():
+        label: str | None
+        if rel.issue_from_id == node_id:
+            other, label = rel.issue_to_id, rel.relation_type
+        else:
+            other, label = rel.issue_from_id, RELATION_TYPES[rel.relation_type]["sym"]
+        edges.append(
+            _RawEdge(node, ("issue", other), KIND_RELATION, relation_type=label, identity=(KIND_RELATION, rel.id))
+        )
+    return edges
+
+
+async def _hierarchy_edges(
+    session: AsyncSession, model: type[Issue] | type[WikiPage], node: NodeKey, kinds: frozenset[str]
+) -> list[_RawEdge]:
+    """The parent, then the children, of an issue or a wiki page (*model*), as *kinds* asks."""
+    node_type, node_id = node
+    edges: list[_RawEdge] = []
+    if KIND_PARENT in kinds:
+        parent_id = await session.scalar(select(model.parent_id).where(model.id == node_id))
+        if parent_id is not None:
+            edges.append(_hierarchy_edge(node_type, node_id, parent_id, from_child=True))
+    if KIND_CHILD in kinds:
+        children = (await session.execute(select(model.id).where(model.parent_id == node_id))).scalars()
+        edges.extend(_hierarchy_edge(node_type, child_id, node_id, from_child=False) for child_id in children)
+    return edges
+
+
+async def _attachment_edges(
+    session: AsyncSession, container_type: str, node: NodeKey, kinds: frozenset[str]
+) -> list[_RawEdge]:
+    """The attachments of the issue or page, when *kinds* asks for them."""
+    if KIND_ATTACHMENT not in kinds:
+        return []
+    stmt = select(Attachment.id).where(Attachment.container_type == container_type, Attachment.container_id == node[1])
+    return [
+        _RawEdge(node, ("attachment", attachment_id), KIND_ATTACHMENT)
+        for attachment_id in (await session.execute(stmt)).scalars()
+    ]
+
+
+def _hierarchy_edge(node_type: str, child_id: int, parent_id: int, *, from_child: bool) -> _RawEdge:
+    """The parent/child edge between two issues or two pages, read from the child (``parent``) or the parent."""
+    child, parent = (node_type, child_id), (node_type, parent_id)
+    identity = ("hierarchy", node_type, child_id, parent_id)
+    if from_child:
+        return _RawEdge(child, parent, KIND_PARENT, identity=identity)
+    return _RawEdge(parent, child, KIND_CHILD, identity=identity)
 
 
 @dataclass(slots=True)
@@ -913,6 +1106,10 @@ class LinkNode:
     status: str | None
     url: str | None
     project: str | None = None
+    # A hub (tag, component, metadata, version, sprint, user): how many items the reader may see point at it.
+    degree: int | None = None
+    # An issue or wiki page, when asked for: how many files are attached to it.
+    attachments: int | None = None
 
 
 @dataclass(slots=True)
@@ -936,6 +1133,8 @@ class LinkGraph:
     edges: list[LinkEdge] = field(default_factory=list)
     truncated: bool = False
     raw_edges: list[tuple[_RawEdge, bool]] = field(default_factory=list)
+    # Node ref -> node key, for the root and every node: lets a caller filter or format by key.
+    keys: dict[str, NodeKey] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -947,7 +1146,7 @@ class LinkGraph:
 
 
 def _node_dict(node: LinkNode) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         "ref": node.ref,
         "type": node.type,
         "title": node.title,
@@ -955,6 +1154,11 @@ def _node_dict(node: LinkNode) -> dict[str, Any]:
         "url": node.url,
         "project": node.project,
     }
+    if node.degree is not None:
+        out["degree"] = node.degree
+    if node.attachments is not None:
+        out["attachments"] = node.attachments
+    return out
 
 
 def _edge_dict(edge: LinkEdge) -> dict[str, Any]:
@@ -1006,6 +1210,7 @@ class _Reader:
         self._issue_projects: set[int] = set()
         self._wiki_projects: set[int] = set()
         self._scopes_loaded: set[int] = set()
+        self.hubs = HubReader(session, user)
 
     async def filter(self, edges: list[_RawEdge]) -> list[_RawEdge]:
         nodes: dict[str, set[int]] = defaultdict(set)
@@ -1021,9 +1226,24 @@ class _Reader:
         # Attachments and commits make the visibility of their containers matter too.
         await self._load_issues(nodes.get("issue", set()))
         await self._load_pages(nodes.get("wiki_page", set()))
-        await self._load_development("commit", nodes.get("commit", set()))
+        await self._load_development("commit", {i for i in nodes.get("commit", set()) if isinstance(i, int)})
         await self._load_development("pull_request", nodes.get("pull_request", set()))
+        await self.hubs.load((t, i) for t, ids in nodes.items() if t in HUB_TYPES for i in ids)
         await self._load_broken_scopes({e.broken_project_id for e in edges if e.broken_ref is not None})
+        # A hand-entered SHA never reveals a commit the reader could not see otherwise:
+        # unless a visible issue links that commit, it stays a bare SHA.
+        # Two typed prefixes of one visible commit name the same node: keep one edge.
+        merged: set[tuple[NodeKey | None, NodeKey | None]] = set()
+        kept: list[_RawEdge] = []
+        for edge in edges:
+            if edge.fallback is not None and edge.target is not None:
+                if not self.visible(edge.target):
+                    edge.target = edge.fallback
+                elif (edge.source, edge.target) in merged:
+                    continue
+                merged.add((edge.source, edge.target))
+            kept.append(edge)
+        edges = kept
         return [
             e
             for e in edges
@@ -1081,6 +1301,10 @@ class _Reader:
 
     def visible(self, node: NodeKey) -> bool:
         node_type, node_id = node
+        if node_type in HUB_TYPES:
+            return self.hubs.visible(node)
+        if node_type == "commit" and isinstance(node_id, str):
+            return True  # a hand-entered SHA: shown with the issue it is written on
         table = {
             "issue": self._issues,
             "wiki_page": self._pages,
@@ -1180,7 +1404,7 @@ class _Reader:
                 # admins only, and files on wiki comments are for admins only;
                 # an admin's project-limited key reaches only its projects.
                 admin = admin_reaches(self.user, journal_project_id)
-                if issue_id is None:
+                if issue_id is None:  # noqa: SIM108
                     ok = admin
                 else:
                     ok = self._issues.get(issue_id, False) and (not is_private or admin)
@@ -1221,11 +1445,22 @@ class _Reader:
         for item_id in ids:
             table.setdefault(item_id, False)
 
-    async def describe(self, graph: LinkGraph, root: NodeKey, nodes: list[NodeKey]) -> None:
+    async def describe(
+        self, graph: LinkGraph, root: NodeKey, nodes: list[NodeKey], *, count_attachments: bool = False
+    ) -> None:
         """Fill in the nodes (in the order found) and edges of *graph* from its raw edges."""
         refs = await self._describe_nodes(set(nodes))
+        await self.hubs.load([root])
+        refs.update(await self.hubs.describe(nodes))
+        for hub, degree in (await self.hubs.degrees(n for n in nodes if n[0] in HUB_TYPES)).items():
+            if hub in refs:
+                refs[hub].degree = degree
+        if count_attachments:
+            for item, count in (await attachment_counts(self.session, self.user, refs)).items():
+                refs[item].attachments = count
         graph.root = refs.get(root)
         graph.nodes = [refs[n] for n in nodes if n != root and n in refs]
+        graph.keys = {node.ref: key for key, node in refs.items()}
         journal_refs = await self._journal_refs({e.via_journal_id for e, _ in graph.raw_edges if e.via_journal_id})
         broken_projects = await self._project_keys({e.broken_project_id for e, _ in graph.raw_edges if e.broken_ref})
         root_ref = graph.root.ref if graph.root else None
@@ -1301,12 +1536,13 @@ class _Reader:
                     None,
                     f"/api/v1/attachments/{attachment_id}/download/",
                 )
-        if by_type["commit"] or by_type["pull_request"]:
+        commit_ids = {i for i in by_type["commit"] if isinstance(i, int)}
+        if commit_ids or by_type["pull_request"]:
             from specivo.models.repository import PullRequest, RepositoryCommit
 
             for commit_id, sha, message, url in await self.session.execute(
                 select(RepositoryCommit.id, RepositoryCommit.sha, RepositoryCommit.message, RepositoryCommit.url).where(
-                    RepositoryCommit.id.in_(by_type["commit"])
+                    RepositoryCommit.id.in_(commit_ids)
                 )
             ):
                 first = (message or "").splitlines()[0] if message else ""
@@ -1358,8 +1594,14 @@ class _Reader:
         }
 
 
-async def resolve_root(session: AsyncSession, user: User, ref: str) -> NodeKey:
-    """Resolve an issue (``ACME-12``, ``issue:ACME-12``) or wiki page (``wiki:ACME/slug``) ref *user* may see.
+async def resolve_root(session: AsyncSession, user: User, ref: str, *, hubs: bool = False) -> NodeKey:
+    """Resolve an issue (``ACME-12``, ``issue:ACME-12``), wiki page (``wiki:ACME/slug``) or hub ref *user* may see.
+
+    Hub refs (``tag:ACME/<name>``, ``component:ACME/<value>``,
+    ``metadata:ACME/<key>/<value>``, ``version:ACME/<name>``,
+    ``sprint:ACME/<name>``, ``user:<login>``) are resolved by
+    ``entity_link_nodes.resolve_hub_root`` when *hubs* is true; otherwise
+    they are not found, so an issue or page route never serves a hub.
 
     An issue the user may not see is not found (404), as everywhere else; a
     wiki the user may not read is refused like the wiki pages themselves.
@@ -1371,6 +1613,10 @@ async def resolve_root(session: AsyncSession, user: User, ref: str) -> NodeKey:
     from specivo.services.wiki_service import WikiService
 
     ref = ref.strip()
+    if is_hub_ref(ref):
+        if not hubs:
+            raise NotFoundError(f"Issue {ref!r} not found")
+        return await resolve_hub_root(session, user, ref)
     if ref.lower().startswith("wiki:"):
         rest = ref[len("wiki:") :]
         if "/" not in rest:

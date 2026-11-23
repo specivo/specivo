@@ -43,7 +43,7 @@ class GroupPolicyService:
             await session.flush()
         except IntegrityError:
             await session.rollback()
-            raise ConflictError(f"Agent group '{name}' already exists")
+            raise ConflictError(f"Agent group '{name}' already exists")  # noqa: B904
         logger.info("Created agent group %d: %s", group.id, name)
         return group
 
@@ -92,7 +92,7 @@ class GroupPolicyService:
             await session.flush()
         except IntegrityError:
             await session.rollback()
-            raise ConflictError("User is already a member of this group")
+            raise ConflictError("User is already a member of this group")  # noqa: B904
         logger.info("Added user %d to agent group %d", user_id, group_id)
         return membership
 

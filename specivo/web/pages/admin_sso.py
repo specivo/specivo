@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ from specivo.services.scim.config_service import ScimConfigService
 from specivo.services.sso.auth_settings import update_auth_settings
 from specivo.services.sso.flow import backchannel_logout_uri_for, redirect_uri_for
 from specivo.services.sso.provider_service import ProviderService
-from specivo.web.deps import get_templates
+from specivo.web.deps import get_templates, redirect_to
 from specivo.web.pages.admin import require_admin, require_admin_session
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
@@ -141,4 +141,4 @@ async def admin_settings_authentication(
         # is dropped and the rest of the card is still saved.
         await update_auth_settings(db, AuthSettingsUpdate(**flags), actor=user)
     await db.commit()
-    return RedirectResponse("/admin/settings/#authentication", status_code=303)
+    return redirect_to("/admin/settings/#authentication", status_code=303)

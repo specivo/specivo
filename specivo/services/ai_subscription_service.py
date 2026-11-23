@@ -36,6 +36,7 @@ from specivo.core.ai_subscriptions import (
     BILLING_PERIODS,
     CUSTOM_PLAN_KEY,
     Coverage,
+    PlanPreset,
     SeatCharge,
     get_preset,
     is_plan_key,
@@ -136,7 +137,7 @@ class AiToolService:
             .on_conflict_do_nothing(index_elements=["slug"])
         )
         tool = await session.get(AiTool, normalized)
-        assert tool is not None
+        assert tool is not None  # noqa: S101
         logger.info("Added AI tool %r on first use (inactive)", normalized)
         return tool
 
@@ -519,104 +520,20 @@ class AiSubscriptionService:
 
         A new subscription takes missing values from its preset. Every check
         that reads only the request runs on what changed; the period and
-        the minor units are checked on the result.
+        the minor units are checked on the result. The fields are checked in
+        a fixed order, so the first invalid one is the one reported.
         """
-        out: dict[str, Any] = {}
-        creating = current is None
-
-        plan_key = changes.get("plan_key")
-        if plan_key is not None or creating:
-            key = str(plan_key or CUSTOM_PLAN_KEY).strip().lower()
-            if not is_plan_key(key):
-                raise _invalid("Choose a plan from the list, or custom", "plan_key")
-            out["plan_key"] = key
-        preset = get_preset(out.get("plan_key")) if creating else None
-
-        def pick(name: str, preset_value: Any = None) -> Any:
-            value = changes.get(name)
-            if isinstance(value, str) and not value.strip() and name not in ("notes",):
-                value = None
-            if value is None and creating:
-                return preset_value
-            return value
-
-        provider_raw = pick("provider", preset.provider if preset else None)
-        if provider_raw is not None or creating:
-            provider = normalize_provider(str(provider_raw)) if provider_raw else None
-            if provider is None or not PROVIDER_RE.match(provider):
-                raise _invalid("Enter the provider, for example anthropic or openai", "provider")
-            out["provider"] = provider
-
-        name_raw = pick("plan_name", preset.name if preset else None)
-        if name_raw is not None or creating:
-            name = str(name_raw or "").strip()
-            if not name or len(name) > PLAN_NAME_MAX_LENGTH:
-                raise _invalid(f"Enter a plan name of at most {PLAN_NAME_MAX_LENGTH} characters", "plan_name")
-            out["plan_name"] = name
-
-        if "tool_slugs" in changes or creating:
-            raw_tools = changes.get("tool_slugs")
-            if raw_tools is None and creating and preset is not None:
-                raw_tools = list(preset.tool_slugs)
-            slugs = parse_tool_slugs(raw_tools)
-            if slugs:
-                known = set((await session.execute(select(AiTool.slug).where(AiTool.slug.in_(slugs)))).scalars().all())
-                missing = [s for s in slugs if s not in known]
-                if missing:
-                    raise _invalid(f"Unknown tools: {', '.join(missing)}", "tool_slugs", "ai_subscription_unknown_tool")
-            out["tool_slugs"] = slugs
-
-        amount_raw = pick("amount", preset.amount if preset else None)
-        if amount_raw is not None or creating:
-            if amount_raw is None:
-                raise _invalid("Enter the fee", "amount")
-            out["amount"] = parse_amount(amount_raw)
-
-        currency_raw = pick("currency", preset.currency if preset else None)
-        if currency_raw is not None or creating:
-            if not currency_raw:
-                raise _invalid("Choose a currency", "currency")
-            changed_currency = current is None or str(currency_raw).strip().upper() != current.currency_code
-            if changed_currency:
-                currency = await _currencies.require_selectable(session, str(currency_raw), field="currency")
-                out["currency_code"] = currency.code
-
-        period_raw = pick("billing_period", preset.billing_period if preset else "month")
-        if period_raw is not None or creating:
-            period = str(period_raw or "").strip().lower()
-            if period not in BILLING_PERIODS:
-                raise _invalid("The billing period is month or year", "billing_period")
-            out["billing_period"] = period
-
-        if "starts_on" in changes or creating:
-            starts_on = changes.get("starts_on")
-            if not isinstance(starts_on, date) or isinstance(starts_on, datetime):
-                raise _invalid("Enter the first day of the subscription", "starts_on")
-            out["starts_on"] = starts_on
-        if "ends_on" in changes:
-            ends_on = changes.get("ends_on")
-            if ends_on is not None and (not isinstance(ends_on, date) or isinstance(ends_on, datetime)):
-                raise _invalid("Enter the last day of the subscription, or leave it empty", "ends_on")
-            out["ends_on"] = ends_on
-
-        if "notes" in changes:
-            notes = (changes.get("notes") or "").strip()
-            if len(notes) > NOTES_MAX_LENGTH:
-                raise _invalid(f"Notes are at most {NOTES_MAX_LENGTH} characters", "notes")
-            out["notes"] = notes or None
-
-        # Checks on the resulting row.
-        final_amount: Decimal = out.get("amount", current.amount if current else None)  # type: ignore[assignment]
-        final_currency: str = out.get("currency_code", current.currency_code if current else "")
-        if ("amount" in out or "currency_code" in out) and final_amount is not None and final_currency:
-            try:
-                check_minor_units(final_amount, final_currency)
-            except MoneyError as exc:
-                raise _invalid(str(exc), "amount") from None
-        final_start: date | None = out.get("starts_on", current.starts_on if current else None)
-        final_end: date | None = out.get("ends_on", current.ends_on if current else None)
-        if final_start is not None and final_end is not None and final_end < final_start:
-            raise _invalid("The last day cannot be before the first day", "ends_on")
+        out = _v_plan(changes, creating=current is None)
+        req = _SubscriptionRequest(changes, current, get_preset(out.get("plan_key")) if current is None else None)
+        out |= _v_provider(req)
+        out |= _v_plan_name(req)
+        out |= await _v_tools(session, req)
+        out |= _v_amount(req)
+        out |= await _v_currency(session, req)
+        out |= _v_period(req)
+        out |= _v_dates(req)
+        out |= _v_notes(req)
+        _check_result(out, current)
         return out
 
     # -- coverage and seat cost ---------------------------------------------------
@@ -711,3 +628,149 @@ class AiSubscriptionService:
             )
         except Exception:
             logger.exception("Failed to write the %s audit event", event)
+
+
+# ---------------------------------------------------------------------------
+# Validation of a subscription change
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class _SubscriptionRequest:
+    """A requested change: the new values, the stored row (``None`` when creating) and the preset."""
+
+    changes: Mapping[str, Any]
+    current: AiSubscription | None
+    preset: PlanPreset | None
+
+    @property
+    def creating(self) -> bool:
+        return self.current is None
+
+    def pick(self, name: str, preset_value: Any = None) -> Any:
+        """The requested *name* (blank text counts as missing); a new subscription falls back to *preset_value*."""
+        value = self.changes.get(name)
+        if isinstance(value, str) and not value.strip():
+            value = None
+        if value is None and self.creating:
+            return preset_value
+        return value
+
+
+def _is_plain_date(value: Any) -> bool:
+    return isinstance(value, date) and not isinstance(value, datetime)
+
+
+def _v_plan(changes: Mapping[str, Any], *, creating: bool) -> dict[str, Any]:
+    plan_key = changes.get("plan_key")
+    if plan_key is None and not creating:
+        return {}
+    key = str(plan_key or CUSTOM_PLAN_KEY).strip().lower()
+    if not is_plan_key(key):
+        raise _invalid("Choose a plan from the list, or custom", "plan_key")
+    return {"plan_key": key}
+
+
+def _v_provider(req: _SubscriptionRequest) -> dict[str, Any]:
+    raw = req.pick("provider", req.preset.provider if req.preset else None)
+    if raw is None and not req.creating:
+        return {}
+    provider = normalize_provider(str(raw)) if raw else None
+    if provider is None or not PROVIDER_RE.match(provider):
+        raise _invalid("Enter the provider, for example anthropic or openai", "provider")
+    return {"provider": provider}
+
+
+def _v_plan_name(req: _SubscriptionRequest) -> dict[str, Any]:
+    raw = req.pick("plan_name", req.preset.name if req.preset else None)
+    if raw is None and not req.creating:
+        return {}
+    name = str(raw or "").strip()
+    if not name or len(name) > PLAN_NAME_MAX_LENGTH:
+        raise _invalid(f"Enter a plan name of at most {PLAN_NAME_MAX_LENGTH} characters", "plan_name")
+    return {"plan_name": name}
+
+
+async def _v_tools(session: AsyncSession, req: _SubscriptionRequest) -> dict[str, Any]:
+    if "tool_slugs" not in req.changes and not req.creating:
+        return {}
+    raw_tools = req.changes.get("tool_slugs")
+    if raw_tools is None and req.creating and req.preset is not None:
+        raw_tools = list(req.preset.tool_slugs)
+    slugs = parse_tool_slugs(raw_tools)
+    if slugs:
+        known = set((await session.execute(select(AiTool.slug).where(AiTool.slug.in_(slugs)))).scalars().all())
+        missing = [s for s in slugs if s not in known]
+        if missing:
+            raise _invalid(f"Unknown tools: {', '.join(missing)}", "tool_slugs", "ai_subscription_unknown_tool")
+    return {"tool_slugs": slugs}
+
+
+def _v_amount(req: _SubscriptionRequest) -> dict[str, Any]:
+    raw = req.pick("amount", req.preset.amount if req.preset else None)
+    if raw is None and not req.creating:
+        return {}
+    if raw is None:
+        raise _invalid("Enter the fee", "amount")
+    return {"amount": parse_amount(raw)}
+
+
+async def _v_currency(session: AsyncSession, req: _SubscriptionRequest) -> dict[str, Any]:
+    raw = req.pick("currency", req.preset.currency if req.preset else None)
+    if raw is None and not req.creating:
+        return {}
+    if not raw:
+        raise _invalid("Choose a currency", "currency")
+    if req.current is not None and str(raw).strip().upper() == req.current.currency_code:
+        return {}
+    currency = await _currencies.require_selectable(session, str(raw), field="currency")
+    return {"currency_code": currency.code}
+
+
+def _v_period(req: _SubscriptionRequest) -> dict[str, Any]:
+    raw = req.pick("billing_period", req.preset.billing_period if req.preset else "month")
+    if raw is None and not req.creating:
+        return {}
+    period = str(raw or "").strip().lower()
+    if period not in BILLING_PERIODS:
+        raise _invalid("The billing period is month or year", "billing_period")
+    return {"billing_period": period}
+
+
+def _v_dates(req: _SubscriptionRequest) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if "starts_on" in req.changes or req.creating:
+        starts_on = req.changes.get("starts_on")
+        if not _is_plain_date(starts_on):
+            raise _invalid("Enter the first day of the subscription", "starts_on")
+        out["starts_on"] = starts_on
+    if "ends_on" in req.changes:
+        ends_on = req.changes.get("ends_on")
+        if ends_on is not None and not _is_plain_date(ends_on):
+            raise _invalid("Enter the last day of the subscription, or leave it empty", "ends_on")
+        out["ends_on"] = ends_on
+    return out
+
+
+def _v_notes(req: _SubscriptionRequest) -> dict[str, Any]:
+    if "notes" not in req.changes:
+        return {}
+    notes = (req.changes.get("notes") or "").strip()
+    if len(notes) > NOTES_MAX_LENGTH:
+        raise _invalid(f"Notes are at most {NOTES_MAX_LENGTH} characters", "notes")
+    return {"notes": notes or None}
+
+
+def _check_result(out: Mapping[str, Any], current: AiSubscription | None) -> None:
+    """Checks on the row the change results in: the fee's minor units and the order of the two days."""
+    final_amount: Decimal | None = out.get("amount", current.amount if current else None)
+    final_currency: str = out.get("currency_code", current.currency_code if current else "")
+    if ("amount" in out or "currency_code" in out) and final_amount is not None and final_currency:
+        try:
+            check_minor_units(final_amount, final_currency)
+        except MoneyError as exc:
+            raise _invalid(str(exc), "amount") from None
+    final_start: date | None = out.get("starts_on", current.starts_on if current else None)
+    final_end: date | None = out.get("ends_on", current.ends_on if current else None)
+    if final_start is not None and final_end is not None and final_end < final_start:
+        raise _invalid("The last day cannot be before the first day", "ends_on")

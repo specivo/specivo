@@ -281,7 +281,8 @@ async def test_oversized_request_id_and_user_agent_keep_the_event(
     [member] = [r for r in members if r.details.get("action") == "user_created"]
     [failure] = await _rows(db_session, AuditEvent.AUTH_FAILURE)
     for row in (member, failure):
-        assert row.request_id == _LONG_REQUEST_ID[:36]
+        # An oversized X-Request-ID is replaced by a fresh UUID4 before it is stored.
+        assert row.request_id != _LONG_REQUEST_ID[:36] and len(row.request_id) == 36
         assert row.user_agent is not None and len(row.user_agent) == 512
 
 
@@ -298,7 +299,8 @@ async def test_login_survives_oversized_request_id_and_user_agent(
 
     [row] = await _rows(db_session, AuditEvent.LOGIN_SUCCESS)
     assert row.user_id == user.id
-    assert row.request_id == _LONG_REQUEST_ID[:36]
+    # An oversized X-Request-ID is replaced by a fresh UUID4 before it is stored.
+    assert row.request_id != _LONG_REQUEST_ID[:36] and len(row.request_id) == 36
     assert row.user_agent is not None and len(row.user_agent) == 512
 
 
@@ -633,23 +635,26 @@ async def _mcp_http(db_engine):
     from specivo.core.redis import get_redis
     from specivo.main import create_app
     from specivo.mcp.mount import get_mcp_session_manager
+    from specivo.testing.conftest_base import global_engine_on
 
-    app = create_app()
-    manager = get_mcp_session_manager()
-    assert manager is not None
-    # The throttle remembers refusals for a minute, across tests.
-    redis = await get_redis()
-    async for key in redis.scan_iter(match="audit:auth_failure:*"):
-        await redis.delete(key)
-    try:
-        async with manager.run():
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
-                yield http
-    finally:
-        async with db_engine.begin() as conn:
-            await conn.execute(
-                delete(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AUTH_FAILURE.value)
-            )
+    # Opening a session checks the key on the global engine: use this loop's.
+    with global_engine_on(db_engine):
+        app = create_app()
+        manager = get_mcp_session_manager()
+        assert manager is not None
+        # The throttle remembers refusals for a minute, across tests.
+        redis = await get_redis()
+        async for key in redis.scan_iter(match="audit:auth_failure:*"):
+            await redis.delete(key)
+        try:
+            async with manager.run():
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+                    yield http
+        finally:
+            async with db_engine.begin() as conn:
+                await conn.execute(
+                    delete(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AUTH_FAILURE.value)
+                )
 
 
 async def _mcp_initialize(http: AsyncClient, token: str | None) -> Any:
@@ -664,9 +669,9 @@ async def _mcp_initialize(http: AsyncClient, token: str | None) -> Any:
     )
 
 
-async def _mcp_whoami(http: AsyncClient, token: str) -> dict[str, Any]:
-    """Open a session with *token* and call a tool; return the tool's result."""
-    from tests.integration.test_mcp_protocol import _ACCEPT, _sse_json
+async def _mcp_open(http: AsyncClient, token: str) -> dict[str, str]:
+    """Open a session with *token*; return the headers that use it."""
+    from tests.integration.test_mcp_protocol import _ACCEPT
 
     init = await _mcp_initialize(http, token)
     assert init.status_code == 200, init.text
@@ -678,6 +683,15 @@ async def _mcp_whoami(http: AsyncClient, token: str) -> dict[str, Any]:
         "Mcp-Protocol-Version": "2025-03-26",
     }
     await http.post("/mcp/", headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    return headers
+
+
+async def _mcp_whoami(http: AsyncClient, token: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """Call a tool in the session *headers* name (a new one with *token* if none); return its result."""
+    from tests.integration.test_mcp_protocol import _sse_json
+
+    if headers is None:
+        headers = await _mcp_open(http, token)
     called = await http.post(
         "/mcp/",
         headers=headers,
@@ -688,10 +702,11 @@ async def _mcp_whoami(http: AsyncClient, token: str) -> dict[str, Any]:
 
 @pytest.mark.serial
 async def test_unknown_key_on_mcp_writes_auth_failure(db_engine) -> None:
+    """An unknown key is refused when it tries to open a session, before any tool call."""
     unknown = "spv_" + "q" * 43
     async with _mcp_http(db_engine) as http:
-        result = await _mcp_whoami(http, unknown)
-        assert result["isError"] is True
+        resp = await _mcp_initialize(http, unknown)
+        assert resp.status_code == 401, resp.text
 
         [row] = await _refused_mcp_rows(db_engine)
         assert row.details == {"reason": "api_key_invalid", "source": "mcp"}
@@ -735,7 +750,7 @@ async def test_mcp_without_credentials_writes_nothing(db_engine) -> None:
 async def test_repeated_mcp_refusals_write_one_row(db_engine) -> None:
     async with _mcp_http(db_engine) as http:
         for _ in range(3):
-            await _mcp_whoami(http, "spv_" + "r" * 43)
+            assert (await _mcp_initialize(http, "spv_" + "r" * 43)).status_code == 401
 
         assert len(await _refused_mcp_rows(db_engine)) == 1
 
@@ -758,12 +773,14 @@ async def test_key_deactivated_mid_session_writes_auth_failure(mcp_key, db_engin
 
     raw_key, _user_id, key_id = mcp_key
     async with _mcp_http(db_engine) as http:
-        assert (await _mcp_whoami(http, raw_key))["isError"] is False
+        session = await _mcp_open(http, raw_key)
+        assert (await _mcp_whoami(http, raw_key, session))["isError"] is False
         assert await _refused_mcp_rows(db_engine) == []
         async with db_engine.begin() as conn:
             await conn.execute(update(ApiKey).where(ApiKey.id == key_id).values(is_active=False))
 
-        assert (await _mcp_whoami(http, raw_key))["isError"] is True
+        # The same session: every tool call re-checks the key.
+        assert (await _mcp_whoami(http, raw_key, session))["isError"] is True
 
         [row] = await _refused_mcp_rows(db_engine)
         assert row.details == {"reason": "api_key_inactive", "source": "mcp"}

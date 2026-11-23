@@ -20,8 +20,8 @@ Four role permissions control AI usage in a project:
 |---|---|
 | **View AI usage** | The project's AI usage list and an issue's AI usage tab. With the role's *AI usage visibility* set to **All AI usage** you see everyone's entries; with **Own AI usage**, only your own. |
 | **Log AI usage** | Logging your own usage in the project, and moving your entries into it. |
-| **Edit/exclude any AI usage entries** | Editing, excluding and deleting anyone's entries in the project. |
-| **Log AI usage on behalf of other members** | Logging usage in the name of another active member of the project. |
+| **Edit any AI usage entry** | Editing, excluding and deleting anyone's entries in the project. |
+| **Log AI usage for others** | Logging usage in the name of another active member of the project. |
 
 Whatever your roles, you **always see the usage logged in your own name**, including who logged it,
 on **My AI usage**. You can always edit and exclude your own entries. Entries on issues you cannot
@@ -79,7 +79,9 @@ For totals per person, model, tool, issue or week, with subscription fees includ
 ## On an issue
 
 An issue's **AI usage** tab sits next to the **Time** tab and answers "what did this feature cost
-in AI?". It loads when you open it and shows:
+in AI?". When usage is logged, the tab's label shows how many entries you can see, counted the way
+the tab counts them (sub-issues included, excluded entries left out). The tab loads when you open
+it and shows:
 
 - **Headline numbers**: the spend, the API-equivalent value, the tokens and entries, how many
   people used AI on the issue, and the first and last day with usage.
@@ -169,7 +171,7 @@ usage. On My AI usage you choose the project, or leave it **unassigned**.
 | Field | What to enter |
 |---|---|
 | **Issue** | Optional. The key of the issue the work was for, such as `APP-12`. |
-| **On behalf of** | Only with *Log AI usage on behalf of other members*: the login of the member whose usage it is. Leave empty for your own. |
+| **On behalf of** | Only with *Log AI usage for others*: the login of the member whose usage it is. Leave empty for your own. |
 | **Tool** | The AI tool you used. |
 | **Model** | The model name. Suggestions come from the price table; another name is accepted too, but it is priced only when a price exists for it. |
 | **Provider** | Optional. Leave it empty to use the tool's provider. |

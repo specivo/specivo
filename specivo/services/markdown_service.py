@@ -22,7 +22,9 @@ Pipeline:
              never touched; issue refs and URLs stay out of link text too)
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
-      -> nh3.clean(...)            HTML sanitizer with our allowlist
+      -> nh3.clean(...)            HTML sanitizer with our allowlist; behind a
+                                   STEALTH_PREFIX it also prefixes root-relative
+                                   href/src values (issue, wiki and attachment links)
       -> markupsafe.Markup
 
 ``markdown.markdown`` also runs under a cooperative deadline, and a render
@@ -35,21 +37,24 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import unquote, urlsplit
 from xml.etree.ElementTree import Element
 
 import markdown as _md
 import markupsafe
 import nh3
-from markdown.extensions import Extension  # type: ignore[import-untyped]
-from markdown.extensions.attr_list import get_attrs_and_remainder  # type: ignore[import-untyped]
-from markdown.extensions.fenced_code import FencedBlockPreprocessor  # type: ignore[import-untyped]
-from markdown.extensions.tables import TableExtension, TableProcessor  # type: ignore[import-untyped]
-from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
-from markdown.preprocessors import Preprocessor  # type: ignore[import-untyped]
-from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
-from markdown.util import HTML_PLACEHOLDER_RE, AtomicString  # type: ignore[import-untyped]
+from markdown.extensions import Extension
+from markdown.extensions.attr_list import get_attrs_and_remainder
+from markdown.extensions.fenced_code import FencedBlockPreprocessor
+from markdown.extensions.tables import TableExtension, TableProcessor
+from markdown.inlinepatterns import InlineProcessor
+from markdown.preprocessors import Preprocessor
+from markdown.treeprocessors import InlineProcessor as InlineTreeprocessor
+from markdown.treeprocessors import Treeprocessor
+from markdown.util import HTML_PLACEHOLDER_RE, AtomicString
 
+from specivo.core.app_url import base_path, prefixed, strip_base
 from specivo.core.i18n import gettext as _
 from specivo.services import markdown_budget
 from specivo.services.markdown_budget import (
@@ -163,7 +168,7 @@ class _MermaidPreprocessor(Preprocessor):
 
 
 class _MermaidExtension(Extension):
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         # Just above fenced_code (25), so mermaid fences are taken first.
         md.preprocessors.register(_MermaidPreprocessor(md), "mermaid_fences", 26)
 
@@ -181,14 +186,14 @@ class _WikiTableProcessor(TableProcessor):
         masked = _WIKI_LINK_RE.sub(lambda m: m.group(0).replace("|", "\x00"), row)
         cells = []
         pos = 0
-        for cell in super()._split(masked):
+        for cell in super()._split(masked):  # type: ignore[misc]  # private, not in the stubs
             cells.append(row[pos : pos + len(cell)])
             pos += len(cell) + 1
         return cells
 
 
 class _WikiTableExtension(TableExtension):
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         super().extendMarkdown(md)
         # Replaces the stock processor under its own name and priority.
         md.parser.blockprocessors.register(_WikiTableProcessor(md.parser, self.getConfigs()), "table", 75)
@@ -296,7 +301,7 @@ class _BareUrlInlineProcessor(InlineProcessor):
 
     def _inside_raw_anchor(self, data: str, pos: int) -> bool:
         """Whether *pos* in *data* follows a raw inline ``<a ...>`` not closed before it."""
-        stash = self.md.treeprocessors["inline"].stashed_nodes
+        stash = cast("InlineTreeprocessor", self.md.treeprocessors["inline"]).stashed_nodes
         if stash is not self._stash_seen:
             self._stash_seen = stash
             self._inside_anchor_after.clear()
@@ -319,7 +324,7 @@ class _BareUrlInlineProcessor(InlineProcessor):
             known[key] = inside
         return inside
 
-    def handleMatch(  # noqa: N802 - Python-Markdown API
+    def handleMatch(  # type: ignore[override]  # as in the stubs  # noqa: N802
         self, m: re.Match[str], data: str
     ) -> tuple[Element | None, int | None, int | None]:
         url = _trim_bare_url(m.group(1))
@@ -333,7 +338,7 @@ class _BareUrlInlineProcessor(InlineProcessor):
 
 
 class _BareUrlExtension(Extension):
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         # Below links (160), ``<url>`` autolinks (120), inline HTML (90) and
         # entities (80), so those are settled first; above emphasis (60), so
         # ``*`` and ``_`` in a URL stay part of it.
@@ -355,9 +360,9 @@ _MD_EXTENSION_CONFIGS = {
 # Compiled once at import time
 # A URL scheme (``https:``, ``mailto:``) at the start of a link target.
 _URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
-# Issue reference: PROJ-123, but not right after ``[``, ``(`` or ``/`` (a link
-# label, a link target, a URL path).
-_ISSUE_REF_PATTERN = r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b"
+# Issue reference: PROJ-123, but not right after ``[``, ``](`` or ``/`` (a link
+# label, a link target, a URL path). Prose in parentheses, "(PROJ-123)", is linked.
+_ISSUE_REF_PATTERN = r"(?<!\[)(?<!\]\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b"
 _ISSUE_REF_RE = re.compile(_ISSUE_REF_PATTERN)
 # What Python-Markdown leaves in text for a backslash escape it has read.
 _ESCAPED_CHAR_RE = re.compile("\x02(\\d+)\x03")
@@ -384,6 +389,24 @@ def find_issue_ref_candidates(text: str | None) -> set[str]:
     return {m.group(1) for m in _ISSUE_REF_RE.finditer(text)}
 
 
+def _prefix_root_relative(base: str):
+    """An nh3 ``attribute_filter`` giving root-relative ``href``/``src`` values the URL prefix.
+
+    Issue and wiki links, attachment URLs and root-relative links typed by
+    hand (``[x](/issue/ACME-1/)``) all leave the renderer as application
+    paths; behind a stealth prefix this is where they get it. A value that
+    already carries it (a link copied from the address bar) is left alone.
+    Applied after sanitizing, so it also covers raw HTML in the source.
+    """
+
+    def _filter(_tag: str, attribute: str, value: str) -> str:
+        if attribute in ("href", "src") and value.startswith("/") and not value.startswith(("//", "/\\")):
+            return prefixed(value)
+        return value
+
+    return _filter if base else None
+
+
 def _sanitize_html(html_str: str) -> str:
     return nh3.clean(
         html_str,
@@ -391,6 +414,7 @@ def _sanitize_html(html_str: str) -> str:
         attributes=_ALLOWED_ATTRIBUTES,
         link_rel="noopener noreferrer",
         url_schemes={"http", "https", "mailto"},
+        attribute_filter=_prefix_root_relative(base_path()),
     )
 
 
@@ -418,7 +442,7 @@ def _render_markdown(source: str, extensions: list, issue_refs: int = 0) -> mark
         except RecursionError:
             hazard = "recursion"
         else:
-            return markupsafe.Markup(_sanitize_html(html))
+            return markupsafe.Markup(_sanitize_html(html))  # noqa: S704
         finally:
             charge_render(markdown_budget._cpu_clock() - started)
     logger.warning("Markdown shown as plain text (%s, %d characters)", hazard, len(source))
@@ -478,7 +502,7 @@ class _AttachmentRefExtension(Extension):
         super().__init__()
         self.attachment_map = attachment_map
 
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         # Below "inline" (20), so links and images exist when it runs.
         md.treeprocessors.register(_AttachmentRefTreeprocessor(md, self.attachment_map), "attachment_refs", 5)
 
@@ -499,8 +523,10 @@ class _IssueRefInlineProcessor(InlineProcessor):
         super().__init__(_ISSUE_REF_PATTERN, md)
         self.known_issue_refs = known_issue_refs
 
-    def handleMatch(  # noqa: N802 - Python-Markdown API
-        self, m: re.Match[str], data: str
+    def handleMatch(  # type: ignore[override]  # as in the stubs  # noqa: N802
+        self,
+        m: re.Match[str],
+        data: str,  # noqa: ARG002
     ) -> tuple[Element | None, int | None, int | None]:
         ref = m.group(1)
         if self.known_issue_refs is not None and ref not in self.known_issue_refs:
@@ -515,7 +541,7 @@ class _IssueRefExtension(Extension):
         super().__init__()
         self.known_issue_refs = known_issue_refs
 
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         # Below every built-in pattern (the lowest is emphasis at 50), so links,
         # autolinks, inline HTML and emphasis are matched first and a key in
         # link text is seen with an ``a`` ancestor.
@@ -549,8 +575,10 @@ class _WikiLinkInlineProcessor(InlineProcessor):
         """Return *text* with its escapes and code spans read back as the author typed them."""
         return _ESCAPED_CHAR_RE.sub(lambda e: "\\" + chr(int(e.group(1))), self.unescape(text))
 
-    def handleMatch(  # noqa: N802 - Python-Markdown API
-        self, m: re.Match[str], data: str
+    def handleMatch(  # type: ignore[override]  # as in the stubs  # noqa: N802
+        self,
+        m: re.Match[str],
+        data: str,  # noqa: ARG002
     ) -> tuple[Element | None, int | None, int | None]:
         target = m.group(1).strip()
         label = (m.group(2) or "").strip() or target
@@ -578,7 +606,7 @@ class _WikiLinkExtension(Extension):
         self.found = found
         self.made = made
 
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         # Below backticks (190) and escapes (180), so code spans and escaped
         # brackets are settled first; above references (170) and links (160),
         # which would otherwise read ``[[Page]]`` as bracketed text.
@@ -634,7 +662,9 @@ def classify_link_target(target: str, instance_origin: str | None = None) -> Fou
         origin = _origin(target.strip())
         if origin is None or instance_origin is None or origin != _origin(instance_origin):
             return None
-    path = unquote(parts.path)
+    # A link copied from the address bar of an instance behind a stealth
+    # prefix carries it; the routes below are matched without it.
+    path = strip_base(unquote(parts.path))
     if m := _ISSUE_PATH_RE.match(path):
         return FoundLink("issue", m.group(1))
     if m := _WIKI_PATH_RE.match(path):
@@ -680,7 +710,7 @@ class _LinkCollectorExtension(Extension):
         self.skip = skip
         self.instance_origin = instance_origin
 
-    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # Python-Markdown API  # noqa: N802
         # Below "inline" (20), so wiki links and issue refs are elements by now.
         md.treeprocessors.register(_LinkCollector(md, self.found, self.skip, self.instance_origin), "link_collector", 4)
 

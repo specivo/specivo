@@ -27,7 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.config import get_settings
 from specivo.models.user import User
 from specivo.services.auth_service import _make_access_token
-from specivo.web.pages.ai_spend_reports import DRILL_MAX_ROWS, SESSIONS
+from specivo.web.pages.ai_spend_reports.drill import DRILL_MAX_ROWS
+from specivo.web.pages.ai_spend_reports.form import SESSIONS
 from tests.services.test_ai_spend_reports import World, build_world, entry
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]

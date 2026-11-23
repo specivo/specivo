@@ -522,10 +522,20 @@ async def activity_groups(
     if not scope.project_ids:
         return []
     who = who if who in ACTIVITY_FILTERS else "all"
-    events: list[ActivityEvent] = []
     visible_issues = scope.visible_issue_ids()
+    events = await _journal_events(session, scope, who, visible_issues)
+    events += await _time_events(session, scope, who, visible_issues)
+    events += await _created_events(session, who, visible_issues)
+    events += await _commit_events(session, who, visible_issues)
+    events.sort(key=lambda e: e.ts, reverse=True)
+    events = events[:ACTIVITY_EVENTS_LIMIT]
+    return await _fold(session, scope, events, groups_limit)
 
-    # Journals: issue changes and comments, wiki edits.
+
+async def _journal_events(
+    session: AsyncSession, scope: DashboardScope, who: str, visible_issues: Any
+) -> list[ActivityEvent]:
+    """Issue changes and comments, and wiki edits."""
     journal_stmt = (
         select(Journal)
         .join(User, User.id == Journal.user_id)
@@ -552,30 +562,40 @@ async def activity_groups(
         ).all()
     }
     status_names = {str(sid): name for sid, name in (await session.execute(select(IssueStatus.id, IssueStatus.name)))}
+    events: list[ActivityEvent] = []
     for j in journals:
-        target = ("issue", j.issue_id) if j.issue_id is not None else ("wiki", j.wiki_page_id or 0)
+        events.extend(_journal_to_events(j, finished, status_names))
+    return events
 
-        def journal_event(kind: str, text: str = "", j: Journal = j, target: tuple[str, int] = target) -> None:
-            events.append(
-                ActivityEvent(
-                    ts=j.created_at, kind=kind, user_id=j.user_id, via_key=j.api_key_id, target=target, text=text
-                )
-            )
 
-        if target[0] == "wiki":
-            journal_event("wiki")
-            continue
-        status = next((d for d in j.details if d.prop_key == "status_id"), None)
-        if status is not None and status.new_value in finished:
-            journal_event("resolved", finished[status.new_value])
-        elif status is not None:
-            journal_event("status", status_names.get(status.new_value or "", ""))
-        elif j.details:
-            journal_event("updated")
-        if j.notes:
-            journal_event("comment", " ".join(j.notes.split())[:80])
+def _journal_to_events(j: Journal, finished: dict[str, str], status_names: dict[str, str]) -> list[ActivityEvent]:
+    """A wiki edit; or an issue's status change, resolution or update, then its comment."""
+    target = ("issue", j.issue_id) if j.issue_id is not None else ("wiki", j.wiki_page_id or 0)
 
-    # Time logged.
+    def event(kind: str, text: str = "") -> ActivityEvent:
+        return ActivityEvent(
+            ts=j.created_at, kind=kind, user_id=j.user_id, via_key=j.api_key_id, target=target, text=text
+        )
+
+    if target[0] == "wiki":
+        return [event("wiki")]
+    events: list[ActivityEvent] = []
+    status = next((d for d in j.details if d.prop_key == "status_id"), None)
+    if status is not None and status.new_value in finished:
+        events.append(event("resolved", finished[status.new_value]))
+    elif status is not None:
+        events.append(event("status", status_names.get(status.new_value or "", "")))
+    elif j.details:
+        events.append(event("updated"))
+    if j.notes:
+        events.append(event("comment", " ".join(j.notes.split())[:80]))
+    return events
+
+
+async def _time_events(
+    session: AsyncSession, scope: DashboardScope, who: str, visible_issues: Any
+) -> list[ActivityEvent]:
+    """Time logged on visible issues, as far as the viewer may see time entries."""
     te_stmt = (
         select(TimeEntry)
         .join(User, User.id == TimeEntry.user_id)
@@ -591,20 +611,22 @@ async def activity_groups(
     te_visible = await TimeEntryService().visible_entries_clause_any(session, scope.user)
     if te_visible is not None:
         te_stmt = te_stmt.where(te_visible)
-    for te in (await session.execute(te_stmt)).scalars():
-        events.append(
-            ActivityEvent(
-                ts=te.created_at,
-                kind="time",
-                user_id=te.user_id,
-                via_key=None,
-                target=("issue", te.issue_id or 0),
-                hours=Decimal(te.hours),
-                activity=te.activity.name if te.activity else "",
-            )
+    return [
+        ActivityEvent(
+            ts=te.created_at,
+            kind="time",
+            user_id=te.user_id,
+            via_key=None,
+            target=("issue", te.issue_id or 0),
+            hours=Decimal(te.hours),
+            activity=te.activity.name if te.activity else "",
         )
+        for te in (await session.execute(te_stmt)).scalars()
+    ]
 
-    # Issues created.
+
+async def _created_events(session: AsyncSession, who: str, visible_issues: Any) -> list[ActivityEvent]:
+    """Issues created."""
     created_stmt = (
         select(Issue.id, Issue.author_id, Issue.created_at)
         .join(User, User.id == Issue.author_id)
@@ -612,12 +634,14 @@ async def activity_groups(
         .order_by(Issue.created_at.desc(), Issue.id.desc())
         .limit(ACTIVITY_SOURCE_LIMIT)
     )
-    for issue_id, author_id, created_at in (await session.execute(created_stmt)).all():
-        events.append(
-            ActivityEvent(ts=created_at, kind="created", user_id=author_id, via_key=None, target=("issue", issue_id))
-        )
+    return [
+        ActivityEvent(ts=created_at, kind="created", user_id=author_id, via_key=None, target=("issue", issue_id))
+        for issue_id, author_id, created_at in (await session.execute(created_stmt)).all()
+    ]
 
-    # Commits linked to issues, by the account their author was matched to.
+
+async def _commit_events(session: AsyncSession, who: str, visible_issues: Any) -> list[ActivityEvent]:
+    """Commits linked to issues, by the account their author was matched to."""
     commit_stmt = (
         select(
             IssueCommitLink.issue_id,
@@ -632,6 +656,7 @@ async def activity_groups(
         .order_by(func.coalesce(RepositoryCommit.committed_at, RepositoryCommit.created_at).desc())
         .limit(ACTIVITY_SOURCE_LIMIT)
     )
+    events: list[ActivityEvent] = []
     for issue_id, user_id, ts, sha, message in (await session.execute(commit_stmt)).all():
         if user_id is None:
             continue
@@ -646,17 +671,70 @@ async def activity_groups(
                 text=f"{sha[:7]} {first_line}".strip(),
             )
         )
+    return events
 
-    events.sort(key=lambda e: e.ts, reverse=True)
-    events = events[:ACTIVITY_EVENTS_LIMIT]
-    return await _fold(session, scope, events, groups_limit)
+
+_Run = tuple[tuple[int, bool, tuple[str, int]], list[ActivityEvent]]
 
 
 async def _fold(
-    session: AsyncSession, scope: DashboardScope, events: list[ActivityEvent], groups_limit: int
+    session: AsyncSession,
+    scope: DashboardScope,  # noqa: ARG001
+    events: list[ActivityEvent],
+    groups_limit: int,
 ) -> list[ActivityGroup]:
     """Fold consecutive events of one actor (and key) on one target into groups, and label them."""
-    runs: list[tuple[tuple[Any, ...], list[ActivityEvent]]] = []
+    runs = _runs(events, groups_limit)
+    if not runs:
+        return []
+    labels = await _FoldLabels.load(session, runs)
+    groups = [labels.group(run) for run in runs]
+    return [g for g in groups if g is not None]
+
+
+@dataclass
+class _FoldLabels:
+    """What the groups of a fold are labelled with, each looked up once."""
+
+    users: dict[int, Any]
+    issues: dict[int, tuple[str, str]]
+    pages: dict[int, tuple[str, str, str]]
+    clients: dict[int, str]
+
+    @classmethod
+    async def load(cls, session: AsyncSession, runs: list[_Run]) -> _FoldLabels:
+        users = await _fold_users(session, {key[0] for key, _ in runs})
+        issues = await _fold_issues(session, {key[2][1] for key, _ in runs if key[2][0] == "issue"})
+        pages = await _fold_pages(session, {key[2][1] for key, _ in runs if key[2][0] == "wiki"})
+        clients = await _key_clients(session, {e.via_key for _, evs in runs for e in evs if e.via_key is not None})
+        return cls(users, issues, pages, clients)
+
+    def group(self, run: _Run) -> ActivityGroup | None:
+        """The run as a group; None when its user or target is gone or hidden."""
+        (user_id, via, target), evs = run
+        user = self.users.get(user_id)
+        labelled = _target_label(target, self.issues, self.pages)
+        if user is None or labelled is None:
+            return None
+        is_sa = bool(user.is_service_account)
+        via_key = next((e.via_key for e in evs if e.via_key is not None), None)
+        target_key, title, url = labelled
+        return ActivityGroup(
+            actor=user.login if is_sa else (user.display_name or user.login),
+            is_agent=is_sa or via,
+            is_service_account=is_sa,
+            via_client=(self.clients.get(via_key, "") if via_key is not None else None) if via else None,
+            target_kind=target[0],
+            target_key=target_key,
+            target_title=title,
+            target_url=url,
+            events=evs,
+        )
+
+
+def _runs(events: list[ActivityEvent], groups_limit: int) -> list[_Run]:
+    """Consecutive events with one (user, keyed or not, target), at most *groups_limit* runs."""
+    runs: list[_Run] = []
     for event in events:
         key = (event.user_id, event.via_key is not None, event.target)
         if runs and runs[-1][0] == key:
@@ -665,83 +743,65 @@ async def _fold(
             runs.append((key, [event]))
         else:
             break
-    if not runs:
-        return []
+    return runs
 
-    user_ids = {key[0] for key, _ in runs}
-    issue_ids = {key[2][1] for key, _ in runs if key[2][0] == "issue"}
-    wiki_ids = {key[2][1] for key, _ in runs if key[2][0] == "wiki"}
-    key_ids = {e.via_key for _, evs in runs for e in evs if e.via_key is not None}
 
-    users = {
-        u.id: u
-        for u in (
-            await session.execute(
-                select(User.id, User.login, User.display_name, User.is_service_account).where(User.id.in_(user_ids))
-            )
-        ).all()
-    }
-    issues: dict[int, tuple[str, str]] = {}
-    if issue_ids:
-        for iid, pkey, seq, subject in (
-            await session.execute(
-                select(Issue.id, Issue.project_key, Issue.sequence_number, Issue.subject).where(Issue.id.in_(issue_ids))
-            )
-        ).all():
-            issues[iid] = (f"{pkey}-{seq}", subject)
-    pages: dict[int, tuple[str, str, str]] = {}
-    if wiki_ids:
-        for pid, title, slug, pkey in (
-            await session.execute(
-                select(WikiPage.id, WikiPage.title, WikiPage.slug, Project.key)
-                .join(Wiki, WikiPage.wiki_id == Wiki.id)
-                .join(Project, Wiki.project_id == Project.id)
-                .where(WikiPage.id.in_(wiki_ids))
-            )
-        ).all():
-            pages[pid] = (title, slug, pkey)
-    clients: dict[int, str] = {}
-    if key_ids:
-        # The client of each key's latest session names the agent ("via claude-code").
-        latest = (
-            select(AgentSession.api_key_id, AgentSession.client_name)
-            .where(AgentSession.api_key_id.in_(key_ids), AgentSession.client_name.is_not(None))
-            .ext(distinct_on(AgentSession.api_key_id))
-            .order_by(AgentSession.api_key_id, AgentSession.last_activity_at.desc())
-        )
-        clients = {kid: name or "" for kid, name in (await session.execute(latest)).all()}
+async def _fold_users(session: AsyncSession, user_ids: set[int]) -> dict[int, Any]:
+    rows = await session.execute(
+        select(User.id, User.login, User.display_name, User.is_service_account).where(User.id.in_(user_ids))
+    )
+    return {u.id: u for u in rows.all()}
 
-    groups: list[ActivityGroup] = []
-    for (user_id, via, target), evs in runs:
-        user = users.get(user_id)
-        if user is None:
-            continue
-        is_sa = bool(user.is_service_account)
-        via_key = next((e.via_key for e in evs if e.via_key is not None), None)
-        if target[0] == "issue":
-            if target[1] not in issues:
-                continue
-            target_key, title = issues[target[1]]
-            url = f"/issue/{target_key}/"
-        else:
-            if target[1] not in pages:
-                continue
-            title, slug, pkey = pages[target[1]]
-            target_key, url = pkey, f"/projects/{pkey}/wiki/{slug}/"
-        groups.append(
-            ActivityGroup(
-                actor=user.login if is_sa else (user.display_name or user.login),
-                is_agent=is_sa or via,
-                is_service_account=is_sa,
-                via_client=(clients.get(via_key, "") if via_key is not None else None) if via else None,
-                target_kind=target[0],
-                target_key=target_key,
-                target_title=title,
-                target_url=url,
-                events=evs,
-            )
-        )
-    return groups
+
+async def _fold_issues(session: AsyncSession, issue_ids: set[int]) -> dict[int, tuple[str, str]]:
+    """Issue id → (display key, subject)."""
+    if not issue_ids:
+        return {}
+    rows = await session.execute(
+        select(Issue.id, Issue.project_key, Issue.sequence_number, Issue.subject).where(Issue.id.in_(issue_ids))
+    )
+    return {iid: (f"{pkey}-{seq}", subject) for iid, pkey, seq, subject in rows.all()}
+
+
+async def _fold_pages(session: AsyncSession, wiki_ids: set[int]) -> dict[int, tuple[str, str, str]]:
+    """Wiki page id → (title, slug, project key)."""
+    if not wiki_ids:
+        return {}
+    rows = await session.execute(
+        select(WikiPage.id, WikiPage.title, WikiPage.slug, Project.key)
+        .join(Wiki, WikiPage.wiki_id == Wiki.id)
+        .join(Project, Wiki.project_id == Project.id)
+        .where(WikiPage.id.in_(wiki_ids))
+    )
+    return {pid: (title, slug, pkey) for pid, title, slug, pkey in rows.all()}
+
+
+async def _key_clients(session: AsyncSession, key_ids: set[int]) -> dict[int, str]:
+    """API key id → the client of its latest session, which names the agent ("via claude-code")."""
+    if not key_ids:
+        return {}
+    latest = (
+        select(AgentSession.api_key_id, AgentSession.client_name)
+        .where(AgentSession.api_key_id.in_(key_ids), AgentSession.client_name.is_not(None))
+        .ext(distinct_on(AgentSession.api_key_id))
+        .order_by(AgentSession.api_key_id, AgentSession.last_activity_at.desc())
+    )
+    return {kid: name or "" for kid, name in (await session.execute(latest)).all()}
+
+
+def _target_label(
+    target: tuple[str, int], issues: dict[int, tuple[str, str]], pages: dict[int, tuple[str, str, str]]
+) -> tuple[str, str, str] | None:
+    """(key, title, URL) of an issue or wiki page target; None when it is gone or hidden."""
+    if target[0] == "issue":
+        if target[1] not in issues:
+            return None
+        target_key, title = issues[target[1]]
+        return target_key, title, f"/issue/{target_key}/"
+    if target[1] not in pages:
+        return None
+    title, slug, pkey = pages[target[1]]
+    return pkey, title, f"/projects/{pkey}/wiki/{slug}/"
 
 
 __all__ = [

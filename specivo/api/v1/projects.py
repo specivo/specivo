@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import AppError, PermissionDeniedError
+from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
+from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
@@ -28,9 +32,10 @@ from specivo.services.api_key_scope import is_global_admin
 from specivo.services.branch_name import BranchNameSettings
 from specivo.services.computed_metadata_service import computed_values
 from specivo.services.currency_service import reporting_currency_for
+from specivo.services.entity_link_nodes import graph_metadata_keys
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
-from specivo.services.security_audit_service import MemberAction, SecurityAuditService
+from specivo.services.security_audit_service import AuditEvent, MemberAction, SecurityAuditService
 from specivo.services.similar_issues import project_setting_enabled
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -65,18 +70,22 @@ async def _require_manage(
                 request=request,
             )
             await db.commit()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
         raise PermissionDeniedError("You do not have permission to manage this project")
 
 
-async def _require_project_access(
-    project,
-    user: User,
-    db: AsyncSession,
-) -> None:
-    """Raise 404 if user cannot access the project."""
-    await _service.require_project_access(db, project, user)
+async def _reachable(key: str, user: User, db: AsyncSession) -> Project:
+    """Resolve project *key* if *user* may reach it, else raise 404.
+
+    A missing key and a project *user* cannot reach get the same answer,
+    naming the key as given (ADR-0004), so the permission checks that follow
+    (403) only ever run for a project the caller already knows exists.
+    """
+    try:
+        return await _service.get_readable_by_key(db, key.upper(), user)
+    except NotFoundError:
+        raise NotFoundError(f"Project '{key.upper()}' not found") from None
 
 
 async def _can_manage(project, user: User, db: AsyncSession) -> bool:
@@ -104,6 +113,26 @@ def _branch_name(project) -> BranchNameConfig:
     return BranchNameConfig(format=settings.format, types=dict(settings.types), default_type=settings.default_type)
 
 
+async def _ancestors_reachable(db: AsyncSession, project: Project, user: User) -> bool:
+    """Whether *user* may reach every ancestor of *project*.
+
+    ``parent_id``, ``parent_key`` and ``path`` spell out the ancestors, and a
+    public project can hang under a private parent: they are shown only when
+    the whole lineage is reachable (anonymous visitors never see them).
+    """
+    parent_id = project.parent_id
+    while parent_id is not None:
+        parent = await db.get(Project, parent_id)
+        if parent is None:
+            return False
+        try:
+            await _service.require_project_access(db, parent, user)
+        except NotFoundError:
+            return False
+        parent_id = parent.parent_id
+    return True
+
+
 def _project_out(
     project,
     parent_key: str | None,
@@ -111,11 +140,13 @@ def _project_out(
     *,
     detail: bool = False,
     reporting_currency: str | None = None,
+    lineage_visible: bool = True,
 ) -> ProjectOut:
     return ProjectOut(
         computed_metadata=computed_metadata,
         branch_name=_branch_name(project) if detail else None,
         similar_issues=project_setting_enabled(project.settings) if detail else None,
+        graph_metadata_keys=list(graph_metadata_keys(project.settings)) if detail else None,
         reporting_currency_code=project.reporting_currency_code,
         reporting_currency=reporting_currency,
         id=project.id,
@@ -123,9 +154,9 @@ def _project_out(
         identifier=project.identifier,
         key=project.key,
         description=project.description,
-        parent_id=project.parent_id,
-        parent_key=parent_key,
-        path=project.path,
+        parent_id=project.parent_id if lineage_visible else None,
+        parent_key=parent_key if lineage_visible else None,
+        path=project.path if lineage_visible else None,
         is_public=project.is_public,
         inherit_members=project.inherit_members,
         status=project.status,
@@ -197,7 +228,7 @@ async def list_projects(
     items = []
     for p in projects:
         parent_key = await _service.get_parent_key(db, p)
-        items.append(_project_out(p, parent_key))
+        items.append(_project_out(p, parent_key, lineage_visible=await _ancestors_reachable(db, p, current_user)))
 
     return PaginatedResponse(total_count=total, offset=offset, limit=limit, items=items)
 
@@ -211,7 +242,7 @@ async def create_project(
     if not is_global_admin(current_user):
         raise PermissionDeniedError("Only admins can create projects")
 
-    project = await _service.create(db, data, current_user)
+    project = await _service.create(db, data)
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # Creation is admin-only, so the creator may always see the map.
@@ -230,13 +261,17 @@ async def get_project(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
 
     parent_key = await _service.get_parent_key(db, project)
     computed = await _disclosed_computed_metadata(project, current_user, db)
     return _project_out(
-        project, parent_key, computed, detail=True, reporting_currency=await reporting_currency_for(db, project)
+        project,
+        parent_key,
+        computed,
+        detail=True,
+        reporting_currency=await reporting_currency_for(db, project),
+        lineage_visible=await _ancestors_reachable(db, project, current_user),
     )
 
 
@@ -248,7 +283,7 @@ async def update_project(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db)
 
     project = await _service.update(db, project, data, actor=current_user, request=request)
@@ -261,18 +296,37 @@ async def update_project(
         computed_values(project.settings),
         detail=True,
         reporting_currency=await reporting_currency_for(db, project),
+        lineage_visible=await _ancestors_reachable(db, project, current_user),
     )
 
 
 @router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     key: str,
-    current_user: User = Depends(get_current_user),
+    request: Request,
+    current_user: Annotated[User, Depends(require_admin_api)],
     db: AsyncSession = DB_SESSION,
 ) -> None:
+    """Delete a project with all its issues, wiki pages and time entries. Instance admins only.
+
+    Irreversible, so it is not a project manager's call (archiving, the
+    reversible way, is admin-only too). A project with subprojects is refused
+    with 409. The deletion is audited.
+    """
     project = await _service.get_by_key(db, key.upper())
-    await _require_manage(project, current_user, db)
+    details = {"project_key": project.key, "name": project.name, "identifier": project.identifier}
+    project_id = project.id
     await _service.delete(db, project)
+    await _audit.log_event(
+        session=db,
+        event_type=AuditEvent.PROJECT_DELETED,
+        user_id=current_user.id,
+        project_id=project_id,
+        resource_type="project",
+        resource_id=project_id,
+        details=details,
+        request=request,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +397,7 @@ async def _log_member_change(
                 roles=roles,
                 request=request,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
@@ -355,7 +409,7 @@ async def _principal_label(db: AsyncSession, principal: Principal) -> str:
         stmt = select(UserGroup.name).where(UserGroup.id == principal.id)
     try:
         return (await db.execute(stmt)).scalar_one_or_none() or ""
-    except Exception:
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -366,8 +420,7 @@ async def list_members(
     db: AsyncSession = DB_SESSION,
 ) -> list[MemberOut]:
     """List every membership on the project — users first, then user groups."""
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
     rows = await _service.list_members(db, project)
     rows += await _service.list_group_memberships(db, project)
     return [MemberOut(**row) for row in rows]
@@ -390,8 +443,7 @@ async def search_assignees(
     ``limit`` is the last. Needs an account and access to the project (404
     otherwise, for a private project).
     """
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
     users = await _service.search_assignable_users(db, project, q, offset=offset, limit=limit)
     return [
         AssigneeSuggestionOut(
@@ -414,7 +466,7 @@ async def add_member(
     db: AsyncSession = DB_SESSION,
 ) -> MemberOut:
     """Add a user or a user group to the project with the given roles."""
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db, request)
 
     principal = Principal.of(user_id=data.user_id, group_id=data.group_id)
@@ -446,7 +498,7 @@ async def remove_member(
 ) -> None:
     """Remove a membership. *principal_type* is ``user`` or ``group``."""
     principal = Principal.parse(principal_type, principal_id)
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db, request)
 
     # Capture the holder's name before the delete takes it out of reach.
@@ -469,7 +521,7 @@ async def update_member_roles(
 ) -> MemberOut:
     """Replace all roles held by one membership. ``user`` or ``group``."""
     principal = Principal.parse(principal_type, principal_id)
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db, request)
 
     await _service.update_member_roles(db, project, principal, data.role_ids)
@@ -500,8 +552,7 @@ async def get_modules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ModulesOut:
-    project = await _service.get_by_key(db, key.upper())
-    await _require_project_access(project, current_user, db)
+    project = await _reachable(key, current_user, db)
     modules = await _service.get_modules(db, project)
     return ModulesOut(modules=modules)
 
@@ -513,7 +564,7 @@ async def update_modules(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ModulesOut:
-    project = await _service.get_by_key(db, key.upper())
+    project = await _reachable(key, current_user, db)
     await _require_manage(project, current_user, db)
 
     modules = await _service.set_modules(db, project, data.modules)

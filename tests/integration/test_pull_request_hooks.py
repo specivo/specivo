@@ -713,3 +713,122 @@ class TestExternalPullRequests:
 
         assert RepositorySettings().ignore_external_pull_requests is True
         assert RepositorySettings.model_validate({}, strict=False).ignore_external_pull_requests is True
+
+
+class TestProcessingCharacterization:
+    """Pins the outcome of each step of ``process_pull_request``: details, link flags, metadata, journals."""
+
+    async def test_a_payload_without_a_pull_request_is_ignored(self, db_session, world):
+        from specivo.services.repository_pull_requests import process_pull_request
+
+        integration = await make_integration(db_session, world.project)
+        result = await process_pull_request(db_session, integration, {})
+        assert (result.status, result.detail) == ("ignored", "The payload names no pull request.")
+        assert await _count(db_session, PullRequest) == 0
+
+    async def test_the_default_branch_is_refreshed_before_anything_else(self, client, db_session, world, queued):
+        integration = await make_integration(db_session, world.project, default_branch="main")
+        payload = pull_request_payload("github", title="No references here")
+        payload["repository"]["default_branch"] = "trunk"
+        result = await _send(client, db_session, integration, payload, queued)
+        await db_session.refresh(integration)
+        assert integration.default_branch == "trunk"
+        assert result.detail == "Pull request #7 (open) references no issue."
+
+    async def test_a_new_link_without_a_source_branch_appends_only_the_url(self, client, db_session, world, queued):
+        integration = await make_integration(db_session, world.project)
+        payload = pull_request_payload("github", title="PRH-1", branch="")
+        result = await _send(client, db_session, integration, payload, queued)
+        assert result.detail == "Pull request #7 open: 1 linked issue(s), 1 new."
+        issue = await _reload(db_session, world.issues["PRH-1"])
+        assert issue.issue_metadata == {"pull_requests": ["https://forge.example.com/example-org/widgets/pull/7"]}
+
+    async def test_closing_follows_the_text_until_the_merge_which_qualifies_its_own_references(
+        self, client, db_session, world, queued
+    ):
+        await _grant_git(db_session, world.project)
+        integration = await make_integration(db_session, world.project, settings=_automation(world))
+        p1, p2, p3 = (world.issues[f"PRH-{n}"] for n in (1, 2, 3))
+
+        async def links() -> dict[int, tuple[str, bool, bool, bool]]:
+            rows = (await db_session.execute(select(IssuePullRequestLink))).scalars().all()
+            for row in rows:
+                await db_session.refresh(row)
+            return {
+                r.issue_id: (r.source, r.closing, r.merge_qualified_at is not None, r.merge_handled_at is not None)
+                for r in rows
+            }
+
+        steps = [
+            ("open", "Fixes PRH-1", "feat/PRH-2-x", "01"),
+            ("open", "Refs PRH-1, fixes PRH-3", "feat/PRH-2-x", "02"),
+            ("merged", "Fixes PRH-3", "feat/PRH-2-x", "03"),
+            ("merged", "Fixes PRH-1 and PRH-3", "feat/PRH-2-x", "04"),
+            ("merged", "Fixes PRH-2", "feat/PRH-2-x", "05"),
+        ]
+        seen = []
+        for state, body, branch, day in steps:
+            payload = pull_request_payload(
+                "github", title="Work", body=body, branch=branch, state=state, updated_at=f"2026-10-{day}T09:00:00Z"
+            )
+            if day == "05":
+                payload["action"] = "edited"
+            result = await _send(client, db_session, integration, payload, queued)
+            seen.append((result.detail, await links()))
+
+        assert seen == [
+            (
+                "Pull request #7 open: 2 linked issue(s), 2 new.",
+                {p1.id: ("body", True, False, False), p2.id: ("branch", False, False, False)},
+            ),
+            (
+                "Pull request #7 open: 3 linked issue(s), 1 new.",
+                {
+                    p1.id: ("body", False, False, False),
+                    p2.id: ("branch", False, False, False),
+                    p3.id: ("body", True, False, False),
+                },
+            ),
+            (
+                "Pull request #7 merged: 3 linked issue(s), 0 new. Merge automation: PRH-3 merge: moved.",
+                {
+                    p1.id: ("body", False, False, False),
+                    p2.id: ("branch", False, False, False),
+                    p3.id: ("body", True, True, True),
+                },
+            ),
+            (
+                "Pull request #7 merged: 3 linked issue(s), 0 new. Merge automation: PRH-1 merge: moved.",
+                {
+                    p1.id: ("body", True, True, True),
+                    p2.id: ("branch", False, False, False),
+                    p3.id: ("body", True, True, True),
+                },
+            ),
+            (
+                "Pull request #7 merged: 3 linked issue(s), 0 new.",
+                {
+                    p1.id: ("body", True, True, True),
+                    p2.id: ("branch", True, False, False),
+                    p3.id: ("body", True, True, True),
+                },
+            ),
+        ]
+        assert [len(await _journals(db_session, i)) for i in (p1, p2, p3)] == [2, 1, 2]
+
+    async def test_a_late_merge_event_qualifies_links_without_changing_the_request(
+        self, client, db_session, world, queued
+    ):
+        integration = await make_integration(db_session, world.project)
+        newer = pull_request_payload("github", title="Fixes PRH-1", state="merged", updated_at="2026-10-05T09:00:00Z")
+        newer["action"] = "labeled"
+        await _send(client, db_session, integration, newer, queued)
+        link = (await db_session.execute(select(IssuePullRequestLink))).scalar_one()
+        assert link.merge_qualified_at is None
+        late = pull_request_payload("github", title="Fixes PRH-1", state="merged", updated_at="2026-10-04T09:00:00Z")
+        result = await _send(client, db_session, integration, late, queued)
+        await db_session.refresh(link)
+        assert result.detail == "Pull request #7 merged: 1 linked issue(s), 0 new."
+        assert link.merge_qualified_at is not None
+        pr = (await db_session.execute(select(PullRequest))).scalar_one()
+        assert pr.provider_updated_at.isoformat().startswith("2026-10-05")

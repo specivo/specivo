@@ -432,7 +432,7 @@ class RecurringPatternService:
         pattern: RecurringPattern,
         project: Project,
         author: User,
-        now: datetime,
+        now: datetime,  # noqa: ARG002
         horizon: datetime,
         exdates: set[datetime],
         overrides: dict[datetime, RecurrenceException],
@@ -468,7 +468,7 @@ class RecurringPatternService:
         pattern: RecurringPattern,
         project: Project,
         author: User,
-        now: datetime,
+        now: datetime,  # noqa: ARG002
         horizon: datetime,
         exdates: set[datetime],
         overrides: dict[datetime, RecurrenceException],
@@ -663,7 +663,7 @@ class RecurringPatternService:
         """Return *occurrence*'s calendar date as seen in the pattern timezone."""
         try:
             tz = ZoneInfo(pattern.timezone)
-        except Exception:
+        except Exception:  # noqa: BLE001
             tz = ZoneInfo("UTC")
         return occurrence.astimezone(tz).date()
 
@@ -823,7 +823,7 @@ class RecurringPatternService:
             start = spec_fields["dtstart"]
             expand_occurrences(spec, start, start + timedelta(days=_VALIDATION_WINDOW_DAYS))
         except ValueError as exc:
-            raise ValidationError(message=f"Invalid recurrence rule: {exc}", field="recurrence")
+            raise ValidationError(message=f"Invalid recurrence rule: {exc}", field="recurrence")  # noqa: B904
 
     async def _filter_rotation(
         self,
@@ -934,7 +934,7 @@ class RecurringPatternService:
         if issue.done_ratio != 0:
             return False
         status = await session.get(IssueStatus, issue.status_id)
-        if status is not None and status.category in ("done", "closed"):
+        if status is not None and status.category in ("done", "closed"):  # noqa: SIM103
             return False
         return True
 

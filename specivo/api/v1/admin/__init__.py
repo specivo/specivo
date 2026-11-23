@@ -10,7 +10,7 @@ from specivo.models.user import User
 from specivo.services.api_key_scope import is_global_admin
 
 
-def require_admin_api(current_user: User = Depends(get_current_user)) -> User:  # noqa: B008
+def require_admin_api(current_user: User = Depends(get_current_user)) -> User:
     """Dependency: raise 403 if the current user is not an admin.
 
     An admin authenticated with a project-limited API key is refused: the
@@ -36,7 +36,7 @@ def refuse_api_key(request: Request) -> None:
 
 def require_admin_session_api(
     request: Request,
-    current_user: User = Depends(require_admin_api),  # noqa: B008
+    current_user: User = Depends(require_admin_api),
 ) -> User:
     """Dependency: an admin signed in with a session (JWT), never with an API key.
 

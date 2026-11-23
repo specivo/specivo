@@ -252,7 +252,7 @@ async def active_subscriptions(session: AsyncSession, project_id: int) -> list[S
                 Subscription(webhook_id=row[0], events=frozenset(row[1]), include_private=bool(row[2]))
                 for row in json.loads(cached)
             ]
-    except Exception:  # noqa: BLE001 - Redis unavailable: fall through to the database
+    except Exception:  # Redis unavailable: fall through to the database
         logger.debug("Webhook subscription cache unavailable", exc_info=True)
 
     rows = (
@@ -272,7 +272,7 @@ async def active_subscriptions(session: AsyncSession, project_id: int) -> list[S
             json.dumps([[s.webhook_id, sorted(s.events), s.include_private] for s in subs]),
             ex=WEBHOOK_SUBSCRIPTION_CACHE_SECONDS,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.debug("Could not cache webhook subscriptions", exc_info=True)
     return subs
 
@@ -294,7 +294,7 @@ async def _drop_cached(project_ids: Iterable[int]) -> None:
         return
     try:
         await (await get_redis()).delete(*keys)
-    except Exception:  # noqa: BLE001 - the TTL bounds a stale entry
+    except Exception:  # the TTL bounds a stale entry
         logger.debug("Could not drop cached webhook subscriptions", exc_info=True)
 
 
@@ -386,7 +386,7 @@ def dispatch_deliveries(delivery_ids: Iterable[tuple[int, int]]) -> int:
     for delivery_id, attempts in delivery_ids:
         try:
             deliver_webhook.apply_async(args=[delivery_id, attempts], retry=False)
-        except Exception as exc:  # noqa: BLE001 - a dead broker must not fail the request
+        except Exception as exc:  # a dead broker must not fail the request  # noqa: BLE001
             logger.warning(
                 "Could not queue webhook delivery %d (%s); the sweeper will retry it", delivery_id, type(exc).__name__
             )

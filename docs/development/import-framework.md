@@ -11,9 +11,9 @@ Three decisions shape everything below. The write path goes through Specivo's
 own services, so sequence numbers, nested sets and auto-watching stay correct
 as those services change. The identifier map lives in a database table, written
 in the same transaction as the rows it describes, so a rolled-back write never
-leaves a stale entry. Each phase commits on its own, so a failure late in a
-large import keeps what the earlier phases loaded and `--resume` continues from
-there.
+leaves a stale entry. Each phase commits on its own, and the long ones also
+commit as they go, so a failure late in a large import keeps what was loaded
+before it and `--resume` continues from there.
 
 ## Package layout
 
@@ -213,7 +213,12 @@ file (`core/links_file.py`), next to the bundles, and every later load of the
 scope (and `admin import-map resolve-pending`) retries it:
 
 - **Texts** are rewritten in `LINK_GRAPH` (`placeholder_rewrite.py`,
-  `pending_links.py`); an edited text is never overwritten (hash check).
+  `pending_links.py`). The rewrite pass reads only the rows this run imported
+  (`ImportIdMap.targets_written_by_run`, plus the history entry creating each
+  of its issues); text of earlier runs is linked only through the links file,
+  where an edited text is never overwritten (hash check). So text somebody
+  typed into an imported record is left alone, and the pass costs what the
+  run imported, not what the scope holds.
 - **Parents and relations** are made in `RELATIONS` (`issue_links.py`), with
   the same checks as anywhere else (`NestedSetService.validate_parent` plus a
   depth check that counts the child's own sub-tasks, `RelationService.create`);
@@ -241,6 +246,18 @@ and rolled back if any of them raise. `--resume` relies on this: a failure in
 a late phase leaves the earlier ones committed, and a resumed run re-derives what is
 left to do purely from what `import_id_map` and the target tables already
 contain — there is no separate resume bookkeeping.
+
+The long phases do not wait for their end. Issues and wiki pages commit after
+each project (`PhaseContext.checkpoint`); watchers, attachments, history and
+time entries also commit every `--commit-every` records (default 1000) within a
+project (`PhaseContext.record_written`). A failure at 95% of a large phase then
+loses only the work since the last commit, row locks are not held for the whole
+phase, and a resumed run skips what was committed: each record is mapped in
+the same transaction as its row. Issues commit per project only, because the
+parents' timestamps are restored once a project's issues are all in. A
+checkpoint does nothing in a dry run, and nothing in a phase that registered an
+`at_phase_end` hook (`RELATIONS`, `LINK_GRAPH`), whose links-file work follows
+the phase's one commit.
 
 A dry run (`options.dry_run`) shares **one** session across every phase and
 rolls it back unconditionally when the run ends, success or failure. This

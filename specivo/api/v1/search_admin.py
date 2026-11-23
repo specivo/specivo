@@ -35,7 +35,7 @@ from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.api_key_scope import is_global_admin
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 from specivo.services.settings_service import SettingsService
 from specivo.tasks import celery_app
@@ -77,10 +77,8 @@ def _require_admin(user: User) -> None:
 
 
 async def _require_project_manage(project_key: str, user: User, db: AsyncSession) -> Project:
-    project = await _project_service.get_by_key(db, project_key.upper())
-    if not user.is_admin and not await check_permission(user, project.id, "manage_project", db):
-        raise PermissionDeniedError("manage_project permission required")
-    return project
+    # A project the caller cannot reach is "not found", like a missing key.
+    return await _project_service.get_permitted_by_key(db, project_key.upper(), user, Permission.MANAGE_PROJECT)
 
 
 def _validate_language(value: str) -> str:
@@ -96,9 +94,10 @@ async def _last_result(db: AsyncSession, project_id: int | None) -> dict | None:
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        result: dict = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return None
+    return result
 
 
 async def _running(db: AsyncSession, project_id: int | None) -> tuple[bool, str | None]:
@@ -278,7 +277,7 @@ async def reindex_instance_status(
 
 
 # ---------------------------------------------------------------------------
-# Per-project (manage_project)
+# Per-project (manage_project)  # noqa: ERA001
 # ---------------------------------------------------------------------------
 
 

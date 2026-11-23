@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import re
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -67,6 +68,15 @@ _SST_ATTACHMENT = SearchSourceType.ATTACHMENT.value
 
 logger = logging.getLogger(__name__)
 
+# Which branches of the semantic query each search scope keeps.
+_SEMANTIC_SCOPES: dict[str, frozenset[str]] = {
+    "all": frozenset({"issue", "wiki", "comment", "att"}),
+    "issues": frozenset({"issue"}),
+    "wiki": frozenset({"wiki"}),
+    "comments": frozenset({"comment"}),
+    "attachments": frozenset({"att"}),
+}
+
 # Whether the database's pgvector supports iterative index scans, read once per
 # process by ``_prepare_index_scan`` (None until then).
 _pgvector_iterative_scan: bool | None = None
@@ -97,7 +107,7 @@ def _principal_match(alias: str = "m") -> str:
     definition of the same rule.
     """
     return (
-        f"({alias}.user_id = :current_user_id"
+        f"({alias}.user_id = :current_user_id"  # noqa: S608
         f" OR {alias}.group_id IN (SELECT ugm.group_id FROM user_group_members ugm"
         f" WHERE ugm.user_id = :current_user_id))"
     )
@@ -117,20 +127,26 @@ def _role_grants(permission: str, alias: str = "r") -> str:
     return f"(jsonb_exists({alias}.permissions, '{permission}') OR jsonb_exists({alias}.permissions, '*'))"
 
 
-def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int]:
-    """Merge two ranked ID lists using Reciprocal Rank Fusion.
+def rrf_scores[K: Hashable](fts_ids: Sequence[K], sem_ids: Sequence[K], k: int = RRF_K) -> dict[K, float]:
+    """Reciprocal Rank Fusion scores of the items of two ranked lists, in order of first appearance.
 
     RRF score for item i = sum over lists L of: 1 / (k + rank_L(i))
     where rank_L(i) is the 1-based rank in list L (0 if absent).
-
-    Note: hybrid_search uses an inline version for string-keyed dedup.
-    This function is retained for unit test coverage of the RRF algorithm.
     """
-    scores: dict[int, float] = {}
+    scores: dict[K, float] = {}
     for rank_0, item_id in enumerate(fts_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
     for rank_0, item_id in enumerate(sem_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
+    return scores
+
+
+def rrf_fuse[K: Hashable](fts_ids: Sequence[K], sem_ids: Sequence[K], k: int = RRF_K) -> list[K]:
+    """Merge two ranked ID lists using Reciprocal Rank Fusion (:func:`rrf_scores`), best first.
+
+    Items with equal scores keep their order of first appearance.
+    """
+    scores = rrf_scores(fts_ids, sem_ids, k)
     return sorted(scores, key=lambda x: scores[x], reverse=True)
 
 
@@ -339,7 +355,7 @@ def _clean_snippet(snippet: str | None) -> str | None:
     # HTML-escape to prevent XSS, then restore safe <mark> tags
     clean = html.escape(clean)
     clean = clean.replace("\x00MARK_OPEN\x00", "<mark>").replace("\x00MARK_CLOSE\x00", "</mark>")
-    return clean
+    return clean  # noqa: RET504
 
 
 def _empty_type_counts(*, include_all: bool = False) -> dict[str, int]:
@@ -353,6 +369,46 @@ def _empty_type_counts(*, include_all: bool = False) -> dict[str, int]:
     if include_all:
         counts["all"] = 0
     return counts
+
+
+#: Keyword-search result types, in the order their parts are joined.
+_FTS_TYPES: tuple[str, ...] = ("issues", "wiki", "comments", "attachments")
+#: Types that cannot carry tags: left out while a tag filter is on.
+_UNTAGGABLE_TYPES = frozenset({"comments", "attachments"})
+
+
+@dataclass
+class _FtsQuery:
+    """The SQL fragments the keyword-search parts and counts of one query share."""
+
+    user: User
+    parsed: _ParsedQuery
+    issue_project_filter: str
+    wiki_project_filter: str
+    comment_project_filter: str
+    issue_visibility: str
+    wiki_visibility: str
+    comment_visibility: str
+    issue_filter_sql: str
+    tsq_i: str
+    tsq_w: str
+    tsq_ci: str
+    pinned_exclusion: str = ""
+    wiki_tag_filter: str = ""
+    tags_active: bool = False
+
+
+def _fts_result(row: Any) -> SearchResult:
+    """A keyword-search row as a result, its snippet cleaned."""
+    return SearchResult(
+        result_type=row._mapping["result_type"],
+        id=row._mapping["id"],
+        title=row._mapping["title"],
+        subtitle=row._mapping["subtitle"],
+        snippet=_clean_snippet(row._mapping["snippet"]),
+        score=float(row._mapping["score"]),
+        project_key=row._mapping["project_key"],
+    )
 
 
 class SearchService:
@@ -469,7 +525,7 @@ class SearchService:
                   AND NOT EXISTS (SELECT 1 FROM members m
                                   WHERE {_principal_match("m")} AND m.project_id = p.id)
             )
-        """
+        """  # noqa: S608
 
     @staticmethod
     def _issue_visible_sql(alias: str) -> str:
@@ -483,13 +539,13 @@ class SearchService:
         return f"""EXISTS (SELECT 1 FROM user_visibility uv
                     WHERE uv.project_id = {alias}.project_id
                     AND ((uv.visibility_level >= 2 AND ({alias}.is_private = false OR {own}))
-                         OR (uv.visibility_level = 1 AND {own})))"""
+                         OR (uv.visibility_level = 1 AND {own})))"""  # noqa: S608
 
     @staticmethod
     def _wiki_visible_sql(project_id_column: str) -> str:
         """Return a predicate, without a leading AND, admitting the wiki of the project in *project_id_column*."""
         return (
-            f"EXISTS (SELECT 1 FROM user_visibility uv WHERE uv.project_id = {project_id_column} AND uv.can_view_wiki)"
+            f"EXISTS (SELECT 1 FROM user_visibility uv WHERE uv.project_id = {project_id_column} AND uv.can_view_wiki)"  # noqa: S608
         )
 
     def _issue_visibility_cte_clause(self, user: User, alias: str = "i") -> str:
@@ -607,7 +663,7 @@ class SearchService:
                 {att_project_filter}
                 ORDER BY score DESC LIMIT :part_limit
             ) attachments_sub
-        """
+        """  # noqa: S608
 
     def _attachment_fts_count_sql(
         self,
@@ -636,7 +692,7 @@ class SearchService:
             WHERE sc.search_vector @@ query
             {att_vis}
             {att_project_filter}
-        """
+        """  # noqa: S608
 
     def _attachment_semantic_vis(self, user: User) -> str:
         """Attachment visibility for semantic search (aliases ``att``, ``att_iss``, ``att_wp``, ``att_w``)."""
@@ -675,7 +731,7 @@ class SearchService:
         for idx, name in enumerate(filters.tag_names):
             pname = f"filter_tag_{idx}"
             out.append(
-                f"AND EXISTS (SELECT 1 FROM tag_links tl JOIN tags t ON t.id = tl.tag_id "
+                f"AND EXISTS (SELECT 1 FROM tag_links tl JOIN tags t ON t.id = tl.tag_id "  # noqa: S608
                 f"WHERE tl.{link_col} = {alias}.id AND lower(t.name) = lower(:{pname}))"
             )
             params[pname] = name
@@ -880,7 +936,7 @@ class SearchService:
             FROM kept k
             JOIN issues i ON i.id = k.id
             ORDER BY k.ord, k.foreign_rank, i.id
-        """
+        """  # noqa: S608
         result = await session.execute(text(sql), params)
         return [
             SearchResult(
@@ -905,7 +961,7 @@ class SearchService:
     # Full-text search
     # ------------------------------------------------------------------
 
-    async def search(
+    async def search(  # noqa: PLR0913
         self,
         session: AsyncSession,
         query: str,
@@ -943,14 +999,8 @@ class SearchService:
         """
         # Narrow to the authenticating API key's project limit, if any.
         project_id, project_ids = scope_project_ids(project_id, project_ids)
-        parts: list[str] = []
-        # Per-type count SQL fragments, keyed by type name.
-        # Always populated for all 4 types (regardless of scope) so that
-        # a single query can return per-type totals for filter tabs.
-        count_parts: dict[str, str] = {}
         parsed = _ParsedQuery.parse(query)
         params: dict[str, Any] = parsed.bind_params()
-
         params.update(await self._visibility_params(session, user))
 
         # Visibility SQL fragments: CTE-optimized visibility for all modes.
@@ -958,32 +1008,7 @@ class SearchService:
         # so the CTE prefix is required whenever the user is non-admin (even
         # for single-project searches).
         cte_prefix = self._visibility_cte_sql(user)
-        issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
-        wiki_visibility = self._wiki_visibility_cte_clause(user, alias="w")
-        comment_visibility = self._comment_visibility_clause(user, journal_alias="j", issue_alias="ci")
-
-        # Project filtering
-        issue_project_filter = ""
-        wiki_project_filter = ""
-        comment_project_filter = ""
-        if project_ids is not None:
-            # Multi-project: use IN clause
-            issue_project_filter = "AND i.project_id = ANY(:project_ids)"
-            wiki_project_filter = "AND w.project_id = ANY(:project_ids)"
-            comment_project_filter = "AND ci.project_id = ANY(:project_ids)"
-            params["project_ids"] = project_ids
-        elif project_id is not None:
-            issue_project_filter = "AND i.project_id = :project_id"
-            wiki_project_filter = "AND w.project_id = :project_id"
-            comment_project_filter = "AND ci.project_id = :project_id"
-            params["project_id"] = project_id
-
-        # Issue metadata filters
-        issue_filter_sql = self._build_issue_filters(filters, params)
-
-        tsq_i = parsed.tsquery_from_sql("specivo_fts_config(i.project_id)")
-        tsq_w = parsed.tsquery_from_sql("specivo_fts_config(w.project_id)")
-        tsq_ci = parsed.tsquery_from_sql("specivo_fts_config(ci.project_id)")
+        fts = self._fts_query(user, parsed, params, project_id, project_ids, filters)
 
         # Issues the query names by reference lead the results, and are kept
         # out of the ranked issue rows and their count so they appear once.
@@ -999,21 +1024,104 @@ class SearchService:
                 filters=filters,
                 source_numbers=source_numbers,
             )
-        pinned_exclusion = ""
         if pinned:
-            pinned_exclusion = "AND i.id <> ALL(:pinned_issue_ids)"
+            fts.pinned_exclusion = "AND i.id <> ALL(:pinned_issue_ids)"
             params["pinned_issue_ids"] = [r.id for r in pinned]
         # Real-tag AND filter for wiki pages (issue side is folded into
-        # issue_filter_sql above). When a tag filter is active, only taggable
+        # issue_filter_sql). When a tag filter is active, only taggable
         # entities (issues, wiki pages) can match — comments and attachments are
         # excluded entirely.
-        wiki_tag_filter = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp")
-        tags_active = bool(filters and filters.tag_names)
+        fts.wiki_tag_filter = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp")
+        fts.tags_active = bool(filters and filters.tag_names)
 
-        # --- Result parts: scope-gated (only fetch rows for the active scope) ---
+        # Result parts are scope-gated (only fetch rows for the active scope).
+        parts = [sql for sql in (self._fts_part(fts, type_name, scope) for type_name in _FTS_TYPES) if sql]
+        if not parts:
+            return [], 0, {}
 
-        if scope in ("all", "issues"):
-            issue_sql = f"""
+        # Combined query with UNION ALL, ordered by score desc. The pinned
+        # issues take the first places, so the ranked rows start after them.
+        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
+        union_sql = " UNION ALL ".join(parts)
+        full_sql = f"""
+            {cte_prefix}
+            SELECT * FROM ({union_sql}) combined
+            ORDER BY score DESC
+            LIMIT :limit OFFSET :offset
+        """  # noqa: S608
+        params["limit"] = ranked_limit
+        params["offset"] = ranked_offset
+        # Each part must supply every row up to the end of the page, not just
+        # one page's worth, or later pages come back short. Capped whatever the
+        # caller passes, so no request makes a part rank more than the deepest
+        # page search serves; a page past the cap comes back empty.
+        params["part_limit"] = min(ranked_offset + ranked_limit, _MAX_PART_ROWS)
+
+        result = await session.execute(text(full_sql), params)
+        results = [_fts_result(row) for row in result]
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
+
+        # Per-type counts in a single query (skipped when called from hybrid_search)
+        if skip_count:
+            return results, 0, {}
+        type_counts = await self._fts_type_counts(session, cte_prefix, self._fts_count_parts(fts), params)
+        type_counts["issues"] += len(pinned)
+        type_counts["all"] = sum(type_counts.values())
+        # Total for the current scope: sum of active scope types only
+        total = type_counts["all"] if scope == "all" else type_counts.get(scope, 0)
+        return results, total, type_counts
+
+    def _fts_query(
+        self,
+        user: User,
+        parsed: _ParsedQuery,
+        params: dict[str, Any],
+        project_id: int | None,
+        project_ids: list[int] | None,
+        filters: SearchFilters | None,
+    ) -> _FtsQuery:
+        """The SQL fragments every keyword-search part shares; binds the project and issue filter parameters."""
+        project_filters = {"i": "", "w": "", "ci": ""}
+        if project_ids is not None:
+            # Multi-project: use IN clause
+            project_filters = {alias: f"AND {alias}.project_id = ANY(:project_ids)" for alias in project_filters}
+            params["project_ids"] = project_ids
+        elif project_id is not None:
+            project_filters = {alias: f"AND {alias}.project_id = :project_id" for alias in project_filters}
+            params["project_id"] = project_id
+        return _FtsQuery(
+            user=user,
+            parsed=parsed,
+            issue_project_filter=project_filters["i"],
+            wiki_project_filter=project_filters["w"],
+            comment_project_filter=project_filters["ci"],
+            issue_visibility=self._issue_visibility_cte_clause(user, alias="i"),
+            wiki_visibility=self._wiki_visibility_cte_clause(user, alias="w"),
+            comment_visibility=self._comment_visibility_clause(user, journal_alias="j", issue_alias="ci"),
+            issue_filter_sql=self._build_issue_filters(filters, params),
+            tsq_i=parsed.tsquery_from_sql("specivo_fts_config(i.project_id)"),
+            tsq_w=parsed.tsquery_from_sql("specivo_fts_config(w.project_id)"),
+            tsq_ci=parsed.tsquery_from_sql("specivo_fts_config(ci.project_id)"),
+        )
+
+    def _fts_part(self, q: _FtsQuery, type_name: str, scope: str) -> str | None:
+        """The ranked rows of *type_name* when *scope* covers it (and, for untaggable types, no tag filter is on)."""
+        if scope not in ("all", type_name):
+            return None
+        if type_name in _UNTAGGABLE_TYPES and q.tags_active:
+            return None
+        builders: dict[str, Callable[[_FtsQuery], str]] = {
+            "issues": self._fts_part_issue,
+            "wiki": self._fts_part_wiki,
+            "comments": self._fts_part_comment,
+            "attachments": self._fts_part_attachment,
+        }
+        return builders[type_name](q)
+
+    @staticmethod
+    def _fts_part_issue(q: _FtsQuery) -> str:
+        return f"""
                 SELECT * FROM (
                     SELECT
                         '{_SRT_ISSUE}' as result_type,
@@ -1026,19 +1134,19 @@ class SearchService:
                         ts_rank_cd(i.search_vector, query) as score,
                         i.project_key
                     FROM issues i
-                    CROSS JOIN LATERAL {tsq_i}
+                    CROSS JOIN LATERAL {q.tsq_i}
                     WHERE i.search_vector @@ query
-                    {issue_project_filter}
-                    {issue_visibility}
-                    {issue_filter_sql}
-                    {pinned_exclusion}
+                    {q.issue_project_filter}
+                    {q.issue_visibility}
+                    {q.issue_filter_sql}
+                    {q.pinned_exclusion}
                     ORDER BY score DESC LIMIT :part_limit
                 ) issues_sub
-            """
-            parts.append(issue_sql)
+            """  # noqa: S608
 
-        if scope in ("all", "wiki"):
-            wiki_sql = f"""
+    @staticmethod
+    def _fts_part_wiki(q: _FtsQuery) -> str:
+        return f"""
                 SELECT * FROM (
                     SELECT
                         '{_SRT_WIKI}' as result_type,
@@ -1053,7 +1161,7 @@ class SearchService:
                     JOIN wiki_pages wp ON wp.id = wc.page_id
                     JOIN wikis w ON w.id = wp.wiki_id
                     JOIN projects p ON p.id = w.project_id
-                    CROSS JOIN LATERAL {tsq_w}
+                    CROSS JOIN LATERAL {q.tsq_w}
                     JOIN (
                         SELECT page_id, MAX(version) as max_ver
                         FROM wiki_contents
@@ -1061,19 +1169,17 @@ class SearchService:
                     ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
                     WHERE wc.search_vector @@ query
                     AND wp.deleted_at IS NULL
-                    {wiki_project_filter}
-                    {wiki_visibility}
-                    {wiki_tag_filter}
+                    {q.wiki_project_filter}
+                    {q.wiki_visibility}
+                    {q.wiki_tag_filter}
                     ORDER BY score DESC LIMIT :part_limit
                 ) wiki_sub
-            """
-            parts.append(wiki_sql)
+            """  # noqa: S608
 
-        # Comment keyword search: search search_chunks content for source_type='comment'
-        # Comments inherit visibility from their parent issue via journals table.
-        # Skipped when a tag filter is active (comments are not taggable).
-        if scope in ("all", "comments") and not tags_active:
-            comment_sql = f"""
+    @staticmethod
+    def _fts_part_comment(q: _FtsQuery) -> str:
+        """Comments: search_chunks of source_type ``journal``, visible as their parent issue is."""
+        return f"""
                 SELECT * FROM (
                     SELECT
                         '{_SRT_COMMENT}' as result_type,
@@ -1088,41 +1194,38 @@ class SearchService:
                     JOIN search_sources ss ON ss.id = sc.source_id
                     JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
                     JOIN issues ci ON ci.id = j.issue_id
-                    CROSS JOIN LATERAL {tsq_ci}
+                    CROSS JOIN LATERAL {q.tsq_ci}
                     WHERE sc.search_vector @@ query
                     AND ss.source_type = '{_SST_JOURNAL}'
-                    {comment_project_filter}
-                    {comment_visibility}
+                    {q.comment_project_filter}
+                    {q.comment_visibility}
                     ORDER BY score DESC LIMIT :part_limit
                 ) comments_sub
-            """
-            parts.append(comment_sql)
+            """  # noqa: S608
 
-        # Attachment keyword search: search search_chunks for source_type='attachment'
-        # Skipped when a tag filter is active (attachments are not taggable).
-        att_pf = issue_project_filter  # same params, different alias handled in helper
-        if scope in ("all", "attachments") and not tags_active:
-            parts.append(self._attachment_fts_sql(user, att_pf, parsed))
+    def _fts_part_attachment(self, q: _FtsQuery) -> str:
+        """Attachments: search_chunks of source_type ``attachment`` (the issue project filter, re-aliased)."""
+        return self._attachment_fts_sql(q.user, q.issue_project_filter, q.parsed)
 
-        # --- Count parts: ALWAYS build for all 4 types (single-query per-type counts) ---
-
-        count_parts["issues"] = f"""
+    def _fts_count_parts(self, q: _FtsQuery) -> dict[str, str]:
+        """COUNT SQL of every type, whatever the scope, so one query gives the filter tabs their totals."""
+        counts = {
+            "issues": f"""
             SELECT COUNT(*) as cnt
             FROM issues i
-            CROSS JOIN LATERAL {tsq_i}
+            CROSS JOIN LATERAL {q.tsq_i}
             WHERE i.search_vector @@ query
-            {issue_project_filter}
-            {issue_visibility}
-            {issue_filter_sql}
-            {pinned_exclusion}
-        """
-
-        count_parts["wiki"] = f"""
+            {q.issue_project_filter}
+            {q.issue_visibility}
+            {q.issue_filter_sql}
+            {q.pinned_exclusion}
+        """,  # noqa: S608
+            "wiki": f"""
             SELECT COUNT(*) as cnt
             FROM wiki_contents wc
             JOIN wiki_pages wp ON wp.id = wc.page_id
             JOIN wikis w ON w.id = wp.wiki_id
-            CROSS JOIN LATERAL {tsq_w}
+            CROSS JOIN LATERAL {q.tsq_w}
             JOIN (
                 SELECT page_id, MAX(version) as max_ver
                 FROM wiki_contents
@@ -1130,93 +1233,43 @@ class SearchService:
             ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
             WHERE wc.search_vector @@ query
             AND wp.deleted_at IS NULL
-            {wiki_project_filter}
-            {wiki_visibility}
-            {wiki_tag_filter}
-        """
-
-        if tags_active:
+            {q.wiki_project_filter}
+            {q.wiki_visibility}
+            {q.wiki_tag_filter}
+        """,  # noqa: S608
+        }
+        if q.tags_active:
             # Comments/attachments cannot carry tags — report zero for their tabs.
-            count_parts["comments"] = "SELECT 0 as cnt"
-            count_parts["attachments"] = "SELECT 0 as cnt"
-        else:
-            count_parts["comments"] = f"""
+            counts["comments"] = "SELECT 0 as cnt"
+            counts["attachments"] = "SELECT 0 as cnt"
+            return counts
+        counts["comments"] = f"""
                 SELECT COUNT(*) as cnt
                 FROM search_chunks sc
                 JOIN search_sources ss ON ss.id = sc.source_id
                 JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
                 JOIN issues ci ON ci.id = j.issue_id
-                CROSS JOIN LATERAL {tsq_ci}
+                CROSS JOIN LATERAL {q.tsq_ci}
                 WHERE sc.search_vector @@ query
                 AND ss.source_type = '{_SST_JOURNAL}'
-                {comment_project_filter}
-                {comment_visibility}
-            """
+                {q.comment_project_filter}
+                {q.comment_visibility}
+            """  # noqa: S608
+        counts["attachments"] = self._attachment_fts_count_sql(q.user, q.issue_project_filter, q.parsed)
+        return counts
 
-            count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf, parsed)
-
-        if not parts:
-            return [], 0, {}
-
-        # Combined query with UNION ALL, ordered by score desc. The pinned
-        # issues take the first places, so the ranked rows start after them.
-        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
-        union_sql = " UNION ALL ".join(parts)
-        full_sql = f"""
-            {cte_prefix}
-            SELECT * FROM ({union_sql}) combined
-            ORDER BY score DESC
-            LIMIT :limit OFFSET :offset
-        """
-        params["limit"] = ranked_limit
-        params["offset"] = ranked_offset
-        # Each part must supply every row up to the end of the page, not just
-        # one page's worth, or later pages come back short. Capped whatever the
-        # caller passes, so no request makes a part rank more than the deepest
-        # page search serves; a page past the cap comes back empty.
-        params["part_limit"] = min(ranked_offset + ranked_limit, _MAX_PART_ROWS)
-
-        result = await session.execute(text(full_sql), params)
-
-        results = [
-            SearchResult(
-                result_type=row._mapping["result_type"],
-                id=row._mapping["id"],
-                title=row._mapping["title"],
-                subtitle=row._mapping["subtitle"],
-                snippet=_clean_snippet(row._mapping["snippet"]),
-                score=float(row._mapping["score"]),
-                project_key=row._mapping["project_key"],
-            )
-            for row in result
-        ]
-        if pinned:
-            results = self._rank_pinned_first(pinned[pinned_slice], results)
-
-        # Per-type counts in a single query (skipped when called from hybrid_search)
-        type_counts: dict[str, int] = {}
-        total = 0
-        if not skip_count:
-            # Build a single SELECT with scalar subqueries for each type.
-            # PostgreSQL can parallelize these subqueries internally.
-            subquery_parts = [f"({count_sql}) as {type_name}_count" for type_name, count_sql in count_parts.items()]
-            combined_count_sql = f"""
+    @staticmethod
+    async def _fts_type_counts(
+        session: AsyncSession, cte_prefix: str, count_parts: dict[str, str], params: dict[str, Any]
+    ) -> dict[str, int]:
+        """The per-type totals in one SELECT of scalar subqueries (PostgreSQL can run them in parallel)."""
+        subquery_parts = [f"({count_sql}) as {type_name}_count" for type_name, count_sql in count_parts.items()]
+        combined_count_sql = f"""
                 {cte_prefix}
                 SELECT {", ".join(subquery_parts)}
             """
-            count_result = await session.execute(text(combined_count_sql), params)
-            row = count_result.one()
-            for type_name in count_parts:
-                type_counts[type_name] = row._mapping[f"{type_name}_count"]
-            type_counts["issues"] += len(pinned)
-            type_counts["all"] = sum(type_counts.values())
-            # Total for the current scope: sum of active scope types only
-            if scope == "all":
-                total = type_counts["all"]
-            else:
-                total = type_counts.get(scope, 0)
-
-        return results, total, type_counts
+        row = (await session.execute(text(combined_count_sql), params)).one()
+        return {type_name: row._mapping[f"{type_name}_count"] for type_name in count_parts}
 
     async def filter_issues(
         self,
@@ -1267,7 +1320,7 @@ class SearchService:
             SELECT COUNT(*) as cnt
             FROM issues i
             {where_sql}
-        """
+        """  # noqa: S608
         count_result = await session.execute(text(count_sql), params)
         total = int(count_result.scalar_one())
 
@@ -1298,7 +1351,7 @@ class SearchService:
             {where_sql}
             ORDER BY i.updated_at DESC, i.id DESC
             LIMIT :limit OFFSET :offset
-        """
+        """  # noqa: S608
         result = await session.execute(text(list_sql), params)
         results = [
             SearchResult(
@@ -1404,7 +1457,7 @@ class SearchService:
                     i.updated_at as sort_ts
                 FROM issues i
                 {issue_where}
-            """)
+            """)  # noqa: S608
         if scope in ("all", "wiki"):
             parts.append(f"""
                 SELECT
@@ -1420,7 +1473,7 @@ class SearchService:
                 JOIN wikis w ON w.id = wp.wiki_id
                 JOIN projects p ON p.id = w.project_id
                 {wiki_where}
-            """)
+            """)  # noqa: S608
 
         if not parts:
             return [], total, type_counts
@@ -1434,7 +1487,7 @@ class SearchService:
             FROM ({union_sql}) combined
             ORDER BY sort_ts DESC, id DESC
             LIMIT :limit OFFSET :offset
-        """
+        """  # noqa: S608
         result = await session.execute(text(list_sql), params)
         results = [
             SearchResult(
@@ -1481,7 +1534,7 @@ class SearchService:
         )
         return True
 
-    async def semantic_search(
+    async def semantic_search(  # noqa: PLR0913 - the same parameters as search()
         self,
         session: AsyncSession,
         query: str,
@@ -1494,8 +1547,13 @@ class SearchService:
         filters: SearchFilters | None = None,
         *,
         resolve_identifiers: bool = True,
+        scope: str = "all",
     ) -> tuple[list[SearchResult], int]:
         """Semantic-only search using pgvector cosine similarity.
+
+        *scope* (``issues``, ``wiki``, ``comments``, ``attachments`` or
+        ``all``) and the issue filters in *filters* narrow the results the way
+        they narrow a keyword search: the issue filters apply to issues.
 
         Generates an embedding for the query text, then finds the most
         similar chunks via cosine distance. Returns results mapped back
@@ -1519,38 +1577,14 @@ class SearchService:
 
         pinned: list[SearchResult] = []
         if resolve_identifiers:
-            identifiers = extract_identifiers(query)
-            source_numbers = extract_source_numbers(query)
-            if identifiers or source_numbers:
-                pinned = await self._identifier_hits(
-                    session,
-                    identifiers,
-                    user,
-                    project_id=project_id,
-                    project_ids=project_ids,
-                    filters=filters,
-                    source_numbers=source_numbers,
-                )
+            pinned = await self._semantic_pinned(session, query, user, project_id, project_ids, filters)
         pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
 
         emb_service = EmbeddingService()
         model = await emb_service.get_default_model(session)
-        if model is None:
+        vec_literal = await _query_vector_literal(emb_service, query, model) if model is not None else None
+        if model is None or vec_literal is None:
             return pinned[pinned_slice], len(pinned)
-
-        from specivo.services.query_embedding_cache import embed_query
-
-        try:
-            # Cached briefly in Redis, so a repeated or paged query does not
-            # run the model again (specivo.services.query_embedding_cache).
-            query_vector = await embed_query(emb_service, query, model)
-        except Exception as exc:  # noqa: BLE001 - a broken model turns semantic search off, never a 500
-            _warn_embedding_failure(model, exc)
-            query_vector = None
-        if query_vector is None:
-            return pinned[pinned_slice], len(pinned)
-        # Format vector as PostgreSQL literal: '[0.1,0.2,...]'
-        vec_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
 
         params: dict[str, Any] = {"model_id": model.id, "query_vector": vec_literal}
         # Nearest neighbours exist for any query, related or not: only chunks at
@@ -1562,18 +1596,112 @@ class SearchService:
             params["min_similarity"] = min_similarity
             score_filter = "AND n.score >= :min_similarity"
             exact_score_filter = "AND (1 - (ce.embedding <=> CAST(:query_vector AS vector))) >= :min_similarity"
-        project_filter = ""
-        if project_ids is not None:
-            project_filter = "AND ss.project_id = ANY(:project_ids)"
-            params["project_ids"] = project_ids
-        elif project_id is not None:
-            project_filter = "AND ss.project_id = :project_id"
-            params["project_id"] = project_id
+        project_filter = _semantic_project_filter(project_id, project_ids, params)
 
         params.update(await self._visibility_params(session, user))
 
         # Visibility filters for semantic search (CTE-optimized)
         cte_prefix = self._visibility_cte_sql(user)
+        branches = self._semantic_branches(user, filters, params, pinned, scope)
+        if branches is None:
+            return [], 0
+        sem_where_or, count_where_or = branches
+
+        # The exact ranking first narrows the rows to the projects in scope and,
+        # for a non-admin, to projects where the user can see something at all
+        # (every visibility rule needs such a ``user_visibility`` row), so the
+        # planner can skip the distance for chunks that could never be shown.
+        # That narrowing stays out of the index rounds: there it makes the
+        # planner drop the index for a join plan (see _nearest_cte).
+        exact_scope = project_filter.replace("ss.", "ss0.")
+        if not user.is_admin:
+            exact_scope += """
+                  AND ss0.project_id IN (SELECT uv0.project_id FROM user_visibility uv0
+                                         WHERE uv0.visibility_level > 0 OR uv0.can_view_wiki)"""
+        ranked_sql = _semantic_ranked_sql(project_filter, score_filter, sem_where_or)
+
+        # Rank the first offset + limit entities; the page is cut in Python.
+        # The one-row ``fetched`` side reports how many candidates the round
+        # read and the lowest score among them, even when none is visible.
+        def semantic_sql(candidates: int | None) -> str:
+            return f"""
+            {_nearest_cte(cte_prefix, exact_scope, exact_score_filter, candidates)}
+            SELECT fetched.n AS candidate_count, fetched.lowest AS lowest_score, page.*
+            FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
+            LEFT JOIN ({ranked_sql}) page ON true
+            ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
+        """  # noqa: S608
+
+        needed = ranked_offset + ranked_limit
+        params["needed"] = needed
+        rows: list[Any] = []
+        if needed > 0:
+            rows = await self._run_semantic_rounds(session, model, params, needed, min_similarity, semantic_sql)
+
+        results = [_semantic_result(row) for row in rows[ranked_offset:]]
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
+
+        # Count total semantic results (skipped when called from hybrid_search)
+        total = 0
+        if not skip_count:
+            count_sql = f"""
+                {cte_prefix}
+                SELECT COUNT(DISTINCT (ss.source_type, ss.entity_id))
+                FROM chunk_embeddings ce
+                JOIN search_chunks sc ON sc.id = ce.chunk_id
+                JOIN search_sources ss ON ss.id = sc.source_id
+                LEFT JOIN attachments att_c ON ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id = ss.entity_id
+                LEFT JOIN issues att_c_iss ON att_c.container_type = 'Issue' AND att_c_iss.id = att_c.container_id
+                LEFT JOIN wiki_pages att_c_wp ON att_c.container_type = 'WikiPage' AND att_c_wp.id = att_c.container_id
+                LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
+                WHERE ce.model_id = :model_id
+                {project_filter}
+                {exact_score_filter}
+                AND {count_where_or}
+            """  # noqa: S608
+            count_result = await session.execute(text(count_sql), params)
+            total = count_result.scalar_one() + len(pinned)
+
+        return results, total
+
+    async def _semantic_pinned(
+        self,
+        session: AsyncSession,
+        query: str,
+        user: User,
+        project_id: int | None,
+        project_ids: list[int] | None,
+        filters: SearchFilters | None,
+    ) -> list[SearchResult]:
+        """The issues *query* names by reference or source ticket number, ranked ahead of the semantic hits."""
+        identifiers = extract_identifiers(query)
+        source_numbers = extract_source_numbers(query)
+        if not identifiers and not source_numbers:
+            return []
+        return await self._identifier_hits(
+            session,
+            identifiers,
+            user,
+            project_id=project_id,
+            project_ids=project_ids,
+            filters=filters,
+            source_numbers=source_numbers,
+        )
+
+    def _semantic_branches(
+        self,
+        user: User,
+        filters: SearchFilters | None,
+        params: dict[str, Any],
+        pinned: list[SearchResult],
+        scope: str,
+    ) -> tuple[str, str] | None:
+        """The ``WHERE`` alternatives per source type for the ranked query and for the count.
+
+        ``None`` when *scope* leaves no source type to search. Fills *params*
+        with the tag filter, pinned issue and issue filter parameters.
+        """
         issue_vis = self._issue_visibility_cte_clause(user, alias="i2")
         wiki_vis = self._wiki_visibility_cte_clause(user, alias="w2")
         comment_vis = self._comment_visibility_clause(user, journal_alias="cj", issue_alias="ci2")
@@ -1604,68 +1732,321 @@ class SearchService:
             params["pinned_issue_ids"] = [r.id for r in pinned]
         wiki_tag_vis = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp2")
 
+        # The keyword path's issue filters, on this query's alias for issues.
+        issue_field_filter = re.sub(r"\bi\.", "i2.", self._build_issue_filters(filters, params))
         issue_branch = f"""(ss.source_type = '{_SST_ISSUE}' AND EXISTS (
                         SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
                         {issue_vis}
                         {issue_tag_vis}
+                        {issue_field_filter}
                         {pinned_exclusion}
-                    ))"""
+                    ))"""  # noqa: S608
         wiki_branch = f"""(ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
                         SELECT 1 FROM wiki_pages wp2
                         JOIN wikis w2 ON w2.id = wp2.wiki_id
                         WHERE wp2.id = ss.entity_id
                         {wiki_vis}
                         {wiki_tag_vis}
-                    ))"""
+                    ))"""  # noqa: S608
         comment_branch = f"""(ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
                         SELECT 1 FROM journals cj
                         JOIN issues ci2 ON ci2.id = cj.issue_id
                         WHERE cj.id = ss.entity_id
                         {comment_vis}
-                    ))"""
+                    ))"""  # noqa: S608
         att_branch = f"""(ss.source_type = '{_SST_ATTACHMENT}' AND att.id IS NOT NULL
                      {att_sem_vis})"""
         att_count_branch = f"""(ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id IS NOT NULL
                      {self._attachment_semantic_count_vis(user)})"""
 
         _or_join = "\n                    OR\n                    "
-        _result_branches = [issue_branch, wiki_branch]
-        _count_branches = [issue_branch, wiki_branch]
+        in_scope = _SEMANTIC_SCOPES.get(scope, _SEMANTIC_SCOPES["all"])
+        _result_branches = [b for kind, b in (("issue", issue_branch), ("wiki", wiki_branch)) if kind in in_scope]
+        _count_branches = list(_result_branches)
         if not tags_active:
-            _result_branches += [comment_branch, att_branch]
-            _count_branches += [comment_branch, att_count_branch]
+            _result_branches += [
+                b for kind, b in (("comment", comment_branch), ("att", att_branch)) if kind in in_scope
+            ]
+            _count_branches += [
+                b for kind, b in (("comment", comment_branch), ("att", att_count_branch)) if kind in in_scope
+            ]
+        if not _result_branches:
+            return None
         sem_where_or = "(\n                    " + _or_join.join(_result_branches) + "\n                )"
         count_where_or = "(\n                    " + _or_join.join(_count_branches) + "\n                )"
+        return sem_where_or, count_where_or
 
-        # Two phases: the CTE ``nearest`` picks candidate chunks by cosine
-        # distance alone, then the outer query joins them to their entities,
-        # applies visibility, keeps the best chunk per entity and ranks.
-        #
-        # Through the HNSW index (a partial index on the cast expression, so the
-        # query repeats that expression), ``nearest`` holds the closest
-        # ``candidates`` chunks. Visibility is applied afterwards, so when too
-        # few candidates are visible the round is repeated with a wider set,
-        # and once that grows past SEMANTIC_MAX_INDEX_CANDIDATES (or the index
-        # scan returns fewer rows than asked) every embedding is ranked exactly.
-        # A visible match therefore never drops out because hidden chunks rank
-        # ahead of it. Without the index (another vector size, or a pgvector too
-        # old for iterative scans) the exact ranking is used straight away.
-        #
-        # The exact ranking first narrows the rows to the projects in scope and,
-        # for a non-admin, to projects where the user can see something at all
-        # (every visibility rule needs such a ``user_visibility`` row), so the
-        # planner can skip the distance for chunks that could never be shown.
-        # That narrowing stays out of the index rounds: there it makes the
-        # planner drop the index for a join plan.
-        exact_scope = project_filter.replace("ss.", "ss0.")
-        if not user.is_admin:
-            exact_scope += """
-                  AND ss0.project_id IN (SELECT uv0.project_id FROM user_visibility uv0
-                                         WHERE uv0.visibility_level > 0 OR uv0.can_view_wiki)"""
+    async def _run_semantic_rounds(
+        self,
+        session: AsyncSession,
+        model: EmbeddingModel,
+        params: dict[str, Any],
+        needed: int,
+        min_similarity: float | None,
+        semantic_sql: Callable[[int | None], str],
+    ) -> list[Any]:
+        """The visible ranked rows, widening the index candidates until *needed* rows are visible.
 
-        def nearest_cte(candidates: int | None) -> str:
-            if candidates is None:
-                body = f"""nearest AS MATERIALIZED (
+        Through the HNSW index, each round ranks the closest ``candidates``
+        chunks and applies visibility afterwards. When too few are visible the
+        round is repeated with a wider set, and once that grows past
+        SEMANTIC_MAX_INDEX_CANDIDATES (or the index scan returns fewer rows than
+        asked) every embedding is ranked exactly. Without the index the exact
+        ranking is used straight away.
+        """
+        candidates: int | None = None
+        if model.dimensions == SEMANTIC_INDEX_DIMENSIONS and await self._prepare_index_scan(session):
+            candidates = needed * get_settings().search_semantic_overfetch
+        while True:
+            if candidates is not None and candidates > SEMANTIC_MAX_INDEX_CANDIDATES:
+                candidates = None
+            params["candidates"] = candidates
+            fetched = (await session.execute(text(semantic_sql(candidates)), params)).all()
+            rows = [row for row in fetched if row._mapping["result_type"] is not None]
+            logger.debug(
+                "Semantic search round: %s candidates, %d of %d results",
+                "all" if candidates is None else candidates,
+                len(rows),
+                needed,
+            )
+            if candidates is None or len(rows) >= needed:
+                return rows
+            lowest = fetched[0]._mapping["lowest_score"]
+            if min_similarity is not None and lowest is not None and lowest < min_similarity:
+                # The round already reached chunks below the cut-off; the
+                # wider rounds would only add chunks further away still.
+                return rows
+            candidates = _next_candidates(candidates, fetched[0]._mapping["candidate_count"], len(rows), needed)
+
+    async def hybrid_search(
+        self,
+        session: AsyncSession,
+        query: str,
+        user: User,
+        project_id: int | None = None,
+        project_ids: list[int] | None = None,
+        scope: str = "all",
+        offset: int = 0,
+        limit: int = 25,
+        filters: SearchFilters | None = None,
+    ) -> tuple[list[SearchResult], int, dict[str, int]]:
+        """Hybrid search: semantic (pgvector) + keyword (tsvector), RRF fusion.
+
+        1. Run FTS query (existing search logic) -> ranked list with IDs
+        2. Run semantic query (pgvector cosine similarity) -> ranked list with IDs
+        3. Merge using RRF (k=60): score = 1/(k+rank_fts) + 1/(k+rank_semantic)
+        4. Sort by combined score, apply offset/limit
+
+        The semantic list holds only hits above the minimum similarity, so a
+        result found by the semantic side alone must clear it, while every
+        keyword hit stays (a keyword hit below it just gets no semantic boost).
+
+        Issues the query names by reference (``ACME-42``) are resolved
+        directly and placed ahead of the fused ranking, rather than fused:
+        RRF would let a strong semantic neighbour outrank the exact hit.
+
+        Returns:
+            Tuple of (results, total, type_counts). The type_counts are derived
+            from the FTS count query (accurate per-type totals from the DB).
+        """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
+        pinned: list[SearchResult] = []
+        identifiers = extract_identifiers(query)
+        source_numbers = extract_source_numbers(query)
+        if (identifiers or source_numbers) and scope in ("all", "issues"):
+            pinned = await self._identifier_hits(
+                session,
+                identifiers,
+                user,
+                project_id=project_id,
+                project_ids=project_ids,
+                filters=filters,
+                source_numbers=source_numbers,
+            )
+
+        # Get both result sets (unpaginated for RRF merging).
+        # skip_count=True for both — hybrid computes its own counts from merged results.
+        fts_results, _fts_total, _ = await self.search(
+            session,
+            query,
+            user=user,
+            project_id=project_id,
+            project_ids=project_ids,
+            # Prefetched within the scope: filtering afterwards would let the
+            # cap fill with results of other types and lose the ones asked for.
+            scope=scope,
+            offset=0,
+            limit=SEARCH_HYBRID_PREFETCH_LIMIT,
+            filters=filters,
+            skip_count=True,
+            resolve_identifiers=False,
+        )
+        sem_results, sem_total = await self.semantic_search(
+            session,
+            query,
+            user=user,
+            project_id=project_id,
+            project_ids=project_ids,
+            offset=0,
+            limit=SEARCH_HYBRID_PREFETCH_LIMIT,
+            skip_count=True,
+            filters=filters,
+            resolve_identifiers=False,
+            scope=scope,
+        )
+
+        if not fts_results and not sem_results and not pinned:
+            return [], 0, _empty_type_counts(include_all=True)
+
+        fused = _Fused.of(fts_results, sem_results, pinned)
+        type_counts = fused.type_counts()
+        ranked_keys = fused.in_scope(scope)
+        type_counts["issues"] += len(pinned)
+        total = len(pinned) + len(ranked_keys)
+        type_counts["all"] = sum(type_counts.values())
+
+        # Apply pagination: the pinned issues take the first places.
+        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
+        results = [fused.result(key) for key in ranked_keys[ranked_offset : ranked_offset + ranked_limit]]
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
+
+        return results, total, type_counts
+
+
+# ---------------------------------------------------------------------------
+# Hybrid fusion
+# ---------------------------------------------------------------------------
+
+#: The type_counts key of each displayed result type.
+_COUNT_KEY_OF_TYPE: dict[str, str] = {
+    SearchResultType.ISSUE: "issues",
+    SearchResultType.WIKI: "wiki",
+    SearchResultType.COMMENT: "comments",
+    SearchResultType.ATTACHMENT: "attachments",
+}
+
+
+def _result_key(result: SearchResult) -> str:
+    """The composite ``type:id`` key that tells results of different types apart."""
+    return f"{result.result_type}:{result.id}"
+
+
+@dataclass
+class _Fused:
+    """The keyword and semantic lists of a hybrid search fused by RRF, pinned issues left out."""
+
+    ranked_keys: list[str]
+    scores: dict[str, float]
+    results: dict[str, SearchResult]
+    fts_ranks: dict[str, int]
+    sem_ranks: dict[str, int]
+
+    @classmethod
+    def of(cls, fts_results: list[SearchResult], sem_results: list[SearchResult], pinned: list[SearchResult]) -> _Fused:
+        # The pinned issues lead; drop them from the fused lists.
+        pinned_keys = {_result_key(r) for r in pinned}
+        fts = [r for r in fts_results if _result_key(r) not in pinned_keys]
+        sem = [r for r in sem_results if _result_key(r) not in pinned_keys]
+        fts_keys = [_result_key(r) for r in fts]
+        sem_keys = [_result_key(r) for r in sem]
+        # A result found by both sides is shown as the keyword side has it.
+        results: dict[str, SearchResult] = {}
+        for r in [*fts, *sem]:
+            results.setdefault(_result_key(r), r)
+        scores = rrf_scores(fts_keys, sem_keys, RRF_K)
+        return cls(
+            ranked_keys=sorted(scores, key=lambda x: scores[x], reverse=True),
+            scores=scores,
+            results=results,
+            fts_ranks={key: i + 1 for i, key in enumerate(fts_keys)},
+            sem_ranks={key: i + 1 for i, key in enumerate(sem_keys)},
+        )
+
+    def _display_type(self, key: str) -> str | None:
+        return SOURCE_TYPE_TO_DISPLAY.get(self.results[key].result_type)
+
+    def type_counts(self) -> dict[str, int]:
+        """Per-type counts of the fused results (not of the keyword side alone), without ``all``."""
+        counts = _empty_type_counts()
+        for key in self.ranked_keys:
+            count_key = _COUNT_KEY_OF_TYPE.get(self._display_type(key) or "")
+            if count_key:
+                counts[count_key] += 1
+        return counts
+
+    def in_scope(self, scope: str) -> list[str]:
+        """The ranked keys of *scope*'s type (all of them for ``all``)."""
+        if scope == "all":
+            return self.ranked_keys
+        allowed = {key for key, count_key in _COUNT_KEY_OF_TYPE.items() if count_key == scope}
+        return [key for key in self.ranked_keys if self._display_type(key) in allowed]
+
+    def result(self, key: str) -> SearchResult:
+        """The result of *key* with its RRF score and its rank on each side."""
+        r = self.results[key]
+        return SearchResult(
+            result_type=r.result_type,
+            id=r.id,
+            title=r.title,
+            subtitle=r.subtitle,
+            snippet=r.snippet,
+            score=self.scores[key],
+            project_key=r.project_key,
+            fts_rank=self.fts_ranks.get(key),
+            sem_rank=self.sem_ranks.get(key),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Semantic search SQL
+# ---------------------------------------------------------------------------
+
+
+async def _query_vector_literal(emb_service: Any, query: str, model: EmbeddingModel) -> str | None:
+    """The query's embedding as a PostgreSQL vector literal (``'[0.1,0.2,...]'``), or ``None``.
+
+    ``None`` when the model cannot embed it: a broken model turns semantic
+    search off, never a 500.
+    """
+    from specivo.services.query_embedding_cache import embed_query
+
+    try:
+        # Cached briefly in Redis, so a repeated or paged query does not
+        # run the model again (specivo.services.query_embedding_cache).
+        query_vector = await embed_query(emb_service, query, model)
+    except Exception as exc:  # a broken model turns semantic search off, never a 500  # noqa: BLE001
+        _warn_embedding_failure(model, exc)
+        return None
+    if query_vector is None:
+        return None
+    return "[" + ",".join(str(v) for v in query_vector) + "]"
+
+
+def _semantic_project_filter(project_id: int | None, project_ids: list[int] | None, params: dict[str, Any]) -> str:
+    """The ``search_sources`` (``ss``) project condition, its parameter added to *params*."""
+    if project_ids is not None:
+        params["project_ids"] = project_ids
+        return "AND ss.project_id = ANY(:project_ids)"
+    if project_id is not None:
+        params["project_id"] = project_id
+        return "AND ss.project_id = :project_id"
+    return ""
+
+
+def _nearest_cte(cte_prefix: str, exact_scope: str, exact_score_filter: str, candidates: int | None) -> str:
+    """The ``WITH`` clause whose ``nearest`` CTE picks the candidate chunks by cosine distance alone.
+
+    Two phases: ``nearest`` picks candidates, then the outer query joins them
+    to their entities, applies visibility, keeps the best chunk per entity and
+    ranks. With *candidates*, ``nearest`` holds the closest ``candidates``
+    chunks through the HNSW index (a partial index on the cast expression, so
+    the query repeats that expression); with ``None`` it ranks every embedding
+    exactly, narrowed by *exact_scope*.
+    """
+    if candidates is None:
+        body = f"""nearest AS MATERIALIZED (
                 SELECT ce.chunk_id,
                        (1 - (ce.embedding <=> CAST(:query_vector AS vector))) AS score
                 FROM chunk_embeddings ce
@@ -1674,22 +2055,25 @@ class SearchService:
                 WHERE ce.model_id = :model_id
                 {exact_scope}
                 {exact_score_filter}
-            )"""
-            else:
-                dims = SEMANTIC_INDEX_DIMENSIONS
-                distance = f"ce.embedding::vector({dims}) <=> CAST(:query_vector AS vector({dims}))"
-                body = f"""nearest AS MATERIALIZED (
+            )"""  # noqa: S608
+    else:
+        dims = SEMANTIC_INDEX_DIMENSIONS
+        distance = f"ce.embedding::vector({dims}) <=> CAST(:query_vector AS vector({dims}))"
+        body = f"""nearest AS MATERIALIZED (
                 SELECT ce.chunk_id, (1 - ({distance})) AS score
                 FROM chunk_embeddings ce
                 WHERE ce.model_id = :model_id
                   AND vector_dims(ce.embedding) = {dims}
                 ORDER BY {distance}
                 LIMIT :candidates
-            )"""
-            # cte_prefix is "WITH user_visibility AS (...)" or empty (admins).
-            return f"{cte_prefix},\n            {body}" if cte_prefix else f"WITH {body}"
+            )"""  # noqa: S608
+    # cte_prefix is "WITH user_visibility AS (...)" or empty (admins).
+    return f"{cte_prefix},\n            {body}" if cte_prefix else f"WITH {body}"
 
-        ranked_sql = f"""
+
+def _semantic_ranked_sql(project_filter: str, score_filter: str, sem_where_or: str) -> str:
+    """The query ranking the visible ``nearest`` chunks: the best chunk per entity, at most ``:needed`` rows."""
+    return f"""
             SELECT result_type, id, title, subtitle, snippet, score, project_key
             FROM (
                 SELECT DISTINCT ON (ss.source_type, ss.entity_id)
@@ -1762,259 +2146,33 @@ class SearchService:
             ) deduped
             ORDER BY score DESC, result_type, id
             LIMIT :needed
-        """
+        """  # noqa: S608
 
-        # Rank the first offset + limit entities; the page is cut in Python.
-        # The one-row ``fetched`` side reports how many candidates the round
-        # read and the lowest score among them, even when none is visible.
-        def semantic_sql(candidates: int | None) -> str:
-            return f"""
-            {nearest_cte(candidates)}
-            SELECT fetched.n AS candidate_count, fetched.lowest AS lowest_score, page.*
-            FROM (SELECT count(*) AS n, min(score) AS lowest FROM nearest) fetched
-            LEFT JOIN ({ranked_sql}) page ON true
-            ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
-        """
 
-        needed = ranked_offset + ranked_limit
-        params["needed"] = needed
-        rows: list[Any] = []
-        if needed > 0:
-            candidates: int | None = None
-            if model.dimensions == SEMANTIC_INDEX_DIMENSIONS and await self._prepare_index_scan(session):
-                candidates = needed * get_settings().search_semantic_overfetch
-            while True:
-                if candidates is not None and candidates > SEMANTIC_MAX_INDEX_CANDIDATES:
-                    candidates = None
-                params["candidates"] = candidates
-                fetched = (await session.execute(text(semantic_sql(candidates)), params)).all()
-                rows = [row for row in fetched if row._mapping["result_type"] is not None]
-                logger.debug(
-                    "Semantic search round: %s candidates, %d of %d results",
-                    "all" if candidates is None else candidates,
-                    len(rows),
-                    needed,
-                )
-                if candidates is None or len(rows) >= needed:
-                    break
-                lowest = fetched[0]._mapping["lowest_score"]
-                if min_similarity is not None and lowest is not None and lowest < min_similarity:
-                    # The round already reached chunks below the cut-off; the
-                    # wider rounds would only add chunks further away still.
-                    break
-                if fetched[0]._mapping["candidate_count"] < candidates:
-                    # The index ran out before the limit: the table holds fewer
-                    # rows, or the scan hit pgvector's hnsw.max_scan_tuples.
-                    candidates = None
-                elif rows:
-                    # Widen by at least the share still missing, twice over.
-                    candidates *= max(SEMANTIC_CANDIDATE_GROWTH, math.ceil(2 * needed / len(rows)))
-                else:
-                    candidates *= SEMANTIC_CANDIDATE_GROWTH**2
+def _next_candidates(candidates: int, candidate_count: int, visible: int, needed: int) -> int | None:
+    """The candidate count for the next semantic round; ``None`` ranks every embedding exactly."""
+    if candidate_count < candidates:
+        # The index ran out before the limit: the table holds fewer
+        # rows, or the scan hit pgvector's hnsw.max_scan_tuples.
+        return None
+    if visible:
+        # Widen by at least the share still missing, twice over.
+        return candidates * max(SEMANTIC_CANDIDATE_GROWTH, math.ceil(2 * needed / visible))
+    return candidates * SEMANTIC_CANDIDATE_GROWTH**2
 
-        results: list[SearchResult] = []
-        for row in rows[ranked_offset:]:
-            m = row._mapping
-            results.append(
-                SearchResult(
-                    result_type=m["result_type"],
-                    id=m["id"],
-                    title=m["title"] or "",
-                    subtitle=m["subtitle"],
-                    # Raw stored content, rendered with ``| safe`` on the search
-                    # page: escape it as the keyword path does. Hybrid search
-                    # reuses these results, so this covers both modes.
-                    snippet=_clean_snippet(m["snippet"]),
-                    score=float(m["score"]) if m["score"] is not None else 0.0,
-                    project_key=m["project_key"] or "",
-                )
-            )
-        if pinned:
-            results = self._rank_pinned_first(pinned[pinned_slice], results)
 
-        # Count total semantic results (skipped when called from hybrid_search)
-        total = 0
-        if not skip_count:
-            count_sql = f"""
-                {cte_prefix}
-                SELECT COUNT(DISTINCT (ss.source_type, ss.entity_id))
-                FROM chunk_embeddings ce
-                JOIN search_chunks sc ON sc.id = ce.chunk_id
-                JOIN search_sources ss ON ss.id = sc.source_id
-                LEFT JOIN attachments att_c ON ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id = ss.entity_id
-                LEFT JOIN issues att_c_iss ON att_c.container_type = 'Issue' AND att_c_iss.id = att_c.container_id
-                LEFT JOIN wiki_pages att_c_wp ON att_c.container_type = 'WikiPage' AND att_c_wp.id = att_c.container_id
-                LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
-                WHERE ce.model_id = :model_id
-                {project_filter}
-                {exact_score_filter}
-                AND {count_where_or}
-            """
-            count_result = await session.execute(text(count_sql), params)
-            total = count_result.scalar_one() + len(pinned)
-
-        return results, total
-
-    async def hybrid_search(
-        self,
-        session: AsyncSession,
-        query: str,
-        user: User,
-        project_id: int | None = None,
-        project_ids: list[int] | None = None,
-        scope: str = "all",
-        offset: int = 0,
-        limit: int = 25,
-        filters: SearchFilters | None = None,
-    ) -> tuple[list[SearchResult], int, dict[str, int]]:
-        """Hybrid search: semantic (pgvector) + keyword (tsvector), RRF fusion.
-
-        1. Run FTS query (existing search logic) -> ranked list with IDs
-        2. Run semantic query (pgvector cosine similarity) -> ranked list with IDs
-        3. Merge using RRF (k=60): score = 1/(k+rank_fts) + 1/(k+rank_semantic)
-        4. Sort by combined score, apply offset/limit
-
-        The semantic list holds only hits above the minimum similarity, so a
-        result found by the semantic side alone must clear it, while every
-        keyword hit stays (a keyword hit below it just gets no semantic boost).
-
-        Issues the query names by reference (``ACME-42``) are resolved
-        directly and placed ahead of the fused ranking, rather than fused:
-        RRF would let a strong semantic neighbour outrank the exact hit.
-
-        Returns:
-            Tuple of (results, total, type_counts). The type_counts are derived
-            from the FTS count query (accurate per-type totals from the DB).
-        """
-        # Narrow to the authenticating API key's project limit, if any.
-        project_id, project_ids = scope_project_ids(project_id, project_ids)
-        pinned: list[SearchResult] = []
-        identifiers = extract_identifiers(query)
-        source_numbers = extract_source_numbers(query)
-        if (identifiers or source_numbers) and scope in ("all", "issues"):
-            pinned = await self._identifier_hits(
-                session,
-                identifiers,
-                user,
-                project_id=project_id,
-                project_ids=project_ids,
-                filters=filters,
-                source_numbers=source_numbers,
-            )
-
-        # Get both result sets (unpaginated for RRF merging).
-        # skip_count=True for both — hybrid computes its own counts from merged results.
-        fts_results, _fts_total, _ = await self.search(
-            session,
-            query,
-            user=user,
-            project_id=project_id,
-            project_ids=project_ids,
-            scope="all",
-            offset=0,
-            limit=SEARCH_HYBRID_PREFETCH_LIMIT,
-            filters=filters,
-            skip_count=True,
-            resolve_identifiers=False,
-        )
-        sem_results, sem_total = await self.semantic_search(
-            session,
-            query,
-            user=user,
-            project_id=project_id,
-            project_ids=project_ids,
-            offset=0,
-            limit=SEARCH_HYBRID_PREFETCH_LIMIT,
-            skip_count=True,
-            filters=filters,
-            resolve_identifiers=False,
-        )
-
-        if not fts_results and not sem_results and not pinned:
-            return [], 0, _empty_type_counts(include_all=True)
-
-        # The pinned issues lead; drop them from the fused lists.
-        pinned_keys = {f"{r.result_type}:{r.id}" for r in pinned}
-        fts_results = [r for r in fts_results if f"{r.result_type}:{r.id}" not in pinned_keys]
-        sem_results = [r for r in sem_results if f"{r.result_type}:{r.id}" not in pinned_keys]
-
-        # Build ID lists and rank maps for RRF (using composite key: "type:id")
-        fts_keys = [f"{r.result_type}:{r.id}" for r in fts_results]
-        sem_keys = [f"{r.result_type}:{r.id}" for r in sem_results]
-        fts_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(fts_results)}
-        sem_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(sem_results)}
-
-        # Build lookup maps
-        result_map: dict[str, SearchResult] = {}
-        for r in fts_results:
-            key = f"{r.result_type}:{r.id}"
-            result_map[key] = r
-        for r in sem_results:
-            key = f"{r.result_type}:{r.id}"
-            if key not in result_map:
-                result_map[key] = r
-
-        # RRF fusion on string keys
-        scores: dict[str, float] = {}
-        k = RRF_K
-        for rank_0, key in enumerate(fts_keys):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank_0 + 1)
-        for rank_0, key in enumerate(sem_keys):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank_0 + 1)
-
-        sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)
-
-        # Compute per-type counts from the merged RRF results (not FTS alone)
-        _type_to_count_key = {
-            SearchResultType.ISSUE: "issues",
-            SearchResultType.WIKI: "wiki",
-            SearchResultType.COMMENT: "comments",
-            SearchResultType.ATTACHMENT: "attachments",
-        }
-        type_counts: dict[str, int] = _empty_type_counts()
-        for key in sorted_keys:
-            display = SOURCE_TYPE_TO_DISPLAY.get(result_map[key].result_type)
-            if display:
-                count_key = _type_to_count_key.get(display)
-                if count_key:
-                    type_counts[count_key] += 1
-
-        # Apply scope filter to sorted_keys if not "all"
-        if scope != "all":
-            scope_types: dict[str, set[str]] = {
-                "issues": {SearchResultType.ISSUE},
-                "wiki": {SearchResultType.WIKI},
-                "comments": {SearchResultType.COMMENT},
-                "attachments": {SearchResultType.ATTACHMENT},
-            }
-            allowed = scope_types.get(scope, set())
-            sorted_keys = [k for k in sorted_keys if SOURCE_TYPE_TO_DISPLAY.get(result_map[k].result_type) in allowed]
-
-        type_counts["issues"] += len(pinned)
-        total = len(pinned) + len(sorted_keys)
-        type_counts["all"] = sum(type_counts.values())
-
-        # Apply pagination: the pinned issues take the first places.
-        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
-        page_keys = sorted_keys[ranked_offset : ranked_offset + ranked_limit]
-
-        results = []
-        for key in page_keys:
-            r = result_map[key]
-            results.append(
-                SearchResult(
-                    result_type=r.result_type,
-                    id=r.id,
-                    title=r.title,
-                    subtitle=r.subtitle,
-                    snippet=r.snippet,
-                    score=scores[key],
-                    project_key=r.project_key,
-                    fts_rank=fts_rank_map.get(key),
-                    sem_rank=sem_rank_map.get(key),
-                )
-            )
-        if pinned:
-            results = self._rank_pinned_first(pinned[pinned_slice], results)
-
-        return results, total, type_counts
+def _semantic_result(row: Any) -> SearchResult:
+    """A ranked semantic row as a search result."""
+    m = row._mapping
+    return SearchResult(
+        result_type=m["result_type"],
+        id=m["id"],
+        title=m["title"] or "",
+        subtitle=m["subtitle"],
+        # Raw stored content, rendered with ``| safe`` on the search
+        # page: escape it as the keyword path does. Hybrid search
+        # reuses these results, so this covers both modes.
+        snippet=_clean_snippet(m["snippet"]),
+        score=float(m["score"]) if m["score"] is not None else 0.0,
+        project_key=m["project_key"] or "",
+    )

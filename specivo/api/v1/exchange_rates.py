@@ -62,7 +62,7 @@ def import_out(result: CsvImportResult) -> ExchangeRateImportOut:
                 base=r.base,
                 quote=r.quote,
                 rate=format(r.rate, "f"),
-                action=r.action,  # type: ignore[arg-type]
+                action=r.action,
             )
             for r in result.preview
         ],

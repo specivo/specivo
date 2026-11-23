@@ -15,7 +15,7 @@
           <span class="avatar-xs" :class="item.avatarIcon" aria-hidden="true"></span>
         </template>
         <template x-if="item.isUser && !item.avatarIcon && item.avatarUrl">
-          <img class="avatar-xs avatar-img" :src="item.avatarUrl" alt="">
+          <img class="avatar-xs avatar-img" :src="spUrl(item.avatarUrl)" alt="">
         </template>
         <template x-if="item.isUser && !item.avatarIcon && !item.avatarUrl">
           <span class="avatar-xs" :style="item.avatarStyle" x-text="item.initials" aria-hidden="true"></span>
@@ -62,7 +62,7 @@
   {% endif %}
   <span class="sp-filter-chip-label"><span class="sp-visually-hidden">{{ label }}: </span>{{ chip.label }}</span>
   <input type="hidden" name="{{ name }}" value="{{ chip.value }}">
-  <a href="{{ chip.clear_url }}" class="sp-filter-chip-clear"
+  <a href="{{ chip.clear_url | prefixed }}" class="sp-filter-chip-clear"
      aria-label="{% trans field=label %}Clear the %(field)s filter{% endtrans %}"
      title="{% trans field=label %}Clear the %(field)s filter{% endtrans %}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>

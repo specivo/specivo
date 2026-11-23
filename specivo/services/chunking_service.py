@@ -44,7 +44,7 @@ class ChunkingService:
             text += "\n\n" + description
         return [text]
 
-    def chunk_wiki_page(self, title: str, text: str) -> list[str]:
+    def chunk_wiki_page(self, title: str, text: str) -> list[str]:  # noqa: PLR0912
         """Wiki page -> split by markdown headings, code-block-aware.
 
         Fenced code blocks (``` or ~~~) are protected from heading-based
@@ -66,7 +66,7 @@ class ChunkingService:
         placeholders: dict[str, str] = {}
         counter = 0
 
-        def _replace_fence(m: re.Match) -> str:  # type: ignore[type-arg]
+        def _replace_fence(m: re.Match) -> str:
             nonlocal counter
             key = f"\x00FENCE{counter}\x00"
             counter += 1
@@ -249,7 +249,7 @@ class ChunkingService:
                 else:
                     # Single sentence exceeds max_chars — force-split
                     for i in range(0, len(sentence), max_chars - overlap):
-                        chunks.append(sentence[i : i + max_chars])
+                        chunks.append(sentence[i : i + max_chars])  # noqa: PERF401
                     current = ""
 
         if current.strip():

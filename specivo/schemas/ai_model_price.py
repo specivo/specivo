@@ -117,7 +117,7 @@ class AiModelPriceOut(BaseModel):
             long_context_threshold=row.long_context_threshold,
             is_local=row.is_local,
             baseline_model=row.baseline_model,
-            effective_from=_iso(row.effective_from),  # type: ignore[arg-type]
+            effective_from=_iso(row.effective_from),
             effective_to=_iso(row.effective_to),
             source=row.source,
             is_active=row.is_active,

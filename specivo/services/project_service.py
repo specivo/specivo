@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import Request
-from sqlalchemy import and_, delete, false, func, or_, select, text, union
+from sqlalchemy import CursorResult, and_, delete, exists, false, func, or_, select, text, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.exceptions import AnonymousAccessDeniedError, AppError, ConflictError, NotFoundError, ValidationError
+from specivo.core.exceptions import (
+    AnonymousAccessDeniedError,
+    AppError,
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
@@ -28,15 +35,22 @@ from specivo.services.anonymous_user_service import real_users_clause, refuse_an
 from specivo.services.api_key_scope import is_global_admin, project_in_scope, scope_clause
 from specivo.services.branch_name import BRANCH_NAME_SETTINGS_KEY
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
+from specivo.services.entity_link_nodes import GRAPH_METADATA_KEYS_SETTING
 from specivo.services.permission_service import (
     Permission,
     anonymous_role,
+    check_permission,
     member_principal_clause,
     projects_granting,
 )
 from specivo.services.similar_issues import SIMILAR_ISSUES_PROJECT_KEY
 
 logger = logging.getLogger(__name__)
+
+# Project statuses an update may set (active, closed); archived (9) belongs to
+# the admin archive and unarchive actions.
+_UPDATABLE_STATUSES = frozenset({1, 5})
+_PROJECT_STATUS_ARCHIVED = 9
 
 # Default modules enabled for every new project
 _DEFAULT_MODULES = ("issue_tracking", "wiki", "time_tracking")
@@ -132,6 +146,20 @@ class Principal:
         return Member.group_id == self.id
 
 
+def _settings_changes(data: ProjectUpdate) -> dict[str, Any]:
+    """The ``project.settings`` entries a partial update replaces."""
+    changes: dict[str, Any] = {}
+    if data.computed_metadata is not None:
+        changes[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
+    if data.branch_name is not None:
+        changes[BRANCH_NAME_SETTINGS_KEY] = data.branch_name.model_dump()
+    if data.similar_issues is not None:
+        changes[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
+    if data.graph_metadata_keys is not None:
+        changes[GRAPH_METADATA_KEYS_SETTING] = data.graph_metadata_keys
+    return changes
+
+
 class ProjectService:
     """Service layer for project operations."""
 
@@ -178,13 +206,14 @@ class ProjectService:
         self,
         session: AsyncSession,
         data: ProjectCreate,
-        creator_user: User,
     ) -> Project:
         """Create a root or child project.
 
         - Resolves ``parent_key`` to a ``parent_id`` and builds the ltree path.
-        - Adds the creator as a Manager member (role builtin=0, name=Manager).
         - Enables default modules.
+
+        No membership is added: only global admins create projects, and they
+        can reach every project without one.
         """
         parent: Project | None = None
         if data.parent_key:
@@ -337,6 +366,27 @@ class ProjectService:
         await self.require_project_access(session, project, user)
         return project
 
+    async def get_permitted_by_key(
+        self, session: AsyncSession, key: str, user: User, permission: str | Permission
+    ) -> Project:
+        """Resolve project *key* for an action that needs *permission* there.
+
+        A key that names no project and a project *user* cannot reach both
+        raise the same ``NotFoundError``, naming the key as the caller wrote
+        it (the stored key would reveal that a private project exists, or what
+        a retired key was renamed to). Only a reachable project answers
+        ``PermissionDeniedError`` when the permission is missing, so a
+        non-member can never tell a private project from a missing one
+        (ADR-0004).
+        """
+        try:
+            project = await self.get_readable_by_key(session, key, user)
+        except NotFoundError:
+            raise NotFoundError(f"Project '{key}' not found") from None
+        if not await check_permission(user, project.id, permission, session):
+            raise PermissionDeniedError(f"You do not have the '{permission}' permission in this project")
+        return project
+
     async def get_parent_key(self, session: AsyncSession, project: Project) -> str | None:
         """Resolve the parent project's key, or None for root projects."""
         if project.parent_id is None:
@@ -437,23 +487,22 @@ class ProjectService:
 
                 await clear_anonymous_permissions_for_private(session, project, actor, request=request)
             project.is_public = data.is_public
-        if data.status is not None:
+        if data.status is not None and data.status != project.status:
+            # Archiving is reversible only through the admin archive and
+            # unarchive actions; an update moves between active and closed.
+            if project.status == _PROJECT_STATUS_ARCHIVED or data.status not in _UPDATABLE_STATUSES:
+                raise AppError(
+                    code="validation_error",
+                    message="status must be 1 (active) or 5 (closed); use the archive actions to archive or unarchive",
+                    status_code=422,
+                )
             project.status = data.status
         if data.color is not None:
             project.color = data.color
-        if data.computed_metadata is not None:
+        settings_changes = _settings_changes(data)
+        if settings_changes:
             # Reassign a new dict so SQLAlchemy marks the JSONB column dirty.
-            new_settings = dict(project.settings or {})
-            new_settings[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
-            project.settings = new_settings
-        if data.branch_name is not None:
-            new_settings = dict(project.settings or {})
-            new_settings[BRANCH_NAME_SETTINGS_KEY] = data.branch_name.model_dump()
-            project.settings = new_settings
-        if data.similar_issues is not None:
-            new_settings = dict(project.settings or {})
-            new_settings[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
-            project.settings = new_settings
+            project.settings = {**(project.settings or {}), **settings_changes}
         if "reporting_currency_code" in data.model_fields_set:
             from specivo.services.currency_service import CurrencyService
 
@@ -462,13 +511,33 @@ class ProjectService:
             )
 
         if "parent_id" in data.model_fields_set:
+            if data.parent_id is not None and actor is not None:
+                await self._require_parent_manageable(session, data.parent_id, actor)
             project = await self._reparent(session, project, data.parent_id)
-            return project
+            return project  # noqa: RET504
 
         session.add(project)
         await session.flush()
         await session.refresh(project)
         return project
+
+    async def _require_parent_manageable(self, session: AsyncSession, parent_id: int, actor: User) -> None:
+        """Raise unless *actor* may put a project under project *parent_id*.
+
+        A parent *actor* cannot reach is "not found", word for word as a
+        missing id, so the answer does not reveal which project ids exist;
+        a reachable one also needs ``manage_project`` (admins have it).
+        """
+        parent = await session.get(Project, parent_id)
+        not_found = NotFoundError(f"Parent project with id {parent_id} not found")
+        if parent is None:
+            raise not_found
+        try:
+            await self.require_project_access(session, parent, actor)
+        except (NotFoundError, AnonymousAccessDeniedError):
+            raise not_found from None
+        if not await check_permission(actor, parent.id, Permission.MANAGE_PROJECT, session):
+            raise PermissionDeniedError("You do not have the 'manage_project' permission in the new parent project")
 
     async def _reparent(
         self,
@@ -584,7 +653,7 @@ class ProjectService:
             # Bulk re-key all issues
             rekey_stmt = update(Issue).where(Issue.project_id == project.id).values(project_key=new_key)
             result = await session.execute(rekey_stmt)
-            issues_rekeyed = result.rowcount
+            issues_rekeyed = int(cast(CursorResult, result).rowcount or 0)
 
             project.key = new_key
 
@@ -625,21 +694,19 @@ class ProjectService:
         return project, issues_rekeyed
 
     async def delete(self, session: AsyncSession, project: Project) -> None:
-        """Delete a project and all its children (CASCADE handles DB rows)."""
+        """Delete *project* with its issues, wiki pages and time entries (database CASCADE).
+
+        Subprojects are not deleted along with it: ``projects.parent_id`` is
+        ``RESTRICT``, so a project that has any raises ``ConflictError`` and
+        nothing is deleted. Delete or move the subprojects first.
+        """
+        has_children = await session.scalar(select(exists().where(Project.parent_id == project.id)))
+        if has_children:
+            raise ConflictError(
+                message=f"Project '{project.key}' has subprojects; delete or move them before deleting it"
+            )
         await session.delete(project)
         await session.flush()
-
-    async def create_child(
-        self,
-        session: AsyncSession,
-        parent: Project,
-        data: ProjectCreate,
-        creator: User,
-    ) -> Project:
-        """Convenience wrapper: creates a child project under *parent*."""
-        # Override parent_key to ensure the correct parent is used
-        data_with_parent = data.model_copy(update={"parent_key": parent.key})
-        return await self.create(session, data_with_parent, creator)
 
     # -----------------------------------------------------------------------
     # Membership
@@ -1164,16 +1231,16 @@ class ProjectService:
             .group_by(Wiki.project_id)
         )
         wiki_rows = (await session.execute(wiki_stmt)).all()
-        for row in wiki_rows:
-            stats[row.project_id]["wiki_page_count"] = row.page_count
+        for wiki_row in wiki_rows:
+            stats[wiki_row.project_id]["wiki_page_count"] = wiki_row.page_count
 
         # --- Enabled modules ---
         module_stmt = select(EnabledModule.project_id, EnabledModule.name).where(
             EnabledModule.project_id.in_(project_ids)
         )
         module_rows = (await session.execute(module_stmt)).all()
-        for row in module_rows:
-            if row.project_id in stats:
-                stats[row.project_id]["modules"][row.name] = True
+        for module_row in module_rows:
+            if module_row.project_id in stats:
+                stats[module_row.project_id]["modules"][module_row.name] = True
 
         return stats

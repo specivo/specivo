@@ -205,7 +205,7 @@ class _TextExtractor(HTMLParser):
         self.parts: list[str] = []
         self._skipping = 0
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
         if tag in self._SKIP:
             self._skipping += 1
         elif tag in self._BLOCKS:

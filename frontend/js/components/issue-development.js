@@ -64,8 +64,8 @@ export function issueDevelopment(initial) {
         },
 
         _url(item) {
-            return '/api/v1/issues/' + encodeURIComponent(this.issueKey) + '/development/' +
-                PATHS[item.kind] + '/' + encodeURIComponent(item.id) + '/';
+            return spUrl('/api/v1/issues/' + encodeURIComponent(this.issueKey) + '/development/' +
+                PATHS[item.kind] + '/' + encodeURIComponent(item.id) + '/');
         },
 
         async _message(res, fallback) {

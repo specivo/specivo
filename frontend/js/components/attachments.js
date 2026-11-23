@@ -1,4 +1,4 @@
-function spAttachmentsComponent(initial, defaultContainerType, idField) {
+function spAttachmentsComponent(initial, defaultContainerType) {
         var IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
         var EXT_MAP = {
             pdf: 'pdf', doc: 'doc', docx: 'doc',
@@ -85,9 +85,15 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                     .replace('%(date)s', this.formatDate(att.created_at));
             },
 
+            /* The download URL as an application path: what a Markdown link holds
+               (the renderer adds the URL prefix). Navigation goes through spUrl(). */
+            downloadPath(att) {
+                return '/api/v1/attachments/' + att.id + '/download/';
+            },
+
             openLightbox(att) {
                 this.lightbox = {
-                    url: '/api/v1/attachments/' + att.id + '/download/',
+                    url: spUrl(this.downloadPath(att)),
                     name: att.filename,
                     size: this.formatSize(att.filesize)
                 };
@@ -95,7 +101,7 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
 
             copyLink(att) {
                 var isImage = IMAGE_TYPES.indexOf(att.content_type) !== -1;
-                var url = '/api/v1/attachments/' + att.id + '/download/';
+                var url = this.downloadPath(att);
                 var md = isImage
                     ? '![' + att.filename + '](' + url + ')'
                     : '[' + att.filename + '](' + url + ')';
@@ -103,7 +109,7 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
             },
 
             downloadFile(att) {
-                window.open('/api/v1/attachments/' + att.id + '/download/', '_blank');
+                window.open(spUrl(this.downloadPath(att)), '_blank');
             },
 
             confirmDelete(att) {
@@ -208,7 +214,7 @@ export function wikiAttachments(initial) {
             var el = document.getElementById(initial.dataElementId);
             initial.attachments = el ? JSON.parse(el.textContent) : [];
         }
-        return spAttachmentsComponent(initial, 'WikiPage', 'pageId');
+        return spAttachmentsComponent(initial, 'WikiPage');
     }
 
 export function issueAttachments(initial) {
@@ -217,5 +223,5 @@ export function issueAttachments(initial) {
             var el = document.getElementById(initial.dataElementId);
             initial.attachments = el ? JSON.parse(el.textContent) : [];
         }
-        return spAttachmentsComponent(initial, 'Issue', 'containerId');
+        return spAttachmentsComponent(initial, 'Issue');
     }

@@ -99,7 +99,18 @@ def from_record[T](cls: type[T], record: dict[str, Any]) -> T:
     return cls(**kwargs)
 
 
-def _decode(hint: Any, value: Any) -> Any:
+def _strip_nul(value: Any) -> Any:
+    """*value* (any JSON) with U+0000 removed from every string in it."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_nul(item) for item in value]
+    if isinstance(value, dict):
+        return {_strip_nul(key): _strip_nul(item) for key, item in value.items()}
+    return value
+
+
+def _decode(hint: Any, value: Any) -> Any:  # noqa: PLR0911
     origin = get_origin(hint)
 
     if origin in (Union, types.UnionType):
@@ -117,7 +128,7 @@ def _decode(hint: Any, value: Any) -> Any:
         _, value_hint = get_args(hint)
         return {key: _decode(value_hint, item) for key, item in value.items()}
     if hint is Any:
-        return value
+        return _strip_nul(value)
     if hint is datetime:
         return datetime.fromisoformat(value)
     if hint is date:
@@ -129,6 +140,10 @@ def _decode(hint: Any, value: Any) -> Any:
         return hint(value)
     if isinstance(hint, type) and dataclasses.is_dataclass(hint):
         return from_record(hint, value)
+    if isinstance(value, str):
+        # JSON allows U+0000 in a string; PostgreSQL text cannot store it, and
+        # one would fail its insert halfway through a load phase.
+        return value.replace("\x00", "")
     return value
 
 

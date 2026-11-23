@@ -44,7 +44,7 @@ class TokenRejection(StrEnum):
     AUTH_TIME_STALE = "auth_time_stale"
     SUB_MISMATCH = "sub_mismatch"
     USERINFO_REJECTED = "userinfo_rejected"
-    TOKEN_RESPONSE_INVALID = "token_response_invalid"
+    TOKEN_RESPONSE_INVALID = "token_response_invalid"  # noqa: S105
 
 
 class SsoError(AppError):

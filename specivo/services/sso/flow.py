@@ -43,6 +43,7 @@ from typing import Any, Literal
 import httpx
 from redis.asyncio import Redis
 
+from specivo.core.app_url import absolute_url, base_path
 from specivo.core.config import Settings, get_settings
 from specivo.core.redis import get_redis
 from specivo.models.sso import SsoProvider
@@ -99,7 +100,7 @@ def _sha256(value: str) -> str:
 
 
 def _prefix(settings: Settings) -> str:
-    return settings.stealth_prefix.rstrip("/")
+    return base_path(settings)
 
 
 def _provider_url(slug: str, endpoint: str, settings: Settings | None) -> str:
@@ -109,8 +110,7 @@ def _provider_url(slug: str, endpoint: str, settings: Settings | None) -> str:
     source for every address an admin registers at the IdP, so what the admin
     copies is what the flow sends and what the routes answer on.
     """
-    settings = settings or get_settings()
-    return f"{settings.app_url.rstrip('/')}{_prefix(settings)}/auth/oidc/{slug}/{endpoint}/"
+    return absolute_url(f"/auth/oidc/{slug}/{endpoint}/", settings or get_settings())
 
 
 def redirect_uri_for(slug: str, settings: Settings | None = None) -> str:

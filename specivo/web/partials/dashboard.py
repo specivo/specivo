@@ -11,14 +11,14 @@ import datetime
 from typing import cast
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
 from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.services import dashboard_service as dash
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_current_user_optional, get_templates, login_redirect
 from specivo.web.pages.dashboard import _label_projects, activity_context, spend_context
 
 router = APIRouter(prefix="/partials/dashboard", tags=["web-partials"], include_in_schema=False)
@@ -34,7 +34,7 @@ async def my_issues_partial(
     """Return My Open Issues table as an HTML fragment for htmx swapping."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     today = datetime.date.today()
@@ -64,7 +64,7 @@ async def spend_partial(
     """The AI spend and agent time block for *period* (``today``, ``7d``, ``month``)."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
     scope = await dash.load_scope(db, user)
     context = {"user": user, **await spend_context(db, scope, period, utcnow().date())}
@@ -83,7 +83,7 @@ async def activity_partial(
     """The grouped activity block for *who* (``all``, ``agents``, ``people``)."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
     scope = await dash.load_scope(db, user)
     context = {"user": user, **await activity_context(db, scope, who)}

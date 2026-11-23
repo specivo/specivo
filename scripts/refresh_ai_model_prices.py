@@ -49,7 +49,7 @@ Fetch = Callable[[str], bytes]
 
 
 def http_get(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "specivo-price-refresh"})
+    request = urllib.request.Request(url, headers={"User-Agent": "specivo-price-refresh"})  # noqa: S310
     with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - fixed https URLs
         return bytes(response.read())
 

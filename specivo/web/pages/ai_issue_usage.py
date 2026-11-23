@@ -20,7 +20,7 @@ part of the spend only for a reader who sees every entry of the project in
 the range (``sees_every_entry``), otherwise it is left out and the tab says
 so. The totals are SQL sums over all entries, never over the page shown. The
 summary is cached per reader like the report charts
-(:func:`~specivo.web.pages.ai_usage.cached_chart_payload`: keyed by the issue,
+(:func:`~specivo.web.pages.ai_usage.charts.cached_chart_payload`: keyed by the issue,
 the switch, the reader and what they may see, and the project's data version);
 each request spends one AI report from the reader's budget
 (:func:`~specivo.core.ai_report_limits.enforce_ai_report_rate_limit`).
@@ -41,6 +41,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_report_limits import enforce_ai_report_rate_limit
+from specivo.core.app_url import prefixed
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.core.i18n import format_date, get_locale
@@ -61,16 +62,11 @@ from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, ai_usage_visibility, check_permission
 from specivo.web.deps import get_templates, require_user
-from specivo.web.pages.ai_spend_reports import _initials, _short_int, _version_stmt
-from specivo.web.pages.ai_usage import (
-    _charts_view,
-    _fmt_int,
-    _money_view,
-    _project_for,
-    _rows,
-    _tool_names,
-    cached_chart_payload,
-)
+from specivo.web.pages.ai_spend_reports.people import _initials
+from specivo.web.pages.ai_spend_reports.view import _short_int, _version_stmt
+from specivo.web.pages.ai_usage._common import _fmt_int, _project_for
+from specivo.web.pages.ai_usage.charts import _charts_view, cached_chart_payload
+from specivo.web.pages.ai_usage.rows import _money_view, _rows, _tool_names
 
 router = APIRouter(tags=["web-ai-usage"], include_in_schema=False)
 
@@ -411,6 +407,19 @@ async def _sessions(
     }
 
 
+async def tab_entry_count(db: AsyncSession, user: User, project: Project, issue: Issue) -> int:
+    """How many counted entries the tab shows by default, for the badge on its label.
+
+    Matches the tab's default view: the sub-issues' usage is included when the
+    issue has any, excluded entries are left out, and only the entries *user*
+    may read are counted.
+    """
+    has_children = bool(await db.scalar(select(exists().where(Issue.parent_id == issue.id))))
+    scope: dict[str, Any] = {"issue_tree_id": issue.id} if has_children else {"issue_id": issue.id}
+    _none, total = await _usage.list_entries(db, user, project=project, excluded=False, limit=0, **scope)
+    return total
+
+
 async def _context(
     request: Request,
     response: Response,
@@ -428,7 +437,8 @@ async def _context(
     has_children = bool(await db.scalar(select(exists().where(Issue.parent_id == issue.id))))
     state = TabState.read(issue.display_key, has_children, sub, offset, limit)
     summary = await _summary(db, user, project, issue, state)
-    return_to = f"/issue/{issue.display_key}/#ai-usage"
+    # A next= value: the path the browser asks for, so the prefix is part of it.
+    return_to = prefixed(f"/issue/{issue.display_key}/#ai-usage")
     sessions = await _sessions(db, user, project, issue, state, summary, return_to) if summary else None
     excluded_args: dict[str, Any] = {"issue_tree_id": issue.id} if state.sub else {"issue_id": issue.id}
     _none, excluded = await _usage.list_entries(db, user, project=project, excluded=True, limit=0, **excluded_args)

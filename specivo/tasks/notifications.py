@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMAIL)
-def send_notification_email(  # type: ignore[no-untyped-def]
+def send_notification_email(
     self,
     to_email: str,
     subject: str,
@@ -29,7 +29,9 @@ def send_notification_email(  # type: ignore[no-untyped-def]
     (threading, ``X-Specivo-*``); mail without them still gets a Message-ID,
     ``Date`` and ``Auto-Submitted``. Retries keep the same Message-ID.
 
-    Retries up to 3 times on transient failures (connection errors, timeouts).
+    Retries up to 3 times on transient failures (connection errors, timeouts,
+    4xx replies). Permanent failures fail the task at once, and a failure
+    after the server accepted the mail is only logged, so it is never sent twice.
     """
     settings = get_settings()
 
@@ -42,22 +44,46 @@ def send_notification_email(  # type: ignore[no-untyped-def]
         headers=headers,
     )
 
+    sent = False
     try:
-        if settings.smtp_tls:
-            import ssl
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout) as server:
+            if settings.smtp_tls:
+                import ssl
 
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout)
-            server.ehlo()
-            server.starttls(context=ssl.create_default_context())
-        else:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout)
-
-        if settings.smtp_user:
-            server.login(settings.smtp_user, settings.smtp_password)
-
-        server.sendmail(settings.smtp_from, [to_email], msg.as_string())
-        server.quit()
-        logger.info("Notification email sent to %s: %s", to_email, msg["Subject"])
+                server.ehlo()
+                server.starttls(context=ssl.create_default_context())
+            if settings.smtp_user:
+                server.login(settings.smtp_user, settings.smtp_password)
+            server.sendmail(settings.smtp_from, [to_email], msg.as_string())
+            sent = True
     except (smtplib.SMTPException, OSError) as exc:
+        if sent:
+            # The server accepted the mail; only closing the session failed.
+            # Retrying would deliver it a second time.
+            logger.warning("Email to %s sent, but closing the SMTP session failed: %s", to_email, exc)
+            return
+        if not _is_transient(exc):
+            logger.error("Failed to send email to %s, not retrying: %s", to_email, exc)
+            raise
         logger.warning("Failed to send email to %s: %s", to_email, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc)  # noqa: B904
+    logger.info("Notification email sent to %s: %s", to_email, msg["Subject"])
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """Whether a send failure may succeed on retry: a connection problem, a timeout or a 4xx reply.
+
+    Permanent failures (bad credentials, a refused recipient, a rejected
+    message, a server that lacks a needed extension) return False.
+    """
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        codes = [code for code, _message in exc.recipients.values()]
+        return bool(codes) and all(400 <= code < 500 for code in codes)
+    if isinstance(exc, smtplib.SMTPConnectError | smtplib.SMTPServerDisconnected):
+        return True
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return 400 <= exc.smtp_code < 500
+    if isinstance(exc, smtplib.SMTPException):
+        return False
+    # Socket-level errors: refused or reset connections, timeouts, DNS failures.
+    return isinstance(exc, OSError)

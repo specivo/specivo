@@ -1,5 +1,5 @@
 ---
-description: AI spend reports in Specivo — see what AI coding tools cost per person, model, tool, project, issue, branch and period, in one currency, with flat-rate subscription fees spread over the usage and API-equivalent value side by side.
+description: AI spend reports in Specivo — see what AI coding tools cost per person, model, tool, project, issue, release, sprint, branch and period, in one currency, with flat-rate subscription fees spread over the usage and API-equivalent value side by side.
 ---
 
 # AI spend reports
@@ -20,13 +20,14 @@ There are two reports:
 Both reports open as a drill-down: tiles with the **spend**, **entries**, **tokens** and **people**
 of what you are looking at, a **Group by** switch, a table and a **Spend by …** card next to it.
 
-- **Group by**: **Project** (on the AI spend page), **Person**, **Feature** (the issue), **Tool**,
-  **Model** or **Sessions**. The AI spend page starts with projects, a project report with people.
+- **Group by**: **Project** (on the AI spend page), **Release** and **Sprint** (within one project),
+  **Person**, **Feature** (the issue), **Tool**, **Model** or **Sessions**. The AI spend page starts
+  with projects, a project report with people.
 - Each row has a colour, a name and a short line under it (how many people used a tool or worked on
   an issue, which tools a person used), its entries, tokens, spend and its **share** of the total.
 - **Click a row to open it.** The row becomes a filter and the table moves to the next useful
-  grouping: a project opens its people, a person their issues, an issue its sessions. A tool or a
-  model opens the people who used it.
+  grouping: a project opens its people, a person their issues, an issue its sessions. A tool, a
+  model, a release or a sprint opens the people who used it.
 - The **path** above the title shows what you opened, for example *All projects › WEB › a person ›
   WEB-12*. Click any step to go back to it. Groupings already in the path are greyed out
   in the switch.
@@ -106,8 +107,9 @@ The period buttons are always shown; the other settings are under **Dates, filte
 
 - **Period**: click **Last 7 days**, **Last 30 days**, **This month** or **Last month**, or pick
   the first and last day yourself. Days are UTC days.
-- **Group by** and **Then by**: person, project (on the AI spend page), issue, tool, provider, model,
-  cost type or branch. Choose **Nothing (totals)** for one line.
+- **Group by** and **Then by**: release, sprint, person, project (on the AI spend page), issue, tool,
+  provider, model, cost type or branch. Choose **Nothing (totals)** for one line. See
+  [Release and sprint](#release-and-sprint).
 - **Per**: split each group per **day**, **week** (from Monday) or **month**. Opening such a row
   opens its group for that period's dates. Each period lists the ten groups with the largest spend
   over the whole range and sums the rest into **Other**; the CSV lists every row.
@@ -126,6 +128,30 @@ The period buttons are always shown; the other settings are under **Dates, filte
   everything.
 - **Seat cost**: **Leave out** to see pay-per-use spend only.
 - **Order**: rows are ordered by the group. **By spend** puts the largest spend first.
+
+### Release and sprint
+
+**Release** groups the usage by the [version](versions.md) of its issue, **Sprint** by the
+[sprint](sprints.md) of its issue. This answers "what did release 1.0 cost?" and "what did this
+sprint cost?":
+
+- An entry counts toward its issue's version and sprint **as they are now**. If you move an issue to
+  another release, its AI usage moves with it.
+- A sub-issue without a version of its own counts toward the version of its nearest parent issue
+  that has one. A task under a feature planned for 1.0 counts toward 1.0. A sub-issue's own version
+  always wins. Sprints work the same way.
+- Usage without an issue, or on an issue (and parents) without a version, is in **No release**. The
+  same goes for **No sprint**.
+- A version shared from another project is one row, named with that project's key, for example
+  *WEB 2.0*. It is named only if you can open that project; otherwise its usage is in **No release**.
+- You never learn the release or sprint of an issue you cannot see. Your own usage on such an issue
+  counts under **No release** and **No sprint**.
+
+Opening a release or sprint row narrows the report to it. Like a project, an issue or a branch, it
+leaves unallocated seat cost out.
+
+The [version](versions.md#ai-spend-of-a-version) and [sprint](sprints.md#time-and-ai-spend) pages
+show the same totals in an **AI spend** card.
 
 ## Charts
 
@@ -167,7 +193,7 @@ too old*). Add the missing rates under **Admin → Exchange rates** and open the
 
 Opening rows down to **Sessions** shows the entries in the report itself. With **All amount
 columns**, every row also has an **Entries** button. It opens the AI usage list filtered to that row:
-the same period, person, tool, model, issue, branch and so on. On the AI spend page it opens a list of the
+the same period, person, tool, model, issue, branch, release, sprint and so on. On the AI spend page it opens a list of the
 instance's entries, unassigned ones included. Rows on an issue you cannot see have no button.
 
 ## Download
@@ -178,6 +204,8 @@ currency, and a column listing amounts that were not converted. At the **Session
 the spend per model.
 
 The same report is available over the REST API (`GET /api/v1/projects/{key}/ai-usage/report/` and,
-for administrators, `GET /api/v1/ai-usage/report/`, both with `format=csv`; `issue`, `branch` and,
-on the instance report, `project` narrow it like the path, `-` meaning none) and to AI agents through
-the `specivo_ai_usage_report` MCP tool, with the same rules about what each person may see.
+for administrators, `GET /api/v1/ai-usage/report/`, both with `format=csv`; `issue`, `branch`,
+`version`, `sprint` and, on the instance report, `project` narrow it like the path, `-` meaning none;
+`group_by=version,sprint` groups by release and sprint). AI agents get it through the
+`specivo_ai_usage_report` MCP tool, which takes `release` and `sprint` (a name or an id, `none` for
+none). The same rules about what each person may see apply everywhere.

@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query, Request, Response, status
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from specivo.api.v1.tags import _log_tag as log_tag_event
 from specivo.core.constants import (
     DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
     DEVELOPMENT_TIMELINE_MAX_LIMIT,
@@ -41,13 +46,14 @@ from specivo.schemas.issue import (
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
 from specivo.schemas.repository import DevelopmentKind, IssueDevelopmentOut, MoveDevelopmentItemIn
+from specivo.schemas.saved_filter import SavedFilterDefinition
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
-from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version
+from specivo.services.issue_list_filters import parse_assignee, parse_id, parse_version, time_bound
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
@@ -59,7 +65,9 @@ from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.repository_service import development_for_issue
 from specivo.services.saved_filter_service import SavedFilterService
+from specivo.services.security_audit_service import AuditEvent
 from specivo.services.similar_issue_service import SimilarIssueService
+from specivo.services.tag_service import TagService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
 
@@ -67,6 +75,7 @@ router = APIRouter(tags=["issues"])
 _service = IssueService()
 _bulk_service = BulkService()
 _project_service = ProjectService()
+_tag_service = TagService()
 _journal_service = JournalService()
 _watcher_service = WatcherService()
 _attachment_service = AttachmentService()
@@ -135,7 +144,22 @@ async def create_issue(
         raise PermissionDeniedError("You do not have permission to create issues in this project")
     # Override project_key in body to match path param
     data = data.model_copy(update={"project_key": project.key})
+    if data.parent_id is not None:
+        # A parent the caller cannot see is "not found", like a missing one.
+        await _service.load_parent(db, data.parent_id, project.id, current_user)
     issue = await _service.create(db, project, data, current_user)
+    if data.tags:
+        diff = await _tag_service.set_issue_tags(db, project, issue.id, data.tags, current_user)
+        for name in diff["added"]:
+            await log_tag_event(
+                db,
+                request,
+                AuditEvent.TAG_ADDED,
+                current_user,
+                project,
+                None,
+                {"name": name, "issue_ref": issue.display_key},
+            )
     # The session dependency already commits before the response is sent;
     # committing here as well is harmless and keeps the reload below on
     # committed data.
@@ -145,11 +169,76 @@ async def create_issue(
     return _issue_out(issue, computed_values(project.settings))
 
 
+#: Issue list parameters a saved filter fills in when the request leaves them out.
+_SAVED_FILTER_PLAIN_FIELDS = (
+    "tracker_id",
+    "priority_id",
+    "category_id",
+    "author_id",
+    "subject_contains",
+    "created_after",
+    "created_before",
+    "updated_after",
+    "updated_before",
+)
+#: Parameters with a default value: a saved filter overrides the default, not an explicit value.
+_SAVED_FILTER_DEFAULTED_FIELDS = {"status": "open", "sort": "created_at:desc"}
+
+
+def _with_saved_filter_defaults(params: dict[str, Any], fd: dict[str, Any]) -> dict[str, Any]:
+    """*params* with the saved filter definition *fd* filling in what the request left out."""
+    merged = dict(params)
+    for name, default in _SAVED_FILTER_DEFAULTED_FIELDS.items():
+        if merged[name] == default and name in fd:
+            merged[name] = fd[name]
+    for name in _SAVED_FILTER_PLAIN_FIELDS:
+        if merged[name] is None and name in fd:
+            merged[name] = fd[name]
+    if merged["assigned_to_id"] is None and "assigned_to_id" in fd:
+        merged["assigned_to_id"] = str(fd["assigned_to_id"])
+    if merged["version_id"] is None and merged["fixed_version_id"] is None:
+        for name in ("fixed_version_id", "version_id"):
+            if fd.get(name) is not None:
+                merged["fixed_version_id"] = str(fd[name])
+                break
+    if merged["tag_id"] is None and "tag_id" in fd:
+        merged["tag_id"] = parse_id(fd["tag_id"])
+    return merged
+
+
+def _issue_list_filters(params: dict[str, Any], user: User) -> dict[str, Any]:
+    """The ``IssueService.list_issues`` filters for the list parameters *params*."""
+    # "me" stands for the caller (which matches nothing for an anonymous
+    # visitor); "none" selects unassigned issues. Anything unparseable is ignored.
+    resolved_assigned_to = parse_assignee(params["assigned_to_id"], me_id=user.id)
+
+    raw_version = params["fixed_version_id"] if params["fixed_version_id"] is not None else params["version_id"]
+    resolved_version = parse_version(raw_version)
+    if raw_version is not None and raw_version.strip() and resolved_version is None:
+        raise ValidationError("version_id must be a version id or 'none'", field="fixed_version_id")
+
+    return {
+        "status": params["status"],
+        "tracker_id": params["tracker_id"],
+        "assigned_to_id": resolved_assigned_to,
+        "priority_id": params["priority_id"],
+        "category_id": params["category_id"],
+        "version_id": resolved_version,
+        "tag_id": params["tag_id"],
+        "author_id": params["author_id"],
+        "subject_contains": params["subject_contains"],
+        "created_after": time_bound(params["created_after"]),
+        "created_before": time_bound(params["created_before"], end_of_day=True),
+        "updated_after": time_bound(params["updated_after"]),
+        "updated_before": time_bound(params["updated_before"], end_of_day=True),
+    }
+
+
 @router.get(
     "/projects/{project_key}/issues/",
     response_model=IssueListResponse,
 )
-async def list_issues(
+async def list_issues(  # noqa: PLR0913
     project_key: str,
     status_filter: str | None = Query(
         default="open",
@@ -175,10 +264,10 @@ async def list_issues(
     tag_id: int | None = Query(default=None),
     author_id: int | None = Query(default=None),
     subject_contains: str | None = Query(default=None),
-    created_after: str | None = Query(default=None),
-    created_before: str | None = Query(default=None),
-    updated_after: str | None = Query(default=None),
-    updated_before: str | None = Query(default=None),
+    created_after: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
+    created_before: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
+    updated_after: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
+    updated_before: date | datetime | None = Query(default=None, description="A date (that whole day) or timestamp."),
     sort: str = Query(default="created_at:desc"),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=200),
@@ -201,58 +290,14 @@ async def list_issues(
         if saved_filter_id is not None:
             raise AnonymousAccessDeniedError()
 
-    # If a saved filter is specified, load it and use its definition as defaults
-    if saved_filter_id is not None:
-        sf = await _saved_filter_service.get_visible(db, saved_filter_id, project.id, current_user)
-        fd = sf.filter_definition
-        if status_filter == "open" and "status" in fd:
-            status_filter = fd["status"]
-        if tracker_id is None and "tracker_id" in fd:
-            tracker_id = fd["tracker_id"]
-        if assigned_to_id is None and "assigned_to_id" in fd:
-            assigned_to_id = str(fd["assigned_to_id"])
-        if version_id is None and fixed_version_id is None:
-            for name in ("fixed_version_id", "version_id"):
-                if fd.get(name) is not None:
-                    fixed_version_id = str(fd[name])
-                    break
-        if tag_id is None and "tag_id" in fd:
-            tag_id = parse_id(fd["tag_id"])
-        if priority_id is None and "priority_id" in fd:
-            priority_id = fd["priority_id"]
-        if category_id is None and "category_id" in fd:
-            category_id = fd["category_id"]
-        if author_id is None and "author_id" in fd:
-            author_id = fd["author_id"]
-        if subject_contains is None and "subject_contains" in fd:
-            subject_contains = fd["subject_contains"]
-        if created_after is None and "created_after" in fd:
-            created_after = fd["created_after"]
-        if created_before is None and "created_before" in fd:
-            created_before = fd["created_before"]
-        if updated_after is None and "updated_after" in fd:
-            updated_after = fd["updated_after"]
-        if updated_before is None and "updated_before" in fd:
-            updated_before = fd["updated_before"]
-        if sort == "created_at:desc" and "sort" in fd:
-            sort = fd["sort"]
-
-    # "me" stands for the caller (which matches nothing for an anonymous
-    # visitor); "none" selects unassigned issues. Anything unparseable is ignored.
-    resolved_assigned_to = parse_assignee(assigned_to_id, me_id=current_user.id)
-
-    raw_version = fixed_version_id if fixed_version_id is not None else version_id
-    resolved_version = parse_version(raw_version)
-    if raw_version is not None and raw_version.strip() and resolved_version is None:
-        raise ValidationError("version_id must be a version id or 'none'", field="fixed_version_id")
-
-    filters: dict = {
+    params: dict[str, Any] = {
         "status": status_filter,
         "tracker_id": tracker_id,
-        "assigned_to_id": resolved_assigned_to,
+        "assigned_to_id": assigned_to_id,
         "priority_id": priority_id,
         "category_id": category_id,
-        "version_id": resolved_version,
+        "version_id": version_id,
+        "fixed_version_id": fixed_version_id,
         "tag_id": tag_id,
         "author_id": author_id,
         "subject_contains": subject_contains,
@@ -260,7 +305,20 @@ async def list_issues(
         "created_before": created_before,
         "updated_after": updated_after,
         "updated_before": updated_before,
+        "sort": sort,
     }
+    # If a saved filter is specified, load it and use its definition as defaults
+    if saved_filter_id is not None:
+        sf = await _saved_filter_service.get_visible(db, saved_filter_id, project.id, current_user)
+        try:
+            # Typed like the query parameters: a stored definition of the wrong
+            # shape (saved before definitions were checked) is a 422, not a 500.
+            fd = SavedFilterDefinition.model_validate(sf.filter_definition).model_dump(exclude_unset=True)
+        except PydanticValidationError as exc:
+            raise ValidationError(f"Saved filter {sf.id} has an invalid definition: {exc.errors()[0]['msg']}") from None
+        params = _with_saved_filter_defaults(params, fd)
+    filters = _issue_list_filters(params, current_user)
+    sort = params["sort"]
 
     issues, total_count = await _service.list_issues(
         session=db,
@@ -441,8 +499,12 @@ async def get_issue(
         children = [_issue_out(c, computed) for c in child_issues]
 
     if "journals" in include_set:
-        include_private = current_user.is_admin
-        raw_journals = await _journal_service.list_for_issue(db, issue.id, include_private=include_private)
+        raw_journals = await _journal_service.list_for_issue(
+            db,
+            issue.id,
+            include_private=await _journal_service.can_view_private_notes(db, current_user, issue.project_id),
+            own_private_of=current_user.id,
+        )
         # Collect resolved_by user IDs and load them in batch
         resolved_by_ids = {j.resolved_by_id for j in raw_journals if j.resolved_by_id is not None}
         resolved_by_map: dict[int, User] = {}
@@ -468,7 +530,6 @@ async def get_issue(
                 id=u.id,
                 login=u.login,
                 display_name=u.display_name,
-                email=u.email,
             )
             for u in watcher_users
         ]
@@ -542,28 +603,20 @@ async def update_issue(
     if not await check_permission(current_user, issue.project_id, "edit_issues", db):
         raise PermissionDeniedError("You do not have permission to edit issues in this project")
     # Check set_issues_private permission if is_private is being changed
-    if data.is_private is not None and data.is_private != issue.is_private:
+    if data.is_private is not None and data.is_private != issue.is_private:  # noqa: SIM102
         if not await check_permission(current_user, issue.project_id, "set_issues_private", db):
             raise PermissionDeniedError("You do not have permission to change issue privacy")
     old_assignee_id = issue.assigned_to_id
     issue, journal = await _service.update_with_journal(db, issue, data, current_user)
 
-    # --- Notifications (from API layer, keeping services decoupled) ---
-    if data.assigned_to_id is not None and data.assigned_to_id != old_assignee_id:
-        await _notification_service.notify_assignment(
-            session=db,
-            issue=issue,
-            old_assignee_id=old_assignee_id,
-            new_assignee_id=data.assigned_to_id,
-            actor=current_user,
-        )
-    if data.status_id is not None:
-        await _notification_service.notify_watchers(
-            session=db,
-            issue=issue,
-            event_type="status_change",
-            actor=current_user,
-        )
+    await _notification_service.notify_issue_updated(
+        db,
+        issue,
+        current_user,
+        old_assignee_id=old_assignee_id,
+        assigned_to_id=data.assigned_to_id,
+        status_given=data.status_id is not None,
+    )
 
     # Reload with relationships
     issue = await _service.get_with_relations(db, issue.id)
@@ -941,6 +994,8 @@ async def resolve_thread(
     )
     if not can_resolve:
         raise PermissionDeniedError("Only the author, assignee, or a user with edit permission can resolve")
+    # Its notes are returned below, so a private journal must be readable.
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     journal = await _journal_service.resolve_thread(
         session=db,
@@ -983,6 +1038,7 @@ async def unresolve_thread(
     )
     if not can_resolve:
         raise PermissionDeniedError("Only the author, assignee, or a user with edit permission can resolve")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     await _journal_service.unresolve_thread(
         session=db,
@@ -1048,7 +1104,6 @@ async def list_watchers(
             id=u.id,
             login=u.login,
             display_name=u.display_name,
-            email=u.email,
         )
         for u in watcher_users
     ]
@@ -1074,12 +1129,9 @@ async def toggle_reaction(
 ) -> dict:
     """Toggle an emoji reaction on a journal entry."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
-
-    # Verify the journal exists and belongs to this issue
-    result = await db.execute(select(Journal).where(Journal.id == journal_id))
-    journal = result.scalar_one_or_none()
-    if journal is None or journal.issue_id != issue.id:
-        raise NotFoundError("Journal not found")
+    if not await check_permission(current_user, issue.project_id, "view_issues", db):
+        raise PermissionDeniedError("You do not have permission to react in this project")
+    await _journal_service.get_readable(db, journal_id, issue.id, current_user)
 
     added = await _reaction_svc.toggle_reaction(db, journal_id, current_user.id, emoji)
     return {"added": added, "emoji": emoji}

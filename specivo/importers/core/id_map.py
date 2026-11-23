@@ -170,6 +170,24 @@ class ImportIdMap:
         )
         return set((await session.execute(stmt)).scalars())
 
+    async def targets_written_by_run(self, session: AsyncSession, entity_type: str) -> list[int]:
+        """Return the Specivo ids of *entity_type* this run mapped, in ascending order.
+
+        The rows behind :meth:`written_by_run`: what this run (or the attempt
+        it resumes) created, never what an earlier run of the scope did.
+        """
+        stmt = (
+            select(ImportIdMapping.target_id)
+            .where(
+                ImportIdMapping.source_system == self.source_system,
+                ImportIdMapping.source_instance == self.source_instance,
+                ImportIdMapping.entity_type == str(entity_type),
+                ImportIdMapping.import_run_id == self.run_id,
+            )
+            .order_by(ImportIdMapping.target_id)
+        )
+        return list((await session.execute(stmt)).scalars())
+
     async def count(self, session: AsyncSession, entity_type: str | None = None) -> int:
         """Count mappings for this source, optionally narrowed to one entity type."""
         stmt = select(func.count()).where(

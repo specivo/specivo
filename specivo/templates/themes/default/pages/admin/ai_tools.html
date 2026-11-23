@@ -5,11 +5,11 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/ai-subscriptions/">{% trans %}AI subscriptions{% endtrans %}</a>
+  <a href="{{ base }}/admin/ai-subscriptions/">{% trans %}AI subscriptions{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}AI tools{% endtrans %}</span>
 </div>
@@ -40,7 +40,7 @@
         <tr data-tool="{{ t.slug }}">
           <td><code>{{ t.slug }}</code></td>
           <td colspan="5">
-            <form method="post" action="/admin/ai-tools/{{ t.slug }}/" class="sp-sub-tool-row">
+            <form method="post" action="{{ base }}/admin/ai-tools/{{ t.slug }}/" class="sp-sub-tool-row">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="text" name="name" class="form-input" maxlength="100" value="{{ t.name }}" aria-label="{{ _('Name') }}" required>
               <input type="text" name="default_provider" class="form-input" maxlength="50" value="{{ t.default_provider }}" placeholder="{{ _('none') }}" aria-label="{{ _('Default provider') }}">
@@ -58,7 +58,7 @@
 
 <div class="card sp-card-pad" data-testid="new-tool-card">
   <h3 class="sp-card-h3">{% trans %}Add a tool{% endtrans %}</h3>
-  <form method="post" action="/admin/ai-tools/" class="sp-sub-form">
+  <form method="post" action="{{ base }}/admin/ai-tools/" class="sp-sub-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="sp-sub-field">
       <label class="form-label" for="tool-slug">{% trans %}Slug{% endtrans %}</label>

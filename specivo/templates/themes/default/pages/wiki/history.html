@@ -5,16 +5,16 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
-  {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Wiki"), "url": base ~ "/projects/" ~ project.key ~ "/wiki"},
+  {"label": wiki_page.title, "url": base ~ "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
   {"label": _("History")}
 ]) }}
 
 <div class="history-page-header">
   <h1 class="history-page-title">{% trans name=wiki_page.title %}History: %(name)s{% endtrans %}</h1>
-  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/" class="sp-btn sp-btn-ghost">{% trans %}Back to page{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/" class="sp-btn sp-btn-ghost">{% trans %}Back to page{% endtrans %}</a>
 </div>
 
 <div class="compare-toolbar">
@@ -56,7 +56,7 @@
       <td><span class="version-comment">{{ v.comments or '' }}</span></td>
       <td>
         <div class="version-actions">
-          <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/?version={{ v.version }}">{% trans %}View{% endtrans %}</a>
+          <a href="{{ base }}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/?version={{ v.version }}">{% trans %}View{% endtrans %}</a>
           {% if not loop.first %}
           <a href="#" class="restore-link">{% trans %}Restore{% endtrans %}</a>
           {% endif %}

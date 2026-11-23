@@ -7,7 +7,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -19,6 +19,7 @@ from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, SPRINT_EVEN
 from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.services.markdown_budget import check_markdown_length
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.webhook_events import emit_issue_commented
 
 logger = logging.getLogger(__name__)
@@ -493,6 +494,43 @@ class JournalService:
         await emit_issue_commented(session, issue, journal, user)
         return journal
 
+    async def can_view_private_notes(self, session: AsyncSession, user: User, project_id: int) -> bool:
+        """Whether *user* may read every private note of project *project_id*.
+
+        The *View private notes* permission (admins hold every permission).
+        Without it a user still reads the private notes they wrote themselves
+        (``own_private_of`` / :meth:`readable_clause`).
+        """
+        return await check_permission(user, project_id, Permission.VIEW_PRIVATE_NOTES, session)
+
+    async def readable_clause(self, session: AsyncSession, user: User, project_id: int) -> Any:
+        """SQL condition on ``Journal`` for the entries *user* may read in project *project_id*."""
+        if await self.can_view_private_notes(session, user, project_id):
+            return Journal.id.is_not(None)
+        return or_(Journal.is_private.is_(False), Journal.user_id == user.id)
+
+    async def get_readable(self, session: AsyncSession, journal_id: int, issue_id: int, user: User) -> Journal:
+        """Return journal *journal_id* of issue *issue_id* if *user* may read it.
+
+        For routes that take a journal id next to an issue they already
+        checked: the journal must belong to that issue, and a private journal
+        needs *View private notes* or to be the user's own, as in the activity
+        feed. Anything else is ``NotFoundError``, the same as an id that does
+        not exist.
+        """
+        project_id = await session.scalar(select(Issue.project_id).where(Issue.id == issue_id))
+        if project_id is None:
+            raise NotFoundError(f"Journal {journal_id} not found on this issue")
+        stmt = select(Journal).where(
+            Journal.id == journal_id,
+            Journal.issue_id == issue_id,
+            await self.readable_clause(session, user, project_id),
+        )
+        journal = await session.scalar(stmt)
+        if journal is None:
+            raise NotFoundError(f"Journal {journal_id} not found on this issue")
+        return journal
+
     async def resolve_thread(
         self,
         session: AsyncSession,
@@ -527,7 +565,7 @@ class JournalService:
         session: AsyncSession,
         journal_id: int,
         issue_id: int,
-        user: User,
+        user: User,  # noqa: ARG002
     ) -> Journal:
         """Clear resolution on a journal thread.
 
@@ -610,8 +648,13 @@ class JournalService:
         session: AsyncSession,
         issue_id: int,
         include_private: bool = False,
+        own_private_of: int | None = None,
     ) -> list[Journal]:
         """List journals for an issue, ordered by created_at ascending.
+
+        Private journals are left out unless *include_private* (the reader
+        holds *View private notes*); those written by user *own_private_of*
+        are kept either way.
 
         Ties on ``created_at`` (entries written in one transaction share the
         same server-side timestamp) are broken by id, so the order — and the
@@ -634,7 +677,10 @@ class JournalService:
         )
 
         if not include_private:
-            stmt = stmt.where(Journal.is_private.is_(False))
+            if own_private_of is not None:
+                stmt = stmt.where(or_(Journal.is_private.is_(False), Journal.user_id == own_private_of))
+            else:
+                stmt = stmt.where(Journal.is_private.is_(False))
 
         result = await session.execute(stmt)
         return list(result.scalars().all())

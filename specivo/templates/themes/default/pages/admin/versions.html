@@ -4,9 +4,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{% trans %}Versions{% endtrans %}</span>
 </div>
@@ -96,7 +96,7 @@
           <tr>
             <td class="td-checkbox"><input type="checkbox" :value="v.id" x-model.number="selected"></td>
             <td>
-              <a class="version-name-link" :href="'/projects/' + v.project_key + '/roadmap/'" x-text="v.name"></a>
+              <a class="version-name-link" :href="'{{ base }}/projects/' + v.project_key + '/roadmap/'" x-text="v.name"></a>
             </td>
             <td>
               <span class="badge-project"><span class="key" x-text="v.project_key"></span> <span x-text="v.project_name"></span></span>
@@ -122,7 +122,7 @@
               </div>
             </td>
             <td class="td-actions">
-              <a class="action-link" :href="'/projects/' + v.project_key + '/settings/#versions'" title="{% trans %}Edit{% endtrans %}">
+              <a class="action-link" :href="'{{ base }}/projects/' + v.project_key + '/settings/#versions'" title="{% trans %}Edit{% endtrans %}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
               </a>
               <button class="action-link danger" title="{% trans %}Delete{% endtrans %}" x-show="v.open_count + v.closed_count === 0" @click="deleteVersion(v)">

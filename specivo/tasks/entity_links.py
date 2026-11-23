@@ -2,6 +2,9 @@
 
 Tasks:
 - rebuild_entity_links: rebuild the stored links of the given sources.
+- rebuild_link_graph_task: rebuild every stored link of a project or the instance.
+- queue_link_graph_backfill (beat, hourly): queue a full rebuild of every
+  project never fully indexed (``projects.links_rebuilt_at IS NULL``).
 """
 
 from __future__ import annotations
@@ -9,14 +12,18 @@ from __future__ import annotations
 import logging
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_LINK_GRAPH
+from specivo.core.locks import beat_lock
 from specivo.tasks import celery_app
 from specivo.tasks._async import run_async
 
 logger = logging.getLogger(__name__)
 
+_BACKFILL_LOCK_KEY = "specivo:queue_link_graph_backfill"
+_BACKFILL_LOCK_TIMEOUT = 300  # seconds; a tick only reads projects and queues tasks
+
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_LINK_GRAPH)
-def rebuild_entity_links(self, sources: list[list]) -> None:  # type: ignore[no-untyped-def]
+def rebuild_entity_links(self, sources: list[list]) -> None:
     """Rebuild the stored links of each ``[source_type, id]`` in *sources* from its committed text.
 
     Queued by ``entity_link_index`` after a commit. Idempotent, so a retry or
@@ -50,22 +57,51 @@ async def _rebuild_async(keys: list[tuple[str, int]]) -> list[tuple[str, int]]:
 
 
 @celery_app.task(bind=True)
-def rebuild_link_graph_task(self, project_id: int | None = None, triggered_by: str | None = None):  # type: ignore[no-untyped-def]
+def rebuild_link_graph_task(
+    self, project_id: int | None = None, triggered_by: str | None = None, backfill: bool = False
+):
     """Rebuild every stored link of a project (or the instance), reporting progress.
 
-    Dispatched by the settings page after taking the Redis run lock under this
-    task's id; see ``link_graph_admin_service`` for the locking. Returns the
-    summary it stores as the last result, or ``{"status": "skipped"}`` when
-    another run (or an import) holds the project's advisory lock.
+    Dispatched by the settings page, and by the backfill task (*backfill*
+    true), after taking the Redis run lock under this task's id; see
+    ``link_graph_admin_service`` for the locking. Returns the summary it
+    stores as the last result, or ``{"status": "skipped"}`` when another run
+    (or an import) holds the project's advisory lock, or when a backfill
+    finds the project already rebuilt.
     """
 
     async def progress(processed: int, total: int) -> None:
         self.update_state(state="PROGRESS", meta={"processed": processed, "total": total})
 
-    return run_async(_full_rebuild_async(self.request.id, project_id, triggered_by, progress))
+    return run_async(_full_rebuild_async(self.request.id, project_id, triggered_by, progress, backfill=backfill))
 
 
-async def _full_rebuild_async(task_id: str | None, project_id: int | None, triggered_by: str | None, progress) -> dict:  # type: ignore[no-untyped-def]
+@celery_app.task
+def queue_link_graph_backfill() -> list[int]:
+    """Queue a full link graph rebuild for every project never fully indexed (beat, hourly).
+
+    Covers upgraded instances and restored dumps. One small query on
+    ``projects`` per tick when there is nothing to do.
+    """
+    queued: list[int] = run_async(_queue_backfill_async())
+    return queued
+
+
+async def _queue_backfill_async() -> list[int]:
+    from specivo.services.link_graph_admin_service import queue_backfill_rebuilds
+    from specivo.tasks._async import task_session
+
+    async with beat_lock(_BACKFILL_LOCK_KEY, _BACKFILL_LOCK_TIMEOUT) as acquired:
+        if not acquired:
+            logger.debug("Link graph backfill skipped: another worker holds the lock")
+            return []
+        async with task_session() as session:
+            return await queue_backfill_rebuilds(session)
+
+
+async def _full_rebuild_async(
+    task_id: str | None, project_id: int | None, triggered_by: str | None, progress, *, backfill: bool = False
+) -> dict:
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
@@ -76,6 +112,7 @@ async def _full_rebuild_async(task_id: str | None, project_id: int | None, trigg
     from specivo.services.link_graph_admin_service import (
         LINK_REBUILD_LOCK_NAMESPACE,
         LINK_REBUILD_LOCK_TTL,
+        is_rebuilt,
         rebuild_lock_key,
         run_full_rebuild,
         store_last_result,
@@ -92,6 +129,13 @@ async def _full_rebuild_async(task_id: str | None, project_id: int | None, trigg
                 # an import holds the scope: leave its lock alone.
                 logger.info("Link graph rebuild of project %s already running; nothing to do", project_id)
                 return {"status": "skipped"}
+            if backfill and project_id is not None:
+                async with factory() as session:
+                    done = await is_rebuilt(session, project_id)
+                if done:
+                    # A rebuild started from settings got there first.
+                    await lock.release(token)
+                    return {"status": "skipped"}
 
             async def report(processed: int, total: int) -> None:
                 await progress(processed, total)

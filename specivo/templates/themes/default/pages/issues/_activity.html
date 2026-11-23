@@ -40,20 +40,20 @@
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}
-        {% if anonymous %}«{{ d.new_value }}»{% else %}«<a href="/projects/{{ issue.project_key }}/recurring-patterns/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>»{% endif %}
+        {% if anonymous %}«{{ d.new_value }}»{% else %}«<a href="{{ base }}/projects/{{ issue.project_key }}/recurring-patterns/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>»{% endif %}
         {% elif d.property == 'sprint' %}
         {% set sprint_name = names.sprint_name(d) %}
         {% set sprint_key = names.sprint_project_key(d) %}
         {# Like the recurring line, a visitor without an account gets the name without a link. #}
-        {% set sprint_label %}{% if anonymous or not sprint_key %}«{{ sprint_name }}»{% else %}«<a href="/projects/{{ sprint_key }}/sprints/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ sprint_name }}</a>»{% endif %}{% endset %}
+        {% set sprint_label %}{% if anonymous or not sprint_key %}«{{ sprint_name }}»{% else %}«<a href="{{ base }}/projects/{{ sprint_key }}/sprints/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ sprint_name }}</a>»{% endif %}{% endset %}
         <span class="sp-journal-sprint" data-sprint-event="{{ d.prop_key }}">
         {% if d.prop_key == 'completed' %}{% trans sprint=sprint_label %}Sprint %(sprint)s completed{% endtrans %}{% else %}{% trans sprint=sprint_label %}Sprint %(sprint)s started{% endtrans %}{% endif %}
         </span>
         {% elif d.property == 'relation' %}
         {% if d.new_value and not d.old_value %}
-        {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
+        {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="{{ base }}/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
         {% elif d.old_value and not d.new_value %}
-        {% trans %}Removed{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
+        {% trans %}Removed{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="{{ base }}/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
         {% endif %}
         {% elif d.property == 'attachment' %}
         {# A file attached or removed, by its name (ActivityLookups.attachment_name). #}
@@ -68,7 +68,7 @@
         <strong class="sp-change-label">{% trans %}Description{% endtrans %}</strong> {% trans %}updated{% endtrans %}
         {# The diff is its own page, and it is not on the anonymous surface. #}
         {% if not anonymous %}
-        <a href="/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">{% trans %}View changes{% endtrans %}</a>
+        <a href="{{ base }}/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">{% trans %}View changes{% endtrans %}</a>
         {% endif %}
         {% elif d.prop_key == 'issue_metadata' %}
         {% set diffs = metadata_diff(d.old_value, d.new_value) %}
@@ -130,7 +130,7 @@
           <a @click="showReply = !showReply" style="cursor:pointer;">{% trans %}↩ Reply{% endtrans %}</a>
           {% if depth == 0 %}
           {% if j.is_resolved %}
-          <a hx-post="/api/v1/issues/{{ issue.display_key }}/journals/{{ j.id }}/unresolve/"
+          <a hx-post="{{ base }}/api/v1/issues/{{ issue.display_key }}/journals/{{ j.id }}/unresolve/"
              hx-swap="none"
              data-hx-reload
              style="cursor:pointer;">{% trans %}Unresolve{% endtrans %}</a>

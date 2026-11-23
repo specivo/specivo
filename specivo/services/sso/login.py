@@ -243,7 +243,7 @@ class SsoLoginService:
         metadata = await get_provider_metadata(provider)
 
         iss = params.get("iss")
-        if iss is not None or metadata.authorization_response_iss_parameter_supported:
+        if iss is not None or metadata.authorization_response_iss_parameter_supported:  # noqa: SIM102
             if iss != tx.issuer:
                 logger.warning(
                     "sso.callback.rejected provider=%s reason=%s",
@@ -310,7 +310,7 @@ class SsoLoginService:
                 identity_id=account.identity.id,
                 provider_slug=provider.slug,
             )
-        assert probe is not None  # a login: link and reauth returned above
+        assert probe is not None  # a login: link and reauth returned above  # noqa: S101
         await record_sign_in_probe(db, provider, probe)
         session = await AuthService().create_sso_session(
             db,

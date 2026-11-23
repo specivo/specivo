@@ -83,7 +83,7 @@ class WorkflowService:
             cached = await redis.get(cache_key)
             if cached is not None:
                 return list(json.loads(cached))
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass  # Redis unavailable — fall through to DB
 
         stmt = select(WorkflowTransition.new_status_id).where(
@@ -98,7 +98,7 @@ class WorkflowService:
         try:
             redis = await get_redis()
             await redis.set(cache_key, json.dumps(allowed), ex=self.cache_ttl)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         return allowed
@@ -318,16 +318,16 @@ class WorkflowService:
         """Clear cached transitions. Called on admin CRUD."""
         try:
             redis = await get_redis()
-            if tracker_id is not None:
+            if tracker_id is not None:  # noqa: SIM108
                 pattern = f"{self.CACHE_PREFIX}:{tracker_id}:*"
             else:
                 pattern = f"{self.CACHE_PREFIX}:*"
             keys = []
             async for key in redis.scan_iter(match=pattern):
-                keys.append(key)
+                keys.append(key)  # noqa: PERF401
             if keys:
                 await redis.delete(*keys)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass  # Redis unavailable — cache will expire naturally
 
     # ------------------------------------------------------------------
@@ -361,7 +361,7 @@ class WorkflowService:
             await session.flush()
         except IntegrityError:
             await session.rollback()
-            raise AppError(
+            raise AppError(  # noqa: B904
                 code="conflict",
                 message=_("Duplicate workflow transition"),
                 status_code=409,
@@ -442,7 +442,7 @@ class WorkflowService:
             await session.flush()
         except IntegrityError:
             await session.rollback()
-            raise AppError(
+            raise AppError(  # noqa: B904
                 code="conflict",
                 message=_("Duplicate workflow field rule"),
                 status_code=409,

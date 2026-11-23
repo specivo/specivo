@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +28,8 @@ from specivo.services.version_service import (
     normalize_version_sort,
 )
 from specivo.web.deps import (
-    get_current_user_optional,
+    ProjectByKeyForReader,
+    WebUser,
     get_templates,
     get_web_reader,
     refuse_anonymous_web,
@@ -52,7 +53,7 @@ _STATUS_LABELS = {1: "active", 5: "closed", 9: "archived"}
 @router.get("/projects/", response_class=HTMLResponse)
 async def projects_list(
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the project list page."""
@@ -150,7 +151,7 @@ async def projects_list(
 async def project_detail(
     key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the project detail/overview page."""
@@ -170,7 +171,7 @@ async def project_detail(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     if anonymous:
         # No people, and no numbers derived from issues this visitor cannot
@@ -239,8 +240,9 @@ def _version_sort_for(user: User, requested: str | None = None) -> str:
 
 @router.get("/projects/{key}/roadmap/", response_class=HTMLResponse)
 async def project_roadmap(
-    key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
     db: AsyncSession = DB_SESSION,
     show: str = Query("open"),
     sort: str | None = Query(None),
@@ -251,18 +253,6 @@ async def project_roadmap(
     are hidden unless ``show=all``, and then follow in their own section.
     ``sort`` overrides the viewer's saved version sort for this request.
     """
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    from specivo.core.exceptions import NotFoundError
-
-    try:
-        project = await _svc.get_by_key(db, key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _svc.require_project_access(db, project, user)
 
     version_sort = _version_sort_for(user, sort)
     entries = await _version_svc.roadmap(db, project, user, version_sort)
@@ -290,37 +280,14 @@ async def project_roadmap(
     )
 
 
-@router.get("/projects/{key}/settings/", response_class=HTMLResponse)
-async def project_settings(
-    key: str,
-    request: Request,
-    db: AsyncSession = DB_SESSION,
-) -> Response:
-    """Render project settings page (admin only)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    from specivo.core.exceptions import NotFoundError
-    from specivo.services.permission_service import check_permission
-
-    try:
-        project = await _svc.get_by_key(db, key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _svc.require_project_access(db, project, user)
-
-    if not user.is_admin and not await check_permission(user, project.id, "manage_project", db):
-        raise HTTPException(status_code=403, detail="Permission denied")
-
-    # The members tab lists membership *rows*, so both kinds go into one list:
-    # user-held rows first, then group-held ones. Each row carries its own
-    # ``principal_type``, which is what the template keys and addresses it by.
+async def _settings_members(db: AsyncSession, project: Project) -> dict[str, Any]:
+    """The members tab: membership rows of users then groups, every group for the picker, and the people count."""
     from specivo.services.user_group_service import UserGroupService
 
     group_svc = UserGroupService()
-
+    # The members tab lists membership *rows*, so both kinds go into one list:
+    # user-held rows first, then group-held ones. Each row carries its own
+    # ``principal_type``, which is what the template keys and addresses it by.
     user_rows = await _svc.list_members(db, project)
     group_rows = await _svc.list_group_memberships(db, project)
 
@@ -332,44 +299,42 @@ async def project_settings(
     for row in group_rows:
         row["users"] = covered.get(row["group_id"], [])
 
-    members = user_rows + group_rows
-
     # Every group, for the "add member" picker — the picker offers users and
     # groups in one list. The admin groups API would answer this too, but it
     # is admin-only and this page is open to any project manager, so the list
     # is rendered with the page instead of fetched.
     all_group_rows, _group_total = await group_svc.list_groups(db, limit=500)
-    all_groups = [{"id": g["id"], "name": g["name"], "user_count": g["user_count"]} for g in all_group_rows]
+    return {
+        "members": user_rows + group_rows,
+        "all_groups": [{"id": g["id"], "name": g["name"], "user_count": g["user_count"]} for g in all_group_rows],
+        # The two numbers this tab has to keep apart: rows granted, and people
+        # reached. They are equal until a group is used, and then they are not.
+        "people_count": await _svc.count_people_with_access(db, project),
+    }
 
-    # The two numbers this tab has to keep apart: rows granted, and people
-    # reached. They are equal until a group is used, and then they are not.
-    people_count = await _svc.count_people_with_access(db, project)
 
-    modules = await _svc.get_modules(db, project)
-
-    from sqlalchemy import select
-
+async def _settings_general(db: AsyncSession, project: Project) -> dict[str, Any]:
+    """Modules, assignable roles and the projects that may become the parent (not itself or a descendant)."""
     from specivo.models.role import Role
 
+    modules = await _svc.get_modules(db, project)
     roles_result = await db.execute(
         select(Role).where(Role.builtin == 0, Role.assignable.is_(True)).order_by(Role.position)
     )
     roles = [{"id": r.id, "name": r.name} for r in roles_result.scalars().all()]
-
-    # Build list of available parent projects (all projects except self and descendants)
     all_projects_result = await db.execute(select(Project).where(Project.status == 1).order_by(Project.name))
-    all_projects = all_projects_result.scalars().all()
     own_path = project.path
     available_parents = [
         {"id": p.id, "key": p.key, "name": p.name}
-        for p in all_projects
+        for p in all_projects_result.scalars().all()
         if p.id != project.id and not p.path.startswith(own_path + ".")
     ]
+    return {"modules": modules, "roles": roles, "available_parents": available_parents}
 
-    # Check if user can manage versions (separate permission from manage_project)
+
+async def _settings_versions(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """The versions tab: roadmap rows with progress and counts (manage_versions is its own permission)."""
     can_manage_versions = user.is_admin or await check_permission(user, project.id, "manage_versions", db)
-
-    # Load versions with roadmap data (progress, issue counts)
     version_sort = _version_sort_for(user)
     roadmap_entries = await _version_svc.roadmap(db, project, user, version_sort)
     today = datetime.date.today().isoformat()
@@ -390,50 +355,52 @@ async def project_settings(
                 "overdue": bool(due and due_str < today and e.version.status != "closed"),
             }
         )
+    return {"versions_data": versions_data, "version_sort": version_sort, "can_manage_versions": can_manage_versions}
 
-    # Metadata presets and schemas
-    from specivo.models.lookups import Tracker
+
+async def _settings_metadata(db: AsyncSession, project: Project) -> dict[str, Any]:
+    """Metadata presets (all, and the enabled ones) and the project's schemas with their usage counts."""
     from specivo.schemas.metadata_schema import MetadataPresetOut, MetadataSchemaOut
     from specivo.services.metadata_preset_service import MetadataPresetService
     from specivo.services.metadata_schema_service import MetadataSchemaService
 
     preset_svc = MetadataPresetService()
     schema_svc = MetadataSchemaService()
-
     all_presets = await preset_svc.list_presets(db)
     presets_data = [MetadataPresetOut.model_validate(p).model_dump(mode="json") for p in all_presets]
-
     enabled_slugs = await preset_svc.list_enabled(db, project.id)
-
-    project_schemas = await schema_svc.list_for_project(db, project.id)
     schemas_data = []
-    for s in project_schemas:
-        sd = MetadataSchemaOut.model_validate(s).model_dump(mode="json")
-        sd["usage_count"] = await schema_svc.count_usages(db, s)
+    for schema in await schema_svc.list_for_project(db, project.id):
+        sd = MetadataSchemaOut.model_validate(schema).model_dump(mode="json")
+        sd["usage_count"] = await schema_svc.count_usages(db, schema)
         schemas_data.append(sd)
+    return {"presets_data": presets_data, "enabled_slugs": enabled_slugs, "schemas_data": schemas_data}
 
-    # Trackers / statuses / priorities for scope + recurring-task form dropdowns
-    from specivo.models.lookups import IssuePriority, IssueStatus
 
-    trackers_result = await db.execute(select(Tracker).order_by(Tracker.position))
-    trackers_data = [{"id": t.id, "name": t.name} for t in trackers_result.scalars().all()]
+async def _settings_lookups(db: AsyncSession) -> dict[str, Any]:
+    """Trackers, statuses and priorities for the scope and recurring-task form dropdowns."""
+    from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 
-    statuses_result = await db.execute(select(IssueStatus).order_by(IssueStatus.position))
-    statuses_data = [{"id": s.id, "name": s.name} for s in statuses_result.scalars().all()]
+    out: dict[str, Any] = {}
+    models: tuple[tuple[str, Any], ...] = (
+        ("trackers_data", Tracker),
+        ("statuses_data", IssueStatus),
+        ("priorities_data", IssuePriority),
+    )
+    for name, model in models:
+        rows = await db.execute(select(model).order_by(model.position))
+        out[name] = [{"id": r.id, "name": r.name} for r in rows.scalars().all()]
+    return out
 
-    priorities_result = await db.execute(select(IssuePriority).order_by(IssuePriority.position))
-    priorities_data = [{"id": p.id, "name": p.name} for p in priorities_result.scalars().all()]
 
-    # Recurring patterns management section (reuses the recurring web helpers)
+async def _settings_recurring_and_tags(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """Recurring patterns (reusing the recurring web helpers) and the tag vocabulary with usage counts."""
     from specivo.services.recurring_pattern_service import RecurringPatternService
     from specivo.web.pages.recurring import _pattern_summary
 
-    recurring_svc = RecurringPatternService()
-    recurring_patterns = await recurring_svc.list_for_project(db, project.id)
-    recurring_patterns_data = [_pattern_summary(p) for p in recurring_patterns]
+    recurring_patterns = await RecurringPatternService().list_for_project(db, project.id)
     can_manage_recurring = user.is_admin or await check_permission(user, project.id, "manage_recurring_tasks", db)
-
-    # Tag vocabulary with usage counts (create/edit/delete gated on manage_project)
+    # Create/edit/delete of tags is gated on manage_project.
     can_manage_tags = user.is_admin or await check_permission(user, project.id, "manage_project", db)
     tags_data = [
         {
@@ -445,33 +412,46 @@ async def project_settings(
         }
         for tag, issue_count, wiki_count in await _tag_svc.list_with_usage(db, project.id)
     ]
+    return {
+        "recurring_patterns_data": [_pattern_summary(p) for p in recurring_patterns],
+        "can_manage_recurring": can_manage_recurring,
+        "tags_data": tags_data,
+        "can_manage_tags": can_manage_tags,
+    }
 
-    # Search indexing (FTS): per-project analyzer language with inherit. The
-    # Alpine component fetches fresh state (running job, last result, etc.) on
-    # init; these context vars only seed the initial render.
+
+async def _settings_search(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """Search indexing (FTS): per-project analyzer language with inherit.
+
+    The Alpine component fetches fresh state (running job, last result, etc.)
+    on init; these values only seed the initial render.
+    """
     from specivo.core.config import _ALLOWED_FTS_LANGUAGES
     from specivo.services.settings_service import SettingsService
     from specivo.tasks.search import reindex_needed_key
 
     can_manage_search = user.is_admin or await check_permission(user, project.id, "manage_project", db)
-    _fts_settings = SettingsService()
-    fts_instance_default = await _fts_settings.get(db, "search_fts_language", "english")
-    fts_reindex_needed = (await _fts_settings.get(db, reindex_needed_key(project.id))) == "1"
+    fts_settings = SettingsService()
+    fts_instance_default = await fts_settings.get(db, "search_fts_language", "english")
+    fts_reindex_needed = (await fts_settings.get(db, reindex_needed_key(project.id))) == "1"
+    return {
+        "fts_language": project.fts_language,
+        "fts_instance_default": fts_instance_default,
+        "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
+        "fts_reindex_needed": fts_reindex_needed,
+        "can_manage_search": can_manage_search,
+    }
 
-    # Outgoing webhooks. The page already requires manage_project, which is
-    # what every webhook route asks for; secrets are never sent to the page.
-    from specivo.schemas.webhook import SUBSCRIBABLE_EVENTS, WebhookOut
-    from specivo.services.webhook_service import WebhookService
 
-    webhooks_data = [
-        WebhookOut.model_validate(w).model_dump(mode="json")
-        for w in await WebhookService().list_for_project(db, project.id)
-    ]
-    webhook_events = [e.value for e in SUBSCRIBABLE_EVENTS]
+async def _settings_integrations(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """Outgoing webhooks, repository integrations, merge automation roles and the branch name format.
 
-    # Repository integrations: manage_project as well, like their API.
-    # Secrets are never sent to the page.
+    The page already requires manage_project, which is what every webhook
+    and repository route asks for; secrets are never sent to the page.
+    """
     from specivo.hooks.providers import PROVIDER_NAMES
+    from specivo.models.role import Role
+    from specivo.schemas.webhook import SUBSCRIBABLE_EVENTS, WebhookOut
     from specivo.services.branch_name import BranchNameSettings
     from specivo.services.repository_service import (
         RepositoryIntegrationService,
@@ -479,7 +459,12 @@ async def project_settings(
         git_role_id,
         integration_out,
     )
+    from specivo.services.webhook_service import WebhookService
 
+    webhooks_data = [
+        WebhookOut.model_validate(w).model_dump(mode="json")
+        for w in await WebhookService().list_for_project(db, project.id)
+    ]
     project_git_role_id = await git_role_id(db, project.id)
     repositories_data = [
         integration_out(i, project_git_role_id).model_dump(mode="json")
@@ -492,42 +477,82 @@ async def project_settings(
     default_automation_role = await automation_role(db)
     can_manage_members = await check_permission(user, project.id, Permission.MANAGE_MEMBERS, db)
     branch_settings = BranchNameSettings.from_project_settings(project.settings)
-    branch_name_data = {
-        "format": branch_settings.format,
-        "types": dict(branch_settings.types),
-        "default_type": branch_settings.default_type,
+    return {
+        "webhooks_data": webhooks_data,
+        "webhook_events": [e.value for e in SUBSCRIBABLE_EVENTS],
+        "automation_roles": automation_roles,
+        "default_automation_role_id": default_automation_role.id if default_automation_role else None,
+        "can_manage_members": can_manage_members,
+        "branch_name_data": {
+            "format": branch_settings.format,
+            "types": dict(branch_settings.types),
+            "default_type": branch_settings.default_type,
+        },
+        "repositories_data": repositories_data,
+        "repository_providers": list(PROVIDER_NAMES),
     }
 
-    # The admin-only anonymous access card says whether the instance switch is
-    # on. Only read for admins, the only users who see that card.
-    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
 
-    anonymous_access_enabled = user.is_admin and await is_anonymous_access_enabled(db)
-
+async def _settings_instance_switches(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """Anonymous access and similar issues as the instance has them, the reporting currency choices and graph keys."""
+    from specivo.core.i18n import get_locale
+    from specivo.core.money import currency_display_name
     from specivo.models.setting import Setting
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+    from specivo.services.currency_service import CurrencyService
+    from specivo.services.entity_link_nodes import graph_metadata_keys
     from specivo.services.similar_issues import (
         SIMILAR_ISSUES_SETTING_KEY,
         instance_setting_enabled,
         project_setting_enabled,
     )
 
+    # The admin-only anonymous access card says whether the instance switch is
+    # on. Only read for admins, the only users who see that card.
+    anonymous_access_enabled = user.is_admin and await is_anonymous_access_enabled(db)
     similar_issues_instance = instance_setting_enabled(
         await db.scalar(select(Setting.value).where(Setting.key == SIMILAR_ISSUES_SETTING_KEY))
     )
-
     # Reporting currency override: enabled currencies, plus the project's
     # current one if it was disabled since, with names in the reader's language.
-    from specivo.core.i18n import get_locale
-    from specivo.core.money import currency_display_name
-    from specivo.services.currency_service import CurrencyService
-
-    _currency_svc = CurrencyService()
-    _locale = get_locale()
+    currency_svc = CurrencyService()
+    locale = get_locale()
     currency_choices = [
-        {"code": c.code, "name": currency_display_name(c.code, _locale, fallback=c.name)}
-        for c in await _currency_svc.list_currencies(db, active_only=True, include=project.reporting_currency_code)
+        {"code": c.code, "name": currency_display_name(c.code, locale, fallback=c.name)}
+        for c in await currency_svc.list_currencies(db, active_only=True, include=project.reporting_currency_code)
     ]
-    instance_reporting_currency = await _currency_svc.get_instance_reporting_currency(db)
+    return {
+        "anonymous_access_enabled": anonymous_access_enabled,
+        "similar_issues": project_setting_enabled(project.settings),
+        "similar_issues_instance": similar_issues_instance,
+        "graph_metadata_keys": list(graph_metadata_keys(project.settings)),
+        "currency_choices": currency_choices,
+        "instance_reporting_currency": await currency_svc.get_instance_reporting_currency(db),
+    }
+
+
+@router.get("/projects/{key}/settings/", response_class=HTMLResponse)
+async def project_settings(
+    request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Render project settings page (admin only)."""
+
+    if not user.is_admin and not await check_permission(user, project.id, "manage_project", db):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    # Each section reads in the order the page has always read them.
+    members = await _settings_members(db, project)
+    general = await _settings_general(db, project)
+    versions = await _settings_versions(db, project, user)
+    metadata = await _settings_metadata(db, project)
+    lookups = await _settings_lookups(db)
+    recurring_and_tags = await _settings_recurring_and_tags(db, project, user)
+    search = await _settings_search(db, project, user)
+    integrations = await _settings_integrations(db, project, user)
+    switches = await _settings_instance_switches(db, project, user)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -538,45 +563,17 @@ async def project_settings(
             "active_page": "settings",
             "active_project": project,
             "project": project,
-            "fts_language": project.fts_language,
-            "fts_instance_default": fts_instance_default,
-            "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
-            "fts_reindex_needed": fts_reindex_needed,
-            "can_manage_search": can_manage_search,
-            "members": members,
-            "all_groups": all_groups,
-            "people_count": people_count,
-            "modules": modules,
-            "roles": roles,
-            "versions_data": versions_data,
-            "version_sort": version_sort,
-            "can_manage_versions": can_manage_versions,
-            "available_parents": available_parents,
+            **search,
+            **members,
+            **general,
+            **versions,
             "status_label": _STATUS_LABELS.get(project.status, "unknown"),
-            "presets_data": presets_data,
-            "enabled_slugs": enabled_slugs,
-            "schemas_data": schemas_data,
-            "trackers_data": trackers_data,
-            "statuses_data": statuses_data,
-            "priorities_data": priorities_data,
-            "recurring_patterns_data": recurring_patterns_data,
-            "can_manage_recurring": can_manage_recurring,
-            "tags_data": tags_data,
-            "can_manage_tags": can_manage_tags,
+            **metadata,
+            **lookups,
+            **recurring_and_tags,
             "computed_metadata": computed_values(project.settings),
-            "anonymous_access_enabled": anonymous_access_enabled,
-            "similar_issues": project_setting_enabled(project.settings),
-            "similar_issues_instance": similar_issues_instance,
-            "currency_choices": currency_choices,
-            "instance_reporting_currency": instance_reporting_currency,
-            "webhooks_data": webhooks_data,
-            "webhook_events": webhook_events,
-            "automation_roles": automation_roles,
-            "default_automation_role_id": default_automation_role.id if default_automation_role else None,
-            "can_manage_members": can_manage_members,
-            "branch_name_data": branch_name_data,
-            "repositories_data": repositories_data,
-            "repository_providers": list(PROVIDER_NAMES),
+            **switches,
+            **integrations,
         },
     )
 
@@ -586,26 +583,18 @@ async def version_detail(
     key: str,
     version_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """Render the version detail page with issues, progress, and time stats."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
+    """Render the version detail page with issues, progress, time stats and the release's AI spend."""
     from specivo.core.exceptions import NotFoundError
-
-    try:
-        project = await _svc.get_by_key(db, key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _svc.require_project_access(db, project, user)
+    from specivo.web.pages.ai_spend_card import ai_spend_card
 
     try:
         version = await _version_svc.get_by_id(db, version_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Version not found")
+        raise HTTPException(status_code=404, detail="Version not found")  # noqa: B904
 
     # Verify version belongs to this project
     if version.project_id != project.id:
@@ -708,6 +697,7 @@ async def version_detail(
             "time_logged": float(time_logged),
             "can_view_time_entries": can_view_time_entries,
             "estimated_hours": float(estimated_hours),
+            "ai_spend": await ai_spend_card(db, user, project, "version", version.id),
             "days_diff": days_diff,
             "due_class": due_class,
         },

@@ -1,3 +1,5 @@
+import { resolveSchemaFields } from '../lib/metadata-fields';
+
 export function issueMetadataPanel(initial) {
         var i18n = Object.assign({
             tagsPlaceholder: 'Type and press Enter...',
@@ -10,59 +12,11 @@ export function issueMetadataPanel(initial) {
             saveFailed: 'The metadata could not be saved.'
         }, initial.i18n || {});
 
-        function resolveFieldsFromSchemas(schemas, metadataObj) {
-            var fields = [];
-            var names = [];
-            for (var si = 0; si < schemas.length; si++) {
-                var schema = schemas[si];
-                names.push(schema.name);
-                var props = (schema.schema_definition && schema.schema_definition.properties) || {};
-                var keys = Object.keys(props);
-                for (var ki = 0; ki < keys.length; ki++) {
-                    var key = keys[ki];
-                    var prop = props[key];
-                    var inputType = 'text', typeLabel = 'string', options = null, placeholder = '', min = null, max = null;
-                    if (prop.enum) {
-                        inputType = 'enum'; typeLabel = 'enum'; options = prop.enum;
-                    } else if (prop.type === 'integer' || prop.type === 'number') {
-                        inputType = 'number'; typeLabel = prop.type; min = prop.minimum; max = prop.maximum;
-                    } else if (prop.type === 'boolean') {
-                        inputType = 'boolean'; typeLabel = 'boolean';
-                    } else if (prop.type === 'string' && prop.format === 'date') {
-                        inputType = 'date'; typeLabel = 'date';
-                    } else if (prop.type === 'array' && prop.items && prop.items.enum) {
-                        inputType = 'multiselect'; typeLabel = 'multi'; options = prop.items.enum;
-                    } else if (prop.type === 'array') {
-                        inputType = 'tags'; typeLabel = 'array'; placeholder = i18n.tagsPlaceholder;
-                    } else {
-                        placeholder = prop.description || '';
-                    }
-                    // The field's name is its schema's title; without one, the key reads as a name.
-                    var title = typeof prop.title === 'string' ? prop.title.trim() : '';
-                    var label = title || key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
-                    fields.push({ key: key, label: label, inputType: inputType, typeLabel: typeLabel, options: options, placeholder: placeholder, min: min, max: max });
-
-                    // Initialize metadata value if not set
-                    if (!(key in metadataObj)) {
-                        if (inputType === 'tags' || inputType === 'multiselect') metadataObj[key] = [];
-                        else if (inputType === 'boolean') metadataObj[key] = false;
-                        else metadataObj[key] = '';
-                    }
-                }
-            }
-            // Deduplicate
-            var unique = [];
-            for (var i = 0; i < names.length; i++) {
-                if (unique.indexOf(names[i]) === -1) unique.push(names[i]);
-            }
-            return { fields: fields, schemaNames: unique };
-        }
-
         // {key: {id: name}}: the people and versions user and version fields hold, named
         // for this reader by the server; an id without a name is shown as stored.
         var valueNames = initial.names || {};
         var metadataObj = JSON.parse(JSON.stringify(initial.metadata || {}));
-        var resolved = resolveFieldsFromSchemas(initial.schemas || [], metadataObj);
+        var resolved = resolveSchemaFields(initial.schemas || [], metadataObj, i18n.tagsPlaceholder);
 
         return {
             i18n: i18n,
@@ -103,8 +57,8 @@ export function issueMetadataPanel(initial) {
             },
 
             metadataSearchUrl(slug, value, isArray) {
-                return '/search/?scope=issues&mf=' + encodeURIComponent(slug) +
-                    '&mv=' + encodeURIComponent(value) + '&ma=' + (isArray ? '1' : '0');
+                return spUrl('/search/?scope=issues&mf=' + encodeURIComponent(slug) +
+                    '&mv=' + encodeURIComponent(value) + '&ma=' + (isArray ? '1' : '0'));
             },
 
             get summaryChips() {

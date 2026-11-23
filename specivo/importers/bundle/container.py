@@ -10,7 +10,7 @@ followed, because a bundle comes from outside and a link would let it point the
 import at any file the server can read. A pipe, device, socket or directory
 under a name the reader opens (a record file, or a stored file) is refused
 too, without being opened: opening a pipe for reading waits for a writer, so
-one would hang the reader. Files are then opened with :func:`open_regular`,
+one would hang the reader. Files are then opened with :func:`specivo.core.files.open_regular`,
 which refuses anything swapped in since the check without waiting on it.
 
 Unpacking is bounded by :class:`~specivo.importers.bundle.limits.BundleLimits`:
@@ -34,7 +34,6 @@ import stat
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import BinaryIO
 
 from specivo.importers.bundle.format import FILES_DIR, KNOWN_FILES, SHA256_RE
 from specivo.importers.bundle.limits import RATIO_CHECKED_FROM, BundleLimits, format_size
@@ -47,27 +46,6 @@ _COPY_CHUNK = 1024 * 1024
 OWN_FILES_IGNORED = "Stored files are read from the files directory given; the bundle's own are ignored"
 _SYMLINK = "Symbolic links are not allowed in a bundle"
 _NOT_REGULAR = "Not a regular file (a directory, pipe, device or socket); refused without being read"
-# Absent on Windows, which has neither FIFOs nor this kind of link.
-_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-
-
-def open_regular(path: Path) -> BinaryIO:
-    """Open *path* for reading in binary, provided it is a regular file and not a link.
-
-    Opened without blocking, so a pipe put in place of the file since it was
-    checked cannot make the open wait for a writer; then checked with
-    ``fstat`` on the open descriptor, which no later swap can change, and only
-    then switched back to blocking reads. Anything else raises :class:`OSError`.
-    """
-    fd = os.open(path, _OPEN_FLAGS)
-    try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise OSError(f"Not a regular file: {path.name}")
-        os.set_blocking(fd, True)
-        return os.fdopen(fd, "rb")
-    except BaseException:
-        os.close(fd)
-        raise
 
 
 class BundleContainer:

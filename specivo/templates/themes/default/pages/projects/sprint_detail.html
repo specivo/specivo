@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
+{% from "pages/projects/_ai_spend_card.html" import ai_spend_card %}
 
 {% block title %}{{ sprint.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Sprints"), "url": "/projects/" ~ project.key ~ "/sprints/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Sprints"), "url": base ~ "/projects/" ~ project.key ~ "/sprints/"},
   {"label": sprint.name}
 ]) }}
 
@@ -42,18 +43,18 @@
   </div>
 
   <div class="sp-sprint-hero-actions">
-    <a href="/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
       {% trans %}Sprints{% endtrans %}
     </a>
     {% if total_issues > 0 %}
-    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
       {% trans %}Board{% endtrans %}
     </a>
     {% endif %}
     {% if can_manage_sprint %}
-    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       {% trans %}Edit{% endtrans %}
     </a>
@@ -114,12 +115,31 @@
   </div>
 </div>
 
+{# ============ TIME AND AI SPEND ============ #}
+<div class="sp-sprint-plan" data-testid="sprint-plan">
+  <div class="card vd-info-card" data-testid="sprint-time">
+    <h3>{% trans %}Time{% endtrans %}</h3>
+    {% if sprint_time.logged is not none %}
+    <div class="vd-info-row">
+      <span class="vd-info-label">{% trans %}Time logged{% endtrans %}</span>
+      <span class="vd-info-value"><span class="mono" data-testid="sprint-time-logged">{{ "%.1f"|format(sprint_time.logged | float) }}h</span></span>
+    </div>
+    {% endif %}
+    <div class="vd-info-row">
+      <span class="vd-info-label">{% trans %}Estimated{% endtrans %}</span>
+      <span class="vd-info-value"><span class="mono" data-testid="sprint-time-estimated">{{ "%.1f"|format(sprint_time.estimated | float) }}h</span></span>
+    </div>
+    <p class="sp-text-muted-xs sp-ai-spend-card-note">{% trans %}Counts the sprint's issues and the sub-issues that have no sprint of their own.{% endtrans %}</p>
+  </div>
+  {{ ai_spend_card(ai_spend, "sprint") }}
+</div>
+
 {# ============ ISSUE LIST ============ #}
 {% if total_issues == 0 %}
 <div class="sp-sprint-issues-empty">
   <div class="sp-sprint-issues-empty-title">{% trans %}No issues in this sprint yet{% endtrans %}</div>
   <div class="sp-sprint-issues-empty-text">{% trans %}Assign issues from the backlog to get started.{% endtrans %}</div>
-  <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">{% trans %}Open backlog{% endtrans %} &rarr;</a>
+  <a href="{{ base }}/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">{% trans %}Open backlog{% endtrans %} &rarr;</a>
 </div>
 {% else %}
 <div class="sp-sprint-issues">
@@ -144,7 +164,7 @@
       </div>
       <div class="sp-sprint-issue-list">
         {% for issue in items %}
-        <a href="/issue/{{ issue.display_key }}/" class="sp-sprint-issue-row">
+        <a href="{{ base }}/issue/{{ issue.display_key }}/" class="sp-sprint-issue-row">
           <span class="sp-sprint-issue-key">{{ issue.display_key }}</span>
           <span class="sp-sprint-issue-tracker">{{ tracker_badge(issue.tracker.name if issue.tracker else '') }}</span>
           <span class="sp-sprint-issue-subject">{{ issue.subject }}</span>

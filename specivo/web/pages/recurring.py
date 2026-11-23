@@ -1,8 +1,8 @@
 """Web recurring-pattern pages: management list and pattern detail.
 
-These mirror the sprint/version web pages: project resolution via
-``ProjectService``, optional-cookie auth via ``get_current_user_optional``, and
-permission gating through ``check_permission``. Viewing requires ``view_issues``;
+These mirror the sprint/version web pages: the signed-in user and the project
+come from the shared ``WebUser`` / ``ProjectForReader`` dependencies, and
+permissions are gated through ``check_permission``. Viewing requires ``view_issues``;
 managing (create / edit / skip / delete) requires ``manage_recurring_tasks``.
 
 Server rendering provides the no-JS / SEO-friendly initial view (the pattern
@@ -14,11 +14,11 @@ the live "next occurrences" preview — exactly as the settings versions tab doe
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from zoneinfo import available_timezones
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -35,7 +35,7 @@ from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
 from specivo.services.recurring_pattern_service import RecurringPatternService
 from specivo.services.settings_service import SettingsService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import ProjectForReader, WebUser, get_templates
 
 if TYPE_CHECKING:
     from specivo.models.project import Project
@@ -63,6 +63,7 @@ async def _default_timezone(user: User, db: AsyncSession) -> str:
     instance_tz = (await _settings_svc.get_all(db)).get("default_timezone")
     return instance_tz or "UTC"
 
+
 # Number of upcoming occurrences shown in the server-rendered schedule summary.
 _PREVIEW_COUNT = 5
 
@@ -70,20 +71,6 @@ _PREVIEW_COUNT = 5
 # timezone combobox so it filters client-side (no JS round-trip, CSP-safe).
 # Sorted once at import time — the call walks the tz database on disk.
 _TIMEZONE_OPTIONS = sorted(available_timezones())
-
-
-async def _resolve_project(
-    project_key: str,
-    user: User,
-    db: AsyncSession,
-) -> Project:
-    """Resolve a project by key and assert the user may access it."""
-    try:
-        project = await _project_svc.get_by_key(db, project_key.upper())
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
-    return project
 
 
 async def _can_manage(user: User, project: Project, db: AsyncSession) -> bool:
@@ -142,17 +129,12 @@ def _pattern_summary(pattern: RecurringPattern) -> dict[str, Any]:
     response_class=HTMLResponse,
 )
 async def recurring_list(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the recurring-patterns management list for a project."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project = await _resolve_project(project_key, user, db)
 
     if not await _can_view(user, project, db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -185,17 +167,12 @@ async def recurring_list(
     response_class=HTMLResponse,
 )
 async def recurring_create_form(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the dedicated create-pattern form page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project = await _resolve_project(project_key, user, db)
 
     if not await _can_manage(user, project, db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -228,18 +205,13 @@ async def recurring_create_form(
     response_class=HTMLResponse,
 )
 async def recurring_edit_form(
-    project_key: str,
     pattern_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the dedicated edit-pattern form page (carries lock_version)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project = await _resolve_project(project_key, user, db)
 
     if not await _can_manage(user, project, db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -247,7 +219,7 @@ async def recurring_edit_form(
     try:
         pattern = await _pattern_svc.get_by_id(db, pattern_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Recurring pattern not found")
+        raise HTTPException(status_code=404, detail="Recurring pattern not found")  # noqa: B904
     if pattern.project_id != project.id:
         raise HTTPException(status_code=404, detail="Recurring pattern not found")
 
@@ -279,18 +251,13 @@ async def recurring_edit_form(
     response_class=HTMLResponse,
 )
 async def recurring_detail(
-    project_key: str,
     pattern_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a single recurring pattern: schedule, upcoming occurrences, instances."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    project = await _resolve_project(project_key, user, db)
 
     if not await _can_view(user, project, db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -298,7 +265,7 @@ async def recurring_detail(
     try:
         pattern = await _pattern_svc.get_by_id(db, pattern_id)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Recurring pattern not found")
+        raise HTTPException(status_code=404, detail="Recurring pattern not found")  # noqa: B904
     if pattern.project_id != project.id:
         raise HTTPException(status_code=404, detail="Recurring pattern not found")
 

@@ -74,4 +74,3 @@
 .att-delete-modal { background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-xl); max-width: 400px; width: 100%; cursor: default; }
 .att-delete-modal h3 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-sm); }
 .att-delete-modal p { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); line-height: 1.5; }
-

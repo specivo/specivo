@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from specivo.schemas.common import IdName  # noqa: TC001
+from specivo.schemas.common import IdName
 
 if TYPE_CHECKING:
     from specivo.models.user import User

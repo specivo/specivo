@@ -5,9 +5,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/projects/">{% trans %}Projects{% endtrans %}</a>
+  <a href="{{ base }}/projects/">{% trans %}Projects{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{{ project.name }}</span>
 </div>
@@ -37,24 +37,24 @@
 
 <!-- Sub-nav tabs -->
 <div class="sp-subnav">
-  <a href="/projects/{{ project.key }}/" class="active">{% trans %}Overview{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/" class="active">{% trans %}Overview{% endtrans %}</a>
   {% if modules.get('issue_tracking', false) %}
-  <a href="/projects/{{ project.key }}/issues/">{% trans %}Issues{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/issues/">{% trans %}Issues{% endtrans %}</a>
   {% endif %}
   {% if modules.get('wiki', false) %}
-  <a href="/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
   {% endif %}
   {% if not anonymous %}
-  <a href="/projects/{{ project.key }}/roadmap/">{% trans %}Roadmap{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/roadmap/">{% trans %}Roadmap{% endtrans %}</a>
   {% endif %}
   {% if modules.get('time_tracking', false) and can_view_time_entries %}
-  <a href="/projects/{{ project.key }}/time-entries/">{% trans %}Time{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/time-entries/">{% trans %}Time{% endtrans %}</a>
   {% endif %}
   {% if show_ai_usage %}
-  <a href="/projects/{{ project.key }}/ai-usage/" data-testid="project-ai-usage-tab">{% trans %}AI usage{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/ai-usage/" data-testid="project-ai-usage-tab">{% trans %}AI usage{% endtrans %}</a>
   {% endif %}
   {% if user.is_admin %}
-  <a href="/projects/{{ project.key }}/settings/">{% trans %}Settings{% endtrans %}</a>
+  <a href="{{ base }}/projects/{{ project.key }}/settings/">{% trans %}Settings{% endtrans %}</a>
   {% endif %}
 </div>
 
@@ -93,7 +93,7 @@
       <h3 class="sp-card-h3">{% trans %}Subprojects{% endtrans %}</h3>
       <div class="sp-stack-xs">
         {% for sub in subprojects %}
-        <a href="/projects/{{ sub.key }}/" class="sp-row-hover sp-sub-link">
+        <a href="{{ base }}/projects/{{ sub.key }}/" class="sp-row-hover sp-sub-link">
           <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-accent)" stroke-width="2" class="sp-sub-link-icon"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
           <span class="sp-sub-link-name">{{ sub.name }}</span>
           <span class="sp-sub-link-key">{{ sub.key }}</span>
@@ -141,13 +141,13 @@
         </div>
         {% endfor %}
         {% if people_count > members | length %}
-        <a href="/projects/{{ project.key }}/settings/" class="sp-member-more">{% trans count=people_count %}%(count)s person with access{% pluralize %}%(count)s people with access{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ project.key }}/settings/" class="sp-member-more">{% trans count=people_count %}%(count)s person with access{% pluralize %}%(count)s people with access{% endtrans %}</a>
         {% endif %}
       </div>
       {% elif people_count > 0 %}
       {# No direct members, but a group grants access — say so rather than reading as empty. #}
       <p class="sp-member-empty">
-        <a href="/projects/{{ project.key }}/settings/">{% trans count=people_count %}%(count)s person has access through a group{% pluralize %}%(count)s people have access through a group{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ project.key }}/settings/">{% trans count=people_count %}%(count)s person has access through a group{% pluralize %}%(count)s people have access through a group{% endtrans %}</a>
       </p>
       {% else %}
       <p class="sp-member-empty">{% trans %}No members yet.{% endtrans %}</p>

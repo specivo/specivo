@@ -13,6 +13,7 @@ export function projectGeneralSettings(initial) {
             parentId: initial.parentId !== undefined ? initial.parentId : null,
             availableParents: initial.availableParents || [],
             similarIssues: initial.similarIssues !== false,
+            graphMetadataKeys: (initial.graphMetadataKeys || []).join(', '),
             reportingCurrency: initial.reportingCurrency || '',
             saving: false,
             message: '',
@@ -26,6 +27,9 @@ export function projectGeneralSettings(initial) {
                         description: this.description,
                         parent_id: this.parentId,
                         similar_issues: this.similarIssues,
+                        graph_metadata_keys: this.graphMetadataKeys.split(',')
+                            .map(function (k) { return k.trim(); })
+                            .filter(function (k) { return k.length > 0; }),
                         reporting_currency_code: this.reportingCurrency || null
                     };
                     var res = await spFetch('/api/v1/projects/' + this.projectKey + '/', {

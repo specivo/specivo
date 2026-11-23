@@ -8,13 +8,16 @@ import subprocess
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated, NamedTuple, overload
 from urllib.parse import quote
 
-from fastapi import Request, Response
+from fastapi import Depends, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.app_url import base_path, is_under_base, prefixed, strip_base
 from specivo.core.database import DB_SESSION
 from specivo.core.middleware import (
     ANONYMOUS_READER_STATE_KEY,
@@ -22,6 +25,8 @@ from specivo.core.middleware import (
     ROBOTS_NOINDEX_FOLLOW,
     ROBOTS_STATE_KEY,
 )
+from specivo.models.issue import Issue
+from specivo.models.project import Project
 from specivo.models.user import User
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "themes"
@@ -44,8 +49,8 @@ def _resolve_git_commit() -> str:
     _src_dir = str(Path(__file__).resolve().parent.parent.parent)
     for cwd in ("/app", _src_dir):
         try:
-            result = subprocess.run(  # noqa: S603, S607
-                ["git", "rev-parse", "--short", "HEAD"],
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=2,
@@ -54,7 +59,7 @@ def _resolve_git_commit() -> str:
             commit = result.stdout.strip()
             if commit:
                 return commit
-        except Exception:
+        except Exception:  # noqa: BLE001, S112
             continue
     return os.environ.get("GIT_COMMIT", "")
 
@@ -96,7 +101,11 @@ async def get_active_sprint_id(db, project_id: int) -> int | None:
     return row[0] if row else None
 
 
-def _to_user_tz(dt, tz_name: str = "UTC"):
+@overload
+def _to_user_tz(dt: datetime, tz_name: str = ...) -> datetime: ...
+@overload
+def _to_user_tz(dt: None, tz_name: str = ...) -> None: ...
+def _to_user_tz(dt: datetime | None, tz_name: str = "UTC") -> datetime | None:
     """Convert a UTC datetime to the given IANA timezone.
 
     Returns a timezone-aware datetime in the user's local timezone.
@@ -118,7 +127,7 @@ def _to_user_tz(dt, tz_name: str = "UTC"):
     return dt.astimezone(tz)
 
 
-def _localtime(dt, tz_name: str = "UTC") -> str:
+def _localtime(dt: datetime | None, tz_name: str = "UTC") -> str:
     """Jinja2 filter: convert UTC datetime to user timezone, format as 'YYYY-MM-DD HH:MM'.
 
     Usage in templates: ``{{ dt | localtime(user.timezone) }}``
@@ -162,7 +171,7 @@ def _localdate(value, skeleton: str = "yMMMd") -> str:
     return format_date(value, skeleton)
 
 
-def _timeago(
+def _timeago(  # noqa: C901
     dt,
     tz_name: str = "UTC",
     mode: str = "smart",
@@ -256,7 +265,60 @@ def _timeago(
     return _date()
 
 
-def get_templates(theme: str = "default") -> Jinja2Templates:
+class _BasePath:
+    """The ``base`` template global: renders as :func:`base_path`, read on every render.
+
+    Read lazily rather than stored as a string, so a settings override (tests
+    re-create the app with another ``STEALTH_PREFIX``) is seen by templates
+    built before it. The prefix is restricted to unreserved URL characters
+    (``normalize_prefix``), so it needs no escaping in an attribute or a JS
+    string literal.
+    """
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        return base_path()
+
+    def __html__(self) -> str:
+        return base_path()
+
+    def __bool__(self) -> bool:
+        return bool(base_path())
+
+    def __add__(self, other: str) -> str:
+        return base_path() + other
+
+    def __radd__(self, other: str) -> str:
+        return other + base_path()
+
+    def __eq__(self, other: object) -> bool:
+        return str(self) == other
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+    def __repr__(self) -> str:
+        return f"BasePath({base_path()!r})"
+
+
+BASE_PATH = _BasePath()
+
+
+def _prefixed_filter(value: object) -> object:
+    """Template filter: an application path (``/data/avatars/...``) with the URL prefix.
+
+    Like :func:`prefixed`, a path already under the prefix is left as it is.
+    Anything that is not a root-relative path (an absolute URL, ``""``,
+    ``None``) is returned as it is, so stored values that may hold either
+    can go through it.
+    """
+    if isinstance(value, str) and value.startswith("/") and not value.startswith(("//", "/\\")):
+        return prefixed(value)
+    return value
+
+
+def get_templates(theme: str = "default") -> Jinja2Templates:  # noqa: C901, PLR0915
     """Build a Jinja2Templates instance with theme-aware ChoiceLoader.
 
     Resolution order:
@@ -307,7 +369,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     from specivo.core.i18n import gettext, ngettext
 
     templates.env.add_extension("jinja2.ext.i18n")
-    templates.env.install_gettext_callables(gettext, ngettext)
+    templates.env.install_gettext_callables(gettext, ngettext)  # type: ignore[attr-defined]  # added by the i18n extension
     # The active request locale, for <html lang> (read by the frontend's
     # Intl date formatting) and anything else that needs the language code.
     from specivo.core.i18n import get_locale
@@ -316,6 +378,14 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 
     # Brand name — from DB setting, available in all templates
     templates.env.globals["brand_name"] = _brand_name
+
+    # The URL prefix (STEALTH_PREFIX), "" when none is set. Every root-relative
+    # URL a template writes starts with it: href="{{ base }}/projects/". An
+    # application path held in a variable goes through the ``prefixed`` filter
+    # (or is written as {{ base }}{{ path }}). scripts/check_static_rules.py
+    # fails on a root-relative URL in a template that does neither.
+    templates.env.globals["base"] = BASE_PATH
+    templates.env.filters["prefixed"] = _prefixed_filter
 
     # Bundled avatar icons of built-in system accounts, for the avatar macro
     from specivo.core.constants import SYSTEM_AVATAR_ICONS
@@ -378,7 +448,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     _code_formatter = _HtmlFormatter(nowrap=True)
 
     def _highlight_sql(text: str) -> markupsafe.Markup:
-        return markupsafe.Markup(_pygments_highlight(text or "", _sql_lexer, _code_formatter))
+        return markupsafe.Markup(_pygments_highlight(text or "", _sql_lexer, _code_formatter))  # noqa: S704
 
     templates.env.filters["highlight_sql"] = _highlight_sql
 
@@ -403,9 +473,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
             if not raw:
                 return {}
             try:
-                return _json.loads(raw)
+                parsed: dict = _json.loads(raw)
             except (ValueError, TypeError):
                 return {}
+            return parsed
 
         def _truncate(val: object, limit: int = 80) -> str:
             s = _json.dumps(val, separators=(",", ":"), default=str) if not isinstance(val, str) else val
@@ -492,7 +563,7 @@ def setup_plugin_assets(plugins: list) -> None:
 # Static files, ``/static/...``, are mounted outside the router and never touch
 # this dependency, so the page keeps its CSS and bundles. The form posts to
 # ``/api/v1/auth/change-password/``, which the API side exempts.
-CHANGE_PASSWORD_PATH = "/my/password/"
+CHANGE_PASSWORD_PATH = "/my/password/"  # noqa: S105
 _PASSWORD_CHANGE_ALLOWED_SUFFIXES = (CHANGE_PASSWORD_PATH, "/logout/")
 
 
@@ -507,9 +578,9 @@ def redirect_if_password_change_required(request: Request, user: object) -> None
     if not getattr(user, "must_change_password", False):
         return
 
-    from specivo.core.config import get_settings
+    from specivo.core.app_url import base_path
 
-    sp = get_settings().stealth_prefix.rstrip("/")
+    sp = base_path()
     path = request.url.path
     if any(path.startswith(sp + suffix) for suffix in _PASSWORD_CHANGE_ALLOWED_SUFFIXES):
         return
@@ -536,7 +607,7 @@ async def require_user(
 
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        raise HTTPException(status_code=302, headers={"Location": "/login/"})
+        raise HTTPException(status_code=302, headers={"Location": prefixed(LOGIN_PATH)})
     return user_obj  # type: ignore[return-value]
 
 
@@ -576,7 +647,7 @@ async def get_current_user_optional(
         # Any other AppError (invalid/revoked token, locked/deactivated
         # account) falls through to rendering the page as anonymous.
         return None
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
     # Per-user locale override: the LocaleMiddleware runs before auth, so the
@@ -669,9 +740,8 @@ ANONYMOUS_WEB_ROUTES: frozenset[str] = frozenset(
     }
 )
 
-# Where a refused visitor is sent. Bare, exactly as ``require_user`` and every
-# page handler has always spelled it, so the refusal stays the redirect the web
-# layer already used.
+# Where a refused visitor is sent: the application path, which every redirect
+# sends through ``prefixed`` (it adds the stealth prefix, when one is set).
 LOGIN_PATH = "/login/"
 
 # A ``next`` longer than this is dropped rather than echoed into a redirect.
@@ -686,6 +756,11 @@ def safe_next_path(raw: str | None) -> str:
     header. Everything else becomes the empty string, which callers read as
     "no destination" and fall back to the dashboard.
 
+    The path is the one the browser asked for, so behind a stealth prefix it
+    must lie under the prefix: anything outside it is not this application
+    and is refused like another origin. A value that passes is redirected to
+    as it is, never through ``prefixed`` again.
+
     ``//evil.example`` and ``/\\evil.example`` are the two forms browsers
     resolve as protocol-relative URLs, so both are refused even though they
     look local.
@@ -695,6 +770,8 @@ def safe_next_path(raw: str | None) -> str:
     if not raw.startswith("/") or raw.startswith(("//", "/\\")):
         return ""
     if any(ord(char) < 0x20 or char == "\x7f" for char in raw):
+        return ""
+    if not is_under_base(raw):
         return ""
     return raw
 
@@ -709,8 +786,8 @@ def login_url_for(target: str) -> str:
     """The login URL that returns a visitor to *target* once they sign in."""
     destination = safe_next_path(target)
     if not destination:
-        return LOGIN_PATH
-    return f"{LOGIN_PATH}?next={quote(destination, safe='')}"
+        return prefixed(LOGIN_PATH)
+    return f"{prefixed(LOGIN_PATH)}?next={quote(destination, safe='')}"
 
 
 @pass_context
@@ -729,6 +806,31 @@ def _csrf_token(ctx) -> str:
     return str(getattr(request.state, CSRF_STATE_KEY, "") or "")
 
 
+def redirect_to(url: str, status_code: int = 302) -> RedirectResponse:
+    """A redirect to *url*, the one way the web layer sends a browser elsewhere.
+
+    A root-relative path gets the stealth prefix (:func:`prefixed`, so a path
+    that already carries it, such as a ``next`` value, is left as it is); an
+    absolute URL (an identity provider) and a query-only URL go unchanged.
+    """
+    if url.startswith("/") and not url.startswith(("//", "/\\")):
+        url = prefixed(url)
+    return RedirectResponse(url, status_code=status_code)
+
+
+def login_redirect(request: Request) -> RedirectResponse:
+    """Send a visitor without a session to the login page, and back here after it.
+
+    Only a full page fetched with GET comes back: returning to a form's POST
+    URL would fail, and an htmx partial (``/partials/...``) is a fragment,
+    not a page. Those go to the login page alone, as before.
+    """
+    path = request.url.path
+    if request.method != "GET" or "/partials/" in path:
+        return RedirectResponse(prefixed(LOGIN_PATH), status_code=302)
+    return RedirectResponse(login_url_for(_current_path(request)), status_code=302)
+
+
 @pass_context
 def _sign_in_url(ctx) -> str:
     """Template global: the login URL that comes back to the current page.
@@ -738,7 +840,7 @@ def _sign_in_url(ctx) -> str:
     """
     request = ctx.get("request")
     if request is None:
-        return LOGIN_PATH
+        return prefixed(LOGIN_PATH)
     return login_url_for(_current_path(request))
 
 
@@ -860,7 +962,7 @@ async def _mark_for_search_engines(request: Request, db: AsyncSession) -> None:
         return
     if not enabled:
         return
-    follow_only = bool(request.url.query) or request.url.path == _SEARCH_PAGE_PATH
+    follow_only = bool(request.url.query) or strip_base(request.url.path) == _SEARCH_PAGE_PATH
     setattr(request.state, ROBOTS_STATE_KEY, ROBOTS_NOINDEX_FOLLOW if follow_only else ROBOTS_INDEX)
 
 
@@ -875,3 +977,135 @@ def _search_engine_context(request: Request) -> dict[str, object]:
     from specivo.core.config import get_settings
 
     return {"canonical_url": f"{get_settings().app_url.rstrip('/')}{request.url.path}"}
+
+
+# ---------------------------------------------------------------------------
+# Shared reader dependencies: the signed-in user, and the project or issue
+# named in the URL that they may read
+# ---------------------------------------------------------------------------
+
+PROJECT_NOT_FOUND = "Project not found"
+ISSUE_NOT_FOUND = "Issue not found"
+PERMISSION_DENIED = "Permission denied"
+
+
+async def require_web_user(request: Request, db: AsyncSession = DB_SESSION) -> User:
+    """Dependency: the signed-in user, or a redirect to log in and come back (:func:`login_redirect`).
+
+    The page counterpart of ``require_user``: a GET of a full page returns to
+    it after login, a form POST or an htmx partial goes to the bare login
+    page. Resolving the user through :func:`get_current_user_optional` keeps
+    its side effects (the user's locale, the forced password change, the
+    header timer).
+    """
+    from fastapi import HTTPException
+
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        raise HTTPException(status_code=302, headers={"Location": login_redirect(request).headers["location"]})
+    return user_obj  # type: ignore[return-value]
+
+
+WebUser = Annotated[User, Depends(require_web_user)]
+
+
+async def _require_permission(
+    request: Request, db: AsyncSession, user: User, project: Project, permission: str | None
+) -> None:
+    from fastapi import HTTPException
+
+    from specivo.services.permission_service import check_permission
+
+    if permission is not None and not await check_permission(user, project.id, permission, db, request=request):
+        raise HTTPException(status_code=403, detail=PERMISSION_DENIED)
+
+
+async def readable_project(db: AsyncSession, user: User, key: str) -> Project:
+    """The project *key* names (a retired key too), if *user* may reach it; else a 404.
+
+    A key that names nothing and a project the user cannot reach get the same
+    answer, which never names the stored key: echoing it would tell an outsider
+    that a private project exists, or what a retired key was renamed to.
+    """
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.project_service import ProjectService
+
+    projects = ProjectService()
+    try:
+        project = await projects.get_by_key(db, key)
+        await projects.require_project_access(db, project, user)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=PROJECT_NOT_FOUND) from None
+    return project
+
+
+class ProjectReader:
+    """Dependency: the project in the URL's ``{project_key}`` that the signed-in user may read.
+
+    Signed out: :func:`require_web_user`'s redirect. Unknown or unreachable:
+    404 (:func:`readable_project`). With *permission*, a reachable project
+    where the user lacks it: 403.
+    """
+
+    def __init__(self, permission: str | None = None) -> None:
+        self.permission = permission
+
+    async def __call__(
+        self, request: Request, project_key: str, user: WebUser, db: AsyncSession = DB_SESSION
+    ) -> Project:
+        project = await readable_project(db, user, project_key)
+        await _require_permission(request, db, user, project, self.permission)
+        return project
+
+
+class ProjectReaderByKey(ProjectReader):
+    """:class:`ProjectReader` for routes whose path names the key ``{key}``."""
+
+    async def __call__(self, request: Request, key: str, user: WebUser, db: AsyncSession = DB_SESSION) -> Project:
+        return await super().__call__(request, key, user, db)
+
+
+#: The ``{project_key}`` project the signed-in user may read.
+ProjectForReader = Annotated[Project, Depends(ProjectReader())]
+#: The ``{key}`` project the signed-in user may read.
+ProjectByKeyForReader = Annotated[Project, Depends(ProjectReaderByKey())]
+
+
+class ReaderIssue(NamedTuple):
+    project: Project
+    issue: Issue
+
+
+async def readable_issue(db: AsyncSession, user: User, issue_ref: str) -> ReaderIssue:
+    """The issue *issue_ref* names, with its project, if *user* may see it; else a 404.
+
+    The issue is loaded with its relations. A reference that names nothing, an
+    issue the user may not see and an unreachable project are all 404.
+    """
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.issue_service import IssueService
+
+    try:
+        issue = await IssueService().get_by_display_key_with_relations(db, issue_ref, user=user)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail=ISSUE_NOT_FOUND) from None
+    project = await readable_project(db, user, issue.project_key)
+    return ReaderIssue(project, issue)
+
+
+async def issue_for_reader(issue_ref: str, user: WebUser, db: AsyncSession = DB_SESSION) -> ReaderIssue:
+    """Dependency: the issue in the URL's ``{issue_ref}`` (and its project) that the signed-in user may see.
+
+    Signed out: :func:`require_web_user`'s redirect. Unknown or not visible:
+    404 (:func:`readable_issue`). Permission checks stay in the route: the
+    routes that check one do it without auditing the refusal.
+    """
+    return await readable_issue(db, user, issue_ref)
+
+
+#: The ``{issue_ref}`` issue the signed-in user may see.
+IssueForReader = Annotated[ReaderIssue, Depends(issue_for_reader)]

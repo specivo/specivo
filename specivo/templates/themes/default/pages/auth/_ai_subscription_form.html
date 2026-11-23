@@ -1,5 +1,5 @@
 {# The subscription form. Context: form, form_action, presets, tools, currencies; people (admin add form only); submit_label. #}
-<form method="post" action="{{ form_action }}" class="sp-sub-form" data-testid="subscription-form">
+<form method="post" action="{{ form_action | prefixed }}" class="sp-sub-form" data-testid="subscription-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if people is defined and people %}
   <div class="sp-sub-field sp-sub-wide">

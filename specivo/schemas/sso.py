@@ -219,7 +219,7 @@ class SsoProviderCreate(BaseModel):
     issuer: IssuerStr
     discovery_url: HttpUrlStr | None = None
     client_id: str = Field(min_length=1, max_length=255)
-    token_endpoint_auth_method: TokenEndpointAuthMethod = "client_secret_basic"
+    token_endpoint_auth_method: TokenEndpointAuthMethod = "client_secret_basic"  # noqa: S105
     #: Write-only. Stored encrypted; never returned.
     client_secret: SecretStr | None = None
     #: Alternative to ``client_secret``: the name of an environment variable holding it.

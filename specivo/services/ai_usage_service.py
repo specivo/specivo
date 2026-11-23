@@ -111,6 +111,7 @@ from specivo.services.ai_model_price_service import (
     model_name_for,
     register_price_reference,
 )
+from specivo.services.ai_spend_planning import PlanningFilter, planning_conditions, planning_visibility
 from specivo.services.api_key_scope import (
     admin_reaches,
     is_global_admin,
@@ -455,7 +456,7 @@ class AiUsageService:
             raise NotFoundError(f"AI usage entry {entry_id} not found")
         return entry
 
-    async def list_entries(
+    async def list_entries(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -477,6 +478,7 @@ class AiUsageService:
         unassigned: bool | None = None,
         issue_tree_id: int | None = None,
         external_session_id: str | None = None,
+        planning: PlanningFilter | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[AiUsageEntry], int]:
@@ -489,7 +491,9 @@ class AiUsageService:
         *unassigned* ``True`` / ``False`` keeps only entries without / with a
         project; *issue_tree_id* keeps the entries of that issue and of every
         issue below it (:func:`issue_subtree_clause`); *external_session_id*
-        keeps the entries of one agent session (the id the reporter sends).
+        keeps the entries of one agent session (the id the reporter sends);
+        *planning* keeps the entries of one release or sprint, or of none
+        (:mod:`specivo.services.ai_spend_planning`).
         """
         conditions = await self._list_conditions(
             session,
@@ -511,6 +515,7 @@ class AiUsageService:
             unassigned=unassigned,
             issue_tree_id=issue_tree_id,
             external_session_id=external_session_id,
+            planning=planning,
         )
         total = await session.scalar(select(func.count()).select_from(AiUsageEntry).where(*conditions)) or 0
         rows = (
@@ -528,7 +533,7 @@ class AiUsageService:
         )
         return list(rows), int(total)
 
-    async def summarize_entries(
+    async def summarize_entries(  # noqa: PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -547,6 +552,7 @@ class AiUsageService:
         without_issue: bool = False,
         without_branch: bool = False,
         unassigned: bool | None = None,
+        planning: PlanningFilter | None = None,
     ) -> UsageSummary:
         """Totals of the entries ``list_entries`` would return with the same filters, excluded ones left out.
 
@@ -573,6 +579,7 @@ class AiUsageService:
             without_issue=without_issue,
             without_branch=without_branch,
             unassigned=unassigned,
+            planning=planning,
         )
         counted = AiUsageEntry.excluded_at.is_(None)
         row = (
@@ -606,7 +613,7 @@ class AiUsageService:
             setattr(summary, name, items)
         return summary
 
-    async def _list_conditions(
+    async def _list_conditions(  # noqa: C901, PLR0912, PLR0913
         self,
         session: AsyncSession,
         viewer: User,
@@ -628,6 +635,7 @@ class AiUsageService:
         unassigned: bool | None = None,
         issue_tree_id: int | None = None,
         external_session_id: str | None = None,
+        planning: PlanningFilter | None = None,
     ) -> list[ColumnElement[bool]]:
         """The WHERE conditions of ``list_entries`` and ``summarize_entries``, visibility included."""
         conditions: list[ColumnElement[bool]] = []
@@ -674,6 +682,9 @@ class AiUsageService:
             conditions.append(AiUsageEntry.excluded_at.is_not(None) if excluded else AiUsageEntry.excluded_at.is_(None))
         if unassigned is not None:
             conditions.append(AiUsageEntry.project_id.is_(None) if unassigned else AiUsageEntry.project_id.is_not(None))
+        if planning is not None and planning.active:
+            visibility = await planning_visibility(session, viewer)
+            conditions.extend(planning_conditions(planning, AiUsageEntry.issue_id, visibility))
         return conditions
 
     # -- authorization ------------------------------------------------------------
@@ -990,6 +1001,16 @@ class AiUsageService:
         await self._validated(session, data, source=source)
 
     async def _validated(self, session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
+        """Column values for *data*; the checks run in a fixed order, so the first invalid field is reported."""
+        values = await self._validate_identity(session, data, source=source)
+        values |= self._validate_timing(data)
+        values |= await self._validate_counts(session, data)
+        values |= self._validate_meta(data)
+        return values
+
+    @staticmethod
+    async def _validate_identity(session: AsyncSession, data: AiUsageInput, *, source: str) -> dict[str, Any]:
+        """The source, tool, provider and model."""
         from specivo.services.ai_subscription_service import AiToolService
 
         if source not in AI_USAGE_SOURCES:
@@ -1002,6 +1023,10 @@ class AiUsageService:
         model = model_name_for(data.model or "", provider or "")
         if not model or len(model) > 200:
             raise _invalid("Enter a model name of at most 200 characters", "model")
+        return {"tool_slug": tool.slug, "provider": provider, "model": model}
+
+    def _validate_timing(self, data: AiUsageInput) -> dict[str, Any]:
+        """The usage day and the optional start and end instants."""
         if not isinstance(data.usage_date, date) or isinstance(data.usage_date, datetime):
             raise _invalid("usage_date must be a date", "usage_date")
         latest = (utcnow() + FUTURE_TOLERANCE).date()
@@ -1013,6 +1038,10 @@ class AiUsageService:
             raise _invalid("started_at must fall on usage_date (a UTC day)", "started_at")
         if started is not None and ended is not None and ended < started:
             raise _invalid("ended_at must not be before started_at", "ended_at")
+        return {"usage_date": data.usage_date, "started_at": started, "ended_at": ended}
+
+    async def _validate_counts(self, session: AsyncSession, data: AiUsageInput) -> dict[str, Any]:
+        """Token buckets, the request count, the cost type and the reported cost."""
         try:
             tokens = check_tokens(dict(data.tokens or {}), "tokens")
             long_context = check_tokens(dict(data.long_context), "long_context") if data.long_context else None
@@ -1030,23 +1059,20 @@ class AiUsageService:
         if data.cost_type is not None and data.cost_type not in AI_USAGE_COST_TYPES:
             raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
         reported = await self._reported_cost(session, data.reported_cost)
-        method = data.attribution_method or ("explicit" if data.project_id is not None else "none")
-        if method not in AI_USAGE_ATTRIBUTION_METHODS:
-            raise _invalid("Unknown attribution method", "attribution_method")
-        values: dict[str, Any] = {
-            "tool_slug": tool.slug,
-            "provider": provider,
-            "model": model,
-            "usage_date": data.usage_date,
-            "started_at": started,
-            "ended_at": ended,
+        return {
             "request_count": count,
             **tokens,
             "long_context": long_context,
             "reported_cost_amount": reported.amount if reported is not None else None,
             "reported_cost_currency": reported.currency if reported is not None else None,
-            "attribution_method": method,
         }
+
+    def _validate_meta(self, data: AiUsageInput) -> dict[str, Any]:
+        """The attribution method, the context texts, the comments and the idempotency key."""
+        method = data.attribution_method or ("explicit" if data.project_id is not None else "none")
+        if method not in AI_USAGE_ATTRIBUTION_METHODS:
+            raise _invalid("Unknown attribution method", "attribution_method")
+        values: dict[str, Any] = {"attribution_method": method}
         for name, max_length in CONTEXT_MAX_LENGTHS.items():
             values[name] = self._text(getattr(data, name), name, max_length)
         values["comments"] = self._text(data.comments, "comments", COMMENTS_MAX_LENGTH)
@@ -1361,7 +1387,7 @@ class AiUsageService:
             await self._audit(session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER, actor, entry, details, request)
         return UpsertResult(entry, "updated")
 
-    async def update(
+    async def update(  # noqa: C901, PLR0912
         self,
         session: AsyncSession,
         actor: User,

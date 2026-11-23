@@ -630,7 +630,10 @@ async def test_issue_pages_show_relation_controls_only_with_manage_issue_relatio
     assert issue_b["key"] in page, "precondition: the relation itself is listed"
     assert "relationForm(" not in page
     assert "sp-rel-remove" not in page
-    assert "pendingRelations" not in await _page(client, regular_token, new_form)
+    # Without add_issues the new-issue form is not offered at all.
+    resp = await client.get(new_form, cookies={"access_token": regular_token})
+    assert resp.status_code == 403
+    assert "pendingRelations" not in resp.text
 
     # Once a member with the permission, the same reader gets the controls.
     await _grant_membership(db_session, public_project, regular_user, dev_role)

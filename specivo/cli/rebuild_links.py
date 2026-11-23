@@ -1,12 +1,14 @@
 """Rebuild the entity link graph: the links written in every issue, comment and wiki page.
 
 Each source's stored links are replaced with the links its text holds now, and
-links written before their target existed are resolved. Run it once after
-upgrading to a release that adds link kinds (the migration only carries over
-wiki-to-wiki links), or whenever the graph is suspected stale, for example after
-queued rebuilds were lost with a dead broker. Safe to re-run: the result
-depends only on the text. Work is committed in batches, so an interrupted run
-loses little.
+links written before their target existed are resolved. Projects never fully
+rebuilt (after an upgrade or a restored dump) are rebuilt by the hourly
+backfill task when a Celery worker and beat run; run this by hand when they do
+not, or whenever the graph is suspected stale, for example after queued
+rebuilds were lost with a dead broker. A finished run stamps
+``projects.links_rebuilt_at`` like a rebuild started from settings. Safe to
+re-run: the result depends only on the text. Work is committed in batches, so
+an interrupted run loses little.
 
 Exit status: 0 on success, 1 when some sources could not be rebuilt or the run failed.
 
@@ -70,7 +72,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         sys.exit(asyncio.run(_main(args.project)))
-    except Exception as exc:  # pragma: no cover - CLI surface
+    except Exception as exc:  # pragma: no cover - CLI surface  # noqa: BLE001
         logger.error("Rebuilding links failed: %s", exc)
         sys.exit(1)
 

@@ -46,7 +46,7 @@ export function loginForm() {
                         body: JSON.stringify({login: this.login, password: this.password, remember: this.remember})
                     });
                     if (res.ok) {
-                        window.location.href = this.next || '/';
+                        window.location.href = spUrl(this.next || '/');
                     } else {
                         var data = await res.json();
                         this.error = (data.errors && data.errors[0] && data.errors[0].message) || this.msgInvalid;

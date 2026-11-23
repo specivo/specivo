@@ -53,8 +53,6 @@ class TimeEntryOut(BaseModel):
 class TimeEntryListResponse(PaginatedResponse[TimeEntryOut]):
     """Paginated time entry list response."""
 
-    pass
-
 
 class TimerStartRequest(BaseModel):
     """Payload for starting a timer."""

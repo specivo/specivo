@@ -27,7 +27,7 @@ export function adminGroups(initial) {
         },
 
         groupUrl(g) {
-            return '/admin/groups/' + g.id + '/';
+            return spUrl('/admin/groups/' + g.id + '/');
         },
 
         _readError(err, fallback) {

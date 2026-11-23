@@ -131,6 +131,19 @@ class SecretStatus(StrEnum):
     NOT_REQUIRED = "not_required"  # public client (auth method ``none``)
 
 
+@dataclass(frozen=True, slots=True)
+class _SecretChange:
+    """The client secret after an update: the stored ciphertext, the env variable name, and the changed fields."""
+
+    stored: str | None
+    env: str | None
+    fields: list[str]
+
+    @property
+    def source(self) -> str | None:
+        return "stored" if self.stored else ("env" if self.env else None)
+
+
 @dataclass(frozen=True)
 class ProviderUpdateResult:
     provider: SsoProvider
@@ -194,7 +207,7 @@ class ProviderService:
         return {pid: count for pid, count in rows.all()}
 
     def secret_status(self, provider: SsoProvider) -> SecretStatus:
-        if provider.token_endpoint_auth_method == "none":
+        if provider.token_endpoint_auth_method == "none":  # noqa: S105
             return SecretStatus.NOT_REQUIRED
         if provider.client_secret_encrypted:
             try:
@@ -215,7 +228,7 @@ class ProviderService:
         stored secret cannot be decrypted (``SECRET_KEY`` rotated): the admin
         has to enter it again.
         """
-        if provider.token_endpoint_auth_method == "none":
+        if provider.token_endpoint_auth_method == "none":  # noqa: S105
             return None
         if provider.client_secret_encrypted:
             return secret_box.decrypt(provider.client_secret_encrypted, CLIENT_SECRET_PURPOSE)
@@ -273,7 +286,7 @@ class ProviderService:
             backchannel_action=provider.backchannel_action,
             verify_session_at_idp=provider.verify_session_at_idp,
             idp_check_failure=provider.idp_check_failure,
-            session_recheck_status=provider.session_recheck_status,  # type: ignore[arg-type]
+            session_recheck_status=provider.session_recheck_status,
             session_recheck_status_at=provider.session_recheck_status_at,
             session_max_age_hours=provider.session_max_age_hours,
             extra_auth_params={k: str(v) for k, v in (provider.extra_auth_params or {}).items()},
@@ -343,61 +356,16 @@ class ProviderService:
         """
         settings = get_settings()
         provider = await self.get(session, provider_id)
-        fields_set = data.model_fields_set
-
         current = {field: getattr(provider, field) for field in _PLAIN_FIELDS}
-        values = dict(current)
-        for field in _PLAIN_FIELDS:
-            if field not in fields_set:
-                continue
-            value = getattr(data, field)
-            # Only discovery_url may be cleared with null; null elsewhere means "unchanged".
-            if value is None and field != "discovery_url":
-                continue
-            values[field] = self._column_value(field, value)
+        values = self._requested_values(current, data)
+        secret = self._secret_after_update(provider, data)
 
-        # --- secret source after this update ---
-        secret = self._read_secret(data.client_secret) if "client_secret" in fields_set else None
-        new_env = data.client_secret_env if "client_secret_env" in fields_set else None
-        clear_env = "client_secret_env" in fields_set and data.client_secret_env is None
-        if secret is not None and new_env is not None:
-            raise self._secret_conflict()
-        if data.clear_client_secret and (secret is not None or new_env is not None):
-            raise self._secret_conflict()
-
-        stored, env = provider.client_secret_encrypted, provider.client_secret_env
-        secret_fields: list[str] = []
-        if data.clear_client_secret:
-            if stored or env:
-                secret_fields = ["client_secret"] if stored else ["client_secret_env"]
-            stored, env = None, None
-        elif secret is not None:
-            stored, env = secret_box.encrypt(secret, CLIENT_SECRET_PURPOSE), None
-            secret_fields = ["client_secret"]
-        elif new_env is not None:
-            if new_env != env or stored:
-                secret_fields = ["client_secret_env"]
-            stored, env = None, new_env
-        elif clear_env and env:
-            env = None
-            secret_fields = ["client_secret_env"]
-        source = "stored" if stored else ("env" if env else None)
-
-        self._check_state(values, source, settings)
+        self._check_state(values, secret.source, settings)
         if values["slug"] != current["slug"]:
             await self._check_slug_free(session, values["slug"])
 
         changed = [field for field in _PLAIN_FIELDS if values[field] != current[field]]
-        for field in changed:
-            setattr(provider, field, values[field])
-        provider.client_secret_encrypted = stored
-        provider.client_secret_env = env
-        if _ENDPOINT_FIELDS.intersection(changed):
-            provider.discovery_cache = None
-            provider.discovery_fetched_at = None
-        if _TOKEN_BINDING_FIELDS.intersection(changed):
-            await self._drop_idp_refresh_tokens(session, provider.id)
-        await session.flush()
+        await self._write_update(session, provider, values, changed, secret)
         sessions_revoked = 0
         if current["enabled"] and not values["enabled"]:
             sessions_revoked = await self._revoke_sessions(
@@ -411,6 +379,74 @@ class ProviderService:
 
         if "slug" in changed:
             await replace_auto_redirect_provider(session, current["slug"], values["slug"])
+        await self._announce_update(provider, actor, changed, secret.fields, sessions_revoked)
+        return ProviderUpdateResult(provider=provider, sessions_revoked=sessions_revoked)
+
+    def _requested_values(self, current: dict[str, Any], data: SsoProviderUpdate) -> dict[str, Any]:
+        """The plain column values after the update: *current* with the fields set in *data* applied."""
+        values = dict(current)
+        for field in _PLAIN_FIELDS:
+            if field not in data.model_fields_set:
+                continue
+            value = getattr(data, field)
+            # Only discovery_url may be cleared with null; null elsewhere means "unchanged".
+            if value is None and field != "discovery_url":
+                continue
+            values[field] = self._column_value(field, value)
+        return values
+
+    def _secret_after_update(self, provider: SsoProvider, data: SsoProviderUpdate) -> _SecretChange:
+        """Where the client secret comes from after the update, and the audited fields that changed."""
+        fields_set = data.model_fields_set
+        secret = self._read_secret(data.client_secret) if "client_secret" in fields_set else None
+        new_env = data.client_secret_env if "client_secret_env" in fields_set else None
+        clear_env = "client_secret_env" in fields_set and data.client_secret_env is None
+        if secret is not None and new_env is not None:
+            raise self._secret_conflict()
+        if data.clear_client_secret and (secret is not None or new_env is not None):
+            raise self._secret_conflict()
+
+        stored, env = provider.client_secret_encrypted, provider.client_secret_env
+        if data.clear_client_secret:
+            fields = (["client_secret"] if stored else ["client_secret_env"]) if stored or env else []
+            return _SecretChange(None, None, fields)
+        if secret is not None:
+            return _SecretChange(secret_box.encrypt(secret, CLIENT_SECRET_PURPOSE), None, ["client_secret"])
+        if new_env is not None:
+            return _SecretChange(None, new_env, ["client_secret_env"] if new_env != env or stored else [])
+        if clear_env and env:
+            return _SecretChange(stored, None, ["client_secret_env"])
+        return _SecretChange(stored, env, [])
+
+    async def _write_update(
+        self,
+        session: AsyncSession,
+        provider: SsoProvider,
+        values: dict[str, Any],
+        changed: list[str],
+        secret: _SecretChange,
+    ) -> None:
+        """Store the *changed* fields and the secret, dropping what a changed endpoint or client invalidates."""
+        for field in changed:
+            setattr(provider, field, values[field])
+        provider.client_secret_encrypted = secret.stored
+        provider.client_secret_env = secret.env
+        if _ENDPOINT_FIELDS.intersection(changed):
+            provider.discovery_cache = None
+            provider.discovery_fetched_at = None
+        if _TOKEN_BINDING_FIELDS.intersection(changed):
+            await self._drop_idp_refresh_tokens(session, provider.id)
+        await session.flush()
+
+    async def _announce_update(
+        self,
+        provider: SsoProvider,
+        actor: User | None,
+        changed: list[str],
+        secret_fields: list[str],
+        sessions_revoked: int,
+    ) -> None:
+        """Audit the update and drop the cached provider when anything changed."""
         if changed:
             counts = {"sessions_revoked": sessions_revoked} if "enabled" in changed and not provider.enabled else None
             self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, changed, counts=counts)
@@ -418,7 +454,6 @@ class ProviderService:
             self._emit(AuditEvent.SSO_PROVIDER_SECRET_CHANGED, provider, actor, secret_fields)
         if changed or secret_fields:
             await invalidate_provider_cache(provider.id)
-        return ProviderUpdateResult(provider=provider, sessions_revoked=sessions_revoked)
 
     # ------------------------------------------------------------------
     # Delete
@@ -675,7 +710,7 @@ class ProviderService:
         logger.info("sso.provider.self_test provider=%s ok=false step=%s reason=%s", provider.slug, step, exc.reason)
         return SsoSelfTestResult(
             ok=False,
-            failed_step=step,  # type: ignore[arg-type]
+            failed_step=step,
             error_code=exc.code,
             error_reason=exc.reason,
             warnings=warnings or [],
@@ -781,7 +816,7 @@ class ProviderService:
                     "Identity provider URLs must use https (SSO_ALLOW_INSECURE_HTTP is off)",
                     field,
                 )
-        public = values["token_endpoint_auth_method"] == "none"
+        public = values["token_endpoint_auth_method"] == "none"  # noqa: S105
         if public and secret_source is not None:
             raise _invalid(
                 "sso_client_secret_not_allowed",

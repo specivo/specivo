@@ -121,7 +121,7 @@ _registry: MetadataTargetRegistry | None = None
 
 def get_metadata_target_registry() -> MetadataTargetRegistry:
     """Return the process-wide singleton, creating it on first use."""
-    global _registry  # noqa: PLW0603
+    global _registry
     if _registry is None:
         _registry = MetadataTargetRegistry()
         _registry.register(IssueMetadataTarget())

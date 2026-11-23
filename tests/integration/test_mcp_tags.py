@@ -12,9 +12,9 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import ConflictError, PermissionDeniedError, ValidationError
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import Project
+from specivo.models.project import EnabledModule, Project
 from specivo.models.role import Role
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
@@ -64,6 +64,8 @@ async def priority(db_session: AsyncSession):
 async def project(db_session: AsyncSession) -> Project:
     proj = ProjectFactory.build(key="MTAG", name="MCP Tag Test", is_public=True)
     db_session.add(proj)
+    await db_session.flush()
+    db_session.add_all([EnabledModule(project_id=proj.id, name=m) for m in ("issue_tracking", "wiki")])
     await db_session.commit()
     await db_session.refresh(proj)
     return proj
@@ -122,9 +124,7 @@ async def issue(db_session, project, tracker, priority, status, admin):
 
 @pytest_asyncio.fixture
 async def wiki_page(db_session, project, admin):
-    page, _ = await WikiService().create_page(
-        db_session, project.id, title="MCP Wiki Tag", text="body", author=admin
-    )
+    page, _ = await WikiService().create_page(db_session, project.id, title="MCP Wiki Tag", text="body", author=admin)
     await db_session.commit()
     await db_session.refresh(page)
     return page
@@ -170,8 +170,8 @@ class TestTagVocabularyTools:
         from specivo.mcp.tools import _create_tag
 
         await _create_tag(db_session, admin, project.key, "dup", None)
-        result = await _create_tag(db_session, admin, project.key, "DUP", None)
-        assert result.startswith("Error:")
+        with pytest.raises(ConflictError, match="already exists"):
+            await _create_tag(db_session, admin, project.key, "DUP", None)
 
     async def test_create_requires_manage_project(self, db_session, viewer, project, role_view_only):
         from specivo.mcp.tools import _create_tag
@@ -211,6 +211,30 @@ class TestTagEntityTool:
         got = await _tag(db_session, admin, issue.display_key, "get")
         assert "b" in got and "c" in got and "a" not in got.split(": ", 1)[1].split(", ")
 
+    @pytest.mark.parametrize(("op", "value"), [("add", "new"), ("set", []), ("remove", "keep")])
+    async def test_viewer_cannot_change_issue_tags(
+        self, db_session, admin, viewer, project, issue, role_view_only, op, value
+    ):
+        from specivo.mcp.tools import _tag
+
+        await _tag(db_session, admin, issue.display_key, "add", "keep")
+        await _add_member(db_session, project, viewer, role_view_only)
+        with pytest.raises(PermissionDeniedError):
+            await _tag(db_session, viewer, issue.display_key, op, value)
+        assert await _tag(db_session, viewer, issue.display_key, "get") == f"{issue.display_key}: keep"
+
+    async def test_viewer_without_view_wiki_cannot_read_wiki_tags(
+        self, db_session, viewer, project, wiki_page, role_view_only
+    ):
+        from specivo.mcp.tools import _tag
+
+        await _add_member(db_session, project, viewer, role_view_only)
+        with pytest.raises(PermissionDeniedError):
+            await _tag(db_session, viewer, f"wiki:{project.key}/{wiki_page.slug}", "get")
+        # The same refusal for a slug that does not exist: no page enumeration.
+        with pytest.raises(PermissionDeniedError):
+            await _tag(db_session, viewer, f"wiki:{project.key}/no-such-page", "get")
+
     async def test_add_on_wiki(self, db_session, admin, project, wiki_page):
         from specivo.mcp.tools import _tag
 
@@ -224,16 +248,16 @@ class TestTagEntityTool:
     async def test_too_many_names_is_a_tool_error(self, db_session, admin, issue, op):
         from specivo.mcp.tools import _tag
 
-        result = await _tag(db_session, admin, issue.display_key, op, [f"t{i}" for i in range(101)])
-        assert result == "Error: at most 100 tag names per call"
+        with pytest.raises(ValueError, match="^at most 100 tag names per call$"):
+            await _tag(db_session, admin, issue.display_key, op, [f"t{i}" for i in range(101)])
         assert await _tag(db_session, admin, issue.display_key, "get") == f"{issue.display_key}: (no tags)"
 
     @pytest.mark.parametrize("op", ["add", "set"])
     async def test_over_long_name_is_a_tool_error(self, db_session, admin, issue, op):
         from specivo.mcp.tools import _tag
 
-        result = await _tag(db_session, admin, issue.display_key, op, ["fine", "z" * 65])
-        assert result == "Error: tag names must be at most 64 characters"
+        with pytest.raises(ValueError, match="^tag names must be at most 64 characters$"):
+            await _tag(db_session, admin, issue.display_key, op, ["fine", "z" * 65])
         assert await _tag(db_session, admin, issue.display_key, "get") == f"{issue.display_key}: (no tags)"
 
     async def test_names_are_stripped_and_deduplicated(self, db_session, admin, issue):
@@ -242,31 +266,31 @@ class TestTagEntityTool:
         result = await _tag(
             db_session, admin, issue.display_key, "add", ["  " + "x" * 64 + "  ", " Ops ", "ops", "OPS", "   "]
         )
-        assert not result.startswith("Error:")
+        assert result.startswith("Added tags to"), result
         got = await _tag(db_session, admin, issue.display_key, "get")
         assert sorted(got.split(": ", 1)[1].split(", ")) == sorted(["Ops", "x" * 64])
 
     async def test_only_blank_names_is_still_a_missing_value(self, db_session, admin, issue):
         from specivo.mcp.tools import _tag
 
-        result = await _tag(db_session, admin, issue.display_key, "add", ["  ", ""])
-        assert result == "Error: value (tag name) is required for add/remove"
+        with pytest.raises(ValidationError, match=r"^value \(tag name\) is required for add/remove$"):
+            await _tag(db_session, admin, issue.display_key, "add", ["  ", ""])
 
     async def test_invalid_op_returns_error(self, db_session, admin, issue):
         from specivo.mcp.tools import _tag
 
-        result = await _tag(db_session, admin, issue.display_key, "frobnicate", "x")
-        assert result.startswith("Error:")
+        with pytest.raises(ValidationError, match="invalid op 'frobnicate'"):
+            await _tag(db_session, admin, issue.display_key, "frobnicate", "x")
 
     async def test_add_writes_audit_log(self, db_session, admin, issue):
         from specivo.mcp.tools import _tag
 
         await _tag(db_session, admin, issue.display_key, "add", "tracked")
         rows = (
-            await db_session.execute(
-                select(SecurityAuditLog).where(SecurityAuditLog.event_type == "tag_added")
-            )
-        ).scalars().all()
+            (await db_session.execute(select(SecurityAuditLog).where(SecurityAuditLog.event_type == "tag_added")))
+            .scalars()
+            .all()
+        )
         assert len(rows) >= 1
         assert rows[0].details.get("source") == "mcp"
 
@@ -303,9 +327,7 @@ class TestTagsInIssueResponses:
         result = await _show_issue(db_session, admin, issue.display_key, metadata_only=True)
         assert "Tags: backend" in result
 
-    async def test_list_issues_shows_tags_per_issue(
-        self, db_session, admin, project, tracker, priority, status, issue
-    ):
+    async def test_list_issues_shows_tags_per_issue(self, db_session, admin, project, tracker, priority, status, issue):
         from specivo.mcp.tools import _list_issues, _tag
 
         svc = IssueService()

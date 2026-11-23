@@ -59,7 +59,7 @@ def classify(code: str, minor_units: str) -> str:
 def read_source(path: str | None) -> str:
     if path:
         return Path(path).read_text(encoding="utf-8")
-    with urllib.request.urlopen(SOURCE_URL, timeout=30) as resp:  # noqa: S310 - fixed https URL
+    with urllib.request.urlopen(SOURCE_URL, timeout=30) as resp:
         return str(resp.read().decode("utf-8"))
 
 

@@ -76,8 +76,10 @@
 @import "./pages/ai-usage.css";
 @import "./pages/ai-spend-drill.css";
 @import "./pages/ai-issue-usage.css";
+@import "./pages/ai-spend-card.css";
 @import "./pages/api-key-limit.css";
 @import "./pages/rate-limited.css";
+@import "./pages/admin-roles.css";
 
 /* Form control sizing and the select arrow: last, so it wins over the
    per-component control rules above. */

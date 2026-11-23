@@ -22,41 +22,79 @@ function toHours(hours, minutes) {
     return Math.round(((parseInt(hours) || 0) + Math.min(parseInt(minutes) || 0, 59) / 60) * 100) / 100;
 }
 
+/* The form's field values from *initial*, each with its default. */
+function formFields(initial) {
+    return {
+        subject: initial.subject || '',
+        tracker_id: initial.tracker_id || 0,
+        description: initial.description || '',
+        status_id: initial.status_id || 0,
+        priority_id: initial.priority_id || 0,
+        assigned_to_id: initial.assigned_to_id || null,
+        start_date: initial.start_date || '',
+        due_date: initial.due_date || '',
+        done_ratio: initial.done_ratio || 0,
+        version_id: initial.version_id || ''
+    };
+}
+
+/* What the form is for (create or edit which issue) and what the reader may set, from *initial*. */
+function formContext(initial) {
+    return {
+        is_private: initial.is_private || false,
+        canSetPrivate: initial.canSetPrivate || false,
+        trackerPrivateDefaults: initial.trackerPrivateDefaults || {},
+        mode: initial.mode || 'create',
+        projectKey: initial.projectKey || '',
+        displayKey: initial.displayKey || '',
+        lockVersion: initial.lockVersion || 0,
+        pendingTags: initial.tags || [],
+        similarEnabled: initial.similarEnabled === true,
+        canManageRelations: initial.canManageRelations === true
+    };
+}
+
+/* The hour and minute inputs of the three estimates from *initial*. */
+function estimateFields(initial) {
+    return {
+        est_hours: initial.estimated_hours ? Math.floor(parseFloat(initial.estimated_hours)) : '',
+        est_minutes: initial.estimated_hours ? Math.round((parseFloat(initial.estimated_hours) % 1) * 60) : '',
+        orig_hours: hoursPart(initial.original_estimate),
+        orig_minutes: minutesPart(initial.original_estimate),
+        rem_hours: hoursPart(initial.remaining_estimate),
+        rem_minutes: minutesPart(initial.remaining_estimate)
+    };
+}
+
+/* The estimated hours from the hour and minute inputs, rounded to 0.01; null when both are empty or zero. */
+function estimatedHours(hours, minutes) {
+    if (!hours && !minutes) return null;
+    return Math.round(((parseInt(hours) || 0) + (parseInt(minutes) || 0) / 60) * 100) / 100;
+}
+
+/* Send *body* as JSON to *url*; a failure is ignored (best-effort follow-up requests). */
+async function sendBestEffort(url, method, body) {
+    try {
+        await spFetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+    } catch (_e) { /* best-effort */ }
+}
+
 export function issueForm(initial) {
         return {
             submitting: false,
-            subject: initial.subject || '',
-            tracker_id: initial.tracker_id || 0,
-            description: initial.description || '',
-            status_id: initial.status_id || 0,
-            priority_id: initial.priority_id || 0,
-            assigned_to_id: initial.assigned_to_id || null,
-            start_date: initial.start_date || '',
-            due_date: initial.due_date || '',
-            est_hours: initial.estimated_hours ? Math.floor(parseFloat(initial.estimated_hours)) : '',
-            est_minutes: initial.estimated_hours ? Math.round((parseFloat(initial.estimated_hours) % 1) * 60) : '',
-            orig_hours: hoursPart(initial.original_estimate),
-            orig_minutes: minutesPart(initial.original_estimate),
-            rem_hours: hoursPart(initial.remaining_estimate),
-            rem_minutes: minutesPart(initial.remaining_estimate),
-            done_ratio: initial.done_ratio || 0,
-            is_private: initial.is_private || false,
-            canSetPrivate: initial.canSetPrivate || false,
-            trackerPrivateDefaults: initial.trackerPrivateDefaults || {},
-            version_id: initial.version_id || '',
-            mode: initial.mode || 'create',
-            projectKey: initial.projectKey || '',
-            displayKey: initial.displayKey || '',
-            lockVersion: initial.lockVersion || 0,
+            ...formFields(initial),
+            ...formContext(initial),
+            ...estimateFields(initial),
             files: [],
             dragover: false,
             pendingRelations: [],
             showRelationForm: false,
             newRelationType: 'relates',
             newRelationKey: '',
-            pendingTags: initial.tags || [],
-            similarEnabled: initial.similarEnabled === true,
-            canManageRelations: initial.canManageRelations === true,
             similarIssues: [],
             _similarTimer: null,
             _similarController: null,
@@ -239,8 +277,8 @@ export function issueForm(initial) {
                 }
             },
 
-            async submitForm(continueCreating) {
-                this.submitting = true;
+            /* The create or update request body from the form's fields. */
+            _payload() {
                 var metadataVal = this._getMetadataFromRenderer();
                 var payload = {
                     project_key: this.projectKey,
@@ -252,7 +290,7 @@ export function issueForm(initial) {
                     assigned_to_id: this.assigned_to_id ? parseInt(this.assigned_to_id) : null,
                     start_date: this.start_date || null,
                     due_date: this.due_date || null,
-                    estimated_hours: (this.est_hours || this.est_minutes) ? Math.round(((parseInt(this.est_hours) || 0) + (parseInt(this.est_minutes) || 0) / 60) * 100) / 100 : null,
+                    estimated_hours: estimatedHours(this.est_hours, this.est_minutes),
                     original_estimate: toHours(this.orig_hours, this.orig_minutes),
                     remaining_estimate: toHours(this.rem_hours, this.rem_minutes),
                     done_ratio: this.done_ratio,
@@ -264,84 +302,75 @@ export function issueForm(initial) {
                 if (metadataVal !== null) {
                     payload.metadata = metadataVal;
                 }
+                return payload;
+            },
 
+            async _submitEdit(payload, tagNames) {
+                payload.lock_version = this.lockVersion;
+                var res = await spFetch('/api/v1/issues/' + this.displayKey + '/', {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) return;
+                /* Files chosen in the form are recorded with the edit */
+                var updated = await res.json();
+                await this._uploadFiles(updated.id, updated.journal_id);
+                await sendBestEffort(spUrl('/api/v1/issues/' + this.displayKey + '/tags/'), 'PUT', {names: tagNames});
+                window.location.href = spUrl('/issue/' + this.displayKey + '/');
+            },
+
+            async _submitCreate(payload, tagNames, continueCreating) {
+                /* Tags go with the create request: tagging an issue later
+                   needs edit_issues, creating one with tags does not. */
+                payload.tags = tagNames;
+                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/issues/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                var data = await res.json();
+                if (!data.key) return;
+
+                /* Upload attachments, recorded in one history entry */
+                await this._uploadFiles(data.id, null);
+
+                /* Create pending relations */
+                for (var j = 0; j < this.pendingRelations.length; j++) {
+                    var rel = this.pendingRelations[j];
+                    await sendBestEffort(spUrl('/api/v1/issues/' + data.key + '/relations/'), 'POST', {
+                        issue_to_key: rel.issue_key,
+                        relation_type: rel.relation_type
+                    });
+                }
+
+                if (continueCreating) {
+                    this._clearForNext();
+                    return;
+                }
+                window.location.href = spUrl('/issue/' + data.key + '/');
+            },
+
+            /* Empty the form for the next issue ("create and continue"). */
+            _clearForNext() {
+                this.subject = '';
+                this.description = '';
+                this.files = [];
+                this.pendingRelations = [];
+                this.pendingTags = [];
+                this.newRelationKey = '';
+                this.showRelationForm = false;
+            },
+
+            async submitForm(continueCreating) {
+                this.submitting = true;
+                var payload = this._payload();
                 var tagNames = (this.pendingTags || []).map(function (t) { return t.name; });
-
                 try {
                     if (this.mode === 'edit') {
-                        payload.lock_version = this.lockVersion;
-                        var res = await spFetch('/api/v1/issues/' + this.displayKey + '/', {
-                            method: 'PATCH',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify(payload)
-                        });
-                        if (res.ok) {
-                            /* Files chosen in the form are recorded with the edit */
-                            var updated = await res.json();
-                            await this._uploadFiles(updated.id, updated.journal_id);
-                            try {
-                                await spFetch('/api/v1/issues/' + this.displayKey + '/tags/', {
-                                    method: 'PUT',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({names: tagNames})
-                                });
-                            } catch (_e) { /* best-effort */ }
-                            window.location.href = '/projects/' + this.projectKey + '/issues/' + this.displayKey + '/';
-                        }
+                        await this._submitEdit(payload, tagNames);
                     } else {
-                        var res = await spFetch('/api/v1/projects/' + this.projectKey + '/issues/', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify(payload)
-                        });
-                        var data = await res.json();
-                        if (!data.key) {
-                            this.submitting = false;
-                            return;
-                        }
-
-                        /* Upload attachments, recorded in one history entry */
-                        await this._uploadFiles(data.id, null);
-
-                        /* Apply pending tags */
-                        if (tagNames.length) {
-                            try {
-                                await spFetch('/api/v1/issues/' + data.key + '/tags/', {
-                                    method: 'PUT',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({names: tagNames})
-                                });
-                            } catch (_e) { /* best-effort */ }
-                        }
-
-                        /* Create pending relations */
-                        for (var j = 0; j < this.pendingRelations.length; j++) {
-                            var rel = this.pendingRelations[j];
-                            try {
-                                await spFetch('/api/v1/issues/' + data.key + '/relations/', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({
-                                        issue_to_key: rel.issue_key,
-                                        relation_type: rel.relation_type
-                                    })
-                                });
-                            } catch (_e) { /* best-effort */ }
-                        }
-
-                        if (continueCreating) {
-                            this.subject = '';
-                            this.description = '';
-                            this.files = [];
-                            this.pendingRelations = [];
-                            this.pendingTags = [];
-                            this.newRelationKey = '';
-                            this.showRelationForm = false;
-                            this.submitting = false;
-                            return;
-                        }
-
-                        window.location.href = '/projects/' + this.projectKey + '/issues/' + data.key + '/';
+                        await this._submitCreate(payload, tagNames, continueCreating);
                     }
                 } catch (_e) {
                     /* request failed */

@@ -36,7 +36,7 @@
         <span>{% trans %}Released in{% endtrans %}
           {% for r in summary.released_in -%}
           {%- if r.version_id and project is defined and project -%}
-          <a class="sp-dev-version" href="/projects/{{ project.key }}/versions/{{ r.version_id }}/" data-testid="development-release-version">{{ r.version_name }}</a> <span class="sp-dev-muted">({{ forge_link(r.url, r.tag_name) }})</span>
+          <a class="sp-dev-version" href="{{ base }}/projects/{{ project.key }}/versions/{{ r.version_id }}/" data-testid="development-release-version">{{ r.version_name }}</a> <span class="sp-dev-muted">({{ forge_link(r.url, r.tag_name) }})</span>
           {%- else -%}
           {{ forge_link(r.url, r.tag_name, "sp-dev-version") }}
           {%- endif -%}

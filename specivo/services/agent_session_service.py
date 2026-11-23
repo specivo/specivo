@@ -1,7 +1,8 @@
-"""AgentSessionService — manage agent work sessions tied to API key usage."""
+"""AgentSessionService — manage agent work sessions: one per MCP connection, else per API key."""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from dataclasses import dataclass
@@ -75,6 +76,15 @@ def parse_user_agent(user_agent: str | None) -> ClientInfo | None:
     return ClientInfo.of(match.group(1), match.group(2))
 
 
+def connection_hash(connection: str) -> str:
+    """Return the stored form of an MCP transport session id: its SHA-256 hex digest.
+
+    The id is only ever compared, so the raw value, which a client presents to
+    resume its connection, is never written to the database.
+    """
+    return hashlib.sha256(connection.encode()).hexdigest()
+
+
 class AgentSessionService:
     """Stateless service for agent session management."""
 
@@ -85,11 +95,21 @@ class AgentSessionService:
         user_id: int,
         user_agent: str | None = None,
         client: ClientInfo | None = None,
+        connection: str | None = None,
     ) -> AgentSession:
-        """Find an active session for this API key or create a new one.
+        """Find the active session of this connection (or API key) or start a new one.
 
-        A session is considered "active" if its last_activity_at is within
-        the timeout window. Otherwise a new session is started.
+        *connection* is the MCP transport session id of the call
+        (``Mcp-Session-Id``, or the session id of a legacy SSE stream). Each
+        connection has sessions of its own, so a new client connection starts
+        a new session with no issue even when it uses the same API key as
+        another one; a connection resumed with the same id (after a network
+        drop or an api restart) keeps its session. Calls without a connection
+        (plain REST) share one session per API key and never join or extend
+        a connection's session.
+
+        A session is "active" while its last_activity_at is within the
+        timeout window; after that a new session is started.
 
         *client* (the MCP ``clientInfo``) names the client; without it the
         first product of *user_agent* does. A session that has no client yet
@@ -97,11 +117,17 @@ class AgentSessionService:
         """
         now = utcnow()
         client = client or parse_user_agent(user_agent)
+        conn_hash = connection_hash(connection) if connection else None
 
-        # Look for the most recent session for this API key
+        # The most recent session of this connection, or of the key's plain REST calls.
         stmt = (
             select(AgentSession)
-            .where(AgentSession.api_key_id == api_key_id)
+            .where(
+                AgentSession.api_key_id == api_key_id,
+                AgentSession.connection_hash == conn_hash
+                if conn_hash is not None
+                else AgentSession.connection_hash.is_(None),
+            )
             .order_by(AgentSession.last_activity_at.desc())
             .limit(1)
         )
@@ -121,6 +147,7 @@ class AgentSessionService:
         agent_session = AgentSession(
             api_key_id=api_key_id,
             user_id=user_id,
+            connection_hash=conn_hash,
             client_name=client.name if client else None,
             client_version=client.version if client else None,
             started_at=now,
@@ -130,10 +157,11 @@ class AgentSessionService:
         await session.flush()
 
         logger.debug(
-            "Created agent session %d for api_key_id=%d client=%s",
+            "Created agent session %d for api_key_id=%d client=%s connection=%s",
             agent_session.id,
             api_key_id,
             client,
+            "yes" if conn_hash else "no",
         )
         return agent_session
 

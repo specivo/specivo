@@ -33,9 +33,7 @@ async def _reset_override():
 
 
 async def _get_default_language(db: AsyncSession) -> str | None:
-    row = (
-        await db.execute(select(Setting).where(Setting.key == "default_language"))
-    ).scalar_one_or_none()
+    row = (await db.execute(select(Setting).where(Setting.key == "default_language"))).scalar_one_or_none()
     return row.value if row else None
 
 
@@ -77,9 +75,7 @@ async def test_admin_rejects_unavailable_language(admin_client: AsyncClient, db_
     assert get_default_language_override() is None
 
 
-async def test_admin_saves_language_and_timezone_together(
-    admin_client: AsyncClient, db_session: AsyncSession
-):
+async def test_admin_saves_language_and_timezone_together(admin_client: AsyncClient, db_session: AsyncSession):
     """A single POST persists both the default language and timezone."""
     resp = await admin_client.post(
         "/admin/settings/defaults/",
@@ -90,9 +86,7 @@ async def test_admin_saves_language_and_timezone_together(
     assert resp.status_code == 303
 
     assert await _get_default_language(db_session) == "th"
-    row = (
-        await db_session.execute(select(Setting).where(Setting.key == "default_timezone"))
-    ).scalar_one_or_none()
+    row = (await db_session.execute(select(Setting).where(Setting.key == "default_timezone"))).scalar_one_or_none()
     assert row is not None and row.value == "Asia/Bangkok"
 
 
@@ -126,9 +120,7 @@ async def test_preferences_saves_language(auth_client: AsyncClient, db_session: 
     """A valid language preference is saved on the user."""
     user: User = auth_client.state.user
 
-    get_resp = await auth_client.get(
-        "/my/preferences/", cookies={"access_token": auth_client.state.token}
-    )
+    get_resp = await auth_client.get("/my/preferences/", cookies={"access_token": auth_client.state.token})
     csrf = _csrf_from(get_resp)
 
     resp = await auth_client.post(
@@ -144,16 +136,12 @@ async def test_preferences_saves_language(auth_client: AsyncClient, db_session: 
     assert user.language == "ru"
 
 
-async def test_preferences_rejects_unavailable_language(
-    auth_client: AsyncClient, db_session: AsyncSession
-):
+async def test_preferences_rejects_unavailable_language(auth_client: AsyncClient, db_session: AsyncSession):
     """An uninstalled code ('de', no catalog) leaves user.language unchanged."""
     user: User = auth_client.state.user
     original = user.language
 
-    get_resp = await auth_client.get(
-        "/my/preferences/", cookies={"access_token": auth_client.state.token}
-    )
+    get_resp = await auth_client.get("/my/preferences/", cookies={"access_token": auth_client.state.token})
     csrf = _csrf_from(get_resp)
 
     resp = await auth_client.post(
@@ -175,9 +163,7 @@ async def test_preferences_rejects_unavailable_language(
 # ---------------------------------------------------------------------------
 
 
-async def test_user_language_beats_admin_default_on_render(
-    admin_client: AsyncClient, db_session: AsyncSession
-):
+async def test_user_language_beats_admin_default_on_render(admin_client: AsyncClient, db_session: AsyncSession):
     """With admin default 'fr' but user.language 'th', the page renders Thai.
 
     The preferences page contains a {% trans %}Save{% endtrans %} string;
@@ -194,9 +180,7 @@ async def test_user_language_beats_admin_default_on_render(
     db_session.add(user)
     await db_session.commit()
 
-    resp = await admin_client.get(
-        "/my/preferences/", cookies={"access_token": admin_client.state.token}
-    )
+    resp = await admin_client.get("/my/preferences/", cookies={"access_token": admin_client.state.token})
     assert resp.status_code == 200
     assert "บันทึก" in resp.text  # Thai "Save"
     assert "Enregistrer" not in resp.text  # not French

@@ -102,7 +102,7 @@ async def _index(ctx: PhaseContext, embedder, entity_type: EntityType, source_ty
         for entity_id in entity_ids[start : start + _INDEX_BATCH]:
             try:
                 await embedder.index_source(ctx.session, source_type, entity_id)
-            except Exception as exc:  # noqa: BLE001 - see backfill_search_index
+            except Exception as exc:  # see backfill_search_index  # noqa: BLE001
                 ctx.warn(
                     "Could not index an item for search",
                     source=str(source_type),

@@ -102,7 +102,8 @@ carried across. **Back up first**, then import. See [Backup & restore](backup-re
 | `--project-key-map ID=KEY,...` | Choose the Specivo project key for a source project instead of the derived one. |
 | `--merge-duplicate-statuses` | Reuse an existing status, tracker or priority of the same name instead of creating a second one. |
 | `--continue-import` | Add to an earlier import of the same source (see below). |
-| `--resume RUN_ID` | Continue a run that stopped. Each phase commits on its own, so what finished stays. |
+| `--resume RUN_ID` | Continue a run that stopped. Each phase commits on its own, and the long ones (issues, history, attachments, wiki, time) also commit after each project and every `--commit-every` records, so what finished stays. |
+| `--commit-every N` | How many records a long phase writes between commits (default 1000). |
 | `--links-file PATH` | Where to keep the links file. |
 | `--files-path DIR` | Read attachment files from this folder instead of the bundle's own `files/`. |
 | `--import-passwords` | Let imported accounts keep their old password until first sign-in. Needs a matching [password hasher](password-hasher-plugins.md). Administrators always set a new one. |
@@ -117,6 +118,12 @@ untrusted bundles.
 !!! tip "Accounts without an email address"
     Some sources do not reveal everyone's email address. Specivo gives such an account a placeholder
     address that never receives mail, and lists it in the report so you can fill in the real one.
+
+!!! note "Logins"
+    A Specivo login holds lowercase letters, digits, `_` and `-` only. An imported login is changed to
+    fit: `John.Doe` becomes `john-doe`, and letters from other alphabets that look like Latin ones are
+    dropped, so no account can pass itself off as another. Each change is listed in the report. A login
+    already taken here gets a numbered suffix.
 
 ## Running it again, and adding to it later
 
@@ -217,6 +224,7 @@ docker compose exec api python -m specivo.cli.admin import-map resolve-pending -
   page, an attachment.
 - Fill in the real email address for accounts that were given a placeholder, and tell people to set a new
   password (or sign in with [single sign-on](single-sign-on/index.md)).
-- Check the roles of the imported members in each project.
+- Check the roles of the imported members in each project. Imported roles arrive with no permissions:
+  set them under **Administration → Roles** (see [Roles and permissions](roles.md)).
 - Search indexing for the imported records runs at the end of the import. See
   [Semantic search](semantic-search.md).

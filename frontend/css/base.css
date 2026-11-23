@@ -64,4 +64,3 @@ body {
 }
 .font-toggle button:hover { color: #e8e4f0; }
 .font-toggle button.active { background: rgba(196, 154, 60, 0.2); color: var(--sp-accent); }
-

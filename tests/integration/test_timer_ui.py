@@ -382,7 +382,7 @@ async def test_the_summary_stays_cheap_with_a_timer_on_an_issue(db_session: Asyn
 
     statements: list[str] = []
 
-    def _count(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+    def _count(conn, cursor, statement, *args) -> None:
         statements.append(statement)
 
     engine = db_session.bind.sync_engine  # type: ignore[union-attr]

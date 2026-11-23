@@ -95,13 +95,13 @@ def create_data_dirs(data_dir: Path) -> None:
         (data_dir / d).mkdir(parents=True, exist_ok=True)
 
 
-def main() -> None:
+def main() -> None:  # noqa: PLR0915
     print(BANNER)
 
     # Check for existing configuration.
     env_path = PROJECT_ROOT / ".env"
     env_local_path = PROJECT_ROOT / ".env.local"
-    if env_path.exists():
+    if env_path.exists():  # noqa: SIM102
         if not ask_yes_no("Existing .env found. Overwrite?", default=False):
             print("Aborted.")
             sys.exit(0)
@@ -126,7 +126,7 @@ def main() -> None:
     database_url = ""
     pg_db = "specivo"
     pg_user = "specivo"
-    pg_password = "specivo"
+    pg_password = "specivo"  # noqa: S105
 
     if use_bundled_db:
         database_url = "postgresql+asyncpg://specivo:specivo@db:5432/specivo"
@@ -137,7 +137,7 @@ def main() -> None:
         if not database_url.startswith("postgresql"):
             print("  Warning: URL should start with 'postgresql+asyncpg://'")
 
-    if use_bundled_redis:
+    if use_bundled_redis:  # noqa: SIM108
         redis_url = "redis://redis:6379/0"
     else:
         redis_url = ask("REDIS_URL", "redis://localhost:6379/0")

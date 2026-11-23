@@ -32,11 +32,14 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_edit_description": "Search-and-replace in issue description (token-efficient)",
     "specivo_add_comment": "Add a journal comment to an issue",
     "specivo_list_comments": "List comments on an issue, paginated; include_changes=true adds named field changes",
-    "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
+    "specivo_search": (
+        "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'; expand=1 adds each top hit's links"
+    ),
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
-        "Link graph of an issue or wiki page: backlinks (direction='in'), outgoing links, relations; depth 1-2"
+        "Link graph of an issue, wiki page, tag, version, sprint, component or user: backlinks, links, "
+        "relations, members; depth 1-2 (3 from a hub); to= finds a path; filter=; format='compact'"
     ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
@@ -68,8 +71,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     ),
     "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
     "specivo_ai_usage_report": (
-        "AI spend report: usage grouped by user, model, tool, project, issue, cost type, branch and period, "
-        "in one currency"
+        "AI spend report: usage grouped by release, sprint, user, model, tool, project, issue, cost type, branch "
+        "and period, in one currency"
     ),
     "specivo_ai_subscriptions": (
         "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
@@ -139,12 +142,38 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 5. Follow the links: `specivo_show_issue` and `specivo_read_wiki` list `Links to:`, `Linked from:`
    (backlinks from issues, comments and wiki pages) and `Related:`. For more, filters or a second hop,
    `specivo_get_links(ref, direction="in"|"out"|"both", depth=1|2, types=[...])` -- `ref` is `ACME-12`
-   or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see.
+   or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see. Attachments are counted
+   on each node (`attachments`), not listed, unless `types=["attachment"]`.
+6. Everything in one release, component, tag, sprint or person's queue: start `specivo_get_links` from
+   `version:ACME/<name>`, `component:ACME/<value>`, `tag:ACME/<name>`, `sprint:ACME/<name>` or
+   `user:<login>` (other metadata keys a project lists in `graph_metadata_keys`:
+   `metadata:ACME/<key>/<value>`). It lists the members; `depth=2` with
+   `types=["targets_version", "assigned_to", "tagged", "in_component"]` adds their assignees, tags and
+   components. Away from the root these nodes are leaves with `degree` (items you may see that point
+   at them); naming their kind in `types` expands them. From such a node `depth=3` is allowed, so
+   `version:ACME/1.2` with `depth=3, types=["tagged"]` gives the issues, their tags and the pages
+   with those tags in one call.
+7. Narrow the result with `filter`: `specivo_get_links("version:ACME/1.2",
+   filter={{"component": "importer", "status": "open"}})` keeps only the matching issues.
+   Keys: `status` (`open`, `closed` or a status name), `tracker`, `version`, `assignee` (a login or
+   `me`), `component` or another key in `graph_metadata_keys`; a list value means any of them. The
+   filter runs after the read: the root is always kept, wiki pages are dropped, and tags, versions and
+   the like stay while linked to a kept issue.
+8. How are two things connected? `specivo_get_links("ACME-12", to="wiki:ACME/<slug>")` returns the
+   shortest path (at most 4 hops, only through items you may see) as ordered `nodes` and `edges`, or
+   `path: null` with `reason` = `no_path_within_4_hops` or `budget_exhausted`. It does not pass through
+   tags, versions and other structured nodes unless `types` names their kind.
+9. Save tokens with `format="compact"`: one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook
+   "Runbook"`, titles written once, after a header line with the root and whether it was truncated.
 
-### Link issues and pages so the graph finds them
-Write `ACME-42` for an issue, `[[Page title]]` for a wiki page of the same project, or a Markdown link
-to an issue, wiki page or attachment URL of this instance (for another project's wiki page). These are
-the links `specivo_get_links` and the backlink lines follow; a key inside code is not a link.
+### Connecting issues and pages (the link graph)
+- Issue to issue: add a relation with `specivo_add_relation` (`blocks`, `relates`, `duplicates`, ...)
+  or a parent with `parent_ref`. These are typed, so prefer them to mentioning the other issue in text.
+- In prose, write `ACME-42` or `[[Page title]]` only where the text naturally refers to that issue or
+  page. A Markdown link to an issue, wiki page or attachment URL of this instance also counts (use it
+  for another project's wiki page). A key inside code is not a link.
+- Do not add references to text just to connect things; `specivo_get_links` already follows
+  relations, parents, children and attachments.
 
 ### Search modes
 - `mode="hybrid"` *(default)* -- FTS + pgvector semantic via RRF fusion.
@@ -156,6 +185,10 @@ the links `specivo_get_links` and the backlink lines follow; a key inside code i
 - Issue references (`ACME-42`) work in any mode: the issue itself comes
   first, followed by issues, comments and wiki pages that mention it.
 - `limit` is clamped to 1-50; the tool has no offset.
+- `expand=1` lists under each of the top 5 issue and wiki page hits what it is linked to (links,
+  backlinks, relations, parent, children, tags, version, assignee; at most 10 each, only what you
+  may see), so one call gives the answer and its context. The REST search takes `expand=1` too and
+  returns them as `links` on those hits.
 
 ### Create an issue
 1. `specivo_list_lookups()` -- get tracker_id, priority_id
@@ -213,7 +246,9 @@ and corrections.
    `project_key` reports the whole instance (administrators). Spend includes seat cost (subscription
    fees spread over the entries that used them) when you read every entry of the project.
    `issue_ref="ACME-12"` (with `include_sub_issues=true` for the issues below it) totals one issue,
-   e.g. for the spend line of a closing note
+   e.g. for the spend line of a closing note; `release="1.0"` or `sprint="Sprint 4"` totals one release or
+   sprint (an issue counts towards its own, else its nearest parent's), and `group_by="version"` or
+   `"sprint"` compares them
 
 ### Register AI subscriptions from invoices
 When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):
@@ -441,7 +476,7 @@ def _build_tool_table(mcp_server: MCPServer | None = None) -> str:
                 if tool.name not in summaries:
                     desc = tool.description or ""
                     summaries[tool.name] = desc.split("\n")[0][:80]
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     rows: list[str] = []

@@ -35,7 +35,7 @@ class ExchangeRateOut(BaseModel):
             base=row.base_code,
             quote=row.quote_code,
             rate=format_decimal_plain(row.rate),
-            source=row.source,  # type: ignore[arg-type]
+            source=row.source,
             created_by_id=row.created_by_id,
             created_at=row.created_at,
         )
@@ -158,7 +158,7 @@ class RateUsedOut(BaseModel):
             to_currency=used.to_currency,
             rate=format_decimal_plain(used.rate),
             rate_date=used.rate_date,
-            method=used.method.value,  # type: ignore[arg-type]
+            method=used.method.value,
             legs=[RateLegOut.from_leg(leg) for leg in used.legs],
         )
 
@@ -200,7 +200,7 @@ class ConvertOut(BaseModel):
             original=MoneyOut.from_money(result.original),
             on=result.on,
             policy=policy,
-            reason=result.reason.value,  # type: ignore[arg-type]
+            reason=result.reason.value,
             newest_rate_date=result.newest_rate_date,
         )
 
@@ -231,7 +231,7 @@ class ConversionSummaryOut(BaseModel):
             unconverted=[
                 UnconvertedGroupOut(
                     currency=g.currency,
-                    reason=g.reason.value,  # type: ignore[arg-type]
+                    reason=g.reason.value,
                     amount=MoneyOut.from_money(g.amount),
                     count=g.count,
                     newest_rate_date=g.newest_rate_date,

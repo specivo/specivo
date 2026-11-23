@@ -31,66 +31,66 @@ from specivo.mcp.client_context import (
     agent_session_id_var,
     mcp_api_key_id_var,
     mcp_client_var,
+    mcp_connection_var,
 )
 from specivo.mcp.docs import generate_setup_guide
-from specivo.mcp.tools import (
-    _add_comment,
-    _add_relation,
-    _append_wiki,
-    _complete_sprint,
+from specivo.mcp.tools.comments import _add_comment, _list_comments
+from specivo.mcp.tools.issues import (
     _create_issue,
-    _create_metadata_schema,
-    _create_recurring_pattern,
-    _create_sprint,
-    _create_tag,
-    _create_version,
-    _create_wiki,
-    _delete_metadata_schema,
-    _delete_recurring_pattern,
-    _delete_tag,
-    _delete_version,
-    _delete_wiki,
     _edit_description,
-    _edit_wiki,
-    _get_links,
     _issue_development,
-    _list_comments,
     _list_issues,
-    _list_lookups,
-    _list_members,
+    _move_issue,
+    _show_issue,
+    _update_issue,
+)
+from specivo.mcp.tools.links import _get_links
+from specivo.mcp.tools.lookups import _list_lookups, _list_members, _list_projects, _whoami
+from specivo.mcp.tools.metadata import (
+    _create_metadata_schema,
+    _delete_metadata_schema,
     _list_metadata_schemas,
-    _list_projects,
+    _metadata,
+    _update_metadata_schema,
+)
+from specivo.mcp.tools.recurring import (
+    _create_recurring_pattern,
+    _delete_recurring_pattern,
     _list_recurrence_occurrences,
     _list_recurring_patterns,
-    _list_relations,
+    _skip_recurrence_occurrence,
+    _update_recurring_pattern,
+)
+from specivo.mcp.tools.relations import _add_relation, _list_relations, _remove_relation
+from specivo.mcp.tools.search import _search
+from specivo.mcp.tools.sprints import (
+    _complete_sprint,
+    _create_sprint,
     _list_sprint_issues,
     _list_sprints,
-    _list_tags,
+    _start_sprint,
+    _update_sprint,
+)
+from specivo.mcp.tools.tags import _create_tag, _delete_tag, _list_tags, _tag, _update_tag
+from specivo.mcp.tools.time_tracking import _log_time, _timer
+from specivo.mcp.tools.versions import (
+    _create_version,
+    _delete_version,
     _list_version_issues,
     _list_versions,
+    _update_version,
+)
+from specivo.mcp.tools.wiki import (
+    _append_wiki,
+    _create_wiki,
+    _delete_wiki,
+    _edit_wiki,
     _list_wiki_pages,
-    _log_time,
-    _metadata,
-    _move_issue,
     _read_wiki,
     _read_wiki_section,
-    _remove_relation,
     _replace_wiki_section,
     _restore_wiki,
-    _search,
-    _show_issue,
-    _skip_recurrence_occurrence,
-    _start_sprint,
-    _tag,
-    _timer,
-    _update_issue,
-    _update_metadata_schema,
-    _update_recurring_pattern,
-    _update_sprint,
-    _update_tag,
-    _update_version,
     _update_wiki_metadata,
-    _whoami,
 )
 from specivo.services.agent_session_service import AgentSessionService
 from specivo.services.api_key_scope import activate_api_key_scope, end_scope_context, start_scope_context
@@ -122,8 +122,10 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     Here we re-validate it against the DB on every tool call so that
     key revocation, expiry, or user deactivation takes effect immediately.
 
-    The key's ``AgentSession`` is found or started, named after the calling
-    client (``mcp_client_var``), and its id is published in
+    The ``AgentSession`` of the calling connection (``mcp_connection_var``;
+    one per MCP connection, so two clients sharing a key never share one) is
+    found or started, named after the calling client (``mcp_client_var``),
+    and its id is published in
     ``agent_session_id_var`` for the tool call, so a tool can record the
     issue the agent is working on (``record_working_issue``).
 
@@ -154,7 +156,11 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
                 savepoint = await session.begin_nested()
                 try:
                     agent_session = await _agent_session_svc.get_or_create_session(
-                        session, api_key.id, user.id, client=mcp_client_var.get()
+                        session,
+                        api_key.id,
+                        user.id,
+                        client=mcp_client_var.get(),
+                        connection=mcp_connection_var.get(),
                     )
                     await savepoint.commit()
                     agent_session_id = agent_session.id
@@ -233,8 +239,8 @@ async def specivo_whoami() -> str:
 
 @mcp.tool()
 async def specivo_list_projects(
-    offset: Annotated[int, Field(description="Number of projects to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max projects to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of projects to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max projects to return (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     """List all projects visible to the authenticated user.
 
@@ -245,7 +251,7 @@ async def specivo_list_projects(
 
 
 @mcp.tool()
-async def specivo_list_issues(
+async def specivo_list_issues(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     status: Annotated[
         str,
@@ -259,8 +265,8 @@ async def specivo_list_issues(
         ),
     ] = "open",
     sort: Annotated[str, Field(description="Sort field:direction, e.g. 'created_at:desc'.")] = "created_at:desc",
-    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).", ge=1, le=100)] = 25,
     sprint_id: Annotated[
         int | None,
         Field(
@@ -361,7 +367,9 @@ async def specivo_show_issue(
     attachments the issue's description and comments link to and the issues,
     comments and wiki pages that link to it; ``Related:`` lists its relations
     and ``Broken links:`` targets that do not exist. Only items you may see are
-    listed, at most 20 per line; use specivo_get_links for more.
+    listed, at most 20 per line. These lines are the issue's neighbours in the
+    link graph; specivo_get_links is the link graph tool for more, a second
+    hop or filters.
     A ``Development:`` line then sums up reviews, CI, deployments and releases
     when there are any; use specivo_issue_development for the details.
     Use metadata_only=true to skip the description body and save tokens
@@ -406,7 +414,7 @@ async def specivo_issue_development(
 
 
 @mcp.tool()
-async def specivo_create_issue(
+async def specivo_create_issue(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     tracker_id: Annotated[int, Field(description="Tracker ID from specivo_list_lookups (e.g. 1=Bug, 2=Feature).")],
     subject: Annotated[str, Field(description="Issue title/subject line.")],
@@ -466,9 +474,9 @@ async def specivo_create_issue(
     Pass parent_ref to make the new issue a child of an existing one (the
     parent may be in another project you can see). A parent that is unknown
     or that you may not see, or one that would exceed the hierarchy depth
-    limit, returns an error string and nothing is created.
+    limit, returns an error and nothing is created.
     Pass tags to tag the issue in the same call; invalid names return an
-    error string and nothing is created.
+    error and nothing is created.
     An issue created in an in-progress status or assigned to you becomes the
     issue this agent session works on (an AI usage attribution hint).
     """
@@ -493,7 +501,7 @@ async def specivo_create_issue(
 
 
 @mcp.tool()
-async def specivo_update_issue(
+async def specivo_update_issue(  # noqa: PLR0913
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
     subject: Annotated[str | None, Field(description="New subject line.")] = None,
     description: Annotated[
@@ -523,7 +531,7 @@ async def specivo_update_issue(
     parent_ref re-parents the issue (its children move with it). An unknown
     parent or one you may not see, a parent that is the issue itself or one
     of its descendants (a cycle), or one that would exceed the hierarchy
-    depth limit returns an error string and nothing is changed.
+    depth limit returns an error and nothing is changed.
     An issue that ends up in progress and assigned to you becomes the issue
     this agent session works on, even when the call changes nothing.
     """
@@ -584,7 +592,7 @@ async def specivo_search(
     query: Annotated[str, Field(description="Search query.")],
     project_key: Annotated[str | None, Field(description="Limit to this project. Uppercase, e.g. ACME.")] = None,
     scope: Annotated[str, Field(description="'all', 'issues', or 'wiki'.")] = "all",
-    limit: Annotated[int, Field(description="Max results to return (1-50).")] = 10,
+    limit: Annotated[int, Field(description="Max results to return (1-50).", ge=1, le=50)] = 10,
     mode: Annotated[
         str,
         Field(
@@ -596,6 +604,18 @@ async def specivo_search(
             )
         ),
     ] = "hybrid",
+    expand: Annotated[
+        int,
+        Field(
+            description=(
+                "1 to list, under each of the top 5 issue and wiki page hits, what it is linked to in the link "
+                "graph (links, backlinks, relations, parent, children, tags, version, assignee), one line per "
+                "link. 0 (default) for hits only."
+            ),
+            ge=0,
+            le=1,
+        ),
+    ] = 0,
 ) -> str:
     """Search across issues and wiki pages.
 
@@ -608,9 +628,13 @@ async def specivo_search(
 
     Returns results with type, title, subtitle, and snippet.
     Use project_key to narrow results to a single project.
+    To see what a hit is connected to (links, backlinks, relations, parent
+    and children), pass expand=1: the top 5 issue and wiki page hits each get
+    up to 10 neighbours from the link graph, as ``SRC -kind-> DST "title"``
+    lines, only what you may see. Follow it further with specivo_get_links.
     """
     async with _get_session_and_user() as (session, user):
-        return await _search(session, user, query, project_key, scope, limit, mode)
+        return await _search(session, user, query, project_key, scope, limit, mode, expand)
 
 
 @mcp.tool()
@@ -637,46 +661,123 @@ async def specivo_read_wiki(
 async def specivo_get_links(
     ref: Annotated[
         str,
-        Field(description="An issue (ACME-12) or a wiki page (wiki:ACME/<slug>)."),
+        Field(
+            description=(
+                "An issue (ACME-12), a wiki page (wiki:ACME/<slug>), or a structured node: tag:ACME/<name>, "
+                "component:ACME/<value>, metadata:ACME/<key>/<value>, version:ACME/<name>, sprint:ACME/<name>, "
+                "user:<login>."
+            )
+        ),
     ],
     direction: Annotated[
         str,
-        Field(description="'in' = what links here (backlinks), 'out' = what it links to, 'both' (default)."),
+        Field(
+            description=(
+                "'in' = what points here: backlinks, relations towards it (and 'relates'), parent and "
+                "children; for a tag, version, sprint, component or user, its members; 'out' = what it links "
+                "to, all its relations, parent, children, attachments, commits, pull requests, tags, version, "
+                "sprint, assignee and metadata values; 'both' (default)."
+            )
+        ),
     ] = "both",
     depth: Annotated[
         int,
-        Field(description="1 (default), or 2 to also expand the linked issues and wiki pages once.", ge=1, le=2),
+        Field(
+            description=(
+                "1 (default), or 2 to also expand the linked issues and wiki pages once. From a tag, component, "
+                "metadata, version, sprint or user ref, up to 3 (for example version -> issues -> tags -> pages "
+                'with types=["tagged"]).'
+            ),
+            ge=1,
+            le=3,
+        ),
     ] = 1,
     types: Annotated[
         list[str] | None,
         Field(
             description=(
-                "Edge kinds to keep; all when omitted. Text links: wiki_link, mention, attachment_link. "
-                "Structured: relation, parent, child, attachment, commit, pull_request."
+                "Edge kinds to keep; when omitted, all but attachment. Text links: wiki_link, mention, "
+                "attachment_link. Structured: relation, parent, child, attachment, commit, pull_request. "
+                "Structured nodes: tagged, in_component, in_metadata, targets_version, in_sprint, assigned_to. "
+                "Naming a structured-node kind also expands those nodes at depth 2."
             )
         ),
     ] = None,
     limit: Annotated[int, Field(description="Neighbour nodes at most (1-200).", ge=1, le=200)] = 50,
+    to: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Another ref: return the shortest path from ref to it instead of the neighbours (at most 4 "
+                "hops, over links you may see). Steps through issues and wiki pages; through tags, versions "
+                "and other structured nodes only when types names their kind."
+            )
+        ),
+    ] = None,
+    filter: Annotated[
+        dict[str, str | list[str]] | None,
+        Field(
+            description=(
+                'Keep only the issues whose properties match every key, e.g. {"status": "open", '
+                '"component": "importer"}. Keys: status (open, closed or a status name), tracker, '
+                "version, assignee (a login or me), component or another metadata key in graph_metadata_keys. "
+                "A list means any of them. The root is always kept; wiki pages are dropped."
+            )
+        ),
+    ] = None,
+    format: Annotated[
+        str,
+        Field(
+            description=(
+                "'json' (default) or 'compact': one line per edge, SRC -kind-> DST \"title\", after a header "
+                "line with the root and whether the result was truncated."
+            )
+        ),
+    ] = "json",
 ) -> str:
-    """Navigate the link graph around an issue or wiki page: what links to it (backlinks) and what it links to.
+    """Navigate the link graph: backlinks and links of an issue or wiki page, or the members of a tag, version, etc.
 
     Combines links written in text -- ``[[Page]]`` wiki links, issue keys such as
     ``ACME-42``, links to issues, wiki pages and attachments of this instance --
     in issue descriptions, comments and wiki pages, with relations, parent and
-    children, attachments, commits and pull requests. Use it to find the wiki
-    pages that document an issue, the issues a design page drives, or everything
+    children, commits and pull requests, and the structured nodes items share:
+    tags (issues and pages), the version, the sprint, the assignee, metadata
+    values such as ``component`` (the project's ``graph_metadata_keys``) and
+    the SHAs in the ``commits`` metadata. Use it to find the wiki pages that
+    document an issue, everything in a version or component, or everything
     that would be affected by a change.
 
-    Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url), ``edges``
-    (source, target, kind, direction relative to the root, label, relation_type,
-    ``via`` = the comment a link is written in, ``broken`` for a link to
-    something that does not exist) and ``truncated``. Only what you may see is
-    returned: a link to or from an item you cannot see is left out entirely.
+    Tags, versions, sprints, components and users are hubs: a hub you start
+    from lists its members (``version:ACME/1.2`` gives the issues in 1.2; add
+    depth=2 and types such as ["targets_version", "assigned_to", "tagged"] for
+    their assignees and tags). Elsewhere a hub is a leaf with ``degree``, the
+    number of items you may see that point at it; it is expanded only when its
+    kind is named in ``types``.
+
+    Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url, project;
+    ``degree`` on hubs; ``attachments`` = the number of files on each issue and
+    wiki page, which are not listed as nodes unless ``types`` names
+    ``attachment``), ``edges`` (source, target, kind, direction relative to
+    the root, label, relation_type, ``via`` = the comment a link is written in,
+    ``broken`` for a link to something that does not exist) and ``truncated``
+    (true only when a neighbour or a second-hop expansion was left out). Each
+    link is listed once, even at depth 2 where both its ends are read. Only
+    what you may see is returned: a link to or from an item you cannot see is
+    left out entirely, and degrees count only what you may see.
     ``specivo_show_issue`` and ``specivo_read_wiki`` already list the direct
-    text links and relations inline; call this for depth 2, filters or JSON.
+    text links and relations inline; call this for depth 2, hubs, filters or JSON.
+
+    ``to=<ref>`` answers "how is A connected to B": the shortest path, as
+    JSON ``path`` (``hops``, ordered ``nodes`` and ``edges``), or ``path: null``
+    with ``reason`` ``no_path_within_4_hops`` or ``budget_exhausted`` (the
+    search stops after 500 nodes). It never passes through an item you cannot
+    see. ``filter`` keeps the issues that match after the read (for example
+    ``version:ACME/1.2`` with ``{"component": "importer"}``); tags, versions and
+    other structured nodes stay while they are linked to a kept issue.
+    ``format="compact"`` saves tokens: one line per edge, titles written once.
     """
     async with _get_session_and_user() as (session, user):
-        return await _get_links(session, user, ref, direction, depth, types, limit)
+        return await _get_links(session, user, ref, direction, depth, types, limit, to, filter, format)
 
 
 @mcp.tool()
@@ -834,7 +935,7 @@ async def specivo_create_wiki(
 
     Use parent_slug to nest under an existing page.
     Pass tags to tag the page in the same call; invalid names return an
-    error string and nothing is created. Never write tags into the text.
+    error and nothing is created. Never write tags into the text.
     """
     async with _get_session_and_user() as (session, user):
         return await _create_wiki(session, user, project_key, title, text, parent_slug, tags)
@@ -1081,8 +1182,8 @@ async def specivo_metadata(
 
     The 'get' op is read-only and requires only view_issues permission;
     all other ops require edit_issues. Use specivo_list_metadata_schemas
-    first to discover available fields. Recoverable errors are returned
-    as 'Error: ...' strings.
+    first to discover available fields. A refused call returns an error
+    and writes nothing.
 
     The new value of the key is checked against the issue's schemas; one
     that does not match (wrong type, a choice not listed, a list item that
@@ -1227,7 +1328,7 @@ _NO_COUNTERS = (
         "the spend for cost_type 'api'. Entries are stored with source 'mcp' and the calling key."
     )
 )
-async def specivo_log_ai_usage(
+async def specivo_log_ai_usage(  # noqa: PLR0913
     tool: Annotated[str, Field(description="AI tool slug, e.g. 'claude-code', 'codex', 'cursor'.")],
     model: Annotated[str, Field(description="Model name as the tool reports it, e.g. 'claude-sonnet-4-5'.")],
     input_tokens: Annotated[int, Field(ge=0, description="Input tokens, from a hook, the reporter or /cost.")],
@@ -1297,7 +1398,7 @@ async def specivo_log_ai_usage(
         "excluded rather than deleted. " + _NO_COUNTERS
     )
 )
-async def specivo_ai_usage(
+async def specivo_ai_usage(  # noqa: PLR0913
     op: Annotated[str, Field(description="One of: list, get, update, exclude, include.")],
     entry_id: Annotated[int | None, Field(description="Entry ID, for get, update, exclude and include.")] = None,
     project_key: Annotated[
@@ -1336,8 +1437,8 @@ async def specivo_ai_usage(
     ] = None,
     cost_currency: Annotated[str | None, Field(description="update: ISO currency of cost_amount.")] = None,
     comments: Annotated[str | None, Field(description="update: new note ('' clears it).")] = None,
-    offset: Annotated[int, Field(description="list: entries to skip.")] = 0,
-    limit: Annotated[int, Field(description="list: max entries (1-100).")] = 25,
+    offset: Annotated[int, Field(description="list: entries to skip.", ge=0)] = 0,
+    limit: Annotated[int, Field(description="list: max entries (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     sent = {
         "input": input_tokens,
@@ -1381,21 +1482,27 @@ async def specivo_ai_usage(
     description=(
         "AI spend report: AI usage grouped and totalled in one reporting currency. With project_key, the "
         "project's entries you may read; without it, the whole instance (administrators only). group_by is a "
-        "comma list of user, project, issue, tool, provider, model, cost_type, branch (default 'user'; '' for "
-        "one total); period adds day, week or month buckets. Dates are UTC days (date_from, date_to) or a "
-        "preset: 7d, 30d (default), this_month, last_month. Each row: entries, tokens, spend (marginal spend "
-        "plus seat cost: subscription fees spread over the entries that used them, weighted by API-equivalent "
-        "value), API-equivalent value (the same tokens at pay-per-use prices, not a bill) and leverage. "
-        "Amounts without an exchange rate are listed apart, never dropped. Seat cost shows only to "
-        "administrators and to whoever reads every entry of the project. Rows are sorted by the grouping key; "
-        "sort='spend' orders by spend. issue_ref narrows the report to one issue (its project's report; "
-        "include_sub_issues adds the issues below it), e.g. for the spend total of a closing note."
+        "comma list of version (the release), sprint, user, project, issue, tool, provider, model, cost_type,"
+        " branch (default 'user'; '' for one total); an entry's release and sprint are its issue's, or those "
+        "of the nearest parent issue that has one. period adds day, week or month buckets. Dates are UTC days"
+        " (date_from, date_to) or a preset: 7d, 30d (default), this_month, last_month. Each row: entries, "
+        "tokens, spend (marginal spend plus seat cost: subscription fees spread over the entries that used "
+        "them, weighted by API-equivalent value), API-equivalent value (the same tokens at pay-per-use "
+        "prices, not a bill) and leverage. Amounts without an exchange rate are listed apart, never dropped. "
+        "Seat cost shows only to administrators and to whoever reads every entry of the project. Rows are "
+        "sorted by the grouping key; sort='spend' orders by spend. issue_ref narrows the report to one issue "
+        "(its project's report; include_sub_issues adds the issues below it), e.g. for the spend total of a "
+        "closing note. release and sprint narrow it to one release or sprint (a name in project_key, or an "
+        "id; 'none' for entries without one), e.g. release='1.0' for what a release cost."
     )
 )
-async def specivo_ai_usage_report(
+async def specivo_ai_usage_report(  # noqa: PLR0913
     project_key: Annotated[str | None, Field(description="Uppercase project key; omit for the instance.")] = None,
     group_by: Annotated[
-        str | None, Field(description="Comma list: user, project, issue, tool, provider, model, cost_type, branch.")
+        str | None,
+        Field(
+            description="Comma list: version, sprint, user, project, issue, tool, provider, model, cost_type, branch."
+        ),
     ] = None,
     period: Annotated[
         str | None, Field(description="day, week or month buckets; coarsened when the range would need over 120.")
@@ -1419,6 +1526,12 @@ async def specivo_ai_usage_report(
     include_sub_issues: Annotated[
         bool, Field(description="With issue_ref: also the usage of the issues below it.")
     ] = False,
+    release: Annotated[
+        str | None, Field(description="Only this release: a version name (in project_key) or id, or 'none'.")
+    ] = None,
+    sprint: Annotated[
+        str | None, Field(description="Only this sprint: a sprint name (in project_key) or id, or 'none'.")
+    ] = None,
 ) -> str:
     async with _get_session_and_user() as (session, user):
         return await _ai_usage_report(
@@ -1440,6 +1553,8 @@ async def specivo_ai_usage_report(
             sort=sort,
             issue_ref=issue_ref,
             include_sub_issues=include_sub_issues,
+            release=release,
+            sprint=sprint,
         )
 
 
@@ -1463,7 +1578,7 @@ async def specivo_ai_usage_report(
         "administrator."
     )
 )
-async def specivo_ai_subscriptions(
+async def specivo_ai_subscriptions(  # noqa: PLR0913
     op: Annotated[str, Field(description="One of: list, presets, add, update, end, delete.")],
     user: Annotated[str | None, Field(description="list, add: another person's login (administrators only).")] = None,
     periods: Annotated[
@@ -1488,8 +1603,8 @@ async def specivo_ai_subscriptions(
     ] = None,
     notes: Annotated[str | None, Field(description="update: new notes ('' clears them).")] = None,
     active_on: Annotated[str | None, Field(description="list: only subscriptions running on this UTC day.")] = None,
-    offset: Annotated[int, Field(description="list: subscriptions to skip.")] = 0,
-    limit: Annotated[int, Field(description="list: max subscriptions (1-200).")] = 50,
+    offset: Annotated[int, Field(description="list: subscriptions to skip.", ge=0)] = 0,
+    limit: Annotated[int, Field(description="list: max subscriptions (1-200).", ge=1, le=200)] = 50,
 ) -> str:
     changes = {
         "plan_key": plan_key,
@@ -1548,8 +1663,8 @@ async def specivo_list_version_issues(
             ),
         ),
     ] = "default",
-    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     """List issues assigned to a version/release, or unversioned issues (version_id=0).
 
@@ -1732,7 +1847,7 @@ async def specivo_list_recurring_patterns(
 
 
 @mcp.tool()
-async def specivo_create_recurring_pattern(
+async def specivo_create_recurring_pattern(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Human-readable pattern name, e.g. 'Weekly status report'.")],
     template_subject: Annotated[
@@ -1873,7 +1988,7 @@ async def specivo_create_recurring_pattern(
 
 
 @mcp.tool()
-async def specivo_update_recurring_pattern(
+async def specivo_update_recurring_pattern(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
     name: Annotated[str | None, Field(description="New pattern name.")] = None,
@@ -2014,8 +2129,8 @@ async def specivo_list_sprint_issues(
             ),
         ),
     ] = "default",
-    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
-    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).", ge=0)] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).", ge=1, le=100)] = 25,
 ) -> str:
     """List issues in a specific sprint, or backlog issues (sprint_id=0).
 

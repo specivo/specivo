@@ -66,7 +66,14 @@ _E2E_SERVER_ENV = {
     # see a disabled user lose the session without waiting for the interval.
     "SSO_IDP_RECHECK_MINUTES": "0",
 }
-E2E_PASSWORD = "testpassword"
+E2E_PASSWORD = "testpassword"  # noqa: S105
+
+# A second server for the tests of an instance behind STEALTH_PREFIX: the whole
+# UI, its assets and the API live under the prefix. Its own port, so the rest
+# of the suite keeps the unprefixed server.
+E2E_STEALTH_PREFIX = "/hidden-ui"
+E2E_PREFIXED_SERVER_PORT = int(os.environ.get("E2E_PREFIXED_SERVER_PORT", str(E2E_SERVER_PORT + 1)))
+E2E_PREFIXED_ORIGIN = f"http://{E2E_SERVER_HOST}:{E2E_PREFIXED_SERVER_PORT}"
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +85,7 @@ E2E_PASSWORD = "testpassword"
 def _run_migrations():
     """Run alembic upgrade head once before E2E tests start."""
     result = subprocess.run(
-        ["uv", "run", "alembic", "upgrade", "head"],
+        ["uv", "run", "alembic", "upgrade", "head"],  # noqa: S607
         env={**os.environ},
         capture_output=True,
         text=True,
@@ -91,7 +98,7 @@ def _run_migrations():
 def _seed_lookups(_run_migrations):
     """Seed lookup tables (trackers, statuses, priorities) via the CLI seed command."""
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "specivo.cli.seed"],
+        ["uv", "run", "python", "-m", "specivo.cli.seed"],  # noqa: S607
         env={**os.environ},
         capture_output=True,
         text=True,
@@ -124,19 +131,45 @@ def kill_port_listeners(port: int) -> None:
     ``host.docker.internal:<port>`` (an IdP calling the back-channel logout
     URL), so killing every listed process took the Docker engine down.
     """
-    result = subprocess.run(
-        ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+    result = subprocess.run(  # noqa: S603
+        ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],  # noqa: S607
         capture_output=True,
         text=True,
     )
     for pid in result.stdout.split():
         if pid.isdigit():
-            subprocess.run(["kill", "-9", pid], capture_output=True)
+            subprocess.run(["kill", "-9", pid], capture_output=True)  # noqa: S603, S607
 
 
 @pytest.fixture(scope="session")
 def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     """Start uvicorn, wait for /health/, yield base URL, stop on teardown."""
+    _fail_without_bundles()
+    proc = _start_server(E2E_SERVER_BIND, E2E_SERVER_PORT, {}, f"{E2E_BASE_URL}/health/")
+    yield E2E_BASE_URL
+    _stop_server(proc)
+
+
+@pytest.fixture(scope="session")
+def e2e_prefixed_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
+    """A server with ``STEALTH_PREFIX`` set; yields its base URL, prefix included.
+
+    ``page.goto("/x/")`` resolves a leading slash against the origin, not the
+    base URL's path, so the tests write ``f"{base}/x/"``.
+    """
+    _fail_without_bundles()
+    base = f"{E2E_PREFIXED_ORIGIN}{E2E_STEALTH_PREFIX}"
+    proc = _start_server(
+        E2E_SERVER_HOST,
+        E2E_PREFIXED_SERVER_PORT,
+        {"STEALTH_PREFIX": E2E_STEALTH_PREFIX, "APP_URL": E2E_PREFIXED_ORIGIN},
+        f"{base}/health/",
+    )
+    yield base
+    _stop_server(proc)
+
+
+def _fail_without_bundles() -> None:
     # The esbuild bundles are generated, not committed. Without them every page
     # loads with no Specivo CSS/JS, so fail once with the fix instead of per test.
     missing = missing_asset_manifests()
@@ -147,23 +180,26 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             pytrace=False,
         )
 
-    kill_port_listeners(E2E_SERVER_PORT)
+
+def _start_server(bind: str, port: int, env: dict[str, str], health_url: str) -> subprocess.Popen:
+    """Start uvicorn on *port* with the E2E settings and *env*; wait until *health_url* answers."""
+    kill_port_listeners(port)
     time.sleep(0.5)
 
-    proc = subprocess.Popen(
-        [
+    proc = subprocess.Popen(  # noqa: S603
+        [  # noqa: S607
             "uv",
             "run",
             "uvicorn",
             "specivo.main:app",
             "--host",
-            E2E_SERVER_BIND,
+            bind,
             "--port",
-            str(E2E_SERVER_PORT),
+            str(port),
             "--log-level",
             "warning",
         ],
-        env={**os.environ, **_E2E_SERVER_ENV},
+        env={**os.environ, **_E2E_SERVER_ENV, **env},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -171,17 +207,17 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         try:
-            r = httpx.get(f"{E2E_BASE_URL}/health/", timeout=3)
+            r = httpx.get(health_url, timeout=3)
             if r.status_code == 200:
-                break
+                return proc
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.ReadError, OSError):
-            time.sleep(0.5)
-    else:
-        proc.kill()
-        pytest.fail(f"E2E server did not start within 20s on port {E2E_SERVER_PORT}.")
+            pass
+        time.sleep(0.5)
+    proc.kill()
+    pytest.fail(f"E2E server did not start within 20s on port {port}.")
 
-    yield E2E_BASE_URL
 
+def _stop_server(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
         proc.wait(timeout=5)
@@ -190,7 +226,7 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
 
 
 @pytest.fixture(scope="session")
-def e2e_seed_data(e2e_server) -> dict:
+def e2e_seed_data(e2e_server) -> dict:  # noqa: ARG001
     """Create test users via a subprocess. Returns credentials dict.
 
     Uses a subprocess with psycopg2-style INSERT to avoid asyncio
@@ -227,10 +263,10 @@ async def _seed():
         await conn.close()
 
 asyncio.run(_seed())
-""".format(db_url=os.environ["DATABASE_URL"], password=E2E_PASSWORD)
+""".format(db_url=os.environ["DATABASE_URL"], password=E2E_PASSWORD)  # noqa: S608
 
-    result = subprocess.run(
-        ["uv", "run", "python", "-c", script],
+    result = subprocess.run(  # noqa: S603
+        ["uv", "run", "python", "-c", script],  # noqa: S607
         env={**os.environ},
         capture_output=True,
         text=True,
@@ -257,7 +293,7 @@ def _login_and_get_token(base_url: str, login: str, password: str) -> tuple[str,
         json={"login": login, "password": password},
         timeout=10,
     )
-    assert resp.status_code == 200, f"E2E login failed for {login}: {resp.text}"
+    assert resp.status_code == 200, f"E2E login failed for {login}: {resp.text}"  # noqa: S101
 
     token = resp.json()["access_token"]
     cookies = []
@@ -349,6 +385,38 @@ def api_client(e2e_server, _admin_auth) -> Generator[httpx.Client, None, None]:
     client.close()
 
 
+# ---------------------------------------------------------------------------
+# The instance behind STEALTH_PREFIX (e2e_prefixed_server)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def _prefixed_admin_auth(e2e_prefixed_server, e2e_seed_data) -> tuple[str, list[dict]]:
+    """Login as admin once per session, on the prefixed server."""
+    return _login_and_get_token(e2e_prefixed_server, e2e_seed_data["admin_login"], e2e_seed_data["password"])
+
+
+@pytest.fixture
+def prefixed_admin_page(browser, _prefixed_admin_auth) -> Generator[Page, None, None]:
+    """A page signed in as admin on the prefixed server (``goto(f"{base}/...")``)."""
+    _, cookies = _prefixed_admin_auth
+    context = browser.new_context()
+    context.add_cookies(cookies)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def prefixed_api(e2e_prefixed_server, _prefixed_admin_auth) -> Generator[httpx.Client, None, None]:
+    """httpx Client authenticated as admin on the prefixed server; paths are under the prefix."""
+    token, _ = _prefixed_admin_auth
+    client = httpx.Client(base_url=e2e_prefixed_server, timeout=10)
+    client.headers["Authorization"] = f"Bearer {token}"
+    yield client
+    client.close()
+
+
 def unique_key(prefix: str = "E2E") -> str:
     """Generate a unique project key for test isolation."""
     return f"{prefix}{uuid4().hex[:5].upper()}"
@@ -389,8 +457,9 @@ def create_project(api: httpx.Client, prefix: str = "E2E", **kwargs: object) -> 
     key = unique_key(prefix)
     payload: dict = {"name": f"Test {key}", "identifier": key.lower(), "key": key, **kwargs}
     resp = api_post_with_retry(api, "/api/v1/projects/", json=payload)
-    assert resp.status_code == 201, resp.text
-    return resp.json()
+    assert resp.status_code == 201, resp.text  # noqa: S101
+    created: dict = resp.json()
+    return created
 
 
 def create_issue(api: httpx.Client, project_key: str, subject: str, **kwargs: object) -> dict:
@@ -398,24 +467,25 @@ def create_issue(api: httpx.Client, project_key: str, subject: str, **kwargs: ob
     tracker_id = get_first_tracker_id(api)
     payload: dict = {"subject": subject, "project_key": project_key, "tracker_id": tracker_id, **kwargs}
     resp = api_post_with_retry(api, f"/api/v1/projects/{project_key}/issues/", json=payload)
-    assert resp.status_code == 201, resp.text
-    return resp.json()
+    assert resp.status_code == 201, resp.text  # noqa: S101
+    created: dict = resp.json()
+    return created
 
 
 _cached_tracker_id: int | None = None
 
 
-def get_first_tracker_id(api: httpx.Client) -> int:
+def get_first_tracker_id(api: httpx.Client) -> int:  # noqa: ARG001
     """Get the first available tracker ID from the DB (cached per session)."""
-    global _cached_tracker_id  # noqa: PLW0603
+    global _cached_tracker_id
     if _cached_tracker_id is not None:
         return _cached_tracker_id
     # Query DB directly via psycopg2 (sync) to avoid event loop issues
     import subprocess
 
     db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
-    result = subprocess.run(
-        [
+    result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
             "uv",
             "run",
             "python",
@@ -429,7 +499,7 @@ async def _f():
     finally:
         await conn.close()
 print(asyncio.run(_f()))
-""",
+""",  # noqa: S608
         ],
         capture_output=True,
         text=True,

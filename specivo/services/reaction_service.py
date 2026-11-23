@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, TypedDict, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,18 +21,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ReactionGroup(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class ReactionGroup:
     emoji: str
     count: int
     reacted_by_me: bool
 
 
-class ReactionListGroup(NamedTuple):
+class ReactionUser(TypedDict):
+    id: int
+    login: str
+    display_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReactionListGroup:
     """Group used by list_reactions (per-journal, with user details)."""
 
     emoji: str
     count: int
-    users: list[dict[str, object]]
+    users: list[ReactionUser]
 
 
 class ReactionService:
@@ -70,11 +79,11 @@ class ReactionService:
                 )
             )
             reaction = existing.scalar_one()
-            return reaction
+            return reaction  # noqa: RET504
 
         await session.flush()
         reaction_obj = await session.get(Reaction, row)
-        assert reaction_obj is not None
+        assert reaction_obj is not None  # noqa: S101
         return reaction_obj
 
     async def remove_reaction(
@@ -92,7 +101,7 @@ class ReactionService:
                 Reaction.emoji == emoji,
             )
         )
-        if result.rowcount == 0:
+        if cast(CursorResult, result).rowcount == 0:
             raise NotFoundError("Reaction not found")
 
     async def list_reactions(
@@ -142,7 +151,7 @@ class ReactionService:
                 Reaction.emoji == emoji,
             )
         )
-        if result.rowcount > 0:
+        if cast(CursorResult, result).rowcount > 0:
             return False  # removed
 
         await session.execute(

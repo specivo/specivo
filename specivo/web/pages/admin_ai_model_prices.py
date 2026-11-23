@@ -26,7 +26,7 @@ from specivo.models.user import User
 from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput, price_usage_of
 from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.currency_service import CurrencyService
-from specivo.web.deps import get_templates
+from specivo.web.deps import get_templates, redirect_to
 from specivo.web.pages.admin import require_admin
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
@@ -102,7 +102,7 @@ def utc_input(value: datetime | None) -> str:
 
 def _redirect(url: str, params: dict[str, str] | None = None, *, anchor: str = "") -> RedirectResponse:
     query = urlencode({k: v for k, v in (params or {}).items() if v})
-    return RedirectResponse(url + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else ""), 303)
+    return redirect_to(url + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else ""), 303)
 
 
 def _model_params(provider: str, model: str) -> dict[str, str]:
@@ -155,7 +155,7 @@ def _snapshot_info() -> dict[str, Any]:
 
 
 @router.get("/admin/ai-model-prices/", response_class=HTMLResponse)
-async def admin_ai_model_prices(
+async def admin_ai_model_prices(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,
@@ -332,7 +332,7 @@ async def admin_ai_usage_recompute(
 
 
 @router.post("/admin/ai-model-prices/", response_model=None)
-async def admin_ai_model_price_create(
+async def admin_ai_model_price_create(  # noqa: PLR0913
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,

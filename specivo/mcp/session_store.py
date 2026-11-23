@@ -74,7 +74,8 @@ its activity windows.
 from __future__ import annotations
 
 import time
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, cast
 
 from redis.asyncio import Redis
 
@@ -83,6 +84,11 @@ _KEY_PREFIX = "mcp:session:"
 
 def _key(session_id: str) -> str:
     return f"{_KEY_PREFIX}{session_id}"
+
+
+def _hgetall(redis: Redis, key: str) -> Awaitable[dict[str, str]]:
+    # redis-py types its commands for both the sync and async clients.
+    return cast("Awaitable[dict[str, str]]", redis.hgetall(key))
 
 
 class RedisSessionStore:
@@ -148,7 +154,7 @@ class RedisSessionStore:
 
         Returns ``None`` if the session does not exist or has expired.
         """
-        raw = await self._redis.hgetall(_key(session_id))
+        raw = await _hgetall(self._redis, _key(session_id))
         if not raw:
             return None
         return dict(raw)
@@ -161,7 +167,7 @@ class RedisSessionStore:
         successful read.
         """
         key = _key(session_id)
-        raw = await self._redis.hgetall(key)
+        raw = await _hgetall(self._redis, key)
         if not raw:
             return None
         now = int(time.time())
@@ -207,7 +213,7 @@ async def get_mcp_session_store() -> RedisSessionStore:
     client from :func:`specivo.core.redis.get_redis` and the
     ``mcp_session_ttl_seconds`` setting.
     """
-    global _store  # noqa: PLW0603
+    global _store
     if _store is None:
         # Local imports to avoid a circular dependency at module import
         # time: ``specivo.core.redis`` does not depend on anything MCP.
@@ -216,15 +222,13 @@ async def get_mcp_session_store() -> RedisSessionStore:
 
         settings = get_settings()
         redis = await get_redis()
-        _store = RedisSessionStore(
-            redis, ttl_seconds=settings.mcp_session_ttl_seconds
-        )
+        _store = RedisSessionStore(redis, ttl_seconds=settings.mcp_session_ttl_seconds)
     return _store
 
 
 def reset_mcp_session_store() -> None:
     """Clear the cached singleton. Test-only helper."""
-    global _store  # noqa: PLW0603
+    global _store
     _store = None
 
 
@@ -245,7 +249,7 @@ async def check_redis_persistence(redis: Redis) -> bool:
     """
     try:
         cfg = await redis.config_get("appendonly")
-    except Exception:
+    except Exception:  # noqa: BLE001
         return True
     if not cfg:
         return True

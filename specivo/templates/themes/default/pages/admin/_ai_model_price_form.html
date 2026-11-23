@@ -1,6 +1,6 @@
 {# The "new price" form. Context: form (prefill), currencies, now_input; fixed_provider/fixed_model on a model's page. #}
 {% set fp = form.prices or {} %}
-<form method="post" action="/admin/ai-model-prices/" class="sp-mp-form" data-testid="price-form">
+<form method="post" action="{{ base }}/admin/ai-model-prices/" class="sp-mp-form" data-testid="price-form">
   {% if fixed_model %}
     <input type="hidden" name="provider" value="{{ fixed_provider }}">
     <input type="hidden" name="model" value="{{ fixed_model }}">

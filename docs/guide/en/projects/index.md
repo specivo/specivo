@@ -36,14 +36,24 @@ commit messages. The old key stays reserved for this project, so no other projec
 
 ## Member roles
 
-People join a project with a **role** that decides what they can do. Specivo ships with four:
+People join a project with a **role** that decides what they can do there. Specivo ships with four:
 
 | Role | For | Can do |
 |---|---|---|
-| **Manager** | Project leads | Full control — settings, members, versions, sprints, workflow, and all issue and wiki actions |
-| **Developer** | People doing the work | Create and update issues, log time, edit wiki pages, comment |
-| **Reporter** | Stakeholders and requesters | File and comment on issues, follow progress |
-| **Agent** | Automation and API/[MCP](../ai-agents/index.md) accounts | A role scoped for service accounts that act through the API |
+| **Manager** | Project leads | Everything (**Full access**): settings, members, versions, sprints, and all issue, wiki, time and AI usage actions |
+| **Developer** | People doing the work | View, create and edit issues, comment, link issues, create and edit wiki pages, log time and AI usage |
+| **Reporter** | Stakeholders and requesters | View and create issues, comment, read the wiki |
+| **Agent** | Automation and API/[MCP](../ai-agents/index.md) accounts | The issue work of a Developer, reading the wiki, logging time and AI usage |
+
+None of the default roles except Manager can delete issues or wiki pages, manage versions, sprints
+or recurring tasks, or change the project's settings and members.
+
+These are starting points. An administrator can change what each role allows, rename it, add new
+roles (for example a Developer who may also delete wiki pages) and delete roles nobody uses, under
+**Administration → Roles**. Roles are global: a change applies in every project that uses the role.
+See [Roles and permissions](../install/roles.md). Changes to the default roles are kept across
+restarts and upgrades. (Before 0.14.0, Developer could only read the wiki; an install whose
+Developer role was never changed gets **Create and edit wiki pages** on upgrade.)
 
 The **Agent** role exists for AI assistants and automation. Teams usually create a dedicated service
 account, give it the Agent role on the projects it should touch, and issue it an API key. See
@@ -52,6 +62,8 @@ account, give it the Agent role on the projects it should touch, and issue it an
 A fifth role, **Automation**, is not offered when adding members: it is the role the built-in
 **Git** account gets by default (a manager may pick another) when a project turns on
 [merge automation](../integrations/repositories.md#merge-automation) for a connected repository.
+The built-in **Non member** role is what signed-in users get on public projects they are not a
+member of.
 
 ### Adding members
 
@@ -62,14 +74,14 @@ matches, the list says so. Administrators also get **Create user "…"**, which 
 with the typed name filled in; the new account is selected afterwards, so only the role and **Add** are
 left. A manager who is not an administrator is told to ask an administrator to create the account.
 
-!!! note "Roles are per project"
-    A person can be a Manager in one project and a Reporter in another. Membership and role are set on
-    each project, not globally.
+!!! note "Membership is per project"
+    A person can be a Manager in one project and a Reporter in another. Who holds which role is set on
+    each project; what a role allows is the same in every project.
 
 ### What a role can see
 
-Besides its permissions, each role has three visibility settings, edited by an administrator under
-**Administration → Roles**:
+Besides its permissions, each role has three visibility settings, which an administrator sets on the
+role's page under **Administration → Roles** (see [Roles and permissions](../install/roles.md#visibility)):
 
 | Setting | Values | Default |
 |---|---|---|
@@ -95,14 +107,14 @@ own usage only. Entries on issues someone cannot see stay hidden from them unles
 their own.
 
 The AI usage permissions are **View AI usage**, **Log AI usage** (log your own usage in the
-project), **Edit/exclude any AI usage entries**, and **Log AI usage on behalf of other members**,
-which a shared service account needs to log usage for the people it reports for; those people must
+project), **Edit any AI usage entry** (edit or exclude anyone's entries), and **Log AI usage for
+others**, which a shared service account needs to log usage for the people it reports for; those people must
 be active members of the project. Usage that belongs to no project can be logged by anyone for
 themselves, and by administrators for others. Moving someone else's entry to another project needs
 the same on-behalf permission in that project. The built-in roles get: Manager all four, Developer
 and Agent view and log, Reporter view.
 
-When someone holds several roles, the **widest** setting wins, as in Redmine: one role with
+When someone holds several roles, the **widest** setting wins: one role with
 *View time entries* and *All time entries* on a project is enough to see every entry there, whatever
 their other roles say.
 For users, any role on any of their projects with *All active users* is enough; a person without
@@ -115,6 +127,14 @@ box, ticked by default. While someone types the subject of a new issue, the form
 the project with a similar subject (see [Similar issues](../issues/creating.md#similar-issues)).
 Untick it to turn the list off for this project. When an administrator has turned the suggestions
 off for the whole instance, the box has no effect and says so.
+
+### Metadata keys in the link graph
+
+The **General** tab also has **Metadata keys in the link graph**, a comma-separated list of
+[metadata](../metadata/index.md) keys, `component` by default. Each value of these keys becomes a
+node in the project's link graph, so an AI agent can list everything in one component (see
+[Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph)). You can list
+up to 10 keys; leave the field empty for none. Only people who can manage the project see it.
 
 ### Reporting currency
 

@@ -123,13 +123,19 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     # Stealth mode — secret URL prefix for all routes.
-    # When set, all endpoints (API, docs, health, hooks) are mounted behind
-    # this prefix, making the instance invisible to scanners probing known URLs.
+    # When set, the whole instance (web pages, static assets, API, MCP, docs,
+    # health, hooks, SCIM) is served under this prefix, making it invisible to
+    # scanners probing known URLs. Only robots.txt and the sitemap stay at the
+    # root. Normalized to "/seg[/seg...]"; read it through
+    # specivo.core.app_url.base_path().
     # Example: STEALTH_PREFIX=/s3cr3t → /s3cr3t/api/v1/projects
     stealth_prefix: str = ""
 
-    # CORS — comma-separated origins, or "*" for development
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS — comma-separated origins allowed to call the API from a browser
+    # with credentials. Empty by default: the UI is served from the same
+    # origin and needs none, and every listed origin can act with a signed-in
+    # user's cookies.
+    cors_origins: list[str] = []
     cors_allow_credentials: bool = True
 
     # Trusted hosts — comma-separated, used by TrustedHostMiddleware in production
@@ -348,6 +354,13 @@ class Settings(BaseSettings):
         if v and not is_mail_domain(v):
             raise ValueError(f"SMTP_MESSAGE_ID_DOMAIN: {v!r} is not a plain host name such as mail.example.com")
         return v
+
+    @field_validator("stealth_prefix")
+    @classmethod
+    def validate_stealth_prefix(cls, v: str) -> str:
+        from specivo.core.app_url import normalize_prefix
+
+        return normalize_prefix(v)
 
     @field_validator("search_fts_language")
     @classmethod

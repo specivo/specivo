@@ -107,11 +107,37 @@ class NotificationService:
     # Public notification methods
     # ------------------------------------------------------------------
 
+    async def notify_issue_updated(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        actor: User,
+        *,
+        old_assignee_id: int | None,
+        assigned_to_id: int | None,
+        status_given: bool,
+    ) -> None:
+        """Notify after an issue edit, the same for every way of editing (REST, MCP).
+
+        The new assignee hears about an assignment that changed; watchers hear
+        about an edit that set the status.
+        """
+        if assigned_to_id is not None and assigned_to_id != old_assignee_id:
+            await self.notify_assignment(
+                session=session,
+                issue=issue,
+                old_assignee_id=old_assignee_id,
+                new_assignee_id=assigned_to_id,
+                actor=actor,
+            )
+        if status_given:
+            await self.notify_watchers(session=session, issue=issue, event_type="status_change", actor=actor)
+
     async def notify_assignment(
         self,
         session: AsyncSession,
         issue: Issue,
-        old_assignee_id: int | None,
+        old_assignee_id: int | None,  # noqa: ARG002
         new_assignee_id: int | None,
         actor: User,
     ) -> None:
@@ -580,7 +606,7 @@ class NotificationService:
 
     def _is_channel_enabled(self, prefs: dict, channel_key: str) -> bool:
         """Check if a channel is enabled. Missing key = enabled (default-on)."""
-        return prefs.get(channel_key, True)
+        return bool(prefs.get(channel_key, True))
 
     async def _get_prefs(
         self,

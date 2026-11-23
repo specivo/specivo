@@ -5,9 +5,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": _("Home"), "url": "/"},
-  {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": _("Backlog"), "url": "/projects/" ~ project.key ~ "/backlog/"},
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Backlog"), "url": base ~ "/projects/" ~ project.key ~ "/backlog/"},
   {"label": _("Edit") ~ " " ~ sprint.name}
 ]) }}
 
@@ -18,16 +18,16 @@
   </div>
   <div class="page-header-actions">
     {% if sprint.status in ('active', 'planned') %}
-    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       {% trans %}Board{% endtrans %}
     </a>
     {% endif %}
-    <a href="/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
       {% trans %}Analytics{% endtrans %}
     </a>
-    <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
+    <a href="{{ base }}/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
       {% trans %}Backlog{% endtrans %}
     </a>
@@ -50,7 +50,7 @@
   <div>
     {# Card 1: Sprint Details #}
     <form class="edit-card"
-          hx-patch="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
+          hx-patch="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
           hx-headers='{"Content-Type": "application/json"}'
           hx-ext="json-enc"
           hx-swap="none"
@@ -97,7 +97,7 @@
           <span x-show="saving" x-cloak>{% trans %}Saving...{% endtrans %}</span>
           <span x-show="saved" x-cloak style="color:#15803D">{% trans %}Saved{% endtrans %}</span>
         </button>
-        <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
       </div>
       <template x-if="error">
         <div style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);margin-top:var(--sp-space-sm)" x-text="error"></div>
@@ -126,7 +126,7 @@
       <div class="status-actions">
         {% if sprint.status == 'planned' %}
         <button class="sp-btn sp-btn-success"
-                hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/start/"
+                hx-post="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/start/"
                 hx-swap="none"
                 data-hx-reload>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -134,7 +134,7 @@
         </button>
         {% elif sprint.status == 'active' %}
         <button class="sp-btn sp-btn-success"
-                hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
+                hx-post="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
                 hx-swap="none"
                 data-hx-reload>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M20 6L9 17l-5-5"/></svg>
@@ -153,10 +153,10 @@
         {% if sprint.status == 'active' %}{% trans %}Active sprints must be completed before deletion.{% endtrans %}{% endif %}
       </div>
       <button class="sp-btn sp-btn-danger sp-btn-sm"
-              hx-delete="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
+              hx-delete="{{ base }}/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
               hx-confirm="{{ _('Are you sure you want to delete this sprint? All issues will be moved to the backlog.') }}"
               hx-swap="none"
-              data-hx-redirect="/projects/{{ project.key }}/backlog/">
+              data-hx-redirect="{{ base }}/projects/{{ project.key }}/backlog/">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
         {% trans %}Delete Sprint{% endtrans %}
       </button>
@@ -209,11 +209,11 @@
       <div class="sprint-issues-list">
         {% for issue in issues_in_sprint %}
         <div class="sprint-issue-row" id="sprint-issue-{{ issue.id }}">
-          <a href="/issue/{{ issue.display_key }}/" class="sprint-issue-key">{{ issue.display_key }}</a>
+          <a href="{{ base }}/issue/{{ issue.display_key }}/" class="sprint-issue-key">{{ issue.display_key }}</a>
           <span class="sprint-issue-subject" title="{{ issue.subject }}">{{ issue.subject }}</span>
           {{ status_badge(issue.status.name) }}
           <button class="sprint-issue-remove" title="{{ _('Remove from sprint') }}"
-                  hx-patch="/api/v1/issues/{{ issue.display_key }}/"
+                  hx-patch="{{ base }}/api/v1/issues/{{ issue.display_key }}/"
                   hx-headers='{"Content-Type": "application/json"}'
                   hx-vals='{"sprint_id": null, "lock_version": {{ issue.lock_version }}}'
                   hx-ext="json-enc"
@@ -232,7 +232,7 @@
       {% endif %}
 
       <div style="margin-top:var(--sp-space-md)">
-        <a href="/projects/{{ project.key }}/backlog/" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-link)">{% trans %}+ Add issues from backlog{% endtrans %}</a>
+        <a href="{{ base }}/projects/{{ project.key }}/backlog/" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-link)">{% trans %}+ Add issues from backlog{% endtrans %}</a>
       </div>
     </div>
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import NotFoundError
+from specivo.core.exceptions import ConflictError, NotFoundError
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
@@ -17,9 +17,13 @@ from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
 from specivo.services.wiki_service import WikiService
 from specivo.web.deps import (
+    ProjectForReader,
+    WebUser,
     get_current_user_optional,
     get_templates,
     get_web_reader,
+    login_redirect,
+    redirect_to,
     refuse_anonymous_web,
 )
 
@@ -35,6 +39,12 @@ _tag_svc = TagService()
 _issue_svc = IssueService()
 
 
+# Result codes a redirect may pass back to the page list and the trash.
+_INDEX_NOTICES = frozenset({"deleted"})
+_TRASH_NOTICES = frozenset({"restored"})
+_TRASH_ERRORS = frozenset({"slug_taken"})
+
+
 def _wiki_tags_to_dicts(tags: list) -> list[dict]:
     """Serialize Tag ORM objects to plain dicts for templates / x-data injection."""
     return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
@@ -44,7 +54,7 @@ def _wiki_tags_to_dicts(tags: list) -> list[dict]:
 async def wiki_index(
     project_key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki home page, or redirect to it after auto-creation.
@@ -66,7 +76,7 @@ async def wiki_index(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     if user.is_anonymous and not await check_permission(user, project.id, Permission.VIEW_WIKI, db):
         # Reaching the project is not enough: one opted in to issues alone
@@ -78,7 +88,7 @@ async def wiki_index(
     if await check_permission(user, project.id, Permission.MANAGE_WIKI, db):
         await _wiki_svc.ensure_home_page(db, project.id, user)
 
-    return RedirectResponse(
+    return redirect_to(
         f"/projects/{project_key}/wiki/home/",
         status_code=302,
     )
@@ -88,18 +98,19 @@ async def wiki_index(
 async def wiki_all_pages(
     project_key: str,
     request: Request,
+    notice: str = Query(""),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page listing all pages."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
+        return login_redirect(request)
     user = cast("User", user_obj)
 
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
     await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
@@ -107,6 +118,8 @@ async def wiki_all_pages(
 
     pages = await _wiki_svc.list_pages(db, project.id)
     can_manage = await check_permission(user, project.id, "manage_wiki", db)
+    # Deleting a page and opening the trash (to restore one) need the same permission.
+    can_delete = await check_permission(user, project.id, "delete_wiki_pages", db)
 
     page_tree = _wiki_svc.build_page_tree(pages)
 
@@ -122,28 +135,21 @@ async def wiki_all_pages(
             "pages": pages,
             "page_tree": page_tree,
             "can_manage_wiki": can_manage,
+            "can_delete_wiki": can_delete,
+            "notice": notice if notice in _INDEX_NOTICES else "",
         },
     )
 
 
 @router.get("/projects/{project_key}/wiki/new/", response_class=HTMLResponse)
 async def wiki_new(
-    project_key: str,
     request: Request,
-    parent: int | None = Query(None),  # noqa: B008
+    user: WebUser,
+    project: ProjectForReader,
+    parent: int | None = Query(None),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page creation form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "manage_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -184,21 +190,14 @@ async def wiki_new(
 
 @router.get("/projects/{project_key}/wiki/trash/", response_class=HTMLResponse)
 async def wiki_trash(
-    project_key: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
+    notice: str = Query(""),
+    error: str = Query(""),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki trash (deleted pages) view."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -215,6 +214,8 @@ async def wiki_trash(
             "active_project": project,
             "project": project,
             "deleted_pages": deleted_pages,
+            "notice": notice if notice in _TRASH_NOTICES else "",
+            "error": error if error in _TRASH_ERRORS else "",
         },
     )
 
@@ -224,19 +225,11 @@ async def wiki_delete(
     project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Handle wiki page deletion (form POST)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -244,11 +237,12 @@ async def wiki_delete(
     page, _ = await _wiki_svc.get_page(db, project.id, slug)
 
     form = await request.form()
+    # Unticked, the page's subpages stay and move up to its parent.
     cascade = form.get("cascade_children") == "true"
     await _wiki_svc.delete_page(db, page.id, deleted_by=user, cascade_children=cascade)
 
-    return RedirectResponse(
-        f"/projects/{project_key}/wiki/pages/",
+    return redirect_to(
+        f"/projects/{project_key}/wiki/pages/?notice=deleted",
         status_code=302,
     )
 
@@ -258,27 +252,25 @@ async def wiki_restore(
     project_key: str,
     page_id: int,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a soft-deleted wiki page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "delete_wiki_pages", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    await _wiki_svc.restore_page(db, page_id)
+    try:
+        await _wiki_svc.restore_page(db, page_id, project_id=project.id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Deleted wiki page not found") from None
+    except ConflictError:
+        # A live page has taken the slug since: nothing was restored.
+        return redirect_to(f"/projects/{project_key}/wiki/trash/?error=slug_taken", status_code=302)
 
-    return RedirectResponse(
-        f"/projects/{project_key}/wiki/trash/",
+    return redirect_to(
+        f"/projects/{project_key}/wiki/trash/?notice=restored",
         status_code=302,
     )
 
@@ -288,7 +280,7 @@ async def wiki_show(
     project_key: str,
     slug: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a wiki page with its content.
@@ -309,7 +301,7 @@ async def wiki_show(
     except AnonymousAccessDeniedError:
         return refuse_anonymous_web(request)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")  # noqa: B904
 
     if anonymous:
         # One refusal for every reason: a project opted in to issues alone and
@@ -330,10 +322,11 @@ async def wiki_show(
             await _wiki_svc.ensure_home_page(db, project.id, user)
             page, content = await _wiki_svc.get_page(db, project.id, slug)
         else:
-            raise HTTPException(status_code=404, detail="Wiki page not found")
+            raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     all_pages = await _wiki_svc.list_pages(db, project.id)
     can_manage = False if anonymous else await check_permission(user, project.id, "manage_wiki", db)
+    can_delete = False if anonymous else await check_permission(user, project.id, "delete_wiki_pages", db)
 
     # Build tree structure for sidebar
     page_tree = _wiki_svc.build_page_tree(all_pages)
@@ -348,6 +341,16 @@ async def wiki_show(
     # Also expand the current page itself if it has children
     if page.id in page_tree:
         expanded_ids.add(page.id)
+
+    # For the delete dialog: how many pages sit below this one, and where its
+    # direct children go when only the page itself is deleted (its parent).
+    descendant_count = 0
+    frontier = [page.id]
+    while frontier:
+        children = [c.id for parent_id in frontier for c in page_tree.get(parent_id, [])]
+        descendant_count += len(children)
+        frontier = children
+    parent_title = next((p.title for p in all_pages if p.id == page.parent_id), None)
 
     if anonymous:
         # Attachments are outside the anonymous scope altogether — the API
@@ -408,6 +411,11 @@ async def wiki_show(
             "page_tree": page_tree,
             "expanded_ids": expanded_ids,
             "can_manage_wiki": can_manage,
+            # The Home page cannot be deleted, so it offers no Delete action.
+            "can_delete_page": can_delete and page.slug != "home",
+            "can_delete_wiki": can_delete,
+            "descendant_count": descendant_count,
+            "parent_title": parent_title,
             "attachments": attachments_json,
             "attachment_map": attachment_map,
             "wiki_tags": wiki_tags,
@@ -418,22 +426,13 @@ async def wiki_show(
 
 @router.get("/projects/{project_key}/wiki/{slug}/edit/", response_class=HTMLResponse)
 async def wiki_edit(
-    project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page edit form."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "manage_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -441,7 +440,7 @@ async def wiki_edit(
     try:
         page, content = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Wiki page not found")
+        raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     all_pages = await _wiki_svc.list_pages(db, project.id)
 
@@ -482,9 +481,10 @@ async def wiki_edit(
 
 @router.get("/projects/{project_key}/wiki/{slug}/diff/", response_class=HTMLResponse)
 async def wiki_diff(
-    project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
     from_version: int = 1,
     to_version: int = 2,
@@ -492,30 +492,19 @@ async def wiki_diff(
     """Render a side-by-side diff between two wiki page versions."""
     from difflib import unified_diff
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
-
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
 
     try:
         page, _ = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Wiki page not found")
+        raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     try:
         content_from = await _wiki_svc.get_page_version(db, page.id, from_version)
         content_to = await _wiki_svc.get_page_version(db, page.id, to_version)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Version not found")
+        raise HTTPException(status_code=404, detail="Version not found")  # noqa: B904
 
     # Generate unified diff lines
     from_lines = (content_from.text or "").splitlines(keepends=True)
@@ -549,22 +538,13 @@ async def wiki_diff(
 
 @router.get("/projects/{project_key}/wiki/{slug}/history/", response_class=HTMLResponse)
 async def wiki_history(
-    project_key: str,
     slug: str,
     request: Request,
+    user: WebUser,
+    project: ProjectForReader,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page history (all versions)."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
-
-    try:
-        project = await _project_svc.get_by_key(db, project_key)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
     if not await check_permission(user, project.id, "view_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -572,7 +552,7 @@ async def wiki_history(
     try:
         page, content = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        raise HTTPException(status_code=404, detail="Wiki page not found")
+        raise HTTPException(status_code=404, detail="Wiki page not found")  # noqa: B904
 
     versions = await _wiki_svc.get_page_history(db, page.id)
 

@@ -21,6 +21,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded AI spend reports: grouping, conversion, seat allocation and who sees seat cost (§4), and the route order of `/ai-usage/report/` (§4).
 **Revised:** 2026-11-06 — recorded that notifications and mail are rendered per recipient, in their language and timezone, with links built from `APP_URL` (§6).
 **Revised:** 2026-11-07 — recorded the AI spend report drill-down: URL state, narrowing filters and bounds (§4).
+**Revised:** 2026-11-21 — recorded AI spend by release and sprint: the nearest-ancestor lookup, its visibility and its query shape (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -306,7 +307,7 @@ stream does not repeat `initialize`.
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and
 `include/`; the router is included after the ingest router so `/ai-usage/ingest/` is matched first. An entry written
 there has the source `api` with an API key and `manual` without one; the MCP tools (`specivo.mcp.ai_usage_tools`, a
-module of its own beside `tools.py`) write `mcp`. Both log through `AiUsageService.create_for`, which resolves
+module of its own beside the `specivo.mcp.tools` package) write `mcp`. Both log through `AiUsageService.create_for`, which resolves
 `on_behalf_of` with `resolve_target`, and render pages with `AiUsageService.references`: users, project keys and the
 issue keys the reader may see in three queries; an issue the reader cannot see shows as no issue. List filters live
 in `AiUsageService.list_entries` (a model filter matches its price aliases; an unknown login filter matches nothing
@@ -332,13 +333,22 @@ range hidden from them); no report names a plan or shows a fee as such. The quer
 The REST routes (`/projects/{key}/ai-usage/report/`, `/ai-usage/report/`, `format=csv`) are included **before**
 the entries router so `/ai-usage/report/` is not read as an entry id; CSV cells that could start a spreadsheet
 formula are prefixed with `'`. The report pages are a drill-down whose whole state is in the URL
-(`group`, incl. `sessions`, and the filters `project`, `user_id`, `issue`, `tool`, `model`, `provider`,
-`cost_type`, `branch`; `-` for none): keys are resolved within what the reader may see, an unknown project or an
+(`group`, incl. `sessions`, and the filters `project`, `version`, `sprint`, `user_id`, `issue`, `tool`,
+`model`, `provider`, `cost_type`, `branch`; `-` for none): keys are resolved within what the reader may see, an unknown project or an
 issue they cannot see matches nothing (`ReportFilters.project_id` / `issue_id` = -1), a project report ignores
 `project`, and the project, issue and branch filters leave unallocated seat cost out (`excludes_seats`). A level
 shows at most 30 rows (the rest folded into one "other" row, `fold_rows`); the sessions level pages the entries and
 prices only that page (`entry_spend`, an internal per-entry grouping). Group colours are palette slots by rank of the
 chart on the same page (`color_slots`), so tables, cards and charts agree.
+The release (`version`) and `sprint` dimensions are the entry's issue's value now, else the value of
+its nearest ancestor that has one (`specivo.services.ai_spend_planning.planning_lookup`): the issue
+joined once to its ancestors on `root_id`/`lft`/`rgt`, never a recursive query. Grouping uses it as a
+`LEFT JOIN LATERAL` (memoized per issue by PostgreSQL), filters as a scalar subquery behind an
+`= ANY(ARRAY(candidates))` index prefilter; building it sets `SET LOCAL jit = off` once per transaction,
+because the planner's per-row estimate otherwise triggers JIT that costs more than the query. Visibility
+is inside the lookup (a hidden issue, a hidden ancestor and a version or sprint of a project the reader
+cannot open all give none), so a "none" filter matches exactly the "none" row and no row names what the
+reader may not see. A version of another project than the report's is labelled `KEY name`.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
@@ -403,7 +413,7 @@ def workflow_service(self) -> Any:
 
 **Permission checks** live in a standalone module (`specivo.services.permission_service`), not inside services. Endpoints call `check_permission(user, project_id, permission, db)` explicitly.
 
-The catalogue is the `Permission` `StrEnum` in that module; each member's value is the string stored in `roles.permissions` JSONB, so the constants are drop-in replacements for the literals. **Use the enum, not a string literal.** The `PERMISSIONS` dict maps the same values to human labels for the admin role editor.
+The catalogue is the `Permission` `StrEnum` in that module; each member's value is the string stored in `roles.permissions` JSONB, so the constants are drop-in replacements for the literals. **Use the enum, not a string literal.** How each permission is described to people lives in `specivo.services.permission_catalogue`: its group, plain-language label and description, whether any code enforces it yet, its prerequisites (`PERMISSION_REQUIRES`, closed transitively by `normalise_permissions` whenever a role is saved) and the allow-list the builtin Non member role is capped at (`NON_MEMBER_ALLOWED`). Add a new permission to the enum **and** to a catalogue group; a unit test fails otherwise. Roles are edited only through `RoleService` (Administration → Roles and `/api/v1/admin/roles/`); the seed creates the default roles once, on a fresh database, and never changes them afterwards.
 
 `get_user_roles(session, user, project)` is the one role resolution behind permission checks, issue visibility and (mirrored in SQL) search visibility: a membership's roles; otherwise, on a public project, the seeded read-only Non member role (`roles.builtin = 1`) plus the project's transient anonymous role when the instance switch is on; for the anonymous user, only that transient role, capped at `view_issues` / `view_wiki` inside `check_permission`. Resolved roles are cached in `session.info`, so the cache lives exactly as long as a request's session. There are no hardcoded `is_public` access branches. `member_principal_clause(user_id)` is the single definition of "this `members` row grants this user access" — see §4 on principals. Any membership read that feeds an access decision uses that clause; a row looked up in order to be *edited* (add, update or remove one user's roles) must stay user-only, or the edit lands on a group and reaches everyone in it.
 
@@ -625,6 +635,14 @@ Task types: email notifications, webhook delivery, embedding generation, wiki li
 ### 15. Web Layer (HTML Pages)
 
 Web routers use `include_in_schema=False` to exclude from OpenAPI docs. Authentication is optional (via `get_current_user_optional`), with redirect to `/login/` for unauthenticated users on protected pages.
+
+**Reader dependencies.** A signed-in page that names a project or issue in its URL takes them from the shared dependencies in `specivo.web.deps` rather than resolving them inline:
+
+- `WebUser`: the signed-in user; without one, the same redirect `login_redirect` gives (back to the page after a GET, the bare login page after a POST or an htmx partial).
+- `ProjectForReader` (path parameter `{project_key}`) and `ProjectByKeyForReader` (`{key}`): the project the user may reach, a retired key included. A key that names nothing and a project the user cannot reach are both 404 "Project not found", which never names the stored key. `Annotated[Project, Depends(ProjectReader(permission))]` adds a permission check (403, refusal audited).
+- `IssueForReader`: `(project, issue)` for the `{issue_ref}` the user may see, else 404.
+
+Declare `user: WebUser` beside the project or issue parameter when the handler needs the user; FastAPI resolves it once per request. Pages open to anonymous readers (`get_web_reader`) keep their own resolution, because their refusal is `refuse_anonymous_web`, not a 404.
 
 Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme support (resolution: custom theme -> default theme -> shared templates).
 

@@ -164,9 +164,7 @@ async def versions_only_client(
     management operations after the permission split.
     """
     user = await _make_user(db_session, login="sprint_api_versions_only")
-    await _add_member_with_permissions(
-        db_session, project, user, ["view_issues", "add_issues", "manage_versions"]
-    )
+    await _add_member_with_permissions(db_session, project, user, ["view_issues", "add_issues", "manage_versions"])
     token = await _login(client, user.login)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
@@ -180,9 +178,7 @@ async def viewer_client(
 ) -> AsyncClient:
     """Client authenticated as a view-only member (no manage_sprints)."""
     viewer = await _make_user(db_session, login="sprint_api_viewer")
-    await _add_member_with_permissions(
-        db_session, project, viewer, ["view_issues"]
-    )
+    await _add_member_with_permissions(db_session, project, viewer, ["view_issues"])
     token = await _login(client, viewer.login)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
@@ -418,14 +414,20 @@ async def test_api_board(
 
     # Create issues assigned to the sprint
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_open.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_open.id,
+        priority.id,
         "Board Task 1",
         sprint_id=sprint["id"],
     )
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_done.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_done.id,
+        priority.id,
         "Board Task 2",
         sprint_id=sprint["id"],
     )
@@ -452,14 +454,20 @@ async def test_api_backlog(
 
     # Create one sprinted and one unsprinted issue
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_open.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_open.id,
+        priority.id,
         "Sprinted Task",
         sprint_id=sprint["id"],
     )
     await _api_create_issue(
-        authed_client, project.key,
-        tracker.id, status_open.id, priority.id,
+        authed_client,
+        project.key,
+        tracker.id,
+        status_open.id,
+        priority.id,
         "Backlog Task",
     )
 
@@ -578,9 +586,7 @@ async def test_manage_sprints_alone_can_run_full_lifecycle(
 ):
     """A user with manage_sprints but NOT manage_versions can do all sprint ops."""
     user = await _make_user(db_session, login="sprint_api_sprints_only")
-    await _add_member_with_permissions(
-        db_session, project, user, ["view_issues", "manage_sprints"]
-    )
+    await _add_member_with_permissions(db_session, project, user, ["view_issues", "manage_sprints"])
     token = await _login(client, user.login)
     client.headers["Authorization"] = f"Bearer {token}"
 
@@ -755,12 +761,15 @@ async def test_api_complete_refuses_a_bad_target(
 
     assert resp.status_code == 422, resp.text
     message = resp.json()["errors"][0]["message"]
-    assert message == {
-        "completed": "Cannot assign issues to a completed sprint",
-        "other_project": "Sprint does not belong to this project",
-        "same": "Cannot move issues to the sprint being completed",
-        "unknown": f"Sprint {target_id} not found",
-    }[target]
+    assert (
+        message
+        == {
+            "completed": "Cannot assign issues to a completed sprint",
+            "other_project": "Sprint does not belong to this project",
+            "same": "Cannot move issues to the sprint being completed",
+            "unknown": f"Sprint {target_id} not found",
+        }[target]
+    )
     assert (await client.get(f"{base}/")).json()["status"] == "active"
     assert (await client.get(f"/api/v1/issues/{issue['key']}/")).json()["sprint_id"] == sprint["id"]
 

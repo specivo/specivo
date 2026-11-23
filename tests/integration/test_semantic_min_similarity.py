@@ -40,6 +40,7 @@ from specivo.services.search_service import SearchService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, AdminUserFactory
+from tests.integration.vector_index_helpers import private_index_scans
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -252,6 +253,7 @@ async def test_pagination_total_counts_only_hits_above_the_cut_off(db_session: A
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.serial
 async def test_index_rounds_stop_at_the_cut_off(
     db_session: AsyncSession, world: World, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -259,10 +261,11 @@ async def test_index_rounds_stop_at_the_cut_off(
     related = await _add_issues(db_session, world, [RELATED], subject="Related")
     await _add_issues(db_session, world, [NOISE - i * 0.001 for i in range(60)], subject="Noise")
 
-    await db_session.execute(text("SET LOCAL enable_seqscan = off"))
-    await db_session.execute(text("SET LOCAL enable_bitmapscan = off"))
-    with caplog.at_level(logging.DEBUG, logger=search_module.__name__):
-        ids, _ = await _semantic(db_session, world, limit=10, skip_count=True)
+    # A freshly built index: on the shared one the scan may miss the related
+    # chunk among the dead entries other tests left behind (see the helper).
+    async with private_index_scans(db_session):
+        with caplog.at_level(logging.DEBUG, logger=search_module.__name__):
+            ids, _ = await _semantic(db_session, world, limit=10, skip_count=True)
 
     rounds = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Semantic search round")]
     assert ids == related

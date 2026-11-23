@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import NotFoundError
+from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.models.wiki import WikiRedirect
@@ -48,7 +48,11 @@ async def admin_user(db_session: AsyncSession) -> User:
 async def wiki_page(db_session: AsyncSession, project: Project, admin_user: User):
     """Create a wiki page for testing."""
     page, content = await _wiki_svc.create_page(
-        db_session, project.id, "Test Page", "Some content", admin_user,
+        db_session,
+        project.id,
+        "Test Page",
+        "Some content",
+        admin_user,
     )
     await db_session.commit()
     await db_session.refresh(page)
@@ -59,7 +63,11 @@ async def wiki_page(db_session: AsyncSession, project: Project, admin_user: User
 async def child_page(db_session: AsyncSession, project: Project, admin_user: User, wiki_page):
     """Create a child wiki page under wiki_page."""
     page, content = await _wiki_svc.create_page(
-        db_session, project.id, "Child Page", "Child content", admin_user,
+        db_session,
+        project.id,
+        "Child Page",
+        "Child content",
+        admin_user,
         parent_slug=wiki_page.slug,
     )
     await db_session.commit()
@@ -71,7 +79,11 @@ async def child_page(db_session: AsyncSession, project: Project, admin_user: Use
 async def parent_page(db_session: AsyncSession, project: Project, admin_user: User):
     """Create a separate parent page."""
     page, content = await _wiki_svc.create_page(
-        db_session, project.id, "New Parent", "Parent content", admin_user,
+        db_session,
+        project.id,
+        "New Parent",
+        "Parent content",
+        admin_user,
     )
     await db_session.commit()
     await db_session.refresh(page)
@@ -85,12 +97,20 @@ async def parent_page(db_session: AsyncSession, project: Project, admin_user: Us
 
 class TestUpdateWikiMetadataReparent:
     async def test_update_wiki_metadata_reparent(
-        self, db_session, admin_user, project, wiki_page, parent_page,
+        self,
+        db_session,
+        admin_user,
+        project,
+        wiki_page,
+        parent_page,
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
         result = await _update_wiki_metadata(
-            db_session, admin_user, project.key, wiki_page.slug,
+            db_session,
+            admin_user,
+            project.key,
+            wiki_page.slug,
             parent_slug=parent_page.slug,
         )
         assert "parent" in result
@@ -102,7 +122,12 @@ class TestUpdateWikiMetadataReparent:
 
 class TestUpdateWikiMetadataMakeRoot:
     async def test_update_wiki_metadata_make_root(
-        self, db_session, admin_user, project, child_page, wiki_page,
+        self,
+        db_session,
+        admin_user,
+        project,
+        child_page,
+        wiki_page,
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
@@ -110,7 +135,10 @@ class TestUpdateWikiMetadataMakeRoot:
         assert child_page.parent_id == wiki_page.id
 
         result = await _update_wiki_metadata(
-            db_session, admin_user, project.key, child_page.slug,
+            db_session,
+            admin_user,
+            project.key,
+            child_page.slug,
             parent_slug="",
         )
         assert "root" in result
@@ -121,13 +149,20 @@ class TestUpdateWikiMetadataMakeRoot:
 
 class TestUpdateWikiMetadataRename:
     async def test_update_wiki_metadata_rename(
-        self, db_session, admin_user, project, wiki_page,
+        self,
+        db_session,
+        admin_user,
+        project,
+        wiki_page,
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
         old_slug = wiki_page.slug
         result = await _update_wiki_metadata(
-            db_session, admin_user, project.key, old_slug,
+            db_session,
+            admin_user,
+            project.key,
+            old_slug,
             title="Renamed Page",
         )
         assert "title" in result
@@ -152,14 +187,21 @@ class TestUpdateWikiMetadataRename:
 
 class TestUpdateWikiMetadataSetProtected:
     async def test_update_wiki_metadata_set_protected(
-        self, db_session, admin_user, project, wiki_page,
+        self,
+        db_session,
+        admin_user,
+        project,
+        wiki_page,
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
         assert wiki_page.protected is False
 
         result = await _update_wiki_metadata(
-            db_session, admin_user, project.key, wiki_page.slug,
+            db_session,
+            admin_user,
+            project.key,
+            wiki_page.slug,
             protected=True,
         )
         assert "protected" in result
@@ -171,25 +213,32 @@ class TestUpdateWikiMetadataSetProtected:
 
 class TestUpdateWikiMetadataNoChangesError:
     async def test_update_wiki_metadata_no_changes_error(
-        self, db_session, admin_user, project, wiki_page,
+        self,
+        db_session,
+        admin_user,
+        project,
+        wiki_page,
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
-        result = await _update_wiki_metadata(
-            db_session, admin_user, project.key, wiki_page.slug,
-        )
-        assert "Error" in result
-        assert "at least one" in result
+        with pytest.raises(ValidationError, match="at least one"):
+            await _update_wiki_metadata(db_session, admin_user, project.key, wiki_page.slug)
 
 
 class TestUpdateWikiMetadataNonexistentPage:
     async def test_update_wiki_metadata_nonexistent_page(
-        self, db_session, admin_user, project,
+        self,
+        db_session,
+        admin_user,
+        project,
     ):
         from specivo.mcp.tools import _update_wiki_metadata
 
         with pytest.raises(NotFoundError):
             await _update_wiki_metadata(
-                db_session, admin_user, project.key, "nonexistent-slug",
+                db_session,
+                admin_user,
+                project.key,
+                "nonexistent-slug",
                 title="New Title",
             )

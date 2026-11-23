@@ -1,7 +1,10 @@
 {# "Link graph" card: figures, rebuild button, progress and last result.
    Used on the project settings Search tab; `base_url` is the API prefix the
-   linkGraphRebuild component appends /rebuild/ and /rebuild/status/ to. #}
-{% macro link_graph_card(base_url, can_manage) -%}
+   linkGraphRebuild component appends /rebuild/ and /rebuild/status/ to.
+   `project`, when given, adds when its link graph was last fully rebuilt
+   (`links_rebuilt_at`, in the viewer's timezone `tz`), or that it is not
+   indexed yet and the hourly backfill will queue a rebuild. #}
+{% macro link_graph_card(base_url, can_manage, project=none, tz="UTC") -%}
 {% set i18n = {
   "connectFailed": _("Unable to connect."),
   "started": _("Rebuild started."),
@@ -58,9 +61,22 @@
     </div>
   </div>
 
+  {% if project is not none %}
+  <p class="sp-link-graph-rebuilt" data-testid="link-graph-rebuilt-at">
+    {% if project.links_rebuilt_at %}
+    {% trans %}Last rebuilt:{% endtrans %}
+    <time datetime="{{ project.links_rebuilt_at.isoformat() }}">{{ project.links_rebuilt_at | localdt(tz) }}</time>
+    {% else %}
+    {% trans %}Not indexed yet — rebuild queued{% endtrans %}
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if project is none or project.links_rebuilt_at %}
   <div class="sp-backlinks-empty" x-show="empty" x-cloak data-testid="link-graph-empty">
     {% trans %}No links indexed yet — run a rebuild.{% endtrans %}
   </div>
+  {% endif %}
 
   <dl class="sp-link-graph-stats" x-show="loaded && !empty" x-cloak data-testid="link-graph-stats">
     <dt>{% trans %}Text links{% endtrans %}</dt>
