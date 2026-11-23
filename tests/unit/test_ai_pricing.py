@@ -15,7 +15,9 @@ from specivo.core.ai_pricing import (
     ModelPrice,
     TokenCounts,
     default_cache_write_1h,
+    is_gateway_provider,
     is_long_context_request,
+    model_name_variants,
     normalize_model_name,
     normalize_provider,
     price_usage,
@@ -311,6 +313,10 @@ def test_token_counts_from_a_mapping() -> None:
         ("google/lab-model-4", ("gemini", "lab-model-4")),
         ("x-ai/lab-model-5", ("xai", "lab-model-5")),
         ("litellm/deepseek/lab-model-6", ("deepseek", "lab-model-6")),
+        ("nousresearch/hermes-4-405b", ("nous", "hermes-4-405b")),
+        ("openrouter/nousresearch/hermes-4-405b", ("nous", "hermes-4-405b")),
+        ("openrouter/anthropic/claude-sonnet-4.6", ("anthropic", "claude-sonnet-4.6")),
+        ("vertex_ai/lab-model-7", ("gemini", "lab-model-7")),
         ("accounts/acme/models/x", (None, "accounts/acme/models/x")),
         ("anthropic/", (None, "anthropic/")),
     ],
@@ -326,6 +332,16 @@ def test_normalize_model_name(raw: str, expected: tuple[str | None, str]) -> Non
         ("google", "gemini"),
         ("x-ai", "xai"),
         ("openrouter", "openrouter"),
+        ("OpenRouter", "openrouter"),
+        ("litellm", "litellm"),
+        ("nous", "nous"),
+        ("NousResearch", "nous"),
+        ("nous-portal", "nous"),
+        ("openai-codex", "openai"),
+        ("vertex", "gemini"),
+        ("vertex_ai", "gemini"),
+        ("vertexai", "gemini"),
+        ("custom", "custom"),
         ("acme-ai", "acme-ai"),
         ("", None),
         ("   ", None),
@@ -334,3 +350,49 @@ def test_normalize_model_name(raw: str, expected: tuple[str | None, str]) -> Non
 )
 def test_normalize_provider(raw: str | None, expected: str | None) -> None:
     assert normalize_provider(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("claude-sonnet-4.6", ("claude-sonnet-4.6", "claude-sonnet-4-6")),
+        ("claude-sonnet-4-6", ("claude-sonnet-4-6", "claude-sonnet-4.6")),
+        ("gpt-5.1", ("gpt-5.1", "gpt-5-1")),
+        ("gpt-5-1", ("gpt-5-1", "gpt-5.1")),
+        ("openrouter/anthropic/claude-sonnet-4.6", ("claude-sonnet-4.6", "claude-sonnet-4-6")),
+        ("Anthropic/Claude-Sonnet-4.6", ("claude-sonnet-4.6", "claude-sonnet-4-6")),
+        (
+            "deepseek/deepseek-r1:free",
+            ("deepseek-r1:free", "deepseek-r1"),
+        ),
+        (
+            "openrouter/qwen/qwen3.6-plus:nitro",
+            ("qwen3.6-plus:nitro", "qwen3-6-plus:nitro", "qwen3.6-plus", "qwen3-6-plus"),
+        ),
+        ("nousresearch/hermes-4-405b", ("hermes-4-405b", "hermes-4.405b")),
+        ("gpt-5", ("gpt-5",)),
+        # "-fast" is a different price, never stripped.
+        ("claude-opus-4-1-fast", ("claude-opus-4-1-fast", "claude-opus-4.1-fast")),
+        # A colon that is not a routing suffix stays.
+        ("lab-model:custom", ("lab-model:custom",)),
+        ("", ()),
+        ("   ", ()),
+    ],
+)
+def test_model_name_variants(raw: str, expected: tuple[str, ...]) -> None:
+    assert model_name_variants(raw) == expected
+
+
+def test_dotted_and_dashed_spellings_share_a_variant() -> None:
+    assert "claude-sonnet-4-6" in model_name_variants("claude-sonnet-4.6")
+    assert "claude-sonnet-4.6" in model_name_variants("claude-sonnet-4-6")
+    assert "claude-opus-4-1" not in model_name_variants("claude-opus-4-1-fast")
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected"),
+    [("openrouter", True), ("OpenRouter", True), ("litellm", True), ("nous-portal", True), ("nous", True)]
+    + [("anthropic", False), ("openai-codex", False), ("custom", False), ("", False), (None, False)],
+)
+def test_gateway_providers(provider: str | None, expected: bool) -> None:
+    assert is_gateway_provider(provider) is expected

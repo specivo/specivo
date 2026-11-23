@@ -23,7 +23,7 @@ from specivo.core.money import currency_display_name
 from specivo.core.utils import utcnow
 from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.user import User
-from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput, price_usage_of
+from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput, price_lookup, price_usage_of
 from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.currency_service import CurrencyService
 from specivo.web.deps import get_templates, redirect_to
@@ -170,8 +170,15 @@ async def admin_ai_model_prices(  # noqa: PLR0913
     error: str = Query(""),
     inserted: int = Query(0, ge=0),
     closed: int = Query(0, ge=0),
+    probe_model: str = Query("", max_length=250),
+    probe_provider: str = Query("", max_length=50),
+    probe_at: str = Query("", max_length=40),
 ) -> Response:
-    """The price list: by default the prices valid now, one line per model and source."""
+    """The price list: by default the prices valid now, one line per model and source.
+
+    ``probe_model`` (with ``probe_provider`` and ``probe_at``) answers which
+    price a usage entry of that model would get, and by which spelling.
+    """
     now = utcnow()
     filters = {
         "provider": normalize_provider(provider) or "",
@@ -210,8 +217,32 @@ async def admin_ai_model_prices(  # noqa: PLR0913
             "notice": notice if notice in _NOTICES else "",
             "error": error if error in _ERRORS else "",
             "seed_counts": {"inserted": inserted, "closed": closed},
+            "probe": await _probe(db, probe_model, probe_provider, probe_at, now),
         },
     )
+
+
+async def _probe(db: AsyncSession, model: str, provider: str, at: str, now: datetime) -> dict[str, Any]:
+    """The resolve probe's form values and, when a model was given, its answer."""
+    form = {"model": model.strip(), "provider": provider.strip(), "at": at.strip()}
+    if not form["model"]:
+        return {"form": form, "ran": False}
+    instant = parse_utc(form["at"]) if form["at"] else now
+    if instant is None:
+        return {"form": form, "ran": True, "error": True}
+    lookup = price_lookup(form["model"], form["provider"] or None)
+    resolved = await _service.resolve(db, form["model"], instant, provider=form["provider"] or None)
+    return {
+        "form": form,
+        "ran": True,
+        "error": False,
+        "at": utc_text(instant),
+        "model": lookup.model,
+        "provider": lookup.provider or "",
+        "variants": list(lookup.variants),
+        "matched_by": resolved.matched_by if resolved is not None else None,
+        "price": price_row(resolved.price, now) if resolved is not None else None,
+    }
 
 
 @router.get("/admin/ai-model-prices/model/", response_class=HTMLResponse)
@@ -238,7 +269,11 @@ async def admin_ai_model_price_history(
         raise HTTPException(status_code=404, detail="No prices for this model")
     now = utcnow()
     resolved = await _service.resolve(db, name, now, provider=provider_slug)
-    current = resolved.price if resolved is not None and resolved.matched_by == "model" else None
+    current = (
+        resolved.price
+        if resolved is not None and resolved.matched_by == "model" and resolved.price.provider == provider_slug
+        else None
+    )
     template = current or rows[0]
     in_use = {r.id: (await price_usage_of(db, r.id)).count for r in rows}
     offer = await _recompute_offer(db, rows, recompute, now)

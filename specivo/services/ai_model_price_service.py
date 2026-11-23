@@ -7,9 +7,14 @@
   instant and inserts the new one, in one transaction; earlier periods can be
   entered too.
 - **Resolution** (:meth:`AiModelPriceService.resolve`) normalises the reported
-  model name, matches the model and then its aliases, and picks the active row
-  valid at the instant (UTC), an ``admin`` row before a ``seed`` row. No match
-  is ``None`` (unpriced): never a zero, never the latest price.
+  model name, matches it and its spelling variants
+  (:func:`~specivo.core.ai_pricing.model_name_variants`: dots and dashes between
+  digits, OpenRouter routing suffixes) against model names and aliases, and
+  picks the active row valid at the instant (UTC): the reported spelling before
+  an alias of it before a variant, then an ``admin`` row before a ``seed`` row.
+  A gateway provider (OpenRouter, LiteLLM, the Nous Portal) breaks ties instead
+  of restricting the match. No match is ``None`` (unpriced): never a zero,
+  never the latest price.
 - **Seed** (:meth:`AiModelPriceService.load_seed`) loads the bundled LiteLLM
   snapshot, append-only; see :mod:`specivo.core.ai_pricing_seed`.
 - **References.** Rows that usage entries price with cannot be deleted, nor
@@ -34,10 +39,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_pricing import (
+    GATEWAY_PROVIDERS,
     MODEL_NAME_MAX_LENGTH,
     PRICE_MAX_DECIMAL_PLACES,
     PRICE_MAX_INTEGER_DIGITS,
     PROVIDER_RE,
+    model_name_variants,
     normalize_model_name,
     normalize_provider,
 )
@@ -237,13 +244,48 @@ class PriceInput:
 
 
 @dataclass(frozen=True, slots=True)
+class PriceLookup:
+    """What :meth:`AiModelPriceService.resolve` looks a reported model up by."""
+
+    #: The normalised explicit provider, if any.
+    provider: str | None
+    #: Whether the provider restricts the match (an explicit provider that is not a gateway).
+    restricts: bool
+    #: Providers that break ties, most wanted first (a gateway's own rows, then a name prefix's provider).
+    preferred: tuple[str, ...]
+    #: The spellings tried, the reported (normalised) one first.
+    variants: tuple[str, ...]
+
+    @property
+    def model(self) -> str:
+        return self.variants[0] if self.variants else ""
+
+
+def price_lookup(model: str, provider: str | None = None) -> PriceLookup:
+    """Normalise a reported model and provider for :meth:`AiModelPriceService.resolve`."""
+    provider_slug = normalize_provider(provider)
+    hint, name = normalize_model_name(model)
+    if provider_slug:
+        name = model_name_for(model, provider_slug)
+    gateway = provider_slug in GATEWAY_PROVIDERS
+    preferred = tuple(p for p in dict.fromkeys((provider_slug if gateway else None, hint)) if p)
+    return PriceLookup(
+        provider=provider_slug,
+        restricts=bool(provider_slug) and not gateway,
+        preferred=preferred,
+        variants=model_name_variants(name) if name else (),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ResolvedPrice:
     """The price valid for a model at an instant."""
 
     price: AiModelPrice
-    matched_by: str  # "model" or "alias"
+    matched_by: str  # "model", "alias" (of the reported spelling) or "variant"
     model: str  # the normalised name that was looked up
     at: datetime
+    variants: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,40 +403,53 @@ class AiModelPriceService:
         """The active price of *model* valid at *at*, or ``None`` (unpriced).
 
         The name is normalised (case, provider prefixes such as
-        ``anthropic/``). An explicit *provider* restricts the match; a prefix in
-        the name only breaks ties. The model name matches before an alias, and
-        an ``admin`` row before a ``seed`` row. *at* must carry a time zone; it
-        is compared in UTC.
+        ``anthropic/``) and tried in its spelling variants
+        (:func:`~specivo.core.ai_pricing.model_name_variants`), against model
+        names and aliases. Ranking: a row named as reported, then one carrying
+        the reported spelling as an alias, then a variant (in variant order);
+        within that an ``admin`` row before a ``seed`` row, then the preferred
+        providers. An explicit *provider* restricts the match unless it is a
+        gateway (:data:`~specivo.core.ai_pricing.GATEWAY_PROVIDERS`), whose own
+        rows then only win ties; a prefix in the name only breaks ties. *at*
+        must carry a time zone; it is compared in UTC.
         """
         instant = as_utc(at)
-        provider_slug = normalize_provider(provider)
-        hint, name = normalize_model_name(model)
-        if provider_slug:
-            name = model_name_for(model, provider_slug)
-        if not name:
+        lookup = price_lookup(model, provider)
+        variants = lookup.variants
+        if not variants:
             return None
+        name = variants[0]
         stmt = select(AiModelPrice).where(
             AiModelPrice.is_active.is_(True),
-            or_(AiModelPrice.model == name, AiModelPrice.aliases.contains([name])),
+            or_(AiModelPrice.model.in_(variants), AiModelPrice.aliases.overlap(list(variants))),
             _contains(instant),
         )
-        if provider_slug:
-            stmt = stmt.where(AiModelPrice.provider == provider_slug)
+        if lookup.restricts:
+            stmt = stmt.where(AiModelPrice.provider == lookup.provider)
         rows = list((await session.execute(stmt)).scalars().all())
         if not rows:
             return None
+        order = {spelling: index for index, spelling in enumerate(variants)}
+        last = len(variants)
 
-        def rank(row: AiModelPrice) -> tuple[int, int, int, str, int]:
-            return (
-                0 if row.model == name else 1,
-                0 if row.source == "admin" else 1,
-                0 if hint is not None and row.provider == hint else 1,
-                row.provider,
-                row.id,
+        def match(row: AiModelPrice) -> tuple[int, int]:
+            if row.model == name:
+                return 0, 0
+            aliases = row.aliases or []
+            if name in aliases:
+                return 1, 0
+            return 2, min([order.get(row.model, last)] + [order[a] for a in aliases if a in order])
+
+        def rank(row: AiModelPrice) -> tuple[int, int, int, int, str, int]:
+            tier, position = match(row)
+            preferred = (
+                lookup.preferred.index(row.provider) if row.provider in lookup.preferred else len(lookup.preferred)
             )
+            return (tier, position, 0 if row.source == "admin" else 1, preferred, row.provider, row.id)
 
         best = min(rows, key=rank)
-        return ResolvedPrice(price=best, matched_by="model" if best.model == name else "alias", model=name, at=instant)
+        matched_by = ("model", "alias", "variant")[match(best)[0]]
+        return ResolvedPrice(price=best, matched_by=matched_by, model=name, at=instant, variants=variants)
 
     # -- administrator changes ----------------------------------------------------
 

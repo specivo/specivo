@@ -2,5 +2,15 @@
   "format": 1,
   "currency": "USD",
   "unit": "per 1M tokens",
-  "periods": []
+  "periods": [
+    {
+      "provider": "nous",
+      "model": "hermes-4-405b",
+      "input": "1",
+      "output": "3",
+      "cache_read": "0.2",
+      "effective_from": "2026-11-23T00:00:00Z",
+      "note": "OpenRouter list price of nousresearch/hermes-4-405b (served by Nebius), read 2026-11-23 from https://openrouter.ai/api/v1/models/nousresearch/hermes-4-405b/endpoints. The Nous Portal model list (https://inference-api.nousresearch.com/v1/models) carried no Nous model that day."
+    }
+  ]
 }
