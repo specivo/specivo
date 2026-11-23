@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 import pytest
@@ -9,10 +10,12 @@ import pytest
 from specivo.core.ai_billing import (
     PROJECT_PAYER_DEFAULT_KEY,
     covers_tool,
+    entry_cost_type,
     normalize_account_slug,
     normalize_route,
     normalize_route_pattern,
     payer_from_default,
+    pick_routed,
     project_payer_default,
     route_matches,
 )
@@ -134,3 +137,31 @@ def test_subscription_account() -> None:
     assert account.default_cost_type == "subscription"
     assert account.tool_slugs == [] and account.route_patterns == []
     assert account.reimburse_share is None and account.is_active
+
+
+@dataclass
+class _Account:
+    name: str
+    route_patterns: list[str] = field(default_factory=list)
+    tool_slugs: list[str] = field(default_factory=list)
+
+
+def test_pick_routed_takes_the_first_account_matching_route_and_tool() -> None:
+    codex_only = _Account("codex", ["corp-*"], ["codex"])
+    any_tool = _Account("any", ["corp-*"])
+    later = _Account("later", ["corp-eu"])
+    no_patterns = _Account("none")
+    accounts = [no_patterns, codex_only, any_tool, later]
+    assert pick_routed(accounts, "corp-eu", "codex") is codex_only
+    assert pick_routed(accounts, "CORP-EU", "claude-code") is any_tool
+    assert pick_routed(accounts, "home", "claude-code") is None
+    assert pick_routed(accounts, None, "codex") is None
+    assert pick_routed(accounts, "", "codex") is None
+
+
+@pytest.mark.parametrize(
+    ("requested", "default", "expected"),
+    [(None, None, "unknown"), (None, "api", "api"), ("free", "api", "free"), ("subscription", None, "subscription")],
+)
+def test_entry_cost_type_prefers_the_records_own(requested: str | None, default: str | None, expected: str) -> None:
+    assert entry_cost_type(requested, default) == expected

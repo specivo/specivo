@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_usage import MAX_TOKENS_PER_CLASS
 from specivo.models.agent_session import AgentSession
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
@@ -467,7 +468,7 @@ async def test_unknown_record_fields_are_ignored_with_a_warning(client: AsyncCli
     assert result["warnings"][0]["message"].endswith("attribution.x, future_field, tokens.audio")
 
 
-async def test_route_and_billing_account_are_accepted_without_warnings(client: AsyncClient, w: World) -> None:
+async def test_route_and_billing_account_are_accepted(client: AsyncClient, w: World) -> None:
     results = await post(
         client,
         w,
@@ -478,7 +479,8 @@ async def test_route_and_billing_account_are_accepted_without_warnings(client: A
         record("k-account-bad", billing_account="Acme Gateway"),
     )
     assert [r["status"] for r in results] == ["created", "created", "rejected", "rejected"]
-    assert [codes(r) for r in results[:2]] == [[], []]
+    # No billing account acme-gateway exists here: the record is stored, the slug is reported.
+    assert [codes(r) for r in results[:2]] == [["billing_account_unknown"], []]
     assert [(r["error"]["code"], r["error"]["field"]) for r in results[2:]] == [
         ("invalid_record", "route"),
         ("invalid_record", "billing_account"),
@@ -1327,7 +1329,23 @@ def _example(path: Path) -> str:
     return text.replace("ACME", "INGX").replace("acme-", "ingx-").replace('"teammate"', '"ingx-teammate"')
 
 
-async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w: World) -> None:
+async def test_valid_examples_replay_through_the_endpoint(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    # The README's world holds the instance gateway acme-gateway, paid for by the employer.
+    db_session.add(
+        AiBillingAccount(
+            slug="ingx-gateway",
+            name="Acme gateway",
+            kind="gateway",
+            owner_user_id=None,
+            payer="employer",
+            route_patterns=[],
+            tool_slugs=[],
+            default_cost_type="api",
+        )
+    )
+    await db_session.commit()
     expected = json.loads((EXAMPLES / "expected.json").read_text())["valid"]
     assert sorted(expected) == sorted(p.name for p in (EXAMPLES / "valid").glob("*.json"))
     for name, outcomes in expected.items():
@@ -1341,6 +1359,8 @@ async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w
                 "method": r["attribution"]["method"] if r["attribution"] else None,
                 "issue_ref": r["attribution"]["issue_ref"] if r["attribution"] else None,
                 "project_key": r["attribution"]["project_key"] if r["attribution"] else None,
+                "payer": r["payer"],
+                "billing_account": r["billing_account"],
             }
             for r in results
         ]
@@ -1349,6 +1369,7 @@ async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w
                 **o,
                 "issue_ref": o["issue_ref"] and o["issue_ref"].replace("ACME", "INGX"),
                 "project_key": o["project_key"] and o["project_key"].replace("ACME", "INGX"),
+                "billing_account": o["billing_account"] and o["billing_account"].replace("acme-", "ingx-"),
             }
             for o in outcomes
         ]

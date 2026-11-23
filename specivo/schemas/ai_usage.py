@@ -267,6 +267,8 @@ class AiUsageIngestRecordOut(BaseModel):
     entry_id: int | None
     revision: int | None
     attribution: AiUsageIngestAttributionOut | None
+    payer: str | None = Field(None, description="Who pays for the stored entry: employer, employee or unknown")
+    billing_account: str | None = Field(None, description="Slug of the billing account the entry was paid through")
     warnings: list[AiUsageIngestProblemOut]
     error: AiUsageIngestProblemOut | None
 

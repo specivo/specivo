@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from fnmatch import fnmatchcase
-from typing import Any
+from typing import Any, Protocol
 
 #: Kinds of billing account.
 BILLING_ACCOUNT_KINDS: tuple[str, ...] = ("gateway", "subscription", "api_key", "local")
@@ -113,3 +113,58 @@ def project_payer_default(project_settings: Mapping[str, Any] | None) -> str:
 def payer_from_default(default: str) -> str:
     """The entry payer a project default gives: its payer, or ``unknown`` for ``none``."""
     return default if default in ACCOUNT_PAYERS else PAYER_UNKNOWN
+
+
+# ---------------------------------------------------------------------------
+# Resolution: which account paid for an entry
+# ---------------------------------------------------------------------------
+
+#: How an entry's billing account and payer were decided, first match wins:
+#: ``manual`` (a person set them; reserved, never overwritten by a replay or a
+#: re-resolution), ``record`` (the record's ``billing_account`` slug),
+#: ``instance_route`` (an instance account's route patterns), ``personal_route``
+#: (one of the user's accounts by route), ``subscription`` (the user's
+#: subscription covering the tool), ``project_default`` (the project's payer
+#: default) and ``none`` (nothing decided: payer ``unknown``).
+BILLING_METHOD_MANUAL = "manual"
+BILLING_METHOD_RECORD = "record"
+BILLING_METHOD_INSTANCE_ROUTE = "instance_route"
+BILLING_METHOD_PERSONAL_ROUTE = "personal_route"
+BILLING_METHOD_SUBSCRIPTION = "subscription"
+BILLING_METHOD_PROJECT_DEFAULT = "project_default"
+BILLING_METHOD_NONE = "none"
+BILLING_METHODS: tuple[str, ...] = (
+    BILLING_METHOD_MANUAL,
+    BILLING_METHOD_RECORD,
+    BILLING_METHOD_INSTANCE_ROUTE,
+    BILLING_METHOD_PERSONAL_ROUTE,
+    BILLING_METHOD_SUBSCRIPTION,
+    BILLING_METHOD_PROJECT_DEFAULT,
+    BILLING_METHOD_NONE,
+)
+
+
+class RoutedAccount(Protocol):
+    """What route matching reads of an account."""
+
+    route_patterns: list[str]
+    tool_slugs: list[str]
+
+
+def pick_routed[A: RoutedAccount](accounts: Iterable[A], route: str | None, tool_slug: str | None) -> A | None:
+    """The first of *accounts* whose route patterns match *route* and that covers *tool_slug*.
+
+    Used for steps 3 (instance accounts) and 4 (the user's own accounts);
+    callers pass accounts oldest first. No route picks nothing.
+    """
+    if not route:
+        return None
+    for account in accounts:
+        if route_matches(account.route_patterns or [], route) and covers_tool(account.tool_slugs or [], tool_slug):
+            return account
+    return None
+
+
+def entry_cost_type(requested: str | None, account_default: str | None) -> str:
+    """An entry's cost type: what the record asked for, else the account's default, else ``unknown``."""
+    return requested or account_default or "unknown"

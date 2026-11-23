@@ -13,6 +13,12 @@
   ``subscription``; :class:`AiSubscriptionService` creates it with the
   subscription.
 
+Creating an account with route patterns, or changing an account's payer,
+patterns, tools, default cost type or state, resolves the usage entries it may
+affect again and re-prices them
+(:meth:`specivo.services.ai_usage_service.AiUsageService.rebill_for_account`),
+in the same transaction.
+
 Lookups for ingest (:meth:`AiBillingAccountService.find_by_slug`,
 :meth:`~AiBillingAccountService.instance_accounts`,
 :meth:`~AiBillingAccountService.personal_accounts`) return active accounts
@@ -69,6 +75,9 @@ ACCOUNT_FIELDS: tuple[str, ...] = (
 )
 
 _subscriptions = AiSubscriptionService()
+
+#: Fields whose change makes usage entries resolve to another account, payer or cost type.
+RESOLUTION_FIELDS: tuple[str, ...] = ("payer", "route_patterns", "tool_slugs", "default_cost_type", "is_active")
 
 
 def _invalid(message: str, field_name: str, code: str = "ai_billing_account_invalid") -> AppError:
@@ -327,6 +336,9 @@ class AiBillingAccountService:
         account = AiBillingAccount(owner_user_id=owner_id, created_by_id=actor.id, **values)
         session.add(account)
         await session.flush()
+        if account.route_patterns and account.is_active:
+            # A new account takes the routed entries its patterns now match.
+            await self._rebill(session, account, actor)
         return account
 
     async def update(
@@ -344,10 +356,20 @@ class AiBillingAccountService:
         values = self._validated(dict(changes), current=account)
         if "slug" in values and values["slug"] != account.slug:
             await self._require_free_slug(session, values["slug"], account.owner_user_id, account.id)
+        before = {name: getattr(account, name) for name in RESOLUTION_FIELDS}
         for key, value in values.items():
             setattr(account, key, value)
         await session.flush()
+        if any(getattr(account, name) != before[name] for name in RESOLUTION_FIELDS):
+            await self._rebill(session, account, actor)
         return account
+
+    @staticmethod
+    async def _rebill(session: AsyncSession, account: AiBillingAccount, actor: User) -> None:
+        """Resolve and re-price the usage entries the change of *account* may affect, like a price change."""
+        from specivo.services.ai_usage_service import AiUsageService
+
+        await AiUsageService().rebill_for_account(session, account, actor_id=actor.id)
 
     async def deactivate(self, session: AsyncSession, account: AiBillingAccount, *, actor: User) -> AiBillingAccount:
         """Switch an account off; usage keeps pointing at it."""
