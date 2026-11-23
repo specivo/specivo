@@ -722,16 +722,29 @@ class AiUsageIngestService:
     async def _session_issues(
         self, session: AsyncSession, batch: _Batch, record: IngestRecord, target: User
     ) -> list[int]:
+        """Issues of agent sessions: matched by the record's ``session_id`` first, then by time overlap.
+
+        Each step tries the reporting account's sessions, then the target
+        user's; a session of any other account is never used, whatever id it
+        carries.
+        """
         from specivo.services.agent_session_service import AgentSessionService
+
+        sessions = AgentSessionService()
+        users = list(dict.fromkeys((batch.actor.id, target.id)))
+        found: list[int] = []
+        if record.session_id:
+            for user_id in users:
+                issue_id = await sessions.issue_for_external(session, user_id, record.session_id)
+                if issue_id is not None:
+                    found.append(issue_id)
 
         start = record.started_at or record.ended_at
         end = record.ended_at or record.started_at
         if start is None or end is None:
-            return []
-        found: list[int] = []
-        # The reporting account's sessions first, then the target user's.
-        for user_id in dict.fromkeys((batch.actor.id, target.id)):
-            issue_id = await AgentSessionService().issue_for(session, user_id, start, end)
+            return found
+        for user_id in users:
+            issue_id = await sessions.issue_for(session, user_id, start, end)
             if issue_id is not None:
                 found.append(issue_id)
         return found

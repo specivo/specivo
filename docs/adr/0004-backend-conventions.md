@@ -292,6 +292,15 @@ their signatures, and both writes run in a savepoint so a failure never fails th
 range longest (ties: most recently active); it is an attribution hint, so callers still check they may log there.
 The id of the API key that authenticated a tool call is published the same way (`mcp_api_key_id_var`), for tools
 that record their reporting key (`specivo_log_ai_usage`).
+A session also records how it was opened (`client_type`: `mcp`, `rest`, or `webhook` for an event receiver, the
+only kind that may have no API key) and, set by the client through `specivo_agent_session(op="set")`, its own session
+id (`external_session_id`, opaque text, never parsed) and its parent's (`parent_external_session_id`, kept raw;
+`parent_session_id` is the resolved row). The tool writes only the calling connection's row, and
+`AgentSessionService.set_external` resolves and back-fills parents among the same user's rows only: a client's claim
+about its ids is trusted within its own account, never across accounts. AI usage ingest matches a record's
+`session_id` with `issue_for_external` (the newest row with the id naming an issue, else the nearest one in its
+lineage, depth bounded at `LINEAGE_MAX_DEPTH`) before the time overlap, for the reporting account and then the target
+user; the stored method stays `mcp_session`.
 
 **MCP transport sessions** are a different thing from agent sessions: the `Mcp-Session-Id` of a Streamable HTTP
 connection. Their Redis entry (`specivo.mcp.session_store`, sliding TTL `mcp_session_ttl_seconds`) is the source of

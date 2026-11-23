@@ -19,6 +19,7 @@ from typing import Annotated, Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from specivo.core.database import get_session_factory
@@ -34,6 +35,7 @@ from specivo.mcp.client_context import (
     mcp_connection_var,
 )
 from specivo.mcp.docs import generate_setup_guide
+from specivo.mcp.tools.agent_sessions import _agent_session
 from specivo.mcp.tools.comments import _add_comment, _list_comments
 from specivo.mcp.tools.issues import (
     _create_issue,
@@ -92,7 +94,7 @@ from specivo.mcp.tools.wiki import (
     _restore_wiki,
     _update_wiki_metadata,
 )
-from specivo.services.agent_session_service import AgentSessionService
+from specivo.services.agent_session_service import CLIENT_TYPE_MCP, AgentSessionService
 from specivo.services.api_key_scope import activate_api_key_scope, end_scope_context, start_scope_context
 
 logger = logging.getLogger(__name__)
@@ -161,6 +163,7 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
                         user.id,
                         client=mcp_client_var.get(),
                         connection=mcp_connection_var.get(),
+                        client_type=CLIENT_TYPE_MCP,
                     )
                     await savepoint.commit()
                     agent_session_id = agent_session.id
@@ -1305,6 +1308,46 @@ async def specivo_timer(
     """
     async with _get_session_and_user() as (session, user):
         return await _timer(session, user, op, issue_ref, activity, comments)
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
+async def specivo_agent_session(
+    op: Annotated[str, Field(description="One of: set, get.")],
+    external_session_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "For 'set': your client's own id for this session (for example the Hermes session_id), "
+                "1-200 characters of letters, digits and . _ : -. Omit to keep the current value."
+            ),
+        ),
+    ] = None,
+    parent_session_id: Annotated[
+        str | None,
+        Field(
+            description=(
+                "For 'set': your client's id of the parent session (the session that started this one), "
+                "same format. Omit to keep the current value."
+            ),
+        ),
+    ] = None,
+    issue_ref: Annotated[
+        str | None,
+        Field(description="For 'set': the issue this session works on, e.g. ACME-12. Must be visible to you."),
+    ] = None,
+) -> str:
+    """Read or set this connection's own agent session: your client's session id, its parent and its issue.
+
+    Ops: get (the session: id, client, client type, external and parent ids,
+    issue, start and last activity); set (records your client's session id
+    and its parent's, and with issue_ref the issue you work on, so AI usage
+    the reporter sends with the same session_id is attributed by id instead
+    of by time). Only the session of the connection you call on is changed;
+    a parent is linked only to a session of your own account. Setting the
+    same values again changes nothing. A change is audited.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _agent_session(session, user, op, external_session_id, parent_session_id, issue_ref)
 
 
 _NO_COUNTERS = (
