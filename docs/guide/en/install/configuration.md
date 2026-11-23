@@ -62,6 +62,7 @@ docker compose up -d
 | `ROBOTS_TXT` | A fixed `robots.txt`, replacing the one Specivo serves. Unset by default. The admin setting `robots_txt` overrides it. See [Search engines](#search-engines). |
 | `CORS_ORIGINS` | Other browser origins allowed to call the API with a signed-in user's cookies, e.g. `["https://tools.example.com"]`. Empty by default: Specivo's own pages need no entry. List only origins you trust. |
 | `AUDIT_LOG_RETENTION_MONTHS` | Whole months of the [security audit log](audit-log.md) kept before the current month; older months are dropped daily. Default `12`. `0` keeps everything. |
+| `WIKI_TRASH_RETENTION_DAYS` | Days a deleted wiki page stays in the [wiki trash](../wiki/history-linking.md#delete-and-restore) before the worker deletes it for good, once a day, with its history, comments and attachments. Default `90`. `0` keeps the trash forever. |
 | `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
 | `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |

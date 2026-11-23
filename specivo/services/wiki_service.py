@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +24,14 @@ from specivo.services.webhook_events import emit_wiki_page_updated
 from specivo.services.wiki_utils import slugify as _slugify
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class WikiTrashPurge:
+    """What a trash purge deleted: the page ids, and the attachment files to remove after commit."""
+
+    page_ids: list[int]
+    files: list[Path]
 
 
 class WikiService:
@@ -478,25 +488,51 @@ class WikiService:
         self,
         session: AsyncSession,
         retention_days: int = 90,
-    ) -> list[int]:
-        """Permanently delete pages in trash older than retention_days.
+    ) -> WikiTrashPurge:
+        """Permanently delete the pages that have been in the trash longer than *retention_days*.
 
-        Returns list of hard-deleted page IDs.
+        Versions, comments, watchers, tags and the page's stored links go by
+        the database's cascades; links from other texts to the page turn into
+        unresolved ones. Attachments have no foreign key to their container,
+        so the page's attachments and those of its comments are deleted here.
+        Their files are returned rather than removed: the caller deletes them
+        once the transaction has committed, so a rollback never leaves rows
+        pointing at missing files.
         """
+        from specivo.models.attachment import Attachment
+        from specivo.models.journal import Journal
+        from specivo.services.attachment_service import AttachmentService
+
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
-        # First collect IDs for the return value
-        stmt = select(WikiPage.id).where(
-            WikiPage.deleted_at.isnot(None),
-            WikiPage.deleted_at < cutoff,
+        expired_ids = list(
+            (
+                await session.scalars(
+                    select(WikiPage.id)
+                    .where(WikiPage.deleted_at.isnot(None), WikiPage.deleted_at < cutoff)
+                    .order_by(WikiPage.id)
+                )
+            ).all()
         )
-        result = await session.execute(stmt)
-        expired_ids = [row[0] for row in result.all()]
+        if not expired_ids:
+            return WikiTrashPurge(page_ids=[], files=[])
 
-        if expired_ids:
-            await session.execute(delete(WikiPage).where(WikiPage.id.in_(expired_ids)))
-            await session.flush()
+        comment_ids = select(Journal.id).where(Journal.wiki_page_id.in_(expired_ids))
+        owned = (Attachment.container_type == "WikiPage") & Attachment.container_id.in_(expired_ids)
+        owned |= (Attachment.container_type == "Journal") & Attachment.container_id.in_(comment_ids)
+        attachments = (await session.execute(select(Attachment.id, Attachment.disk_filename).where(owned))).all()
 
-        return expired_ids
+        if attachments:
+            await session.execute(delete(Attachment).where(Attachment.id.in_([a.id for a in attachments])))
+        await session.execute(delete(WikiPage).where(WikiPage.id.in_(expired_ids)))
+        await session.flush()
+
+        # Bulk deletes are invisible to the session events that keep search in
+        # step, so drop whatever the index still holds for the attachments.
+        await sync_sources(session, [(SearchSourceType.ATTACHMENT, a.id) for a in attachments])
+
+        files = [AttachmentService()._file_path(a.disk_filename) for a in attachments]
+        logger.info("Purged %d wiki pages and %d attachments from the trash", len(expired_ids), len(files))
+        return WikiTrashPurge(page_ids=expired_ids, files=files)
 
     async def list_pages(self, session: AsyncSession, project_id: int) -> list[WikiPage]:
         """List all pages for a project."""
