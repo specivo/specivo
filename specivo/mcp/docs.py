@@ -82,6 +82,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
         "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
         "or 'delete'; warns about overlaps and gaps"
     ),
+    "specivo_ai_billing_accounts": (
+        "AI billing accounts (gateways, company plans, personal keys) and who pays: op='list', 'create', "
+        "'update' or 'deactivate'"
+    ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -273,6 +277,21 @@ When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot
 Needs an unlimited personal API key: a project-limited key and a service account are refused, since
 subscriptions belong to a person. Administrators pass `user="login"` for someone else's.
 
+### Register AI billing accounts
+Billing accounts say what usage was paid through and who pays (employer or employee):
+1. `specivo_ai_billing_accounts(op="list")` -- the company accounts and your own (each subscription
+   is the fee schedule of one of yours)
+2. A company gateway (administrators): `specivo_ai_billing_accounts(op="create", owner="instance",
+   slug="corp-gateway", name="Company gateway", kind="gateway", payer="employer",
+   route_patterns=["corp-*"], default_cost_type="api")` -- usage whose route matches is paid through it
+3. A personal API key used for work: `op="create"`, `kind="api_key"`, `payer="employee"`,
+   `reimburse_share="0.5"` for the part your employer pays back
+4. `op="update"` (`account_id` plus fields) to change one; `op="deactivate"` to switch one off (accounts
+   are never deleted; `is_active=true` switches one on again)
+Changing an account's payer, patterns, tools, default cost type or state re-resolves the usage it
+affects. A project's payer default (employer, employee or none) is a project setting
+(`ai_usage_payer_default`), used when no account decides.
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -385,6 +404,10 @@ the security audit log. Notable cases:
   key of a person (not a service account); changing them needs self-service on. Administrators reach
   anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events. Every
   change over MCP writes `ai_subscriptions_changed`.
+- `specivo_ai_billing_accounts` needs an unlimited key. Everyone lists the instance accounts and
+  their own; company accounts (`owner="instance"`) and other people's (`owner="login"`) are changed
+  by administrators only, and those changes write `ai_billing_account_*` events. Changing your own
+  needs self-service on. Every change over MCP writes `ai_billing_accounts_changed`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
@@ -408,8 +431,8 @@ on them for approvals and retries:
   `specivo_tag` and `specivo_ai_usage`: a repeat with the same arguments
   changes nothing more.
 - Creates, comments, appends, `specivo_edit_description`, `specivo_edit_wiki`,
-  `specivo_log_time`, `specivo_log_ai_usage`, `specivo_timer` and
-  `specivo_metadata` are not idempotent: do not blindly retry them after a
+  `specivo_log_time`, `specivo_log_ai_usage`, `specivo_timer`,
+  `specivo_metadata` and `specivo_ai_billing_accounts` are not idempotent: do not blindly retry them after a
   timeout; check first whether the first call went through.
 - **openWorldHint** is false everywhere: every tool acts on this instance only.
   Tools with an `op` argument carry the hints of their most far-reaching op.

@@ -178,6 +178,21 @@ tool call. Notes are
 never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 
 
+### AI billing accounts
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_billing_account_created` | the administrator | `account_id`, `slug`, `name`, `kind`, `owner` (`instance`, or the login of the person who owns it), `owner_user_id`, `payer`, `reimburse_share`, `route_patterns`, `tool_slugs`, `default_cost_type`, `is_active` |
+| `ai_billing_account_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new` |
+| `ai_billing_account_deactivated` | the administrator | as for `ai_billing_account_updated`, when the change switched the account off |
+| `ai_usage_payer_default_changed` | whoever changed the project setting | `project_key`, `old`, `new` (`employer`, `employee` or `none`), `entries` and `changed` (the usage entries looked at and changed) |
+| `ai_billing_accounts_changed` | the account whose key an agent used, over MCP (`specivo_ai_billing_accounts` creating, updating or switching off) | `tool: "ai_billing_accounts"`, `source: "mcp"`, `op`, `account_ids`, `owner`, and for an update the changed `fields` |
+
+Every change to a company account is recorded, and an administrator's change to **somebody else's**
+personal account. People's changes to their own accounts are not, except that every change over MCP
+is `ai_billing_accounts_changed`. When a change re-prices usage, `ai_usage_costs_recomputed` is
+written too. See [AI billing accounts](ai-billing-accounts.md).
+
 ### AI usage
 
 | Event | Who acted | Details |

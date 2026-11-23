@@ -225,6 +225,8 @@ def _line(sub: AiSubscription, tools: _Tools) -> str:
         f"{_money(sub.amount, sub.currency_code)} {_period(sub.billing_period)}, "
         f"{_dates(sub.starts_on, sub.ends_on)}; covers: {_covers(tools, sub.provider, sub.tool_slugs or [])}"
     )
+    if sub.billing_account_id is not None:
+        text += f"; billing account #{sub.billing_account_id}"
     if sub.notes:
         text += f"; notes: {sub.notes}"
     return text

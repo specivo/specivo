@@ -208,6 +208,24 @@ class AuditEvent(StrEnum):
     # add, update, end, delete; every MCP call is audited): ``op``,
     # ``subscription_ids``, ``target_login`` and, for a change, ``fields``.
     AI_SUBSCRIPTIONS_CHANGED = "ai_subscriptions_changed"
+    # AI billing accounts. An instance account added, changed or deactivated
+    # (always: administrators manage them), or an administrator's change to
+    # somebody else's personal account (details: ``account_id``, ``slug``,
+    # ``name``, ``kind``, ``owner`` = ``instance`` or the owner's login,
+    # ``owner_user_id``, ``payer``, ``reimburse_share``, ``route_patterns``,
+    # ``tool_slugs``, ``default_cost_type``, ``is_active``; a change adds
+    # ``changes``: ``{field: {old, new}}``). People's changes to their own
+    # accounts are not audited. A project's AI usage payer default changed
+    # (``project_key``, ``old``, ``new``; ``none`` when unset), with the
+    # number of entries re-resolved (``entries``, ``changed``).
+    AI_BILLING_ACCOUNT_CREATED = "ai_billing_account_created"
+    AI_BILLING_ACCOUNT_UPDATED = "ai_billing_account_updated"
+    AI_BILLING_ACCOUNT_DEACTIVATED = "ai_billing_account_deactivated"
+    AI_USAGE_PAYER_DEFAULT_CHANGED = "ai_usage_payer_default_changed"
+    # MCP tool calls that change AI billing accounts (``specivo_ai_billing_accounts``
+    # create, update, deactivate; every MCP call is audited): ``op``,
+    # ``account_ids``, ``owner`` and, for a change, ``fields``.
+    AI_BILLING_ACCOUNTS_CHANGED = "ai_billing_accounts_changed"
     # AI usage entries. Logged in another user's name (details: ``entry_id``,
     # ``target_user_id``, ``target_login``, ``source``, ``tool``,
     # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
@@ -299,6 +317,15 @@ _AI_SUBSCRIPTION_ROW_EVENTS = frozenset(
     }
 )
 _AI_SUBSCRIPTION_EVENTS = _AI_SUBSCRIPTION_ROW_EVENTS | {AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED}
+
+_AI_BILLING_ACCOUNT_ROW_EVENTS = frozenset(
+    {
+        AuditEvent.AI_BILLING_ACCOUNT_CREATED,
+        AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
+        AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
+    }
+)
+_AI_BILLING_EVENTS = _AI_BILLING_ACCOUNT_ROW_EVENTS | {AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED}
 
 _AI_USAGE_EVENTS = frozenset(
     {
@@ -396,6 +423,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.RELATION_ADDED,
             AuditEvent.RELATION_REMOVED,
             AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
+            AuditEvent.AI_BILLING_ACCOUNTS_CHANGED,
             AuditEvent.AGENT_SESSION_STARTED,
             AuditEvent.AGENT_TOOL_CALLED,
             AuditEvent.AGENT_APPROVAL_REQUESTED,
@@ -454,6 +482,10 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_SUBSCRIPTION_UPDATED,
             AuditEvent.AI_SUBSCRIPTION_DELETED,
             AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED,
+            AuditEvent.AI_BILLING_ACCOUNT_CREATED,
+            AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
+            AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
+            AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED,
             AuditEvent.HERMES_RECEIVER_CREATED,
             AuditEvent.HERMES_RECEIVER_UPDATED,
             AuditEvent.HERMES_RECEIVER_DELETED,
@@ -1644,6 +1676,38 @@ class SecurityAuditService:
             user_id=user_id,
             resource_type="ai_subscription" if event_type in _AI_SUBSCRIPTION_ROW_EVENTS else "setting",
             resource_id=resource_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+
+    async def log_ai_billing_change(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        user_id: int | None,
+        details: dict[str, Any],
+        resource_id: int | None = None,
+        project_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log an AI billing account added, changed or deactivated, or a project's payer default changed.
+
+        Written in the caller's transaction, in a savepoint, like
+        :meth:`log_exchange_rate_change`.
+        """
+        if event_type not in _AI_BILLING_EVENTS:
+            raise ValueError(f"Not an AI billing event: {event_type!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event_type,
+            user_id=user_id,
+            resource_type="ai_billing_account" if event_type in _AI_BILLING_ACCOUNT_ROW_EVENTS else "setting",
+            resource_id=resource_id,
+            project_id=project_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],

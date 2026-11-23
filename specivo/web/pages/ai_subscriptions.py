@@ -27,8 +27,10 @@ from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedErr
 from specivo.core.i18n import get_locale
 from specivo.core.money import currency_display_name, format_decimal_plain
 from specivo.core.utils import utcnow
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_subscription import AiSubscription, AiTool
 from specivo.models.user import User
+from specivo.services.ai_billing_account_service import AiBillingAccountService
 from specivo.services.ai_subscription_service import AiSubscriptionService, AiToolService, SubscriptionInput
 from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.api_key_scope import require_unlimited_key
@@ -39,6 +41,7 @@ from specivo.web.pages.admin import require_admin
 router = APIRouter(tags=["web-ai-subscriptions"], include_in_schema=False)
 _service = AiSubscriptionService()
 _tools = AiToolService()
+_accounts = AiBillingAccountService()
 
 MY_URL = "/my/ai-subscriptions/"
 ADMIN_URL = "/admin/ai-subscriptions/"
@@ -74,10 +77,19 @@ def _status(sub: AiSubscription, today: date) -> str:
     return "active"
 
 
-def subscription_row(sub: AiSubscription, owner: User | None, tool_names: dict[str, str], today: date) -> dict:
-    """A subscription for the templates."""
+def subscription_row(
+    sub: AiSubscription,
+    owner: User | None,
+    tool_names: dict[str, str],
+    today: date,
+    accounts: dict[int, AiBillingAccount] | None = None,
+) -> dict:
+    """A subscription for the templates, with the billing account it is the fee schedule of."""
     locale = get_locale()
+    account = (accounts or {}).get(sub.billing_account_id) if sub.billing_account_id is not None else None
     return {
+        "billing_account_id": sub.billing_account_id,
+        "billing_account_slug": account.slug if account is not None else "",
         "id": sub.id,
         "user_id": sub.user_id,
         "owner_login": owner.login if owner else "",
@@ -242,13 +254,14 @@ async def _render_my(
     today = utcnow().date()
     rows, _total = await _service.list_subscriptions(db, user_id=user.id, limit=200)
     names = await _tool_names(db)
+    accounts = await _accounts.by_ids(db, (r.billing_account_id for r in rows))
     return get_templates().TemplateResponse(
         request,
         "pages/auth/ai_subscriptions.html",
         context={
             "user": user,
             "active_page": "ai-subscriptions",
-            "subscriptions": [subscription_row(r, user, names, today) for r in rows],
+            "subscriptions": [subscription_row(r, user, names, today, accounts) for r in rows],
             "can_hold": _service.can_hold(user),
             "can_edit": await _service.can_edit_own(db, user),
             "form": form,
@@ -464,6 +477,7 @@ async def _render_admin(  # noqa: PLR0913
     )
     owners = await _service.owners(db, (r.user_id for r in rows))
     names = await _tool_names(db)
+    accounts = await _accounts.by_ids(db, (r.billing_account_id for r in rows))
     selected_user = await db.get(User, user_id) if user_id else None
     filters = {"user_id": str(user_id or ""), "current": current}
     return get_templates().TemplateResponse(
@@ -472,7 +486,7 @@ async def _render_admin(  # noqa: PLR0913
         context={
             "user": user,
             "active_page": "admin",
-            "subscriptions": [subscription_row(r, owners.get(r.user_id), names, today) for r in rows],
+            "subscriptions": [subscription_row(r, owners.get(r.user_id), names, today, accounts) for r in rows],
             "total": total,
             "offset": offset,
             "limit": limit,

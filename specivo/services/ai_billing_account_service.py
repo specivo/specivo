@@ -19,6 +19,13 @@ affect again and re-prices them
 (:meth:`specivo.services.ai_usage_service.AiUsageService.rebill_for_account`),
 in the same transaction.
 
+Changes to instance accounts, and an administrator's changes to somebody
+else's personal account, are audited (``ai_billing_account_created`` /
+``_updated`` / ``_deactivated``); a person's changes to their own accounts are
+not, as for subscriptions. A changed project payer default is audited too
+(``ai_usage_payer_default_changed``) and re-resolves the project's entries
+(:meth:`AiBillingAccountService.change_project_payer_default`).
+
 Lookups for ingest (:meth:`AiBillingAccountService.find_by_slug`,
 :meth:`~AiBillingAccountService.instance_accounts`,
 :meth:`~AiBillingAccountService.personal_accounts`) return active accounts
@@ -28,12 +35,13 @@ and :func:`~specivo.core.ai_billing.covers_tool`.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_billing import (
@@ -47,14 +55,22 @@ from specivo.core.ai_billing import (
     PROJECT_PAYER_DEFAULTS,
     normalize_account_slug,
     normalize_route_pattern,
+    project_payer_default,
 )
 from specivo.core.ai_subscriptions import normalize_tool_slug
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.models.ai_billing_account import AiBillingAccount
+from specivo.models.ai_subscription import AiSubscription
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.ai_subscription_service import AiSubscriptionService
 from specivo.services.api_key_scope import is_global_admin
+from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
+
+if TYPE_CHECKING:
+    from fastapi import Request
+
+logger = logging.getLogger(__name__)
 
 NAME_MAX_LENGTH = 100
 MAX_TOOL_SLUGS = 20
@@ -75,6 +91,10 @@ ACCOUNT_FIELDS: tuple[str, ...] = (
 )
 
 _subscriptions = AiSubscriptionService()
+_audit = SecurityAuditService()
+
+#: ``owner`` of an instance account in audit details and listings.
+INSTANCE_OWNER = "instance"
 
 #: Fields whose change makes usage entries resolve to another account, payer or cost type.
 RESOLUTION_FIELDS: tuple[str, ...] = ("payer", "route_patterns", "tool_slugs", "default_cost_type", "is_active")
@@ -215,6 +235,32 @@ _FIELD_PARSERS: dict[str, Callable[[Any], Any]] = {
 }
 
 
+def _audit_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return format(value.normalize(), "f")
+    if isinstance(value, list):
+        return list(value)
+    return value
+
+
+def account_details(account: AiBillingAccount, owner: User | None) -> dict[str, Any]:
+    """Audit details of an account (no free text beyond its name)."""
+    return {
+        "account_id": account.id,
+        "slug": account.slug,
+        "name": account.name,
+        "kind": account.kind,
+        "owner": INSTANCE_OWNER if account.owner_user_id is None else (owner.login if owner else None),
+        "owner_user_id": account.owner_user_id,
+        "payer": account.payer,
+        "reimburse_share": _audit_value(account.reimburse_share),
+        "route_patterns": list(account.route_patterns or []),
+        "tool_slugs": list(account.tool_slugs or []),
+        "default_cost_type": account.default_cost_type,
+        "is_active": account.is_active,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
@@ -284,6 +330,64 @@ class AiBillingAccountService:
         stmt = stmt.order_by(AiBillingAccount.owner_user_id.is_not(None), AiBillingAccount.name, AiBillingAccount.id)
         return list((await session.execute(stmt)).scalars().all())
 
+    async def list_accounts(
+        self,
+        session: AsyncSession,
+        *,
+        scope: str = "all",
+        owner_user_id: int | None = None,
+        include_inactive: bool = True,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[AiBillingAccount], int]:
+        """Accounts for administrators, instance ones first, by name.
+
+        *scope* ``instance`` (company accounts), ``personal`` (people's; with
+        *owner_user_id* one person's) or ``all``. Callers decide who may list whose.
+        """
+        stmt = select(AiBillingAccount)
+        if scope == "instance":
+            stmt = stmt.where(AiBillingAccount.owner_user_id.is_(None))
+        elif scope == "personal":
+            stmt = stmt.where(
+                AiBillingAccount.owner_user_id == owner_user_id
+                if owner_user_id is not None
+                else AiBillingAccount.owner_user_id.is_not(None)
+            )
+        if not include_inactive:
+            stmt = stmt.where(AiBillingAccount.is_active.is_(True))
+        total = (await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+        stmt = (
+            stmt.order_by(AiBillingAccount.owner_user_id.is_not(None), AiBillingAccount.name, AiBillingAccount.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list((await session.execute(stmt)).scalars().all()), int(total)
+
+    async def subscription_links(self, session: AsyncSession, account_ids: Iterable[int]) -> dict[int, list[int]]:
+        """The subscriptions each account is the fee schedule of (account id to subscription ids)."""
+        ids = sorted(set(account_ids))
+        if not ids:
+            return {}
+        rows = await session.execute(
+            select(AiSubscription.billing_account_id, AiSubscription.id)
+            .where(AiSubscription.billing_account_id.in_(ids))
+            .order_by(AiSubscription.id)
+        )
+        links: dict[int, list[int]] = {}
+        for account_id, sub_id in rows.all():
+            if account_id is not None:
+                links.setdefault(account_id, []).append(sub_id)
+        return links
+
+    async def by_ids(self, session: AsyncSession, account_ids: Iterable[int | None]) -> dict[int, AiBillingAccount]:
+        """Accounts by id (callers check visibility)."""
+        ids = sorted({i for i in account_ids if i is not None})
+        if not ids:
+            return {}
+        rows = await session.execute(select(AiBillingAccount).where(AiBillingAccount.id.in_(ids)))
+        return {a.id: a for a in rows.scalars().all()}
+
     async def instance_accounts(self, session: AsyncSession, *, active_only: bool = True) -> list[AiBillingAccount]:
         """Instance accounts, oldest first (the order ingest tries them in)."""
         stmt = select(AiBillingAccount).where(AiBillingAccount.owner_user_id.is_(None))
@@ -319,9 +423,18 @@ class AiBillingAccountService:
     # -- writes ----------------------------------------------------------------
 
     async def create(
-        self, session: AsyncSession, data: BillingAccountInput, *, owner: User | None, actor: User
+        self,
+        session: AsyncSession,
+        data: BillingAccountInput,
+        *,
+        owner: User | None,
+        actor: User,
+        request: Request | None = None,
     ) -> AiBillingAccount:
-        """Add an instance account (*owner* ``None``, administrators) or a personal account of *owner*."""
+        """Add an instance account (*owner* ``None``, administrators) or a personal account of *owner*.
+
+        Audited for an instance account and when *actor* is not *owner*.
+        """
         owner_id = owner.id if owner is not None else None
         await self._require_can_manage(session, actor, owner_id)
         if owner is not None and not _subscriptions.can_hold(owner):
@@ -338,16 +451,34 @@ class AiBillingAccountService:
         await session.flush()
         if account.route_patterns and account.is_active:
             # A new account takes the routed entries its patterns now match.
-            await self._rebill(session, account, actor)
+            await self._rebill(session, account, actor, request)
+        if self._audited(account, actor):
+            await self._log(
+                session,
+                AuditEvent.AI_BILLING_ACCOUNT_CREATED,
+                actor,
+                request,
+                account_details(account, owner),
+                account.id,
+            )
         return account
 
     async def update(
-        self, session: AsyncSession, account: AiBillingAccount, changes: Mapping[str, Any], *, actor: User
+        self,
+        session: AsyncSession,
+        account: AiBillingAccount,
+        changes: Mapping[str, Any],
+        *,
+        actor: User,
+        request: Request | None = None,
     ) -> AiBillingAccount:
         """Change the fields in *changes* (keys of :data:`ACCOUNT_FIELDS`).
 
         Switching the payer to ``employer`` drops the reimbursement share
-        unless *changes* sets one (which is then refused).
+        unless *changes* sets one (which is then refused). Audited (as
+        ``_deactivated`` when it switches the account off) for an instance
+        account and when *actor* is not the owner, only when something
+        changed.
         """
         await self._require_can_manage(session, actor, account.owner_user_id)
         unknown = set(changes) - set(ACCOUNT_FIELDS)
@@ -356,24 +487,75 @@ class AiBillingAccountService:
         values = self._validated(dict(changes), current=account)
         if "slug" in values and values["slug"] != account.slug:
             await self._require_free_slug(session, values["slug"], account.owner_user_id, account.id)
-        before = {name: getattr(account, name) for name in RESOLUTION_FIELDS}
+        before = {name: getattr(account, name) for name in ACCOUNT_FIELDS}
         for key, value in values.items():
             setattr(account, key, value)
+        diff = {
+            name: {"old": _audit_value(before[name]), "new": _audit_value(getattr(account, name))}
+            for name in ACCOUNT_FIELDS
+            if getattr(account, name) != before[name]
+        }
+        if not diff:
+            return account
         await session.flush()
-        if any(getattr(account, name) != before[name] for name in RESOLUTION_FIELDS):
-            await self._rebill(session, account, actor)
+        if any(name in diff for name in RESOLUTION_FIELDS):
+            await self._rebill(session, account, actor, request)
+        if self._audited(account, actor):
+            owner = await session.get(User, account.owner_user_id) if account.owner_user_id is not None else None
+            deactivated = before["is_active"] and not account.is_active
+            await self._log(
+                session,
+                AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED if deactivated else AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
+                actor,
+                request,
+                {**account_details(account, owner), "changes": diff},
+                account.id,
+            )
         return account
 
     @staticmethod
-    async def _rebill(session: AsyncSession, account: AiBillingAccount, actor: User) -> None:
+    async def _rebill(
+        session: AsyncSession, account: AiBillingAccount, actor: User, request: Request | None = None
+    ) -> None:
         """Resolve and re-price the usage entries the change of *account* may affect, like a price change."""
         from specivo.services.ai_usage_service import AiUsageService
 
-        await AiUsageService().rebill_for_account(session, account, actor_id=actor.id)
+        await AiUsageService().rebill_for_account(session, account, actor_id=actor.id, request=request)
 
-    async def deactivate(self, session: AsyncSession, account: AiBillingAccount, *, actor: User) -> AiBillingAccount:
+    async def deactivate(
+        self, session: AsyncSession, account: AiBillingAccount, *, actor: User, request: Request | None = None
+    ) -> AiBillingAccount:
         """Switch an account off; usage keeps pointing at it."""
-        return await self.update(session, account, {"is_active": False}, actor=actor)
+        return await self.update(session, account, {"is_active": False}, actor=actor, request=request)
+
+    @staticmethod
+    def _audited(account: AiBillingAccount, actor: User) -> bool:
+        """Instance accounts always; personal ones when somebody else (an administrator) changes them."""
+        return account.owner_user_id is None or account.owner_user_id != actor.id
+
+    @staticmethod
+    async def _log(
+        session: AsyncSession,
+        event: AuditEvent,
+        actor: User | None,
+        request: Request | None,
+        details: dict[str, Any],
+        resource_id: int | None,
+        project_id: int | None = None,
+    ) -> None:
+        # An audit write never breaks the change it records.
+        try:
+            await _audit.log_ai_billing_change(
+                session,
+                event,
+                user_id=actor.id if actor is not None else None,
+                details=details,
+                resource_id=resource_id,
+                project_id=project_id,
+                request=request,
+            )
+        except Exception:
+            logger.exception("Failed to write the %s audit event", event)
 
     async def _require_free_slug(
         self, session: AsyncSession, slug: str, owner_id: int | None, exclude_id: int | None
@@ -428,3 +610,44 @@ class AiBillingAccountService:
             settings[PROJECT_PAYER_DEFAULT_KEY] = value
         project.settings = settings
         return value
+
+    async def change_project_payer_default(
+        self,
+        session: AsyncSession,
+        project: Project,
+        value: str,
+        *,
+        actor: User,
+        request: Request | None = None,
+    ) -> str:
+        """Set *project*'s payer default and resolve its entries again; audited when it changes.
+
+        Callers check the project management permission. The entries whose
+        payer came from the default (or from nothing) are re-resolved in the
+        same transaction, like an account change.
+        """
+        from specivo.services.ai_usage_service import AiUsageService
+
+        old = project_payer_default(project.settings)
+        new = self.set_project_payer_default(project, value)
+        if new == old:
+            return new
+        session.add(project)
+        await session.flush()
+        outcome = await AiUsageService().rebill_for_project(session, project, actor_id=actor.id, request=request)
+        await self._log(
+            session,
+            AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED,
+            actor,
+            request,
+            {
+                "project_key": project.key,
+                "old": old,
+                "new": new,
+                "entries": outcome.entries,
+                "changed": outcome.changed,
+            },
+            None,
+            project_id=project.id,
+        )
+        return new

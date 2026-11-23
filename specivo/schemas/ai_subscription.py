@@ -150,6 +150,9 @@ class AiSubscriptionOut(BaseModel):
     starts_on: date
     ends_on: date | None
     notes: str | None
+    billing_account_id: int | None = Field(
+        None, description="The personal billing account this subscription is the fee schedule of"
+    )
     created_by_id: int | None
     created_at: datetime | None
     updated_at: datetime | None
@@ -170,6 +173,7 @@ class AiSubscriptionOut(BaseModel):
             starts_on=row.starts_on,
             ends_on=row.ends_on,
             notes=row.notes,
+            billing_account_id=row.billing_account_id,
             created_by_id=row.created_by_id,
             created_at=row.created_at,
             updated_at=row.updated_at,

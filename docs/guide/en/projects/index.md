@@ -145,6 +145,16 @@ Only currencies an administrator has enabled are offered; see
 [Currencies and the reporting currency](../install/currencies.md). Changing it needs the *Manage
 project* permission and is recorded in the audit log.
 
+### Who pays for AI usage
+
+The **General** tab also has **Who pays for AI usage**: *The employer*, *The employee* or *Not
+set*. It decides the payer of [AI usage](ai-usage.md) logged on the project when no
+[billing account](../install/ai-billing-accounts.md) does, for example usage from a tool that
+reports no route and no account. Changing it updates the usage already logged that took the
+default; usage an account decided keeps its payer. Changing it needs the *Manage project*
+permission and is recorded in the [audit log](../install/audit-log.md#ai-billing-accounts). Through
+the API it is the project's `ai_usage_payer_default` (`employer`, `employee` or `none`).
+
 ### Public projects and search engines
 
 A public project that an administrator opts in to anonymous access can be read without an account

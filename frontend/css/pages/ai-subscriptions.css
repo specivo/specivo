@@ -74,3 +74,6 @@
   .sp-sub-filters .form-input,
   .sp-sub-preset .form-input { width: 100%; }
 }
+
+/* AI billing accounts (same forms and tables as subscriptions) */
+.sp-bill-routes { font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }

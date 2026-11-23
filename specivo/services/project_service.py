@@ -510,6 +510,13 @@ class ProjectService:
                 session, project, data.reporting_currency_code, actor, request=request
             )
 
+        if data.ai_usage_payer_default is not None and actor is not None:
+            from specivo.services.ai_billing_account_service import AiBillingAccountService
+
+            await AiBillingAccountService().change_project_payer_default(
+                session, project, data.ai_usage_payer_default, actor=actor, request=request
+            )
+
         if "parent_id" in data.model_fields_set:
             if data.parent_id is not None and actor is not None:
                 await self._require_parent_manageable(session, data.parent_id, actor)

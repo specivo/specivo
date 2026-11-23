@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_billing_account_macros.html" import error_text, kind_label, payer_label, state_badge, routes_cell, tools_cell with context %}
+
+{% block title %}{% trans %}My AI billing accounts{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/my/profile/">{% trans %}Profile{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}My AI billing accounts{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}My AI billing accounts{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}What your AI usage is paid through, and who pays: the company's gateways and plans, and your own subscriptions and API keys. Set the share your employer pays back on an account you pay for. Only you and administrators see your own accounts.{% endtrans %} <a href="{{ base }}/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %} &rarr;</a></p>
+
+{% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account added.{% endtrans %}</div>
+{% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account saved.{% endtrans %}</div>
+{% elif notice == "deactivated" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account switched off.{% endtrans %}</div>
+{% endif %}
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="billing-account-error">{{ error_text(error) }}</div>{% endif %}
+
+{% if not can_hold %}
+<div class="flash flash-info" role="status" data-testid="billing-account-service-account">{% trans %}Service accounts do not own AI billing accounts. Usage they report on behalf of people is matched to those people's accounts.{% endtrans %}</div>
+{% else %}
+<div class="card sp-card-pad sp-mb-md" data-testid="my-billing-accounts-card">
+  <h3 class="sp-card-h3">{% trans %}Your accounts{% endtrans %}</h3>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="my-billing-accounts-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Account{% endtrans %}</th>
+          <th>{% trans %}Kind{% endtrans %}</th>
+          <th>{% trans %}Who pays{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Reimbursed{% endtrans %}</th>
+          <th>{% trans %}Routes{% endtrans %}</th>
+          <th>{% trans %}Tools{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          {% if can_edit %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in accounts %}
+        <tr data-account-id="{{ a.id }}">
+          <td><strong>{{ a.name }}</strong> <span class="sp-text-muted-xs">{{ a.slug }}</span>{% if a.subscription_ids %}<div class="sp-text-muted-xs"><a href="{{ base }}/my/ai-subscriptions/">{% trans %}Fee schedule of a subscription{% endtrans %}</a></div>{% endif %}</td>
+          <td>{{ kind_label(a.kind) }}</td>
+          <td>{{ payer_label(a.payer) }}</td>
+          <td class="sp-sub-num">{% if a.reimburse_percent %}{{ a.reimburse_percent }}%{% endif %}</td>
+          <td>{{ routes_cell(a) }}</td>
+          <td>{{ tools_cell(a) }}</td>
+          <td>{{ state_badge(a) }}</td>
+          {% if can_edit %}<td><a class="sp-btn-sm" href="{{ base }}/my/ai-billing-accounts/{{ a.id }}/">{% trans %}Edit{% endtrans %}</a></td>{% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="sp-text-muted">{% trans %}You have no AI billing accounts. Each subscription you add gets one.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="instance-billing-accounts-card">
+  <h3 class="sp-card-h3">{% trans %}Company accounts{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}Managed by administrators. Usage through one of these is matched by its route, or by naming its slug in your reporter's configuration.{% endtrans %}</p>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="instance-billing-accounts-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Account{% endtrans %}</th>
+          <th>{% trans %}Kind{% endtrans %}</th>
+          <th>{% trans %}Who pays{% endtrans %}</th>
+          <th>{% trans %}Routes{% endtrans %}</th>
+          <th>{% trans %}Tools{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in instance_accounts %}
+        <tr data-account-id="{{ a.id }}">
+          <td><strong>{{ a.name }}</strong> <span class="sp-text-muted-xs">{{ a.slug }}</span></td>
+          <td>{{ kind_label(a.kind) }}</td>
+          <td>{{ payer_label(a.payer) }}</td>
+          <td>{{ routes_cell(a) }}</td>
+          <td>{{ tools_cell(a) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="sp-text-muted">{% trans %}There are no company accounts.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if can_hold %}
+{% if can_edit %}
+<div class="card sp-card-pad" id="new-billing-account" data-testid="new-billing-account-card">
+  <h3 class="sp-card-h3">{% trans %}Add an account{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}For example a personal API key you pay per token. Subscriptions get their account when you add them.{% endtrans %}</p>
+  {% set submit_label = _("Add account") %}
+  {% set edit = False %}
+  {% include "pages/auth/_ai_billing_account_form.html" %}
+</div>
+{% else %}
+<div class="flash flash-info" role="status" data-testid="billing-account-self-service-off">{% trans %}An administrator manages AI billing accounts on this instance. Ask one to add or change yours.{% endtrans %}</div>
+{% endif %}
+{% endif %}
+{% endblock %}

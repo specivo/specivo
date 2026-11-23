@@ -32,7 +32,7 @@
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, graphMetadataKeys: {{ graph_metadata_keys | tojson }}, reportingCurrency: {{ (project.reporting_currency_code or "") | tojson }}, i18n: {{ {
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, graphMetadataKeys: {{ graph_metadata_keys | tojson }}, reportingCurrency: {{ (project.reporting_currency_code or "") | tojson }}, payerDefault: {{ ai_usage_payer_default | tojson }}, i18n: {{ {
     "saved": _("Saved successfully."),
     "errorWithMessage": _("Error: %(message)s"),
     "saveFailed": _("Failed to save"),
@@ -89,6 +89,15 @@
           {% endfor %}
         </select>
         <div class="form-hint">{% trans %}The currency this project's money reports are shown in.{% endtrans %}{% if user.is_admin %} <a href="{{ base }}/admin/currencies/">{% trans %}Currencies{% endtrans %}</a>{% endif %}</div>
+      </div>
+      <div class="form-group sp-form-group-mb-md">
+        <label class="form-label" for="project-ai-payer-default">{% trans %}Who pays for AI usage{% endtrans %}</label>
+        <select class="form-input" id="project-ai-payer-default" x-model="payerDefault" aria-describedby="project-ai-payer-default-hint" data-testid="project-ai-payer-default">
+          <option value="none">{% trans %}Not set{% endtrans %}</option>
+          <option value="employer">{% trans %}The employer{% endtrans %}</option>
+          <option value="employee">{% trans %}The employee{% endtrans %}</option>
+        </select>
+        <div class="form-hint" id="project-ai-payer-default-hint">{% trans %}Used for AI usage on this project when no billing account decides who paid. Changing it updates the usage already logged that took the default.{% endtrans %}</div>
       </div>
       <div x-show="message" class="flash sp-mb-md" x-text="message" role="status" data-testid="project-general-message"></div>
       <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving" data-testid="project-general-save">{% trans %}Save{% endtrans %}</button>

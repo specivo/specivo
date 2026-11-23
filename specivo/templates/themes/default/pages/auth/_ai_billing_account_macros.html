@@ -1,0 +1,52 @@
+{% macro error_text(error) -%}
+{% set code = error.code %}{% set field = error.field %}
+{% if code == "self_service_off" %}{% trans %}An administrator manages AI billing accounts on this instance. Ask one to change yours.{% endtrans %}
+{% elif code == "ai_billing_account_owner_invalid" %}{% trans %}Service accounts do not own AI billing accounts.{% endtrans %}
+{% elif code == "ai_billing_account_exists" %}{% trans %}An account with this slug exists. Choose another slug.{% endtrans %}
+{% elif code == "ai_billing_account_invalid" %}
+  {% if field == "slug" %}{% trans %}The slug is 1 to 64 lower case letters, digits, dots, dashes and underscores, starting with a letter or digit.{% endtrans %}
+  {% elif field == "name" %}{% trans %}Enter a name of at most 100 characters.{% endtrans %}
+  {% elif field == "kind" %}{% trans %}Choose the kind of account.{% endtrans %}
+  {% elif field == "payer" %}{% trans %}Choose who pays.{% endtrans %}
+  {% elif field == "reimburse_share" %}{% trans %}Enter the reimbursed share as a number from 0 to 1 with at most 4 decimal places, such as 0.5. Only accounts the employee pays for have one.{% endtrans %}
+  {% elif field == "route_patterns" %}{% trans %}Enter at most 20 route patterns, separated by spaces or commas, each without spaces and at most 100 characters.{% endtrans %}
+  {% elif field == "tool_slugs" %}{% trans %}One of the tools no longer exists. Choose the tools again.{% endtrans %}
+  {% elif field == "default_cost_type" %}{% trans %}Choose a default cost type from the list.{% endtrans %}
+  {% else %}{% trans %}Check the account and try again.{% endtrans %}{% endif %}
+{% elif code %}{% trans %}The change could not be saved.{% endtrans %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro kind_label(kind) -%}
+{% if kind == "gateway" %}{% trans %}Gateway{% endtrans %}
+{% elif kind == "subscription" %}{% trans %}Subscription{% endtrans %}
+{% elif kind == "api_key" %}{% trans %}API key{% endtrans %}
+{% elif kind == "local" %}{% trans %}Local model{% endtrans %}
+{% else %}{{ kind }}{% endif %}
+{%- endmacro %}
+
+{% macro payer_label(payer) -%}
+{% if payer == "employer" %}{% trans %}Employer{% endtrans %}
+{% elif payer == "employee" %}{% trans %}Employee{% endtrans %}
+{% else %}{{ payer }}{% endif %}
+{%- endmacro %}
+
+{% macro cost_type_label(cost_type) -%}
+{% if cost_type == "api" %}{% trans %}API (pay per token){% endtrans %}
+{% elif cost_type == "subscription" %}{% trans %}Subscription{% endtrans %}
+{% elif cost_type == "local" %}{% trans %}Local{% endtrans %}
+{% elif cost_type == "free" %}{% trans %}Free{% endtrans %}
+{% else %}{{ cost_type }}{% endif %}
+{%- endmacro %}
+
+{% macro state_badge(a) -%}
+{% if a.is_active %}<span class="sp-badge-info">{% trans %}Active{% endtrans %}</span>{% else %}<span class="sp-sub-badge">{% trans %}Off{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro routes_cell(a) -%}
+{% if a.route_patterns %}<code class="sp-bill-routes">{{ a.route_patterns | join(" ") }}</code>{% else %}<span class="sp-text-muted">{% trans %}None{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro tools_cell(a) -%}
+{% if a.tools %}{{ a.tools | join(", ") }}{% else %}<span class="sp-text-muted">{% trans %}Every tool{% endtrans %}</span>{% endif %}
+{%- endmacro %}

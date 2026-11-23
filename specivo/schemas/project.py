@@ -152,6 +152,16 @@ class ProjectUpdate(BaseModel):
     # the payload: a code sets the override (it must be an enabled currency),
     # null or "" clears it so the instance reporting currency applies.
     reporting_currency_code: str | None = None
+    # Who pays for AI usage on the project when no billing account decides:
+    # employer, employee or none. Changing it re-resolves the project's
+    # entries whose payer came from it.
+    ai_usage_payer_default: Literal["employer", "employee", "none"] | None = Field(
+        default=None,
+        description=(
+            "Who pays for AI usage logged on this project when no billing account decides: "
+            "employer, employee or none (unknown)."
+        ),
+    )
     # parent_id: use model_fields_set to detect whether this field was provided.
     # - Not in payload          → not in model_fields_set  → do not change parent
     # - parent_id=null in JSON  → in model_fields_set, value is None  → move to root
@@ -265,6 +275,9 @@ class ProjectOut(BaseModel):
     # The reporting currency in effect (the override, else the instance
     # setting). ``None`` in list responses and for anonymous visitors.
     reporting_currency: str | None = None
+    # Who pays for AI usage when no billing account decides (employer,
+    # employee or none). ``None`` in list responses and for anonymous visitors.
+    ai_usage_payer_default: str | None = None
 
 
 # ---------------------------------------------------------------------------

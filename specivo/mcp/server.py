@@ -23,6 +23,7 @@ from pydantic import Field
 
 from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
+from specivo.mcp.ai_billing_account_tools import _ai_billing_accounts
 from specivo.mcp.ai_subscription_tools import SubscriptionPeriod, _ai_subscriptions
 from specivo.mcp.ai_usage_tools import _ai_usage, _ai_usage_report, _log_ai_usage
 from specivo.mcp.annotations import TOOL_ANNOTATIONS
@@ -1724,6 +1725,76 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
             active_on=active_on,
             offset=offset,
             limit=limit,
+        )
+
+
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_ai_billing_accounts"],
+    description=(
+        "Manage AI billing accounts: what AI usage is paid through (a corporate gateway, a company plan, a "
+        "personal subscription or API key, a local model) and who pays (employer or employee). Ops: list "
+        "(the instance accounts and yours; owner='instance' for the company accounts only, or a login for "
+        "someone else's, administrators only; include_inactive); create (slug, name, kind, payer, plus "
+        "reimburse_share, route_patterns, tool_slugs, default_cost_type; owner='instance' creates a company "
+        "account, administrators only; otherwise it is yours, or the named person's for administrators); "
+        "update (account_id plus the fields to change; is_active=true switches an account on again; '' "
+        "clears reimburse_share or default_cost_type); deactivate (account_id; accounts are never deleted). "
+        "kind: gateway, subscription, api_key or local. payer: employer or employee. reimburse_share: 0 to 1 "
+        "as a string such as '0.5', the part an employer pays back, employee-paid accounts only. "
+        "route_patterns: case-insensitive patterns (* wildcard) over the route a reporter sends, e.g. a "
+        "gateway's provider id. tool_slugs: the tools covered ([] = every tool). default_cost_type: "
+        "subscription, api, local or free, used when a record gives none. Creating an account with route "
+        "patterns, or changing its payer, patterns, tools, default cost type or state, re-resolves the "
+        "usage it affects. Needs an unlimited API key. Changing your own needs AI subscription self-service "
+        "on (the default) unless you are an administrator."
+    ),
+)
+async def specivo_ai_billing_accounts(  # noqa: PLR0913
+    op: Annotated[str, Field(description="One of: list, create, update, deactivate.")],
+    owner: Annotated[
+        str | None,
+        Field(description="list, create: 'instance' for company accounts, or a login (administrators only)."),
+    ] = None,
+    account_id: Annotated[int | None, Field(description="update, deactivate: the account ID.")] = None,
+    slug: Annotated[str | None, Field(description="create, update: what a reporter sends as billing_account.")] = None,
+    name: Annotated[str | None, Field(description="create, update: display name.")] = None,
+    kind: Annotated[str | None, Field(description="create, update: gateway, subscription, api_key or local.")] = None,
+    payer: Annotated[str | None, Field(description="create, update: employer or employee.")] = None,
+    reimburse_share: Annotated[
+        str | int | float | None, Field(description="create, update: 0 to 1 as a string, e.g. '0.5'; '' clears.")
+    ] = None,
+    route_patterns: Annotated[
+        list[str] | None, Field(description="create, update: route patterns, e.g. ['corp-*'] ([] clears).")
+    ] = None,
+    tool_slugs: Annotated[
+        list[str] | None, Field(description="create, update: tools covered ([] = every tool).")
+    ] = None,
+    default_cost_type: Annotated[
+        str | None, Field(description="create, update: subscription, api, local or free; '' clears.")
+    ] = None,
+    is_active: Annotated[bool | None, Field(description="update: true switches the account on again.")] = None,
+    include_inactive: Annotated[bool, Field(description="list: also accounts that are switched off.")] = False,
+) -> str:
+    changes = {
+        "slug": slug,
+        "name": name,
+        "kind": kind,
+        "payer": payer,
+        "reimburse_share": reimburse_share,
+        "route_patterns": route_patterns,
+        "tool_slugs": tool_slugs,
+        "default_cost_type": default_cost_type,
+        "is_active": is_active,
+    }
+    async with _get_session_and_user() as (session, caller):
+        return await _ai_billing_accounts(
+            session,
+            caller,
+            op,
+            owner=owner,
+            account_id=account_id,
+            changes=changes,
+            include_inactive=include_inactive,
         )
 
 

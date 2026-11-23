@@ -1,0 +1,59 @@
+{# The billing account form. Context: form, form_action, kinds, payers, cost_types, tools; submit_label; edit (bool). #}
+{% from "pages/auth/_ai_billing_account_macros.html" import kind_label, payer_label, cost_type_label with context %}
+<form method="post" action="{{ form_action | prefixed }}" class="sp-sub-form" data-testid="billing-account-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="sp-sub-field">
+    <label class="form-label" for="bill-name">{% trans %}Name{% endtrans %}</label>
+    <input id="bill-name" type="text" name="name" class="form-input" maxlength="100" value="{{ form.name }}" placeholder="{{ _('Company AI gateway') }}" required data-testid="billing-account-name">
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="bill-slug">{% trans %}Slug{% endtrans %}</label>
+    <input id="bill-slug" type="text" name="slug" class="form-input" maxlength="64" value="{{ form.slug }}" placeholder="corp-gateway" required aria-describedby="bill-slug-hint" data-testid="billing-account-slug"{% if error.field == "slug" %} aria-invalid="true"{% endif %}>
+    <p class="form-hint" id="bill-slug-hint">{% trans %}What a reporter sends as billing_account. Lower case letters, digits, dots, dashes and underscores.{% endtrans %}</p>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="bill-kind">{% trans %}Kind{% endtrans %}</label>
+    <select id="bill-kind" name="kind" class="form-input" data-testid="billing-account-kind">
+      {% for k in kinds %}<option value="{{ k }}" {{ 'selected' if k == form.kind else '' }}>{{ kind_label(k) }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="bill-payer">{% trans %}Who pays{% endtrans %}</label>
+    <select id="bill-payer" name="payer" class="form-input" data-testid="billing-account-payer">
+      {% for p in payers %}<option value="{{ p }}" {{ 'selected' if p == form.payer else '' }}>{{ payer_label(p) }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="bill-share">{% trans %}Reimbursed share (optional){% endtrans %}</label>
+    <input id="bill-share" type="text" inputmode="decimal" name="reimburse_share" class="form-input" value="{{ form.reimburse_share }}" placeholder="0.5" aria-describedby="bill-share-hint" data-testid="billing-account-share"{% if error.field == "reimburse_share" %} aria-invalid="true"{% endif %}>
+    <p class="form-hint" id="bill-share-hint">{% trans %}From 0 to 1: the part of the spend the employer pays back. Only for accounts the employee pays for.{% endtrans %}</p>
+  </div>
+  <div class="sp-sub-field">
+    <label class="form-label" for="bill-cost-type">{% trans %}Default cost type (optional){% endtrans %}</label>
+    <select id="bill-cost-type" name="default_cost_type" class="form-input" aria-describedby="bill-cost-type-hint" data-testid="billing-account-cost-type">
+      <option value="" {{ 'selected' if not form.default_cost_type else '' }}>{% trans %}None{% endtrans %}</option>
+      {% for c in cost_types %}<option value="{{ c }}" {{ 'selected' if c == form.default_cost_type else '' }}>{{ cost_type_label(c) }}</option>{% endfor %}
+    </select>
+    <p class="form-hint" id="bill-cost-type-hint">{% trans %}Used when a usage record does not say how it was priced.{% endtrans %}</p>
+  </div>
+  <div class="sp-sub-field sp-sub-wide">
+    <label class="form-label" for="bill-routes">{% trans %}Route patterns (optional){% endtrans %}</label>
+    <input id="bill-routes" type="text" name="route_patterns" class="form-input" maxlength="2100" value="{{ form.route_patterns }}" placeholder="corp-* litellm" aria-describedby="bill-routes-hint" data-testid="billing-account-routes"{% if error.field == "route_patterns" %} aria-invalid="true"{% endif %}>
+    <p class="form-hint" id="bill-routes-hint">{% trans %}Separated by spaces or commas. Usage whose route (the backend a tool reports, such as a gateway name) matches one of them is paid through this account. * matches any text; case is ignored.{% endtrans %}</p>
+  </div>
+  <fieldset class="sp-sub-tools sp-sub-wide">
+    <legend class="form-label">{% trans %}Tools it covers{% endtrans %}</legend>
+    {% for t in tools %}
+    <label class="sp-sub-check"><input type="checkbox" name="tool_slugs" value="{{ t.slug }}" {{ 'checked' if t.slug in (form.tool_slugs or []) else '' }}> {{ t.name }}</label>
+    {% endfor %}
+    <p class="sp-text-muted-xs">{% trans %}Leave all unticked for an account that covers every tool.{% endtrans %}</p>
+  </fieldset>
+  {% if edit %}
+  <div class="sp-sub-field sp-sub-wide">
+    <label class="sp-sub-check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if form.is_active else '' }} data-testid="billing-account-active"> {% trans %}Active: new usage can be paid through this account{% endtrans %}</label>
+  </div>
+  {% endif %}
+  <div class="sp-sub-actions sp-sub-wide">
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto" data-testid="billing-account-submit">{{ submit_label }}</button>
+  </div>
+</form>
