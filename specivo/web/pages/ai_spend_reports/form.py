@@ -17,6 +17,7 @@ from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.ai_spend_planning import resolve_planning
 from specivo.services.ai_spend_report_service import (
+    ATTENDED_FILTERS,
     GROUP_BY,
     PERIODS,
     PRESETS,
@@ -24,6 +25,7 @@ from specivo.services.ai_spend_report_service import (
     SpendReport,
     default_range,
     normalize_filter_provider,
+    session_context_filters,
 )
 from specivo.services.ai_usage_chart_service import (
     BREAKDOWN_SHOWS,
@@ -59,6 +61,8 @@ DRILL_ORDER: tuple[str, ...] = (
     "provider",
     "cost_type",
     "branch",
+    "attended",
+    "profile",
 )
 FILTER_FIELD = {
     "project": "project",
@@ -71,6 +75,8 @@ FILTER_FIELD = {
     "provider": "provider",
     "cost_type": "cost_type",
     "branch": "branch",
+    "attended": "attended",
+    "profile": "profile",
 }
 #: Where a click on a row of each grouping leads: the first of these not filtered yet, else the sessions.
 DRILL_NEXT: dict[str, tuple[str, ...]] = {
@@ -84,6 +90,8 @@ DRILL_NEXT: dict[str, tuple[str, ...]] = {
     "provider": ("model", "user", "issue"),
     "cost_type": ("user", "issue"),
     "branch": (),
+    "attended": ("user", "issue"),
+    "profile": ("user", "issue"),
 }
 #: Page sizes of the sessions level.
 SESSION_LIMITS = (10, 25, 50)
@@ -112,6 +120,8 @@ class ReportForm:
     ``issue`` (a key, ``-`` for none), ``branch`` (``-`` for none),
     ``provider``, the grouping ``group`` (``sessions``: the entries), the
     sessions page (``offset``, ``limit``) and ``detail`` (every amount column).
+    ``attended`` is ``attended`` or ``unattended``; ``profile`` an agent
+    profile, ``-`` for none.
     """
 
     preset: str = "30d"
@@ -140,6 +150,8 @@ class ReportForm:
     version: str = ""
     #: The sprint filter: a sprint id, or ``-`` for entries without a sprint.
     sprint: str = ""
+    attended: str = ""
+    profile: str = ""
     offset: int = 0
     limit: int = 25
     detail: str = ""
@@ -179,6 +191,8 @@ class ReportForm:
             provider=text("provider").lower()[:50],
             version=_planning_value(text("version")),
             sprint=_planning_value(text("sprint")),
+            attended=text("attended") if text("attended") in ATTENDED_FILTERS else "",
+            profile=text("profile")[:100],
             offset=int(offset) if offset.isdigit() and int(offset) < 10_000_000 else 0,
             limit=int(limit) if limit.isdigit() and int(limit) in SESSION_LIMITS else 25,
             detail="1" if text("detail") == "1" else "",
@@ -246,6 +260,8 @@ class ReportForm:
             "branch": self.branch,
             "version": self.version,
             "sprint": self.sprint,
+            "attended": self.attended,
+            "profile": self.profile,
             "bucket": self.bucket,
             "detail": self.detail,
             "offset": str(self.offset) if self.offset else "",
@@ -288,6 +304,8 @@ class ReportForm:
             "branch": self.branch,
             "version": self.version,
             "sprint": self.sprint,
+            "attended": self.attended,
+            "profile": self.profile,
             "format": "csv",
         }
         return urlencode({k: v for k, v in values.items() if v != ""})
@@ -316,6 +334,8 @@ def _form_params(  # noqa: PLR0913
     provider: str = Query(""),
     version: str = Query(""),
     sprint: str = Query(""),
+    attended: str = Query(""),
+    profile: str = Query(""),
     offset: str = Query(""),
     limit: str = Query(""),
     detail: str = Query(""),
@@ -347,6 +367,8 @@ def _form_params(  # noqa: PLR0913
         provider=provider,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
         offset=offset,
         limit=limit,
         detail=detail,
@@ -419,6 +441,7 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         scope.labels["cost_type"] = _cost_type_text(form.cost_type)
     if form.branch:
         scope.labels["branch"] = _("No branch") if form.branch == NONE_VALUE else form.branch
+    _name_session_context(form, scope)
     planning = await _resolve_planning(db, user, project or scope.selected, form, scope)
     scope.filters = ReportFilters(
         user_id=int(form.user_id) if form.user_id else None,
@@ -433,8 +456,17 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         branch=form.branch if form.branch and form.branch != NONE_VALUE else None,
         without_branch=form.branch == NONE_VALUE,
         **planning,
+        **session_context_filters(form.attended, form.profile),
     )
     return scope
+
+
+def _name_session_context(form: ReportForm, scope: Scope) -> None:
+    """The breadcrumb labels of the run (attended or not) and agent profile filters."""
+    if form.attended:
+        scope.labels["attended"] = attended_text(ATTENDED_FILTERS[form.attended])
+    if form.profile:
+        scope.labels["profile"] = _("No profile") if form.profile == NONE_VALUE else form.profile
 
 
 async def _resolve_planning(
@@ -455,6 +487,11 @@ async def _resolve_planning(
             fields[f"{dim}_id"] = found.id
             scope.labels[dim] = found.label if found.id != -1 else value
     return fields
+
+
+def attended_text(unattended: Any) -> str:
+    """The name of an ``attended`` row or filter: by the entries' ``unattended`` flag."""
+    return _("Unattended") if unattended else _("Attended")
 
 
 def _cost_type_text(value: str) -> str:

@@ -86,6 +86,15 @@ class AiUsageCreate(BaseModel):
     )
     comments: str | None = Field(None, max_length=COMMENTS_MAX_LENGTH)
     external_session_id: str | None = Field(None, max_length=200)
+    parent_session_id: str | None = Field(
+        None,
+        max_length=200,
+        description="The client's parent session: a subagent's parent, a branch, a continuation after compression",
+    )
+    unattended: bool = Field(False, description="A run with nobody in the loop, such as a cron or scheduled job")
+    profile: str | None = Field(
+        None, max_length=100, examples=["research"], description="The agent profile or home the usage came from"
+    )
     git_branch: str | None = Field(None, max_length=255)
     repo_hint: str | None = Field(None, max_length=255)
     idempotency_key: str | None = Field(
@@ -179,6 +188,9 @@ class AiUsageEntryOut(BaseModel):
     price_id: int | None
     priced_at: datetime
     external_session_id: str | None
+    parent_session_id: str | None
+    unattended: bool = Field(description="A run with nobody in the loop (cron, scheduled)")
+    profile: str | None = Field(description="The agent profile or home the usage came from")
     git_branch: str | None
     repo_hint: str | None
     client_name: str | None

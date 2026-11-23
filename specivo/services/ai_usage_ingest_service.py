@@ -18,9 +18,10 @@ stored as ``attribution_method``:
 1a. ``attribution.issue_ref`` with ``issue_ref_source`` ``agent_log``
    (``agent_log``): the issue the reporter read from the agent's own Specivo
    MCP calls. Inferred-like: dropped with a warning when unusable;
-2. the issue of an MCP agent session overlapping ``[started_at, ended_at]``
-   (``mcp_session``): the reporting account's sessions first, then, for an
-   on-behalf record, the target user's;
+2. the issue of an MCP agent session (``mcp_session``): one carrying the
+   record's ``session_id``, then one carrying its ``parent_session_id``, then
+   one overlapping ``[started_at, ended_at]``; each time the reporting
+   account's sessions first, then, for an on-behalf record, the target user's;
 3. ``attribution.commits`` linked to an issue (``commit``): the issue most of
    them are linked to;
 4. an issue key in ``attribution.git_branch`` (``branch``), among the keys of
@@ -366,6 +367,9 @@ class AiUsageIngestService:
             idempotency_key=record.idempotency_key,
             route=record.route,
             billing_account=record.billing_account,
+            parent_session_id=record.parent_session_id,
+            unattended=record.unattended,
+            profile=record.profile,
         )
 
     async def _upsert(
@@ -766,7 +770,11 @@ class AiUsageIngestService:
     async def _session_issues(
         self, session: AsyncSession, batch: _Batch, record: IngestRecord, target: User
     ) -> list[int]:
-        """Issues of agent sessions: matched by the record's ``session_id`` first, then by time overlap.
+        """Issues of agent sessions: matched by the record's ``session_id``, then its ``parent_session_id``,
+        then by time overlap.
+
+        A subagent's record names its parent: when its own session is unknown,
+        the parent's session may still name the issue.
 
         Each step tries the reporting account's sessions, then the target
         user's; a session of any other account is never used, whatever id it
@@ -777,9 +785,9 @@ class AiUsageIngestService:
         sessions = AgentSessionService()
         users = list(dict.fromkeys((batch.actor.id, target.id)))
         found: list[int] = []
-        if record.session_id:
+        for external_id in dict.fromkeys(i for i in (record.session_id, record.parent_session_id) if i):
             for user_id in users:
-                issue_id = await sessions.issue_for_external(session, user_id, record.session_id)
+                issue_id = await sessions.issue_for_external(session, user_id, external_id)
                 if issue_id is not None:
                     found.append(issue_id)
 

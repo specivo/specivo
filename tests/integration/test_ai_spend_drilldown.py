@@ -329,3 +329,41 @@ async def test_project_report_names_a_person_only_through_their_entries(client: 
     assert f'aria-current="page">{w.dave.id}<' in html
     html = await _page(client, w.mgr, PROJECT, **MARCH, user_id=str(w.alice.id), group="issue")
     assert 'aria-current="page">Rep Alice<' in html
+
+
+# ---------------------------------------------------------------------------
+# Attended and unattended runs, agent profiles
+# ---------------------------------------------------------------------------
+
+
+async def test_attended_grouping_drills_down_and_lists_the_entries(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    cron = await entry(
+        db_session, w.bob, project=w.p, day=date(2026, 3, 9), api="6", unattended=True, profile="research"
+    )
+    await db_session.commit()
+
+    html = await _page(client, w.mgr, PROJECT, **MARCH, group="attended")
+    opened = {q["attended"]: q for q in _links(html, "spend-open")}
+    assert set(opened) == {"attended", "unattended"}
+    assert opened["unattended"]["group"] == "user"
+    assert "Unattended" in html and "Attended" in html
+
+    # The unattended level: its path names the filter, only bob ran unattended.
+    html = await _page(client, w.mgr, PROJECT, **MARCH, attended="unattended", group="user")
+    assert 'aria-current="page">Unattended<' in html
+    assert {q["user_id"] for q in _links(html, "spend-open")} == {str(w.bob.id)}
+
+    # Grouped by profile, entries without one form their own row.
+    html = await _page(client, w.mgr, PROJECT, **MARCH, group="profile")
+    assert {q["profile"] for q in _links(html, "spend-open")} == {"research", "-"}
+    assert "No profile" in html
+
+    # The project's entry list takes the same filters and marks unattended entries.
+    html = await _page(client, w.mgr, "/projects/RDA/ai-usage/", attended="unattended", profile="research")
+    assert re.findall(r'data-entry-id="(\d+)"', html) == [str(cron.id)]
+    assert 'data-testid="aiu-unattended-badge"' in html
+    assert 'data-testid="aiu-attended-filter"' in html and 'data-testid="aiu-profile-filter"' in html
+    html = await _page(client, w.mgr, "/projects/RDA/ai-usage/", attended="attended")
+    assert str(cron.id) not in re.findall(r'data-entry-id="(\d+)"', html)

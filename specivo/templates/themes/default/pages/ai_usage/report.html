@@ -22,6 +22,8 @@
 {%- elif dim == "provider" %}{% trans %}Provider{% endtrans %}
 {%- elif dim == "model" %}{% trans %}Model{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Cost type{% endtrans %}
+{%- elif dim == "attended" %}{% trans %}Attended or unattended{% endtrans %}
+{%- elif dim == "profile" %}{% trans %}Agent profile{% endtrans %}
 {%- else %}{% trans %}Branch{% endtrans %}{% endif %}
 {%- endmacro %}
 
@@ -36,6 +38,8 @@
 {%- elif dim == "model" %}{% trans %}Model{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Cost type{% endtrans %}
 {%- elif dim == "branch" %}{% trans %}Branch{% endtrans %}
+{%- elif dim == "attended" %}{% trans %}Attended or unattended{% endtrans %}
+{%- elif dim == "profile" %}{% trans %}Agent profile{% endtrans %}
 {%- else %}{% trans %}Sessions{% endtrans %}{% endif %}
 {%- endmacro %}
 
@@ -49,6 +53,8 @@
 {%- elif dim == "provider" %}{% trans %}Spend by provider{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Spend by cost type{% endtrans %}
 {%- elif dim == "branch" %}{% trans %}Spend by branch{% endtrans %}
+{%- elif dim == "attended" %}{% trans %}Spend attended and unattended{% endtrans %}
+{%- elif dim == "profile" %}{% trans %}Spend by agent profile{% endtrans %}
 {%- else %}{% trans %}Spend by model{% endtrans %}{% endif %}
 {%- endmacro %}
 
@@ -69,8 +75,9 @@
 {% macro cell(c) -%}
 {% if c.kind == "seat" %}<span class="sp-spend-seat-label">{% trans %}Unallocated seat cost{% endtrans %}</span>
 {%- elif c.kind == "hidden" %}<span class="sp-text-muted">{% trans %}An issue you cannot see{% endtrans %}</span>
-{%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% else %}–{% endif %}</span>
+{%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% elif c.dim == "profile" %}{% trans %}No profile{% endtrans %}{% else %}–{% endif %}</span>
 {%- elif c.dim == "cost_type" %}{{ cost_type_label(c.value) }}
+{%- elif c.dim == "attended" %}{% if c.value %}{% trans %}Unattended{% endtrans %}{% else %}{% trans %}Attended{% endtrans %}{% endif %}
 {%- elif c.dim == "issue" %}<a class="issue-key" href="{{ base }}/issue/{{ c.label }}/">{{ c.label }}</a>
 {%- elif c.dim in ("model", "branch") %}<span class="sp-aiu-model">{{ c.label }}</span>
 {%- else %}{{ c.label }}{% endif %}
@@ -135,6 +142,7 @@
   {% if form.version %}<input type="hidden" name="version" value="{{ form.version }}">{% endif %}
   {% if form.sprint %}<input type="hidden" name="sprint" value="{{ form.sprint }}">{% endif %}
   {% if form.provider %}<input type="hidden" name="provider" value="{{ form.provider }}">{% endif %}
+  {% if form.profile %}<input type="hidden" name="profile" value="{{ form.profile }}">{% endif %}
   {% if form.detail %}<input type="hidden" name="detail" value="1">{% endif %}
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}From{% endtrans %}</span>
@@ -185,6 +193,14 @@
     <select name="cost_type" class="filter-select">
       <option value="">{% trans %}All{% endtrans %}</option>
       {% for c in cost_types %}<option value="{{ c }}" {{ 'selected' if form.cost_type == c else '' }}>{{ cost_type_label(c) }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Runs{% endtrans %}</span>
+    <select name="attended" class="filter-select" data-testid="spend-attended">
+      <option value="">{% trans %}All{% endtrans %}</option>
+      <option value="attended" {{ 'selected' if form.attended == 'attended' else '' }}>{% trans %}Attended{% endtrans %}</option>
+      <option value="unattended" {{ 'selected' if form.attended == 'unattended' else '' }}>{% trans %}Unattended{% endtrans %}</option>
     </select>
   </label>
   <label class="sp-aiu-filter">

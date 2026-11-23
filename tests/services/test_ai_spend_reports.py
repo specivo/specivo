@@ -43,6 +43,7 @@ from specivo.services.ai_spend_report_service import (
     default_range,
     parse_group_by,
     report_csv,
+    session_context_filters,
 )
 from specivo.services.permission_service import clear_role_cache
 from tests.factories.issue import IssueFactory
@@ -183,6 +184,8 @@ async def entry(
     tokens: int = 1000,
     long_context: dict[str, int] | None = None,
     excluded: bool = False,
+    unattended: bool = False,
+    profile: str | None = None,
 ) -> AiUsageEntry:
     """An entry with fixed costs. ``marginal`` defaults to ``api`` for api usage and to 0 for subscriptions."""
     if marginal is None:
@@ -211,6 +214,8 @@ async def entry(
         api_equivalent_currency=currency if api is not None else None,
         cost_basis="calculated" if api is not None else "unpriced",
         git_branch=branch,
+        unattended=unattended,
+        profile=profile,
         excluded_at=datetime(2026, 5, 1, tzinfo=UTC) if excluded else None,
     )
     db.add(row)
@@ -340,7 +345,17 @@ async def test_instance_report_is_for_administrators(db_session: AsyncSession, w
 async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> None:
     db = db_session
     await entry(db, w.alice, project=w.p, day=date(2026, 3, 2), api="2", issue=w.public_issue, branch="feat/a")
-    await entry(db, w.bob, project=w.q, day=date(2026, 3, 3), api="3", model="lab-model-2", tool="codex")
+    await entry(
+        db,
+        w.bob,
+        project=w.q,
+        day=date(2026, 3, 3),
+        api="3",
+        model="lab-model-2",
+        tool="codex",
+        unattended=True,
+        profile="research",
+    )
     await entry(db, w.bob, project=None, day=date(2026, 3, 4), api="5", cost_type="free")
     report = await run(db, w.admin, group_by=[dim], include_seat_cost=False)
     assert report.group_by == (dim,)
@@ -357,6 +372,8 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         "model": {"lab-model-1", "lab-model-2"},
         "cost_type": {"api", "free"},
         "branch": {"feat/a", None},
+        "attended": {False, True},
+        "profile": {"research", None},
         # Planning dimensions come from the issue: none of these issues is planned.
         "version": {None},
         "sprint": {None},
@@ -369,6 +386,59 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         assert labels == {"RPA", "RPB", ""}
     if dim == "issue":
         assert labels == {"RPA-1", ""}
+    if dim == "attended":
+        assert labels == {"Attended", "Unattended"}
+
+
+async def test_attended_rows_sum_to_the_ungrouped_total(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 2), api="2")
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 3), api="3", unattended=True, profile="research")
+    await entry(db, w.bob, project=w.p, day=date(2026, 3, 4), api="4", unattended=True, profile="ops")
+    whole = await run(db, w.admin, w.p, group_by=[], include_seat_cost=False)
+    split = await run(db, w.admin, w.p, group_by=["attended"], include_seat_cost=False)
+
+    assert [(r.key["attended"], r.labels["attended"]) for r in split.rows] == [
+        (False, "Attended"),
+        (True, "Unattended"),
+    ]
+    assert amount(by(split, attended=False).api_equivalent) == Decimal(2)
+    assert amount(by(split, attended=True).api_equivalent) == Decimal(7)
+    assert sum(r.entries for r in split.rows) == whole.totals.entries == 3
+    assert amount(split.totals.api_equivalent) == amount(whole.totals.api_equivalent) == Decimal(9)
+
+
+async def test_attended_and_profile_filters(db_session: AsyncSession, w: World) -> None:
+    db = db_session
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 2), api="2")
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 3), api="3", unattended=True, profile="research")
+    await entry(db, w.bob, project=w.p, day=date(2026, 3, 4), api="4", profile="ops")
+
+    research = await run(
+        db, w.admin, w.p, group_by=["profile"], filters=ReportFilters(profile="research"), include_seat_cost=False
+    )
+    assert [r.key["profile"] for r in research.rows] == ["research"]
+    assert amount(research.totals.api_equivalent) == Decimal(3)
+
+    no_profile = await run(db, w.admin, w.p, group_by=["user"], filters=ReportFilters(without_profile=True))
+    assert no_profile.totals.entries == 1 and {r.key["user"] for r in no_profile.rows} == {w.alice.id}
+
+    attended = await run(
+        db, w.admin, w.p, group_by=["profile"], filters=ReportFilters(unattended=False), include_seat_cost=False
+    )
+    assert {r.key["profile"] for r in attended.rows} == {None, "ops"}
+    assert amount(attended.totals.api_equivalent) == Decimal(6)
+    # A seat fee is neither attended nor not, nor of a profile.
+    assert ReportFilters(unattended=False).excludes_seats
+    assert ReportFilters(profile="ops").excludes_seats
+    assert not ReportFilters().excludes_seats
+
+
+async def test_session_context_filter_values() -> None:
+    assert session_context_filters("unattended", "research") == {"unattended": True, "profile": "research"}
+    assert session_context_filters("attended", "-") == {"unattended": False, "without_profile": True}
+    assert session_context_filters("sometimes", " ") == {}
+    assert session_context_filters(None, None) == {}
 
 
 async def test_measures_tokens_requests_and_spend(db_session: AsyncSession, w: World) -> None:

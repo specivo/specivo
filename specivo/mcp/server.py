@@ -1376,6 +1376,10 @@ _NO_COUNTERS = (
         "reply ends with (created), (updated, revision N) or (unchanged). started_at and ended_at are ISO 8601 "
         "instants with an offset, stored in UTC; started_at must fall on usage_date (which defaults to its UTC "
         "day), ended_at not before it and not after the end of that UTC day."
+        "\n\nAgent context: parent_session_id names the session this one was started from (a subagent's "
+        "parent, a branch, a continuation after context compression); unattended=true marks a run with nobody "
+        "in the loop (cron, scheduled); profile names the agent profile the usage came from. Spend reports "
+        "split attended from unattended usage and group by profile."
     ),
 )
 async def specivo_log_ai_usage(  # noqa: PLR0913
@@ -1412,6 +1416,15 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
         str | None, Field(description="When the usage started, e.g. '2026-11-23T09:15:00+07:00'.")
     ] = None,
     ended_at: Annotated[str | None, Field(description="When the usage ended, an instant with an offset.")] = None,
+    parent_session_id: Annotated[
+        str | None, Field(description="The parent session's id: for a subagent, a branch or a continuation.")
+    ] = None,
+    unattended: Annotated[
+        bool, Field(description="True for a run with nobody in the loop (cron, scheduled). Default false.")
+    ] = False,
+    profile: Annotated[
+        str | None, Field(description="The agent profile or home the usage came from, e.g. 'research'.")
+    ] = None,
 ) -> str:
     tokens = {
         "input": input_tokens,
@@ -1442,6 +1455,9 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
             idempotency_key=idempotency_key,
             started_at=started_at,
             ended_at=ended_at,
+            parent_session_id=parent_session_id,
+            unattended=unattended,
+            profile=profile,
         )
 
 
@@ -1566,7 +1582,10 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
     group_by: Annotated[
         str | None,
         Field(
-            description="Comma list: version, sprint, user, project, issue, tool, provider, model, cost_type, branch."
+            description=(
+                "Comma list: version, sprint, user, project, issue, tool, provider, model, cost_type, branch, "
+                "attended (attended or unattended runs), profile (the agent profile)."
+            )
         ),
     ] = None,
     period: Annotated[
@@ -1597,6 +1616,12 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
     sprint: Annotated[
         str | None, Field(description="Only this sprint: a sprint name (in project_key) or id, or 'none'.")
     ] = None,
+    attended: Annotated[
+        str | None, Field(description="'attended' or 'unattended' (cron, scheduled runs with nobody in the loop).")
+    ] = None,
+    profile: Annotated[
+        str | None, Field(description="Only this agent profile, e.g. 'research', or 'none' for usage without one.")
+    ] = None,
 ) -> str:
     async with _get_session_and_user() as (session, user):
         return await _ai_usage_report(
@@ -1620,6 +1645,8 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
             include_sub_issues=include_sub_issues,
             release=release,
             sprint=sprint,
+            attended=attended,
+            profile=profile,
         )
 
 

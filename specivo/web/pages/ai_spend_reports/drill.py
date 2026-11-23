@@ -23,6 +23,7 @@ from specivo.services.ai_spend_report_service import (
     DrillFacts,
     ReportRow,
     SpendReport,
+    attended_filter_value,
     fold_rows,
     period_end,
 )
@@ -106,8 +107,10 @@ def _row_dims(report: SpendReport, row: ReportRow) -> dict[str, str] | None:
             if value == HIDDEN_ISSUE:
                 return None
             values["issue"] = row.labels.get("issue") or NONE_VALUE if value is not None else NONE_VALUE
-        elif dim in ("branch", "version", "sprint"):
+        elif dim in ("branch", "version", "sprint", "profile"):
             values[dim] = str(value) if value else NONE_VALUE
+        elif dim == "attended":
+            values["attended"] = attended_filter_value(value)
         elif value is None or value == "":
             return None
         else:
@@ -436,6 +439,9 @@ async def _sessions(
             branch=f.branch,
             without_branch=f.without_branch,
             planning=f.planning,
+            unattended=f.unattended,
+            profile=f.profile,
+            without_profile=f.without_profile,
             excluded=False,
             unassigned=True if f.unassigned else None,
             offset=form.offset,

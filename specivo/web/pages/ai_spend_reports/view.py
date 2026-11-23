@@ -25,6 +25,7 @@ from specivo.services.ai_spend_report_service import (
     PRESETS,
     ReportRow,
     SpendReport,
+    attended_filter_value,
     period_end,
 )
 from specivo.services.ai_subscription_service import AiToolService
@@ -36,7 +37,13 @@ from specivo.services.ai_usage_chart_service import (
 from specivo.services.currency_service import CurrencyService
 from specivo.services.permission_service import ai_usage_visibility
 from specivo.web.pages.ai_spend_reports._common import ADMIN_ENTRIES_URL, _reports
-from specivo.web.pages.ai_spend_reports.form import SHOW_PARAMS, ReportForm, Scope, _cost_type_text
+from specivo.web.pages.ai_spend_reports.form import (
+    SHOW_PARAMS,
+    ReportForm,
+    Scope,
+    _cost_type_text,
+    attended_text,
+)
 from specivo.web.pages.ai_usage._common import NONE_VALUE, _fmt_int
 from specivo.web.pages.ai_usage.charts import _charts_view, cached_chart_payload, fold_breakdowns
 from specivo.web.pages.ai_usage.rows import _money_view, _tool_names
@@ -70,6 +77,7 @@ def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
         params["issue"] = row.labels.get("issue") or NONE_VALUE
     if "branch" in key:
         params["branch"] = key["branch"] or NONE_VALUE
+    params.update(_session_context_params(key, form))
     for dim in ("version", "sprint"):
         if dim in key:
             params[dim] = str(key[dim]) if key[dim] is not None else NONE_VALUE
@@ -81,6 +89,20 @@ def _drill(report: SpendReport, row: ReportRow, form: ReportForm) -> str:
     if "project" in key:
         params["project"] = row.labels.get("project") or NONE_VALUE
     return ADMIN_ENTRIES_URL + "?" + urlencode(params)
+
+
+def _session_context_params(key: dict[str, Any], form: ReportForm) -> dict[str, str]:
+    """The run (attended or not) and agent profile filters of a row's entries: the row's own, else the form's."""
+    params: dict[str, str] = {}
+    if "attended" in key:
+        params["attended"] = attended_filter_value(key["attended"])
+    elif form.attended:
+        params["attended"] = form.attended
+    if "profile" in key:
+        params["profile"] = key["profile"] or NONE_VALUE
+    elif form.profile:
+        params["profile"] = form.profile
+    return params
 
 
 def _row_view(report: SpendReport, row: ReportRow, form: ReportForm, locale: str) -> dict[str, Any]:
@@ -142,9 +164,12 @@ def _cell_text(cell: dict[str, Any]) -> str:
             "branch": _("No branch"),
             "version": _("No release"),
             "sprint": _("No sprint"),
+            "profile": _("No profile"),
         }.get(dim, "–")
     if dim == "cost_type":
         return _cost_type_text(cell["value"])
+    if dim == "attended":
+        return attended_text(cell["value"])
     return str(cell["label"])
 
 

@@ -103,11 +103,14 @@ def _line(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
         flags.append("excluded")
     if entry.is_locked:
         flags.append("locked")
+    if entry.unattended:
+        flags.append("unattended")
     return (
         f"#{entry.id} {entry.usage_date.isoformat()} {_where(entry, refs)} {entry.tool_slug}/{entry.model} "
         f"user={_login(refs, entry.user_id)} {_tokens(entry)} cost_type={entry.cost_type} "
         f"marginal={_money(entry.marginal)} api_equivalent={_money(entry.api_equivalent)} source={entry.source}"
         + (f" session={session_id}" if (session_id := _session(entry, viewer)) else "")
+        + (f" profile={entry.profile}" if entry.profile else "")
         + (f" [{', '.join(flags)}]" if flags else "")
     )
 
@@ -130,7 +133,10 @@ def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     ]
     session_id = _session(entry, viewer)
     if session_id:
-        lines.insert(3, f"Session: {session_id}")
+        parent = entry.parent_session_id if entry.user_id == viewer.id else None
+        lines.insert(3, f"Session: {session_id}" + (f" (parent {parent})" if parent else ""))
+    run = "unattended (nobody in the loop)" if entry.unattended else "attended"
+    lines.append(f"Run: {run}" + (f"  Profile: {entry.profile}" if entry.profile else ""))
     long = " ".join(f"{k}={v}" for k, v in entry.long_context_tokens().items() if v)
     if long:
         lines.append(f"Long-context tokens (included above): {long}")
@@ -256,6 +262,9 @@ async def _log_ai_usage(  # noqa: PLR0913
     idempotency_key: str | None = None,
     started_at: str | None = None,
     ended_at: str | None = None,
+    parent_session_id: str | None = None,
+    unattended: bool = False,
+    profile: str | None = None,
 ) -> str:
     """Log one AI usage entry (source ``mcp``); see ``specivo_log_ai_usage`` for the rules.
 
@@ -297,6 +306,9 @@ async def _log_ai_usage(  # noqa: PLR0913
         issue_id=issue.id if issue is not None else None,
         attribution_method=method,
         external_session_id=session_id,
+        parent_session_id=parent_session_id,
+        unattended=unattended,
+        profile=profile,
         client_name=client.name if client is not None else None,
         client_version=client.version if client is not None else None,
         comments=comments,
@@ -746,16 +758,26 @@ async def _ai_usage_report(  # noqa: PLR0913
     include_sub_issues: bool = False,
     release: str | None = None,
     sprint: str | None = None,
+    attended: str | None = None,
+    profile: str | None = None,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
     from specivo.services.ai_spend_report_service import (
+        ATTENDED_FILTERS,
+        NO_PROFILE,
         AiSpendReportService,
         ReportFilters,
         default_range,
         parse_group_by,
+        session_context_filters,
     )
 
     await _check_report_request(user, preset)
+    attended = (attended or "").strip().lower() or None
+    if attended is not None and attended not in ATTENDED_FILTERS:
+        raise ValidationError(message="attended must be 'attended' or 'unattended'", field="attended")
+    profile = (profile or "").strip() or None
+    context = session_context_filters(attended, NO_PROFILE if profile == _NO_PLANNING else profile)
     first, last = default_range(preset)
     project, issue = await _report_scope(session, user, project_key, issue_ref)
     user_id = await _report_user_id(session, user_login)
@@ -780,6 +802,7 @@ async def _ai_usage_report(  # noqa: PLR0913
             issue_id=None if include_sub_issues else issue_id,
             issue_tree_id=issue_id if include_sub_issues else None,
             **planning,
+            **context,
         ),
         sort=sort or "key",
     )

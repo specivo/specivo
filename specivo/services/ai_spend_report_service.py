@@ -141,7 +141,39 @@ GROUP_BY: tuple[str, ...] = (
     "model",
     "cost_type",
     "branch",
+    "attended",
+    "profile",
 )
+#: Labels of the two ``attended`` rows, keyed by the entry's ``unattended`` flag.
+ATTENDED_LABELS: dict[bool, str] = {False: "Attended", True: "Unattended"}
+#: Values of the ``attended`` filter, and the ``unattended`` flag each keeps.
+ATTENDED_FILTERS: dict[str, bool] = {"attended": False, "unattended": True}
+#: The ``profile`` filter value for entries without a profile.
+NO_PROFILE = "-"
+
+
+def attended_filter_value(unattended: Any) -> str:
+    """The ``attended`` filter value of an ``unattended`` flag (a row key)."""
+    return "unattended" if unattended else "attended"
+
+
+def session_context_filters(attended: str | None, profile: str | None) -> dict[str, Any]:
+    """The ``ReportFilters`` fields of the ``attended`` and ``profile`` filters.
+
+    *attended* is ``attended`` or ``unattended`` (anything else: no filter);
+    *profile* a profile name, or ``-`` for entries without one.
+    """
+    out: dict[str, Any] = {}
+    if attended and attended.strip() in ATTENDED_FILTERS:
+        out["unattended"] = ATTENDED_FILTERS[attended.strip()]
+    if profile and profile.strip():
+        if profile.strip() == NO_PROFILE:
+            out["without_profile"] = True
+        else:
+            out["profile"] = profile.strip()[:100]
+    return out
+
+
 #: Period buckets: a UTC day, an ISO week (from Monday) or a calendar month.
 PERIODS: tuple[str, ...] = ("day", "week", "month")
 #: Row orders: by the grouping key (default), or by total spend, largest first.
@@ -169,6 +201,9 @@ _COLUMNS = {
     "model": AiUsageEntry.model,
     "cost_type": AiUsageEntry.cost_type,
     "branch": AiUsageEntry.git_branch,
+    # Keyed by the ``unattended`` flag: False is the "Attended" row, True the "Unattended" one.
+    "attended": AiUsageEntry.unattended,
+    "profile": AiUsageEntry.profile,
     # Internal only (never in GROUP_BY, so no report groups by plan): the charts' seat breakdown.
     "subscription": AiUsageEntry.subscription_id,
     # Internal only: one row per entry, for the drill-down's page of entries (always with ``entry_ids``).
@@ -262,7 +297,9 @@ class ReportFilters:
     :mod:`specivo.services.ai_spend_planning`. The drill-down of the report
     pages sets them; callers resolve keys and visibility first (an issue the
     viewer cannot see is no filter they may use). A release or sprint id the
-    viewer may not see matches nothing by itself.
+    viewer may not see matches nothing by itself. ``unattended`` ``True`` /
+    ``False`` keeps unattended / attended usage; ``profile`` /
+    ``without_profile`` the entries of one agent profile (or of none).
     """
 
     user_id: int | None = None
@@ -280,6 +317,9 @@ class ReportFilters:
     without_version: bool = False
     sprint_id: int | None = None
     without_sprint: bool = False
+    unattended: bool | None = None
+    profile: str | None = None
+    without_profile: bool = False
     #: Internal: only these entries (the sessions page of the drill-down prices its page of entries).
     entry_ids: tuple[int, ...] | None = None
     #: The entries of this issue and of every issue below it (the issue page's AI usage tab).
@@ -297,7 +337,8 @@ class ReportFilters:
 
     @property
     def excludes_seats(self) -> bool:
-        """Whether a fee cannot match these filters (it has no tool, model, project, issue, branch or release)."""
+        """Whether a fee cannot match these filters (it has no tool, model, project, issue, branch, release,
+        profile, and is neither attended nor not)."""
         narrowed = (
             self.project_id is not None
             or self.unassigned
@@ -308,6 +349,9 @@ class ReportFilters:
             or self.entry_ids is not None
             or self.issue_tree_id is not None
             or self.planning.active
+            or self.unattended is not None
+            or bool(self.profile)
+            or self.without_profile
         )
         return (
             narrowed or bool(self.tool or self.model or self.provider) or self.cost_type not in (None, "subscription")
@@ -324,6 +368,12 @@ class ReportFilters:
             out.append(AiUsageEntry.id.in_(list(self.entry_ids)))
         if self.issue_tree_id is not None:
             out.append(issue_subtree_clause(self.issue_tree_id))
+        if self.unattended is not None:
+            out.append(AiUsageEntry.unattended.is_(self.unattended))
+        if self.profile:
+            out.append(AiUsageEntry.profile == self.profile)
+        if self.without_profile:
+            out.append(AiUsageEntry.profile.is_(None))
         return out
 
     def cache_parts(self) -> list[Any]:
@@ -346,6 +396,9 @@ class ReportFilters:
             self.without_version,
             self.sprint_id,
             self.without_sprint,
+            self.unattended,
+            self.profile,
+            self.without_profile,
         ]
 
 
@@ -1217,6 +1270,8 @@ class AiSpendReportService:
                     row.labels[dim] = issues.get(value, "") if value != HIDDEN_ISSUE else ""
                 elif dim == "tool":
                     row.labels[dim] = tools.get(value, value)
+                elif dim == "attended":
+                    row.labels[dim] = ATTENDED_LABELS[bool(value)]
                 elif dim in planned:
                     row.labels[dim] = planned[dim].get(value, "")
                 else:

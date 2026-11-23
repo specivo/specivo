@@ -70,6 +70,8 @@ async def project_ai_usage(  # noqa: PLR0913
     branch: str = Query(""),
     version: str = Query(""),
     sprint: str = Query(""),
+    attended: str = Query(""),
+    profile: str = Query("", max_length=100),
     bucket: str = Query(""),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
@@ -104,6 +106,8 @@ async def project_ai_usage(  # noqa: PLR0913
         branch=branch,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
     )
     await filters.name_planning(db, user, project)
     issue_id = await _issue_filter(db, user, filters.issue, project)

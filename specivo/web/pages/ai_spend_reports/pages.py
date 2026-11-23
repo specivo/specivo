@@ -219,6 +219,8 @@ async def admin_spend_entries(  # noqa: PLR0913
     branch: str = Query(""),
     version: str = Query(""),
     sprint: str = Query(""),
+    attended: str = Query(""),
+    profile: str = Query("", max_length=100),
     cost_type: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
@@ -241,6 +243,8 @@ async def admin_spend_entries(  # noqa: PLR0913
         branch=branch,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
     )
     selected: Project | None = None
     unassigned: bool | None = None

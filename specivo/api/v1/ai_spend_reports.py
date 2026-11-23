@@ -42,6 +42,7 @@ from specivo.services.ai_spend_report_service import (
     default_range,
     parse_group_by,
     report_csv,
+    session_context_filters,
 )
 from specivo.services.ai_usage_service import AiUsageService, ModelSuggestion
 from specivo.services.issue_service import IssueService
@@ -68,7 +69,7 @@ _GROUP_BY = Query(
     "user",
     description=(
         "Comma-separated: version (the release), sprint, user, project, issue, tool, provider, model, cost_type, "
-        "branch (may be empty)"
+        "branch, attended (attended or unattended runs), profile (the agent profile) (may be empty)"
     ),
 )
 
@@ -100,6 +101,8 @@ async def _report(  # noqa: PLR0913
     branch: str | None = None,
     version: str | None = None,
     sprint: str | None = None,
+    attended: str | None = None,
+    profile: str | None = None,
     offset: int = 0,
     limit: int = JSON_ROWS_DEFAULT,
 ) -> SpendReportOut | Response:
@@ -107,6 +110,7 @@ async def _report(  # noqa: PLR0913
     first, last = default_range(preset)
     narrowing, selected = await _narrowing(db, user, project, project_filter, issue, branch)
     narrowing.update(await _planning_narrowing(db, user, project or selected, version, sprint))
+    narrowing.update(session_context_filters(attended, profile))
     report = await _service.report(
         db,
         user,
@@ -208,6 +212,8 @@ _VERSION = Query(
 _SPRINT = Query(
     None, max_length=255, description="A sprint id, or a name on a project report; '-' for entries without a sprint"
 )
+_ATTENDED = Query(None, description="'attended' for runs a person attended, 'unattended' for cron and scheduled runs")
+_PROFILE = Query(None, max_length=100, description="An agent profile, or '-' for entries without one")
 
 
 @router.get(
@@ -239,6 +245,8 @@ async def project_ai_spend_report(  # noqa: PLR0913
     branch: str | None = _BRANCH,
     version: str | None = _VERSION,
     sprint: str | None = _SPRINT,
+    attended: Literal["attended", "unattended"] | None = _ATTENDED,
+    profile: str | None = _PROFILE,
     sort: Literal["key", "spend"] = Query("key", description="By the grouping key (default), or by total spend"),
     format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
@@ -278,6 +286,8 @@ async def project_ai_spend_report(  # noqa: PLR0913
         branch=branch,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
         offset=offset,
         limit=limit,
     )
@@ -310,6 +320,8 @@ async def instance_ai_spend_report(  # noqa: PLR0913
     branch: str | None = _BRANCH,
     version: str | None = _VERSION,
     sprint: str | None = _SPRINT,
+    attended: Literal["attended", "unattended"] | None = _ATTENDED,
+    profile: str | None = _PROFILE,
     sort: Literal["key", "spend"] = Query("key"),
     format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
@@ -347,6 +359,8 @@ async def instance_ai_spend_report(  # noqa: PLR0913
         branch=branch,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
         offset=offset,
         limit=limit,
     )

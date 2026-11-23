@@ -70,6 +70,8 @@ async def _rows(
                 "project_key": refs.project_keys.get(e.project_id, "") if e.project_id is not None else "",
                 "issue_key": issue_key or "",
                 "branch": e.git_branch or "",
+                "unattended": e.unattended,
+                "profile": e.profile or "",
                 "comments": e.comments or "",
                 "excluded": e.is_excluded,
                 "editable": editable,
