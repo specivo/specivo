@@ -4,8 +4,9 @@ After the upgrade a claim and a frozen entry can be written; the month must
 be a first day and the status a known one; a person has one claim per month
 that is not rejected; deleting the usage entry keeps the frozen row with no
 entry id; deleting the claim drops its entries; a user with a claim cannot be
-deleted. The downgrade drops both tables. It steps back one revision rather
-than naming the previous one, so it holds wherever the release chain puts it.
+deleted. The downgrade drops both tables. It reads its own revision and the
+one it follows from the migration file, so it holds wherever the release chain
+puts it and whatever comes after it.
 
 Runs Alembic in a subprocess against the test database, so it changes schema
 shared by every test and is marked ``serial``. The upgrade always ends at head,
@@ -16,6 +17,7 @@ even when an assertion fails half-way. Rows it inserts are committed for real
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from datetime import date
@@ -29,8 +31,18 @@ from sqlalchemy.ext.asyncio import create_async_engine
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration, pytest.mark.serial]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_MIGRATION = _REPO_ROOT / "alembic" / "versions" / "0085_ai_reimbursement_claims.py"
 _LOGIN = "mig_claimer"
 _TABLES = ["ai_reimbursement_claim_entries", "ai_reimbursement_claims"]
+
+
+def _revisions() -> tuple[str, str]:
+    """This migration's revision and the one it follows, read from the file (the chain may be rebased)."""
+    source = _MIGRATION.read_text(encoding="utf-8")
+    revision = re.search(r'^revision = "([^"]+)"', source, re.M)
+    down = re.search(r'^down_revision = "([^"]+)"', source, re.M)
+    assert revision and down
+    return revision.group(1), down.group(1)
 
 
 def _alembic(*args: str) -> None:
@@ -89,11 +101,12 @@ async def _claim(month: date, status: str = "draft") -> int:
 async def test_claims_and_their_entries_and_the_downgrade_round_trips() -> None:
     await _cleanup()
     try:
+        revision, down = _revisions()
         _alembic("upgrade", "head")
         assert await _tables() == _TABLES
-        _alembic("downgrade", "-1")
+        _alembic("downgrade", down)
         assert await _tables() == []
-        _alembic("upgrade", "head")
+        _alembic("upgrade", revision)
         assert await _tables() == _TABLES
 
         await _execute(
