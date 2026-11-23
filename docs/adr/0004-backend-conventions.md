@@ -23,6 +23,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-07 — recorded the AI spend report drill-down: URL state, narrowing filters and bounds (§4).
 **Revised:** 2026-11-21 — recorded AI spend by release and sprint: the nearest-ancestor lookup, its visibility and its query shape (§4).
 **Revised:** 2026-11-23 — recorded the optional idempotency key on manual, API and MCP AI usage entries (§4).
+**Revised:** 2026-11-23 — recorded AI billing accounts, the payer and route on AI usage entries and the project payer default (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -264,6 +265,20 @@ within a step the latest start, then the newest row. Seat cost goes through the 
 `ai_subscriptions_self_service` is on (default); administrators manage everyone's; nobody else sees one; service and
 system accounts hold none; the `/my/` routes are account-wide (`get_account_user`). Plan presets
 (`PLAN_PRESETS`) are suggestions only.
+
+**AI billing accounts and payer.** Who pays (`payer`: `employer` / `employee`) and what usage was paid through
+(`ai_billing_accounts`, `kind` `gateway` / `subscription` / `api_key` / `local`) sit beside `cost_type`, which stays
+the pricing mechanism; the values and pure helpers are in `specivo.core.ai_billing`. An account without
+`owner_user_id` is an instance account (administrators manage it, everyone sees it); an owned one is personal (its
+owner manages it under `ai_subscriptions_self_service`, only the owner and administrators see it). `slug` is unique per
+owner and among instance accounts (two partial unique indexes). `reimburse_share` (`NUMERIC(5, 4)`, 0 to 1) is allowed
+only on employee-paid accounts. `route_patterns` are case-insensitive `fnmatch` patterns over an entry's `route`;
+`tool_slugs` empty covers every tool. Accounts are deactivated, not deleted. Every subscription is the fee schedule of a
+personal `subscription` account (`ai_subscriptions.billing_account_id`), created with it, slug `<plan_key>-<id>`, with
+no tools of its own (coverage stays the subscription's). `ai_usage_entries.payer` (`unknown` until something decides),
+`billing_account_id` and `route` (the raw backend id, String(100)) are snapshots like `cost_type`; `route` never feeds
+pricing. The project setting `ai_usage_payer_default` (`employer` / `employee`; absent = `none`) is a key of
+`projects.settings`, read with `project_payer_default`.
 
 **AI usage entries.** `ai_usage_entries` holds one bucket of usage per session x model x **UTC day**, logged in a
 user's name (`user_id`, on behalf of) and written by `reporter_user_id` / `reporter_api_key_id` with a `source`
