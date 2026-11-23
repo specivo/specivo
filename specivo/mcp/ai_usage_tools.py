@@ -419,8 +419,6 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     cost_amount: Any = None,
     cost_currency: str | None = None,
     comments: str | None = None,
-    billing_account: str | None = None,
-    payer: str | None = None,
     offset: int = 0,
     limit: int = 25,
 ) -> str:

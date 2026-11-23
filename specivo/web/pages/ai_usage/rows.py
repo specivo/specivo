@@ -78,7 +78,6 @@ async def _rows(
                 "branch": e.git_branch or "",
                 "unattended": e.unattended,
                 "profile": e.profile or "",
-                "payer": e.payer,
                 "comments": e.comments or "",
                 "excluded": e.is_excluded,
                 "editable": editable,

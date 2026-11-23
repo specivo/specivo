@@ -1509,9 +1509,23 @@ async def specivo_ai_usage(  # noqa: PLR0913
         str | None,
         Field(description="list: only your own entries from this agent session (the session= value on your entries)."),
     ] = None,
-    payer: Annotated[str | None, Field(description="list: only usage paid by employer, employee or unknown.")] = None,
+    payer: Annotated[
+        str | None,
+        Field(
+            description=(
+                "list: only usage paid by employer, employee or unknown. "
+                "update: employer or employee, for an override without an account."
+            )
+        ),
+    ] = None,
     billing_account: Annotated[
-        str | None, Field(description="list: only this billing account (id or slug), or 'none' for usage without one.")
+        str | None,
+        Field(
+            description=(
+                "list: only this billing account (id or slug), or 'none' for usage without one. "
+                "update: slug of the billing account that paid ('' clears the override)."
+            )
+        ),
     ] = None,
     input_tokens: Annotated[int | None, Field(ge=0, description="update: new input token count.")] = None,
     output_tokens: Annotated[int | None, Field(ge=0, description="update: new output token count.")] = None,
@@ -1525,13 +1539,6 @@ async def specivo_ai_usage(  # noqa: PLR0913
     ] = None,
     cost_currency: Annotated[str | None, Field(description="update: ISO currency of cost_amount.")] = None,
     comments: Annotated[str | None, Field(description="update: new note ('' clears it).")] = None,
-    billing_account: Annotated[
-        str | None,
-        Field(description="update: slug of the billing account that paid ('' clears the override)."),
-    ] = None,
-    payer: Annotated[
-        str | None, Field(description="update: employer or employee, for an override without an account.")
-    ] = None,
     offset: Annotated[int, Field(description="list: entries to skip.", ge=0)] = 0,
     limit: Annotated[int, Field(description="list: max entries (1-100).", ge=1, le=100)] = 25,
 ) -> str:
@@ -1570,8 +1577,6 @@ async def specivo_ai_usage(  # noqa: PLR0913
             cost_amount=cost_amount,
             cost_currency=cost_currency,
             comments=comments,
-            billing_account=billing_account,
-            payer=payer,
             offset=offset,
             limit=limit,
         )
