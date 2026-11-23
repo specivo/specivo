@@ -32,7 +32,8 @@ Writing
 
 ``can_edit``: the entry's user, ``manage_ai_usage`` in its project, or an
 administrator. Reporter and import entries keep their token, model and tool
-columns: only the project, the issue and the comments change. People exclude
+columns: only the project, the issue, the comments and the billing override
+change. People exclude
 them (``excluded_at``) rather than delete them, and a later upsert keeps the
 exclusion; administrators may hard-delete. Moving an entry to another project
 is checked like logging it there in its user's name (``require_can_log``),
@@ -60,8 +61,18 @@ may affect again and re-prices those whose cost type or subscription changed
 (:meth:`AiUsageService.rebill_for_account`); a moved entry is resolved again
 in its new project.
 
+Whoever may edit an entry may also override its billing
+(:class:`BillingOverride`, the change key :data:`BILLING_OVERRIDE`): a billing
+account the entry's user may use (their own or an instance account, and one
+the editor may see), whose payer becomes the entry's, or a payer without an
+account. The entry's ``billing_method`` becomes ``manual``, which replays and
+re-resolution keep (only the cost type follows the account's default);
+clearing the override resolves the entry again by the other rules. Every
+change of an override is audited (``ai_usage_billing_overridden``).
+
 Audit: logging for another user, an edit by someone other than the entry's
-user, excluding and including, deleting, and recomputing costs.
+user, a billing override, excluding and including, deleting, and recomputing
+costs.
 """
 
 from __future__ import annotations
@@ -81,6 +92,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.ai_billing import (
+    ACCOUNT_PAYERS,
     BILLING_METHOD_MANUAL,
     BILLING_METHOD_NONE,
     BILLING_METHOD_PROJECT_DEFAULT,
@@ -126,6 +138,7 @@ from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
+from specivo.services.ai_billing_account_service import AiBillingAccountService
 from specivo.services.ai_billing_resolution import (
     BillingLookups,
     BillingRequest,
@@ -186,6 +199,10 @@ USAGE_FIELDS: frozenset[str] = frozenset(
         "repo_hint",
     }
 )
+#: The change key of a billing override: a :class:`BillingOverride` sets one, ``None`` clears it.
+BILLING_OVERRIDE = "billing"
+#: Entry state a billing override changes (and its audit event records).
+_BILLING_STATE: tuple[str, ...] = ("billing_method", "billing_account_id", "payer", "cost_type")
 #: Usage fields whose change re-prices the entry.
 _COST_FIELDS: frozenset[str] = frozenset(
     {"tool", "provider", "model", "usage_date", "started_at", "tokens", "long_context", "cost_type", "reported_cost"}
@@ -285,6 +302,23 @@ class AiUsageInput:
 
 
 @dataclass(frozen=True, slots=True)
+class BillingOverride:
+    """The billing a person sets on an entry: an account (whose payer becomes the entry's) or a payer alone.
+
+    Both ``None`` is no override: it clears one, like passing ``None`` for
+    :data:`BILLING_OVERRIDE`. A payer sent with an account must be the
+    account's.
+    """
+
+    account_id: int | None = None
+    payer: str | None = None
+
+    @property
+    def is_clear(self) -> bool:
+        return self.account_id is None and self.payer is None
+
+
+@dataclass(frozen=True, slots=True)
 class ModelSuggestion:
     """A model name for a report's model filter, with its provider and the other names it is priced under."""
 
@@ -325,6 +359,8 @@ class EntryReferences:
     issue_keys: dict[int, str] = field(default_factory=dict)
     #: Names of the API keys that reported entries for someone else ("logged by X via key Y").
     key_names: dict[int, str] = field(default_factory=dict)
+    #: The billing accounts of the entries that the reader may see (instance ones, their own; all for admins).
+    accounts: dict[int, AiBillingAccount] = field(default_factory=dict)
 
 
 #: How many unpriced models a summary or report names.
@@ -1587,12 +1623,15 @@ class AiUsageService:
 
         *changes* maps field names (``project_id``, ``issue_id``, ``comments``,
         and for manual, API and MCP entries the fields of :class:`AiUsageInput`)
-        to new values. A locked field on a reporter or import entry is a 422
-        ``ai_usage_field_locked``. Audited when the actor is not the entry's user.
+        to new values; :data:`BILLING_OVERRIDE` sets (a :class:`BillingOverride`)
+        or clears (``None``) the billing override, on every entry. A locked
+        field on a reporter or import entry is a 422 ``ai_usage_field_locked``.
+        Audited when the actor is not the entry's user; a changed billing
+        override always (``ai_usage_billing_overridden``).
         """
         if not await self.can_edit(session, actor, entry):
             raise PermissionDeniedError("You do not have permission to edit this AI usage entry")
-        unknown = set(changes) - ATTRIBUTION_FIELDS - USAGE_FIELDS
+        unknown = set(changes) - ATTRIBUTION_FIELDS - USAGE_FIELDS - {BILLING_OVERRIDE}
         if unknown:
             raise _invalid(f"Unknown fields: {', '.join(sorted(unknown))}", sorted(unknown)[0])
         if entry.is_locked:
@@ -1604,6 +1643,12 @@ class AiUsageService:
                     locked[0],
                     "ai_usage_field_locked",
                 )
+
+        override = await self._checked_override(session, actor, entry, changes.get(BILLING_OVERRIDE))
+        # Setting an override, or clearing one that is set (clearing none changes nothing).
+        overrides = BILLING_OVERRIDE in changes and (
+            override is not None or entry.billing_method == BILLING_METHOD_MANUAL
+        )
 
         before = self._editable_state(entry)
         project_id = changes.get("project_id", entry.project_id)
@@ -1642,9 +1687,12 @@ class AiUsageService:
             ):
                 setattr(entry, name, values[name])
 
+        if overrides:
+            self._apply_override(entry, override)
+
         reprice = bool(usage_changes & _COST_FIELDS)
-        if reprice or entry.project_id != before["project_id"]:
-            # The billing follows the usage and the project (its payer default).
+        if reprice or overrides or entry.project_id != before["project_id"]:
+            # The billing follows the usage, the project (its payer default) and a person's override.
             requested = changes.get("cost_type", entry.requested_cost_type)
             if requested is not None and requested not in AI_USAGE_COST_TYPES:
                 raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
@@ -1668,12 +1716,89 @@ class AiUsageService:
             diff["comments"] = {"changed": True}
         entry.revision += 1
         await session.flush()
-        if actor.id != entry.user_id:
+        target: User | None = None
+        if overrides and any(name in diff for name in ("billing_method", "billing_account_id", "payer")):
+            # The override goes to its own event; the generic one keeps what else changed.
+            billing_diff = {name: diff.pop(name) for name in _BILLING_STATE if name in diff}
             target = await session.get(User, entry.user_id)
+            await self._audit_override(session, actor, entry, target, billing_diff, before, request)
+        if actor.id != entry.user_id and diff:
+            target = target or await session.get(User, entry.user_id)
             details = await self._details(session, entry, target)
             details["changes"] = diff
             await self._audit(session, AuditEvent.AI_USAGE_UPDATED_BY_OTHER, actor, entry, details, request)
         return entry
+
+    async def _checked_override(
+        self, session: AsyncSession, actor: User, entry: AiUsageEntry, override: BillingOverride | None
+    ) -> tuple[AiBillingAccount | None, str] | None:
+        """The account and payer *override* sets on *entry*, or ``None`` to clear; a 422 when it is not usable.
+
+        The account must be one the entry's user may use (their own or an
+        instance account), active (the entry's current account may stay), and
+        one *actor* may see (a manager cannot pick a person's private account).
+        One answer for unknown, foreign, invisible and inactive accounts.
+        """
+        if override is None or override.is_clear:
+            return None
+        if override.payer is not None and override.payer not in ACCOUNT_PAYERS:
+            raise _invalid(f"payer must be one of {', '.join(ACCOUNT_PAYERS)}", "payer")
+        if override.account_id is None:
+            return None, override.payer or PAYER_UNKNOWN
+        account = await session.get(AiBillingAccount, override.account_id)
+        usable = (
+            account is not None
+            and account.owner_user_id in (None, entry.user_id)
+            and (account.is_active or account.id == entry.billing_account_id)
+            and AiBillingAccountService.can_view(actor, account)
+        )
+        if not usable or account is None:
+            raise _invalid(
+                "Choose an active billing account of the entry's user or of the instance",
+                "billing_account",
+                "ai_usage_billing_account_unknown",
+            )
+        if override.payer is not None and override.payer != account.payer:
+            raise _invalid("The payer of an entry with a billing account is the account's payer", "payer")
+        return account, account.payer
+
+    @staticmethod
+    def _apply_override(entry: AiUsageEntry, override: tuple[AiBillingAccount | None, str] | None) -> None:
+        """Store a checked override on *entry*, or mark a cleared one for resolution by the other rules."""
+        if override is not None:
+            account, payer = override
+            entry.billing_method = BILLING_METHOD_MANUAL
+            entry.billing_account_id = account.id if account is not None else None
+            entry.payer = payer
+        elif entry.billing_method == BILLING_METHOD_MANUAL:
+            entry.billing_method = BILLING_METHOD_NONE
+
+    async def _audit_override(
+        self,
+        session: AsyncSession,
+        actor: User,
+        entry: AiUsageEntry,
+        target: User | None,
+        billing_diff: dict[str, Any],
+        before: Mapping[str, Any],
+        request: Request | None,
+    ) -> None:
+        details = await self._details(session, entry, target)
+        details["override"] = "set" if entry.billing_method == BILLING_METHOD_MANUAL else "cleared"
+        details["changes"] = billing_diff
+        details["billing_account"] = await self._account_slugs(
+            session, before["billing_account_id"], entry.billing_account_id
+        )
+        await self._audit(session, AuditEvent.AI_USAGE_BILLING_OVERRIDDEN, actor, entry, details, request)
+
+    @staticmethod
+    async def _account_slugs(session: AsyncSession, old_id: int | None, new_id: int | None) -> dict[str, str | None]:
+        """The slugs of the accounts an override replaced and set, for its audit event."""
+        slugs: dict[str, str | None] = {}
+        for name, account_id in (("old", old_id), ("new", new_id)):
+            account = await session.get(AiBillingAccount, account_id) if account_id is not None else None
+            slugs[name] = account.slug if account is not None else None
+        return slugs
 
     async def _require_can_move(
         self,
@@ -1769,6 +1894,7 @@ class AiUsageService:
             "repo_hint": entry.repo_hint,
             "payer": entry.payer,
             "billing_account_id": entry.billing_account_id,
+            "billing_method": entry.billing_method,
         }
 
     @staticmethod
@@ -1864,10 +1990,10 @@ class AiUsageService:
         return project.id
 
     async def references(self, session: AsyncSession, viewer: User, entries: list[AiUsageEntry]) -> EntryReferences:
-        """The users, project keys and issue keys *entries* name, in up to four queries.
+        """The users, project keys, issue keys and billing accounts *entries* name, in up to five queries.
 
-        Issues *viewer* cannot see are left out. Key names are loaded only for
-        entries reported for someone else.
+        Issues and billing accounts *viewer* cannot see are left out. Key names
+        are loaded only for entries reported for someone else.
         """
         from specivo.models.auth import ApiKey
         from specivo.services.issue_service import IssueService
@@ -1896,6 +2022,10 @@ class AiUsageService:
             if clause is not None:
                 stmt = stmt.where(clause)
             refs.issue_keys = {iid: f"{key}-{number}" for iid, key, number in (await session.execute(stmt)).all()}
+        account_ids = {e.billing_account_id for e in entries if e.billing_account_id is not None}
+        if account_ids:
+            rows_a = await session.execute(select(AiBillingAccount).where(AiBillingAccount.id.in_(account_ids)))
+            refs.accounts = {a.id: a for a in rows_a.scalars().all() if AiBillingAccountService.can_view(viewer, a)}
         return refs
 
     # -- range recompute ------------------------------------------------------------

@@ -28,6 +28,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded the AI billing account and project payer default audit events (§18).
 **Revised:** 2026-11-23 — recorded the parent session, unattended flag and agent profile of AI usage entries (§4).
 **Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
+**Revised:** 2026-11-23 — recorded the manual billing override on AI usage entries (§4) and its audit event (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -298,6 +299,19 @@ route patterns, or changing an account's payer, patterns, tools, default cost ty
 may affect from the stored inputs and re-prices those whose cost type or subscription changed, in the same transaction
 (`AiUsageService.rebill_for_account`; `rebill_for_project` for a changed payer default), with one
 `ai_usage_costs_recomputed` audit event (`reason` `billing`) when something changed.
+
+**Billing override.** Whoever may edit an entry (`can_edit`, also on reporter and import entries) sets its
+billing by hand through `AiUsageService.update` with the change key `BILLING_OVERRIDE` (`"billing"`): a
+`BillingOverride` with an account (one of the entry user's own or an instance account, active unless it is
+already the entry's, and one the editor may see, so a manager cannot name a person's private account; one
+422 `ai_usage_billing_account_unknown` for every refusal) whose payer becomes the entry's (a payer sent with
+it must match), or a payer alone; `None` clears it. Setting one stores `billing_method` `manual` and
+re-resolves (only the cost type follows the account's default), clearing one sets `none` and resolves by the
+other rules; clearing an entry without an override writes nothing. Surfaces: `PATCH /ai-usage/{id}/`
+(`billing_account_id` / `payer`, `null` clears), the web edit form (`billing`: `account:<id>`,
+`payer:<payer>`, `""` automatic; omitted = unchanged) and `specivo_ai_usage` `op="update"`
+(`billing_account` slug, `payer`, `""` clears). Entry responses carry `payer`, `billing_method` and the
+account (`EntryReferences.accounts`, only those the reader may see).
 
 **AI usage entries.** `ai_usage_entries` holds one bucket of usage per session x model x **UTC day**, logged in a
 user's name (`user_id`, on behalf of) and written by `reporter_user_id` / `reporter_api_key_id` with a `source`
@@ -930,7 +944,10 @@ user's name; details `entry_id`, `target_user_id`, `target_login`, `source`, `to
 `project_key`, `issue`, `reporter_api_key_id`; a replay that changes another user's bucket writes it again with
 `status: "updated"` and `revision`, an unchanged replay none),
 `AI_USAGE_UPDATED_BY_OTHER` (an edit by someone other than the entry's user; the same plus `changes`, comments only as
-`{"changed": true}`), `AI_USAGE_EXCLUDED` / `AI_USAGE_INCLUDED` and `AI_USAGE_DELETED` (whoever did it; a delete adds
+`{"changed": true}`; billing fields of an override go to the next event instead),
+`AI_USAGE_BILLING_OVERRIDDEN` (a billing override set or cleared, by anyone; the same plus `override` `set` /
+`cleared`, `changes` of `billing_method`, `billing_account_id`, `payer`, `cost_type`, and `billing_account`
+`{old, new}` slugs), `AI_USAGE_EXCLUDED` / `AI_USAGE_INCLUDED` and `AI_USAGE_DELETED` (whoever did it; a delete adds
 `tokens` and `cost_type`), and `AI_USAGE_COSTS_RECOMPUTED` (one per range: `provider`, `models`, `from`, `to`,
 `entries`, `changed`, `before` and `after` totals per currency of `marginal` and `api_equivalent`; user none when the
 task runs without an actor). Entries a person logs for themselves are not audited.

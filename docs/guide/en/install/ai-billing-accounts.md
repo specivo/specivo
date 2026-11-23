@@ -52,7 +52,9 @@ Service accounts own no billing accounts. Self-service is the same switch as for
 
 When usage is logged, Specivo picks the account in this order and stops at the first match:
 
-1. An account a person set on the entry by hand.
+1. An account (or a payer without an account) a person set on the entry by hand, on the
+   [entry's edit form](../projects/ai-usage.md#correct-who-paid), with `specivo_ai_usage` or through
+   the API. It is kept until someone sets it back to automatic.
 2. The account the record names by slug: your own first, then a company account.
 3. A company account whose route patterns match the route and that covers the tool.
 4. One of your own accounts that matches the same way.

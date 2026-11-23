@@ -26,7 +26,15 @@ from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences, money_from
+from specivo.services.ai_billing_account_service import AiBillingAccountService
+from specivo.services.ai_usage_service import (
+    BILLING_OVERRIDE,
+    AiUsageInput,
+    AiUsageService,
+    BillingOverride,
+    EntryReferences,
+    money_from,
+)
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent
@@ -35,6 +43,7 @@ if TYPE_CHECKING:
     from specivo.services.ai_spend_report_service import SpendReport
 
 _usage = AiUsageService()
+_accounts = AiBillingAccountService()
 _issues = IssueService()
 _projects = ProjectService()
 
@@ -116,6 +125,21 @@ def _line(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     )
 
 
+def _billing(entry: AiUsageEntry, refs: EntryReferences) -> str:
+    """Who paid, through which account (when the reader may see it), and whether a person set it."""
+    account = refs.accounts.get(entry.billing_account_id) if entry.billing_account_id is not None else None
+    text = f"Payer: {entry.payer}"
+    if account is not None:
+        text += f"  Billing account: {account.slug}"
+    elif entry.billing_account_id is not None:
+        text += "  Billing account: (a personal account)"
+    if entry.billing_method == "manual":
+        text += "  (set by hand; clear it with billing_account='')"
+    else:
+        text += f"  (resolved: {entry.billing_method})"
+    return text
+
+
 def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     lines = [
         f"AI usage entry #{entry.id} (revision {entry.revision})",
@@ -142,6 +166,7 @@ def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     if long:
         lines.append(f"Long-context tokens (included above): {long}")
     lines.append(f"Cost type: {entry.cost_type}  Basis: {entry.cost_basis}")
+    lines.append(_billing(entry, refs))
     lines.append(f"Marginal cost: {_money(entry.marginal)}")
     lines.append(f"API equivalent: {_money(entry.api_equivalent)}")
     if entry.reported_cost is not None:
@@ -152,7 +177,7 @@ def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     if entry.is_excluded and entry.excluded_at is not None:
         lines.append(f"Excluded from reports since {entry.excluded_at.isoformat()}")
     if entry.is_locked:
-        lines.append("Reported usage: only the project, the issue and the comments can change.")
+        lines.append("Reported usage: only the project, the issue, the comments and the billing can change.")
     return "\n".join(lines)
 
 
@@ -394,6 +419,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     cost_amount: Any = None,
     cost_currency: str | None = None,
     comments: str | None = None,
+    billing_account: str | None = None,
+    payer: str | None = None,
     offset: int = 0,
     limit: int = 25,
 ) -> str:
@@ -470,6 +497,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     if cost_amount is not None or cost_currency is not None:
         cleared = (cost_amount is None or str(cost_amount).strip() == "") and not (cost_currency or "").strip()
         changes["reported_cost"] = None if cleared else _cost(cost_amount, cost_currency)
+    if billing_account is not None or payer is not None:
+        changes[BILLING_OVERRIDE] = await _override(session, entry, billing_account, payer)
     if not changes:
         raise ValidationError(message="op='update' needs at least one field to change", field="op")
     entry = await _usage.update(session, user, entry, changes)
@@ -482,6 +511,26 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
         project_id=entry.project_id,
     )
     return await _show(session, user, entry)
+
+
+async def _override(
+    session: AsyncSession, entry: AiUsageEntry, billing_account: str | None, payer: str | None
+) -> BillingOverride | None:
+    """The billing override of an update: an account by slug (the entry user's own first, then an instance
+    account), a payer alone, or ``None`` to clear it (both empty)."""
+    slug = (billing_account or "").strip()
+    who = (payer or "").strip().lower() or None
+    if not slug:
+        return BillingOverride(payer=who) if who else None
+    account = await _accounts.find_by_slug(session, slug, user_id=entry.user_id, active_only=False)
+    if account is None:
+        raise AppError(
+            code="ai_usage_billing_account_unknown",
+            message="Choose an active billing account of the entry's user or of the instance",
+            status_code=422,
+            field="billing_account",
+        )
+    return BillingOverride(account_id=account.id, payer=who)
 
 
 async def _list(  # noqa: PLR0913

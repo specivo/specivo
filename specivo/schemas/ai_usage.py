@@ -17,6 +17,7 @@ from specivo.schemas.common import IdName, PaginatedResponse
 from specivo.schemas.money import MoneyIn, MoneyOut
 
 AiUsageCostType = Literal["subscription", "api", "local", "free", "unknown"]
+AiUsagePayer = Literal["employer", "employee"]
 
 _COUNT = Field(0, ge=0, le=MAX_TOKENS_PER_CLASS)
 
@@ -115,9 +116,17 @@ class AiUsageUpdate(BaseModel):
 
     ``project_key`` moves the entry (``null``: unassigned; its issue is
     dropped unless ``issue_id`` is sent too). Reporter and import entries only
-    take ``project_key``, ``issue_id`` and ``comments`` (422
-    ``ai_usage_field_locked`` otherwise). ``tokens`` changes only the classes
-    sent.
+    take ``project_key``, ``issue_id``, ``comments`` and the billing override
+    (422 ``ai_usage_field_locked`` otherwise). ``tokens`` changes only the
+    classes sent.
+
+    Billing override, on any entry: ``billing_account_id`` sets the billing
+    account the usage was paid through (one of the entry user's own accounts
+    or an instance account; its payer becomes the entry's), ``payer`` alone
+    sets who paid without an account. The override is kept when the reporter
+    sends the bucket again and when accounts change. Send both as ``null``
+    (or either alone as ``null``) to clear it and let the server resolve the
+    billing again.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -139,10 +148,26 @@ class AiUsageUpdate(BaseModel):
     external_session_id: str | None = Field(None, max_length=200)
     git_branch: str | None = Field(None, max_length=255)
     repo_hint: str | None = Field(None, max_length=255)
+    billing_account_id: int | None = Field(
+        None, description="Override: the billing account the usage was paid through (null clears the override)"
+    )
+    payer: AiUsagePayer | None = Field(
+        None, description="Override without an account: who paid (with an account it must be the account's payer)"
+    )
 
 
 class AiUsageUserOut(IdName):
     login: str
+
+
+class AiUsageBillingAccountRef(BaseModel):
+    """The billing account an entry was paid through."""
+
+    id: int
+    slug: str
+    name: str
+    kind: str
+    instance: bool = Field(description="A company account (no owner)")
 
 
 class AiUsageEntryOut(BaseModel):
@@ -181,6 +206,16 @@ class AiUsageEntryOut(BaseModel):
     total_tokens: int = Field(description="All tokens of the entry: every class of both buckets")
     cost_type: str
     subscription_id: int | None
+    payer: str = Field(description="Who paid: employer, employee or unknown")
+    billing_method: str = Field(
+        description=(
+            "What decided the billing: manual (a person's override), record, instance_route, personal_route, "
+            "subscription, project_default or none"
+        )
+    )
+    billing_account: AiUsageBillingAccountRef | None = Field(
+        description="The billing account, when there is one and the reader may see it"
+    )
     cost_basis: str = Field(description="calculated, reported, manual, unpriced or partial")
     marginal_cost: MoneyOut | None
     api_equivalent_cost: MoneyOut | None

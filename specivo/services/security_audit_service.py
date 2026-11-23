@@ -232,13 +232,17 @@ class AuditEvent(StrEnum):
     # ``project_key``, ``issue``; a replay that changes the bucket adds
     # ``status: "updated"`` and ``revision``); changed by someone other than the entry's
     # user (the same plus ``changes``: ``{field: {old, new}}``, comments only
-    # as ``{"changed": true}``); excluded from reports, or included again;
-    # deleted. Costs recomputed for a range (``provider``, ``models``,
+    # as ``{"changed": true}``); its billing override set or cleared, by
+    # anyone (the same plus ``override`` = ``set`` / ``cleared``, ``changes``
+    # of ``billing_method``, ``billing_account_id``, ``payer`` and
+    # ``cost_type``, and ``billing_account`` ``{old, new}`` slugs); excluded
+    # from reports, or included again; deleted. Costs recomputed for a range (``provider``, ``models``,
     # ``from``, ``to``, ``entries``, ``changed``, and ``before`` / ``after``
     # totals per currency of ``marginal`` and ``api_equivalent``). Never
     # comments, prompts or code.
     AI_USAGE_LOGGED_FOR_OTHER = "ai_usage_logged_for_other"
     AI_USAGE_UPDATED_BY_OTHER = "ai_usage_updated_by_other"
+    AI_USAGE_BILLING_OVERRIDDEN = "ai_usage_billing_overridden"
     AI_USAGE_EXCLUDED = "ai_usage_excluded"
     AI_USAGE_INCLUDED = "ai_usage_included"
     AI_USAGE_DELETED = "ai_usage_deleted"
@@ -331,6 +335,7 @@ _AI_USAGE_EVENTS = frozenset(
     {
         AuditEvent.AI_USAGE_LOGGED_FOR_OTHER,
         AuditEvent.AI_USAGE_UPDATED_BY_OTHER,
+        AuditEvent.AI_USAGE_BILLING_OVERRIDDEN,
         AuditEvent.AI_USAGE_EXCLUDED,
         AuditEvent.AI_USAGE_INCLUDED,
         AuditEvent.AI_USAGE_DELETED,
@@ -534,6 +539,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
         [
             AuditEvent.AI_USAGE_LOGGED_FOR_OTHER,
             AuditEvent.AI_USAGE_UPDATED_BY_OTHER,
+            AuditEvent.AI_USAGE_BILLING_OVERRIDDEN,
             AuditEvent.AI_USAGE_EXCLUDED,
             AuditEvent.AI_USAGE_INCLUDED,
             AuditEvent.AI_USAGE_DELETED,

@@ -29,6 +29,7 @@ from specivo.core.security import get_current_user
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.user import User
 from specivo.schemas.ai_usage import (
+    AiUsageBillingAccountRef,
     AiUsageCostType,
     AiUsageCreate,
     AiUsageEntryOut,
@@ -38,7 +39,13 @@ from specivo.schemas.ai_usage import (
     AiUsageUserOut,
 )
 from specivo.schemas.money import MoneyOut
-from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences
+from specivo.services.ai_usage_service import (
+    BILLING_OVERRIDE,
+    AiUsageInput,
+    AiUsageService,
+    BillingOverride,
+    EntryReferences,
+)
 from specivo.services.project_service import ProjectService
 
 router = APIRouter(tags=["ai-usage"])
@@ -63,6 +70,15 @@ def _user_out(refs: EntryReferences, user_id: int) -> AiUsageUserOut:
     if user is None:
         return AiUsageUserOut(id=user_id, name="", login="")
     return AiUsageUserOut(id=user.id, name=user.display_name, login=user.login)
+
+
+def _account_ref(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageBillingAccountRef | None:
+    account = refs.accounts.get(entry.billing_account_id) if entry.billing_account_id is not None else None
+    if account is None:
+        return None
+    return AiUsageBillingAccountRef(
+        id=account.id, slug=account.slug, name=account.name, kind=account.kind, instance=account.owner_user_id is None
+    )
 
 
 def entry_out(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageEntryOut:
@@ -92,6 +108,9 @@ def entry_out(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageEntryOut:
         total_tokens=sum(entry.all_tokens().values()),
         cost_type=entry.cost_type,
         subscription_id=entry.subscription_id,
+        payer=entry.payer,
+        billing_method=entry.billing_method,
+        billing_account=_account_ref(entry, refs),
         cost_basis=entry.cost_basis,
         marginal_cost=MoneyOut.from_money(entry.marginal) if entry.marginal is not None else None,
         api_equivalent_cost=(MoneyOut.from_money(entry.api_equivalent) if entry.api_equivalent is not None else None),
@@ -209,6 +228,9 @@ async def _changes(db: DbSession, viewer: User, entry: AiUsageEntry, data: AiUsa
             }
     if "cost" in sent:
         changes["reported_cost"] = data.cost.to_money() if data.cost is not None else None
+    if "billing_account_id" in sent or "payer" in sent:
+        override = BillingOverride(account_id=data.billing_account_id, payer=data.payer)
+        changes[BILLING_OVERRIDE] = None if override.is_clear else override
     return changes
 
 
@@ -406,9 +428,12 @@ async def update_ai_usage(
 
     Moving it (``project_key``) is checked like logging it there in its user's
     name. Reporter and import entries keep their usage: 422
-    ``ai_usage_field_locked`` for anything but ``project_key``, ``issue_id``
-    and ``comments``. Changing the usage re-prices the entry. An edit by
-    someone else than the entry's user is audited.
+    ``ai_usage_field_locked`` for anything but ``project_key``, ``issue_id``,
+    ``comments`` and the billing override. Changing the usage re-prices the
+    entry. ``billing_account_id`` / ``payer`` set or clear the billing
+    override (422 ``ai_usage_billing_account_unknown`` for an account the
+    entry's user may not use or the caller may not see). An edit by someone
+    else than the entry's user is audited, and so is every override.
     """
     entry = await _service.get_visible(db, entry_id, current_user)
     changes = await _changes(db, current_user, entry, data)

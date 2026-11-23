@@ -303,7 +303,9 @@ async def test_reporter_entries_keep_their_usage(db_session: AsyncSession, w: Wo
     await db_session.commit()
     entry_id = outcome.entry.id
     _as(w, "alice")
-    assert "only the project, the issue and the comments" in await server.specivo_ai_usage(op="get", entry_id=entry_id)
+    assert "only the project, the issue, the comments and the billing can change" in await server.specivo_ai_usage(
+        op="get", entry_id=entry_id
+    )
     refused = await _refused(server.specivo_ai_usage(op="update", entry_id=entry_id, input_tokens=5))
     assert "only the project, the issue and the comments can change" in refused
     text = await server.specivo_ai_usage(op="update", entry_id=entry_id, issue_ref="MAUA-1", comments="Login")
@@ -484,3 +486,84 @@ async def test_replay_naming_another_project_is_refused(w: World) -> None:
     await _log(w, "mgr", issue_ref="MAUA-1", idempotency_key="mau-run-5")
     refused = await _refused(_log(w, "mgr", project_key="MAUB", idempotency_key="mau-run-5"))
     assert "belongs to another project" in refused
+
+
+async def test_update_sets_and_clears_a_billing_override(db_session: AsyncSession, w: World) -> None:
+    from specivo.services.ai_billing_account_service import AiBillingAccountService, BillingAccountInput
+
+    accounts = AiBillingAccountService()
+    gateway = await accounts.create(
+        db_session,
+        BillingAccountInput(slug="mau-gw", name="Corp gateway", kind="gateway", payer="employer"),
+        owner=None,
+        actor=w.users["admin"],
+    )
+    own = await accounts.create(
+        db_session,
+        BillingAccountInput(slug="mau-key", name="Own key", kind="api_key", payer="employee"),
+        owner=w.users["alice"],
+        actor=w.users["admin"],
+    )
+    await db_session.commit()
+    entry_id = _entry_id(await _log(w, "alice", issue_ref="MAUA-1"))
+    _as(w, "alice")
+
+    text = await server.specivo_ai_usage(op="update", entry_id=entry_id, billing_account="mau-gw")
+    assert "Payer: employer  Billing account: mau-gw  (set by hand; clear it with billing_account='')" in text
+    entry = await _entry(db_session, entry_id)
+    assert (entry.billing_method, entry.billing_account_id, entry.payer) == ("manual", gateway.id, "employer")
+
+    await server.specivo_ai_usage(op="update", entry_id=entry_id, billing_account="mau-key")
+    assert (await _entry(db_session, entry_id)).billing_account_id == own.id
+
+    text = await server.specivo_ai_usage(op="update", entry_id=entry_id, payer="employee")
+    assert "Payer: employee  (set by hand" in text
+    assert (await _entry(db_session, entry_id)).billing_account_id is None
+
+    text = await server.specivo_ai_usage(op="update", entry_id=entry_id, billing_account="")
+    assert "(resolved: none)" in text and "Payer: unknown" in text
+    assert (await _entry(db_session, entry_id)).billing_method == "none"
+
+    refused = await _refused(server.specivo_ai_usage(op="update", entry_id=entry_id, billing_account="nope"))
+    assert "Choose an active billing account" in refused
+
+    changed = (
+        (
+            await db_session.execute(
+                select(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AI_USAGE_CHANGED.value)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [e.details["fields"] for e in changed] == [["billing"]] * 4
+    overridden = (
+        (
+            await db_session.execute(
+                select(SecurityAuditLog).where(
+                    SecurityAuditLog.event_type == AuditEvent.AI_USAGE_BILLING_OVERRIDDEN.value
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [e.details["override"] for e in overridden] == ["set", "set", "set", "cleared"]
+
+
+async def test_a_manager_cannot_name_a_persons_private_account(db_session: AsyncSession, w: World) -> None:
+    from specivo.services.ai_billing_account_service import AiBillingAccountService, BillingAccountInput
+
+    await AiBillingAccountService().create(
+        db_session,
+        BillingAccountInput(slug="mau-key2", name="Own key", kind="api_key", payer="employee"),
+        owner=w.users["alice"],
+        actor=w.users["admin"],
+    )
+    await db_session.commit()
+    entry_id = _entry_id(await _log(w, "alice", issue_ref="MAUA-1"))
+    _as(w, "mgr")
+    refused = await _refused(server.specivo_ai_usage(op="update", entry_id=entry_id, billing_account="mau-key2"))
+    assert "Choose an active billing account" in refused
+    text = await server.specivo_ai_usage(op="update", entry_id=entry_id, payer="employee")
+    assert "Payer: employee" in text
