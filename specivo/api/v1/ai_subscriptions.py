@@ -7,11 +7,15 @@
   (on by default). Account-wide, so a project-limited API key is refused.
 - ``/admin/ai-subscriptions/`` and ``/admin/ai-tools/``: administrators, for
   every user. Changes to another user's subscription are audited.
+- ``/admin/ai-company-plans/``: company seat plans (no holder, a seat count)
+  and their members, ``/admin/ai-company-plans/{id}/members/``.
+  Administrators only; every change is audited.
 """
 
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
@@ -20,8 +24,16 @@ from specivo.core.ai_subscriptions import PLAN_PRESETS
 from specivo.core.database import DbSession
 from specivo.core.exceptions import AppError
 from specivo.core.security import get_account_user, get_current_user
+from specivo.core.utils import utcnow
+from specivo.models.ai_subscription import AiSubscription
 from specivo.models.user import User
 from specivo.schemas.ai_subscription import (
+    AiCompanyPlanCreate,
+    AiCompanyPlanOut,
+    AiCompanyPlanUpdate,
+    AiPlanMemberCreate,
+    AiPlanMemberOut,
+    AiPlanMemberUpdate,
     AiPlanPresetOut,
     AiSubscriptionAdminCreate,
     AiSubscriptionCreate,
@@ -45,8 +57,9 @@ _service = AiSubscriptionService()
 _tools = AiToolService()
 
 
-def _input(data: AiSubscriptionCreate) -> SubscriptionInput:
+def _input(data: AiSubscriptionCreate, **extra: Any) -> SubscriptionInput:
     return SubscriptionInput(
+        **extra,
         plan_key=data.plan_key,
         provider=data.provider,
         plan_name=data.plan_name,
@@ -181,7 +194,7 @@ async def admin_list_subscriptions(
         total_count=total,
         offset=offset,
         limit=limit,
-        items=[AiSubscriptionOut.from_row(r, owners.get(r.user_id)) for r in rows],
+        items=[AiSubscriptionOut.from_row(r, owners.get(r.user_id or 0)) for r in rows],
     )
 
 
@@ -224,7 +237,7 @@ async def admin_update_settings(
 async def admin_get_subscription(
     subscription_id: int, db: DbSession, current_user: User = Depends(require_admin_api)
 ) -> AiSubscriptionOut:
-    sub = await _service.get(db, subscription_id)
+    sub = await _service.get_personal(db, subscription_id)
     return AiSubscriptionOut.from_row(sub, await db.get(User, sub.user_id))
 
 
@@ -237,7 +250,7 @@ async def admin_update_subscription(
     current_user: User = Depends(require_admin_api),
 ) -> AiSubscriptionOut:
     """Change anyone's subscription (admin only). Audited when it is not the admin's own."""
-    sub = await _service.get(db, subscription_id)
+    sub = await _service.get_personal(db, subscription_id)
     sub = await _service.update(db, sub, data.changes(), actor=current_user, request=request)
     await db.refresh(sub)
     return AiSubscriptionOut.from_row(sub, await db.get(User, sub.user_id))
@@ -248,7 +261,7 @@ async def admin_delete_subscription(
     subscription_id: int, request: Request, db: DbSession, current_user: User = Depends(require_admin_api)
 ) -> Response:
     """Delete anyone's subscription (admin only). Audited when it is not the admin's own."""
-    sub = await _service.get(db, subscription_id)
+    sub = await _service.get_personal(db, subscription_id)
     await _service.delete(db, sub, actor=current_user, request=request)
     return Response(status_code=204)
 
@@ -286,3 +299,156 @@ async def admin_update_tool(
     changes = {k: getattr(data, k) for k in data.model_fields_set}
     tool = await _tools.update(db, slug, changes)
     return AiToolOut.from_row(tool)
+
+
+# ---------------------------------------------------------------------------
+# Company seat plans
+# ---------------------------------------------------------------------------
+
+
+async def _plan_out(db: DbSession, sub: AiSubscription) -> AiCompanyPlanOut:
+    today = utcnow().date()
+    members = await _service.list_members(db, sub)
+    held = sum(1 for m in members if m.starts_on <= today and (m.ends_on is None or m.ends_on >= today))
+    return AiCompanyPlanOut.from_plan(sub, held)
+
+
+@router.get("/admin/ai-company-plans/", response_model=PaginatedResponse[AiCompanyPlanOut])
+async def admin_list_company_plans(
+    db: DbSession,
+    current_user: User = Depends(require_admin_api),
+    active_on: date | None = Query(None, description="Only plans running on this UTC day"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+) -> PaginatedResponse[AiCompanyPlanOut]:
+    """Company seat plans, newest start first (admin only)."""
+    rows, total = await _service.list_subscriptions(db, company=True, active_on=active_on, offset=offset, limit=limit)
+    return PaginatedResponse[AiCompanyPlanOut](
+        total_count=total, offset=offset, limit=limit, items=[await _plan_out(db, r) for r in rows]
+    )
+
+
+@router.post("/admin/ai-company-plans/", response_model=AiCompanyPlanOut, status_code=201)
+async def admin_create_company_plan(
+    data: AiCompanyPlanCreate,
+    request: Request,
+    db: DbSession,
+    current_user: User = Depends(require_admin_api),
+) -> AiCompanyPlanOut:
+    """Add a company seat plan (admin only, audited). Its fee may be zero; it gets an instance billing account
+    paid by the employer. 422 ``ai_subscription_invalid``, ``ai_subscription_unknown_tool``, ``currency_*``."""
+    sub = await _service.create(
+        db, _input(data, seat_count=data.seat_count), owner=None, actor=current_user, request=request
+    )
+    await db.refresh(sub)
+    return await _plan_out(db, sub)
+
+
+@router.get("/admin/ai-company-plans/{subscription_id}/", response_model=AiCompanyPlanOut)
+async def admin_get_company_plan(
+    subscription_id: int, db: DbSession, current_user: User = Depends(require_admin_api)
+) -> AiCompanyPlanOut:
+    return await _plan_out(db, await _service.get_company(db, subscription_id))
+
+
+@router.patch("/admin/ai-company-plans/{subscription_id}/", response_model=AiCompanyPlanOut)
+async def admin_update_company_plan(
+    subscription_id: int,
+    data: AiCompanyPlanUpdate,
+    request: Request,
+    db: DbSession,
+    current_user: User = Depends(require_admin_api),
+) -> AiCompanyPlanOut:
+    """Change a company seat plan (admin only, audited). 422 ``ai_subscription_seats_full`` when fewer seats
+    than members holding one at once."""
+    sub = await _service.get_company(db, subscription_id)
+    sub = await _service.update(db, sub, data.changes(), actor=current_user, request=request)
+    await db.refresh(sub)
+    return await _plan_out(db, sub)
+
+
+@router.delete("/admin/ai-company-plans/{subscription_id}/", status_code=204)
+async def admin_delete_company_plan(
+    subscription_id: int, request: Request, db: DbSession, current_user: User = Depends(require_admin_api)
+) -> Response:
+    """Delete a company seat plan and its members (admin only, audited). Prefer ending it: deleting removes
+    its fee from past spend reports."""
+    sub = await _service.get_company(db, subscription_id)
+    await _service.delete(db, sub, actor=current_user, request=request)
+    return Response(status_code=204)
+
+
+@router.get("/admin/ai-company-plans/{subscription_id}/members/", response_model=list[AiPlanMemberOut])
+async def admin_list_plan_members(
+    subscription_id: int, db: DbSession, current_user: User = Depends(require_admin_api)
+) -> list[AiPlanMemberOut]:
+    """Every seat of the plan, past and present, earliest first (admin only)."""
+    sub = await _service.get_company(db, subscription_id)
+    members = await _service.list_members(db, sub)
+    people = await _service.owners(db, (m.user_id for m in members))
+    return [AiPlanMemberOut.from_row(m, people.get(m.user_id)) for m in members]
+
+
+@router.post("/admin/ai-company-plans/{subscription_id}/members/", response_model=AiPlanMemberOut, status_code=201)
+async def admin_add_plan_member(
+    subscription_id: int,
+    data: AiPlanMemberCreate,
+    request: Request,
+    db: DbSession,
+    current_user: User = Depends(require_admin_api),
+) -> AiPlanMemberOut:
+    """Give a person a seat (admin only, audited); their usage of those days is resolved again.
+
+    422 ``ai_subscription_member_invalid``, ``ai_subscription_member_overlap``, ``ai_subscription_seats_full``.
+    """
+    from specivo.services.ai_usage_service import AiUsageService
+
+    sub = await _service.get_company(db, subscription_id)
+    person = await db.get(User, data.user_id) if data.user_id is not None else None
+    if person is None and data.login:
+        person = await AiUsageService.user_by_login(db, data.login)
+    if person is None:
+        raise AppError(code="user_not_found", message="User not found", status_code=422, field="user_id")
+    member = await _service.add_member(
+        db,
+        sub,
+        person,
+        starts_on=data.starts_on or utcnow().date(),
+        ends_on=data.ends_on,
+        actor=current_user,
+        request=request,
+    )
+    await db.refresh(member)
+    return AiPlanMemberOut.from_row(member, person)
+
+
+@router.patch("/admin/ai-company-plans/{subscription_id}/members/{member_id}/", response_model=AiPlanMemberOut)
+async def admin_update_plan_member(
+    subscription_id: int,
+    member_id: int,
+    data: AiPlanMemberUpdate,
+    request: Request,
+    db: DbSession,
+    current_user: User = Depends(require_admin_api),
+) -> AiPlanMemberOut:
+    """Change a seat's days, e.g. ``ends_on`` when someone leaves (admin only, audited)."""
+    sub = await _service.get_company(db, subscription_id)
+    member = await _service.get_member(db, sub, member_id)
+    member = await _service.update_member(db, sub, member, data.changes(), actor=current_user, request=request)
+    await db.refresh(member)
+    return AiPlanMemberOut.from_row(member, await db.get(User, member.user_id))
+
+
+@router.delete("/admin/ai-company-plans/{subscription_id}/members/{member_id}/", status_code=204)
+async def admin_remove_plan_member(
+    subscription_id: int,
+    member_id: int,
+    request: Request,
+    db: DbSession,
+    current_user: User = Depends(require_admin_api),
+) -> Response:
+    """Delete a seat entered by mistake (admin only, audited). To keep past months, end it instead."""
+    sub = await _service.get_company(db, subscription_id)
+    member = await _service.get_member(db, sub, member_id)
+    await _service.remove_member(db, sub, member, actor=current_user, request=request)
+    return Response(status_code=204)

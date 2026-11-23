@@ -80,7 +80,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     ),
     "specivo_ai_subscriptions": (
         "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
-        "or 'delete'; warns about overlaps and gaps"
+        "or 'delete'; warns about overlaps and gaps. Administrators: company seat plans (company=true) and their "
+        "members ('members', 'add_member', 'end_member', 'remove_member')"
     ),
     "specivo_ai_billing_accounts": (
         "AI billing accounts (gateways, company plans, personal keys) and who pays: op='list', 'create', "
@@ -281,6 +282,21 @@ When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot
 Needs an unlimited personal API key: a project-limited key and a service account are refused, since
 subscriptions belong to a person. Administrators pass `user="login"` for someone else's.
 
+### Register a company seat plan (administrators)
+A Team or Enterprise plan the employer pays for, shared by several people:
+1. `specivo_ai_subscriptions(op="add", company=true, periods=[{{"plan_name": "Claude Team",
+   "provider": "anthropic", "amount": "750", "currency": "USD", "seat_count": 25,
+   "starts_on": "2026-11-01"}}])` -- the fee of the whole plan; it may be `"0"` when its cost is
+   booked elsewhere. It gets a company billing account paid by the employer
+2. `op="add_member"` (`subscription_id`, `user="login"`, `starts_on`) for each person with a seat;
+   their usage of those days is charged to the plan, before their own subscriptions
+3. `op="end_member"` (`subscription_id`, `user` or `member_id`, `ends_on`) when someone leaves: the
+   months before keep their seat cost. `op="remove_member"` only for a seat entered by mistake
+4. `op="members"` lists the seats; `op="list", company=true` the plans
+Each member carries one seat's share of the fee (fee / seats, by the days they held it); seats nobody
+held show as unallocated seat cost in the instance report. Seat cost of a company plan is never
+reimbursable.
+
 ### Register AI billing accounts
 Billing accounts say what usage was paid through and who pays (employer or employee):
 1. `specivo_ai_billing_accounts(op="list")` -- the company accounts and your own (each subscription
@@ -418,8 +434,10 @@ the security audit log. Notable cases:
   entry of the project in the period; plan names never appear.
 - `specivo_ai_subscriptions` works on the key owner's own subscriptions, and only with an unlimited
   key of a person (not a service account); changing them needs self-service on. Administrators reach
-  anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events. Every
-  change over MCP writes `ai_subscriptions_changed`.
+  anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events.
+  Company seat plans and their members are for administrators only; every change to them writes
+  `ai_subscription_*` / `ai_subscription_member_*` events. Every change over MCP writes
+  `ai_subscriptions_changed`.
 - `specivo_ai_billing_accounts` needs an unlimited key. Everyone lists the instance accounts and
   their own; company accounts (`owner="instance"`) and other people's (`owner="login"`) are changed
   by administrators only, and those changes write `ai_billing_account_*` events. Changing your own
@@ -446,7 +464,8 @@ on them for approvals and retries:
   dropped session.
 - **destructiveHint: true** -- deletes, `specivo_remove_relation`,
   `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence`,
-  `specivo_ai_subscriptions` and `specivo_ai_reimbursement_claims` (their `delete` ops).
+  `specivo_ai_subscriptions` (its `delete` and `remove_member` ops) and
+  `specivo_ai_reimbursement_claims` (its `delete` op).
 - **idempotentHint: true** -- updates by key, deletes, `specivo_add_relation`,
   `specivo_tag` and `specivo_ai_usage`: a repeat with the same arguments
   changes nothing more.

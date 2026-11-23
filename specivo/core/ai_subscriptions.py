@@ -1,4 +1,4 @@
-"""AI tools and personal AI subscriptions: plan presets, coverage and seat-cost proration.
+"""AI tools, personal AI subscriptions and company seat plans: plan presets, coverage and seat-cost proration.
 
 Pure functions and data, no database. The service
 (:mod:`specivo.services.ai_subscription_service`) loads rows and calls these.
@@ -25,11 +25,21 @@ type:
 
 Within a step the subscription that started last wins, then the newest row.
 
+**Company seat plans** are subscriptions without a holder (``user_id`` ``NULL``)
+with a ``seat_count`` and dated members. A member is covered by the plan on
+the days both the plan and their membership run, by the same two steps;
+the service tries the company plans a person is a member of before their own
+plans.
+
 **Seat cost** (:func:`prorated_fee`, :func:`seat_charges`): a monthly fee
 counts in full for a month the subscription covers entirely, and by covered
 days otherwise (``fee x covered days / days in the month``). A yearly fee
 is spread over twelve months first. Amounts are exact ``Decimal`` values,
-never rounded here.
+never rounded here. A company plan's fee is split into ``seat_count`` equal
+seats: a member's share of a month is ``fee x covered days / (days in the month
+x seats)`` (:func:`member_charges`), over the days both the plan and the
+membership run. The seats nobody holds are the plan's vacant fee
+(:func:`vacant_charges`), which no person carries.
 """
 
 from __future__ import annotations
@@ -209,12 +219,21 @@ class SubscriptionLike(Protocol):
     """What coverage and proration read from a subscription row."""
 
     id: int
-    user_id: int
+    #: ``None`` for a company seat plan.
+    user_id: int | None
     provider: str
     tool_slugs: list[str]
     amount: Decimal
     currency_code: str
     billing_period: str
+    starts_on: date
+    ends_on: date | None
+
+
+class MembershipLike(Protocol):
+    """What seat cost reads from a company plan membership row."""
+
+    user_id: int
     starts_on: date
     ends_on: date | None
 
@@ -293,14 +312,19 @@ def prorated_fee(
     *,
     first: date | None = None,
     last: date | None = None,
+    seats: int = 1,
 ) -> tuple[Decimal, int]:
     """The share of a fee for *year*-*month*, and the days it counts.
 
     ``fee x covered days / days in the month``, the fee being a twelfth of a
     yearly amount. *first* and *last* narrow the days counted to part of the
     month (a report period that starts or ends inside it); the divisor stays
-    the whole month. One division, so ``20 x 31 / 31`` is exactly ``20``.
+    the whole month. *seats* splits the fee into that many equal seats (a
+    company plan's member holds one). One division, so ``20 x 31 / 31`` is
+    exactly ``20``.
     """
+    if seats < 1:
+        raise ValueError("A plan has at least one seat")
     if billing_period not in BILLING_PERIODS:
         raise ValueError(f"Unknown billing period {billing_period!r}")
     month_start = month_first(year, month)
@@ -313,9 +337,9 @@ def prorated_fee(
     if days == 0:
         return Decimal(0), 0
     total_days = days_in_month(year, month)
-    if days == total_days:
+    if days == total_days and seats == 1:
         return monthly_fee(amount, billing_period), days
-    divisor = Decimal(total_days * (12 if billing_period == "year" else 1))
+    divisor = Decimal(total_days * (12 if billing_period == "year" else 1) * seats)
     return amount * Decimal(days) / divisor, days
 
 
@@ -324,7 +348,8 @@ class SeatCharge:
     """One subscription's fee share in one month."""
 
     subscription_id: int
-    user_id: int
+    #: The holder, the member of a company plan, or ``None`` for its vacant seats.
+    user_id: int | None
     year: int
     month: int
     active_days: int
@@ -369,6 +394,113 @@ def subscription_charges(
     return charges
 
 
+def member_span(subscription: SubscriptionLike, member: MembershipLike) -> tuple[date, date | None] | None:
+    """The days a membership of a company plan is covered by it: both run (inclusive), or ``None``."""
+    start = max(subscription.starts_on, member.starts_on)
+    ends = [d for d in (subscription.ends_on, member.ends_on) if d is not None]
+    end = min(ends) if ends else None
+    if end is not None and end < start:
+        return None
+    return start, end
+
+
+def member_charges(
+    subscription: SubscriptionLike,
+    seats: int,
+    members: Iterable[MembershipLike],
+    first: date,
+    last: date,
+) -> list[SeatCharge]:
+    """Each member's share of a company plan per month, for the days from *first* to *last* they hold a seat.
+
+    A share is one of *seats* equal parts of the fee, prorated to the days
+    both the plan and the membership run.
+    """
+    charges: list[SeatCharge] = []
+    for member in members:
+        span = member_span(subscription, member)
+        if span is None:
+            continue
+        for year, month in months_between(first, last):
+            share, days = prorated_fee(
+                subscription.amount,
+                subscription.billing_period,
+                span[0],
+                span[1],
+                year,
+                month,
+                first=first,
+                last=last,
+                seats=seats,
+            )
+            if days:
+                charges.append(
+                    SeatCharge(
+                        subscription_id=subscription.id,
+                        user_id=member.user_id,
+                        year=year,
+                        month=month,
+                        active_days=days,
+                        days_in_month=days_in_month(year, month),
+                        amount=Money(share, subscription.currency_code),
+                    )
+                )
+    return charges
+
+
+def vacant_charges(
+    subscription: SubscriptionLike,
+    seats: int,
+    members: Iterable[MembershipLike],
+    first: date,
+    last: date,
+) -> list[SeatCharge]:
+    """The fee of a company plan's seats nobody held, per month from *first* to *last* (``user_id`` ``None``).
+
+    Counted in seat-days: the plan's days x *seats*, less the days each member
+    held a seat, times one seat-day's fee (one division, so a full plan leaves
+    exactly nothing). Months where every seat was held have none.
+    """
+    held: dict[tuple[int, int], int] = {}
+    for charge in member_charges(subscription, seats, members, first, last):
+        key = (charge.year, charge.month)
+        held[key] = held.get(key, 0) + charge.active_days
+    charges: list[SeatCharge] = []
+    for charge in subscription_charges(subscription, first, last):
+        vacant = charge.active_days * seats - held.get((charge.year, charge.month), 0)
+        if vacant <= 0:
+            continue
+        divisor = Decimal(charge.days_in_month * (12 if subscription.billing_period == "year" else 1) * seats)
+        charges.append(
+            SeatCharge(
+                subscription_id=subscription.id,
+                user_id=None,
+                year=charge.year,
+                month=charge.month,
+                active_days=charge.active_days,
+                days_in_month=charge.days_in_month,
+                amount=Money(subscription.amount * Decimal(vacant) / divisor, subscription.currency_code),
+            )
+        )
+    return charges
+
+
+def most_members_at_once(periods: Iterable[tuple[date, date | None]]) -> int:
+    """The largest number of *periods* (inclusive days, open when the end is ``None``) running on one day."""
+    events: list[tuple[date, int]] = []
+    for start, end in periods:
+        events.append((start, 1))
+        if end is not None:
+            events.append((end + timedelta(days=1), -1))
+    # Ends sort before starts on the same day: a period ending the day before another starts frees its seat.
+    events.sort(key=lambda e: (e[0], e[1]))
+    current = peak = 0
+    for _day, step in events:
+        current += step
+        peak = max(peak, current)
+    return peak
+
+
 def seat_charges(subscriptions: Iterable[SubscriptionLike], year: int, month: int) -> list[SeatCharge]:
     """Every subscription's fee share for the whole month *year*-*month*."""
     first, last = month_first(year, month), month_last(year, month)
@@ -392,7 +524,7 @@ class PlainSubscription:
     """A subscription without a database row (tests, previews)."""
 
     id: int
-    user_id: int
+    user_id: int | None
     provider: str
     amount: Decimal
     currency_code: str
@@ -400,3 +532,12 @@ class PlainSubscription:
     starts_on: date
     ends_on: date | None = None
     tool_slugs: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class PlainMembership:
+    """A company plan membership without a database row (tests, previews)."""
+
+    user_id: int
+    starts_on: date
+    ends_on: date | None = None

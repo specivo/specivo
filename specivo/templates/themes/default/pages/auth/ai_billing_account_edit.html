@@ -22,7 +22,8 @@
 {% if admin_mode %}
 <p class="sp-text-muted sp-mb-md" data-testid="billing-account-owner">{% if account.is_instance %}{% trans %}A company account. Your changes are recorded in the audit log.{% endtrans %}{% else %}{% trans name=account.owner_name, login=account.owner_login %}A personal account of {{ name }} ({{ login }}). Your changes are recorded in the audit log.{% endtrans %}{% endif %}</p>
 {% endif %}
-{% if account.subscription_ids %}<p class="sp-text-muted sp-mb-md">{% trans %}This account is the fee schedule of a subscription: the subscription decides which tools it covers.{% endtrans %}</p>{% endif %}
+{% if account.subscription_ids and account.is_instance %}<p class="sp-text-muted sp-mb-md">{% trans %}This account is the fee schedule of a company plan: the plan decides which tools it covers and who holds a seat, and the employer pays for it.{% endtrans %}{% if admin_mode %} <a href="{{ base }}/admin/ai-company-plans/{{ account.subscription_ids[0] }}/">{% trans %}Company AI plan{% endtrans %} &rarr;</a>{% endif %}</p>
+{% elif account.subscription_ids %}<p class="sp-text-muted sp-mb-md">{% trans %}This account is the fee schedule of a subscription: the subscription decides which tools it covers.{% endtrans %}</p>{% endif %}
 <p class="sp-text-muted-xs sp-mb-md">{% trans %}Changing who pays, the routes, the tools, the default cost type or whether the account is active updates the usage already logged through it.{% endtrans %}</p>
 
 {% if error.code %}<div class="flash flash-error" role="alert" data-testid="billing-account-error">{{ error_text(error) }}</div>{% endif %}

@@ -272,6 +272,23 @@ within a step the latest start, then the newest row. Seat cost goes through the 
 system accounts hold none; the `/my/` routes are account-wide (`get_account_user`). Plan presets
 (`PLAN_PRESETS`) are suggestions only.
 
+**Company seat plans.** An `ai_subscriptions` row with `user_id` `NULL` is a company plan: it has a `seat_count`
+(CHECK: set exactly when there is no holder, at least 1), its fee may be zero (only then), and it is the fee schedule
+of an instance `subscription` account paid by the employer (`company_plan_account`; `AiBillingAccountService.update`
+refuses another payer). Its members are `ai_subscription_members` rows (`subscription_id`, `user_id`, `starts_on` /
+`ends_on` as UTC days, both inclusive): one person's seats of a plan never overlap and no day has more members than
+seats (checked in `AiSubscriptionService.add_member` / `update_member`, 422 `ai_subscription_member_overlap` /
+`ai_subscription_seats_full`). Memberships are dated, not replaced: leaving sets `ends_on`, so past months keep their
+allocation; deleting a membership is for mistakes. Administrators manage plans and seats, always audited
+(`ai_subscription_*`, `ai_subscription_member_added` / `_updated` / `_removed`), and a membership change re-resolves
+the member's entries from the first day it touches (`AiUsageService.rebill_for_member`). Coverage
+(`AiSubscriptionService.coverages`) tries the company plans the person holds a seat on that day before their own;
+billing resolution's `subscription` step takes the first whose account is active, and a company plan's account named
+by a record or a route sets `subscription_id` only on the member's seat days (`company_plan_for`). Seat cost is
+per plan, person and month: a member carries `prorated_fee(..., seats=seat_count)` over the days both the plan and
+the seat run, spread over their own entries of the plan; the vacant seat-days (`vacant_charges`) are unallocated and
+nobody's. The payer is the employer, so company seat cost is never reimbursable.
+
 **AI billing accounts and payer.** Who pays (`payer`: `employer` / `employee`) and what usage was paid through
 (`ai_billing_accounts`, `kind` `gateway` / `subscription` / `api_key` / `local`) sit beside `cost_type`, which stays
 the pricing mechanism; the values and pure helpers are in `specivo.core.ai_billing`. An account without

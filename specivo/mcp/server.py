@@ -1716,16 +1716,40 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
         "covered, and warn when periods of one plan family (same provider and tools) overlap or leave a "
         "gap; warnings never refuse anything. Needs an unlimited personal API key: a project-limited key "
         "and a service account are refused. Changing needs self-service on (the default) unless you are an "
-        "administrator."
+        "administrator. Company seat plans (administrators): list and add with company=true (each period with "
+        "seat_count; the fee may be '0'); update, end and delete take a company plan's subscription_id; "
+        "members (subscription_id) lists who holds a seat; add_member (subscription_id, user, starts_on default "
+        "today, ends_on); end_member (subscription_id, member_id or user, ends_on default today: the months "
+        "before keep their seat cost); remove_member (subscription_id, member_id: for mistakes only). Each "
+        "member carries one seat's share of the fee; the employer pays it, so it is never reimbursable."
     ),
 )
 async def specivo_ai_subscriptions(  # noqa: PLR0913
-    op: Annotated[str, Field(description="One of: list, presets, add, update, end, delete.")],
-    user: Annotated[str | None, Field(description="list, add: another person's login (administrators only).")] = None,
+    op: Annotated[
+        str,
+        Field(
+            description="One of: list, presets, add, update, end, delete, members, add_member, end_member, "
+            "remove_member."
+        ),
+    ],
+    user: Annotated[
+        str | None,
+        Field(
+            description="list, add: another person's login (administrators only); add_member, end_member: the "
+            "member's login."
+        ),
+    ] = None,
     periods: Annotated[
         list[SubscriptionPeriod] | None, Field(description="add: the periods to register (1-50).")
     ] = None,
-    subscription_id: Annotated[int | None, Field(description="update, end, delete: the subscription ID.")] = None,
+    subscription_id: Annotated[
+        int | None, Field(description="update, end, delete and the member ops: the subscription or company plan ID.")
+    ] = None,
+    company: Annotated[
+        bool, Field(description="list, add: company seat plans instead of personal ones (administrators).")
+    ] = False,
+    seat_count: Annotated[int | None, Field(description="update: a company plan's number of seats.", ge=1)] = None,
+    member_id: Annotated[int | None, Field(description="end_member, remove_member: the member ID.")] = None,
     plan_key: Annotated[str | None, Field(description="update: a preset key or 'custom'.")] = None,
     provider: Annotated[str | None, Field(description="update: the provider.")] = None,
     plan_name: Annotated[str | None, Field(description="update: the plan name.")] = None,
@@ -1737,10 +1761,15 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
     ] = None,
     currency: Annotated[str | None, Field(description="update: ISO currency code.")] = None,
     billing_period: Annotated[str | None, Field(description="update: month or year.")] = None,
-    starts_on: Annotated[str | None, Field(description="update: first day, YYYY-MM-DD.")] = None,
+    starts_on: Annotated[
+        str | None, Field(description="update, add_member: first day, YYYY-MM-DD (add_member: default today UTC).")
+    ] = None,
     ends_on: Annotated[
         str | None,
-        Field(description="update, end: last day, YYYY-MM-DD (update: '' reopens; end: default today UTC)."),
+        Field(
+            description="update, end, add_member, end_member: last day, YYYY-MM-DD (update: '' reopens; end, "
+            "end_member: default today UTC)."
+        ),
     ] = None,
     notes: Annotated[str | None, Field(description="update: new notes ('' clears them).")] = None,
     active_on: Annotated[str | None, Field(description="list: only subscriptions running on this UTC day.")] = None,
@@ -1758,6 +1787,7 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
         "starts_on": starts_on,
         "ends_on": ends_on,
         "notes": notes,
+        "seat_count": seat_count,
     }
     async with _get_session_and_user() as (session, caller):
         return await _ai_subscriptions(
@@ -1769,7 +1799,10 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
             subscription_id=subscription_id,
             changes=changes,
             ends_on=ends_on,
+            starts_on=starts_on,
             active_on=active_on,
+            company=company,
+            member_id=member_id,
             offset=offset,
             limit=limit,
         )

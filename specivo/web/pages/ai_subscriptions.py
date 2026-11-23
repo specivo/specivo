@@ -28,7 +28,7 @@ from specivo.core.i18n import get_locale
 from specivo.core.money import currency_display_name, format_decimal_plain
 from specivo.core.utils import utcnow
 from specivo.models.ai_billing_account import AiBillingAccount
-from specivo.models.ai_subscription import AiSubscription, AiTool
+from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember, AiTool
 from specivo.models.user import User
 from specivo.services.ai_billing_account_service import AiBillingAccountService
 from specivo.services.ai_subscription_service import AiSubscriptionService, AiToolService, SubscriptionInput
@@ -69,7 +69,7 @@ def _redirect(url: str, params: dict[str, str] | None = None) -> RedirectRespons
     return redirect_to(url + (f"?{query}" if query else ""), 303)
 
 
-def _status(sub: AiSubscription, today: date) -> str:
+def _status(sub: AiSubscription | AiSubscriptionMember, today: date) -> str:
     if sub.starts_on > today:
         return "future"
     if sub.ends_on is not None and sub.ends_on < today:
@@ -486,7 +486,7 @@ async def _render_admin(  # noqa: PLR0913
         context={
             "user": user,
             "active_page": "admin",
-            "subscriptions": [subscription_row(r, owners.get(r.user_id), names, today, accounts) for r in rows],
+            "subscriptions": [subscription_row(r, owners.get(r.user_id or 0), names, today, accounts) for r in rows],
             "total": total,
             "offset": offset,
             "limit": limit,
@@ -600,7 +600,7 @@ async def admin_ai_subscription_settings(
 
 async def _sub_or_none(db: AsyncSession, subscription_id: int) -> AiSubscription | None:
     try:
-        return await _service.get(db, subscription_id)
+        return await _service.get_personal(db, subscription_id)
     except NotFoundError:
         return None
 
@@ -654,7 +654,7 @@ async def admin_ai_subscription_update(  # noqa: PLR0913
     try:
         await _service.update(db, sub, _changes(form), actor=user, request=request)
     except (AppError, _BadDateError) as exc:
-        sub = await _service.get(db, subscription_id)
+        sub = await _service.get_personal(db, subscription_id)
         return await _render_edit(
             request, db, user, sub, admin_mode=True, form=form, error=_error(exc), status_code=422
         )

@@ -11,7 +11,8 @@
   at them.
 - Every subscription is the fee schedule of a personal account of kind
   ``subscription``; :class:`AiSubscriptionService` creates it with the
-  subscription.
+  subscription. A company seat plan's is an instance account of that kind,
+  paid by the employer, and stays so.
 
 Creating an account with route patterns, or changing an account's payer,
 patterns, tools, default cost type or state, resolves the usage entries it may
@@ -51,6 +52,7 @@ from specivo.core.ai_billing import (
     MAX_ROUTE_PATTERNS,
     PAYER_DEFAULT_NONE,
     PAYER_EMPLOYEE,
+    PAYER_EMPLOYER,
     PROJECT_PAYER_DEFAULT_KEY,
     PROJECT_PAYER_DEFAULTS,
     normalize_account_slug,
@@ -485,6 +487,11 @@ class AiBillingAccountService:
         if unknown:
             raise _invalid(f"Unknown fields: {', '.join(sorted(unknown))}", sorted(unknown)[0])
         values = self._validated(dict(changes), current=account)
+        if values.get("payer", account.payer) != PAYER_EMPLOYER and await self._is_company_plan_account(
+            session, account
+        ):
+            # A company seat plan is the employer's: its seat cost is never the employee's to claim back.
+            raise _invalid("A company plan's account is paid by the employer", "payer")
         if "slug" in values and values["slug"] != account.slug:
             await self._require_free_slug(session, values["slug"], account.owner_user_id, account.id)
         before = {name: getattr(account, name) for name in ACCOUNT_FIELDS}
@@ -512,6 +519,16 @@ class AiBillingAccountService:
                 account.id,
             )
         return account
+
+    @staticmethod
+    async def _is_company_plan_account(session: AsyncSession, account: AiBillingAccount) -> bool:
+        """Whether *account* is the fee schedule of a company seat plan."""
+        if account.owner_user_id is not None:
+            return False
+        stmt = select(AiSubscription.id).where(
+            AiSubscription.billing_account_id == account.id, AiSubscription.user_id.is_(None)
+        )
+        return (await session.execute(stmt.limit(1))).scalar_one_or_none() is not None
 
     @staticmethod
     async def _rebill(

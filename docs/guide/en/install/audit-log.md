@@ -168,11 +168,15 @@ installation's first load runs in the database migration and is not audited. See
 | `ai_subscription_created` | the administrator | `subscription_id`, `target_user_id`, `target_login` (the person who holds it), `provider`, `plan_key`, `plan_name`, `tool_slugs`, `amount`, `currency`, `billing_period`, `starts_on`, `ends_on` |
 | `ai_subscription_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new`; a changed note shows only as `notes: {"changed": true}` |
 | `ai_subscription_deleted` | the administrator | the deleted subscription, as for `ai_subscription_created` |
+| `ai_subscription_member_added` | the administrator | a seat on a company seat plan: `subscription_id`, `plan_name`, `member_id`, `target_user_id`, `target_login` (the member), `starts_on`, `ends_on` |
+| `ai_subscription_member_updated` | the administrator | the same, plus `changes`: `starts_on` or `ends_on` with `old` and `new` |
+| `ai_subscription_member_removed` | the administrator | the removed seat, as for `ai_subscription_member_added` |
 | `ai_subscriptions_self_service_toggled` | the administrator | `enabled` |
-| `ai_subscriptions_changed` | the account whose key an agent used, over MCP (`specivo_ai_subscriptions` adding, updating, ending or deleting) | `tool: "ai_subscriptions"`, `source: "mcp"`, `op`, `subscription_ids`, `target_login` (whose subscriptions), and for a change the changed `fields` |
+| `ai_subscriptions_changed` | the account whose key an agent used, over MCP (`specivo_ai_subscriptions` adding, updating, ending or deleting, and the seat operations) | `tool: "ai_subscriptions"`, `source: "mcp"`, `op`, `subscription_ids`, `target_login` (whose subscriptions; none for a company plan), for a change the changed `fields`, and for a seat `member_id` |
 
-Only an administrator's change to **somebody else's** subscription is recorded as
-`ai_subscription_*`. People's changes to their own subscriptions, and an administrator's to their
+Only an administrator's change to **somebody else's** subscription, or to a company seat plan, is
+recorded as `ai_subscription_*`. A company plan's events have no `target_login` and add
+`seat_count`; every change to its seats is recorded. People's changes to their own subscriptions, and an administrator's to their
 own, are not, except that every change over MCP is `ai_subscriptions_changed`, like every agent
 tool call. Notes are
 never copied into the log. See [AI subscriptions](ai-subscriptions.md).

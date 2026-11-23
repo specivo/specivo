@@ -1,4 +1,4 @@
-"""AI tool and AI subscription schemas.
+"""AI tool, AI subscription and company seat plan schemas.
 
 A fee crosses the API as a **string** (``"20.00"``), never a JSON number, like
 every amount (see :mod:`specivo.schemas.money`). ``starts_on`` and ``ends_on``
@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from specivo.core.ai_subscriptions import PlanPreset
 from specivo.core.money import format_decimal_plain
-from specivo.models.ai_subscription import AiSubscription, AiTool
+from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember, AiTool
 from specivo.models.user import User
 from specivo.schemas.money import CurrencyCode
 
@@ -138,7 +138,7 @@ class AiSubscriptionUpdate(BaseModel):
 
 class AiSubscriptionOut(BaseModel):
     id: int
-    user_id: int
+    user_id: int | None = Field(description="The holder; null for a company seat plan")
     user_login: str | None = None
     provider: str
     plan_key: str
@@ -188,3 +188,88 @@ class AiSubscriptionSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     self_service: bool
+
+
+# ---------------------------------------------------------------------------
+# Company seat plans
+# ---------------------------------------------------------------------------
+
+
+class AiCompanyPlanCreate(AiSubscriptionCreate):
+    """A company seat plan: a plan the employer pays for, whose fee is split into ``seat_count`` equal seats.
+
+    The fee may be ``"0"`` (a plan whose cost is booked elsewhere).
+    """
+
+    plan_name: str = Field(max_length=100, examples=["Claude Team"])
+    seat_count: int = Field(ge=1, le=100000, description="How many seats the fee pays for")
+
+
+class AiCompanyPlanUpdate(AiSubscriptionUpdate):
+    seat_count: int | None = Field(None, ge=1, le=100000)
+
+
+class AiCompanyPlanOut(AiSubscriptionOut):
+    seat_count: int = Field(description="How many seats the fee pays for")
+    seats_held: int = Field(description="Members holding a seat today (UTC)")
+
+    @classmethod
+    def from_plan(cls, row: AiSubscription, seats_held: int) -> AiCompanyPlanOut:
+        base = AiSubscriptionOut.from_row(row).model_dump()
+        return cls(**base, seat_count=row.seat_count or 0, seats_held=seats_held)
+
+
+class AiPlanMemberCreate(BaseModel):
+    """A seat for one person from ``starts_on`` (default today, UTC) to ``ends_on``.
+
+    Both days are included; without ``ends_on`` the seat stays open.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int | None = Field(None, description="The person; or give login")
+    login: str | None = Field(None, max_length=255)
+    starts_on: date | None = None
+    ends_on: date | None = None
+
+
+class AiPlanMemberUpdate(BaseModel):
+    """Leave a field out to keep it; ``ends_on: null`` reopens the seat. End a seat rather than delete it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    starts_on: date | None = None
+    ends_on: date | None = None
+
+    def changes(self) -> dict[str, object]:
+        out: dict[str, object] = {}
+        for name in self.model_fields_set:
+            value = getattr(self, name)
+            if value is None and name == "starts_on":
+                continue
+            out[name] = value
+        return out
+
+
+class AiPlanMemberOut(BaseModel):
+    id: int
+    subscription_id: int
+    user_id: int
+    user_login: str | None = None
+    starts_on: date
+    ends_on: date | None
+    created_by_id: int | None
+    created_at: datetime | None
+
+    @classmethod
+    def from_row(cls, row: AiSubscriptionMember, person: User | None = None) -> AiPlanMemberOut:
+        return cls(
+            id=row.id,
+            subscription_id=row.subscription_id,
+            user_id=row.user_id,
+            user_login=person.login if person is not None else None,
+            starts_on=row.starts_on,
+            ends_on=row.ends_on,
+            created_by_id=row.created_by_id,
+            created_at=row.created_at,
+        )

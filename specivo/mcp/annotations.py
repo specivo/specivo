@@ -133,8 +133,10 @@ _ADDITIVE = (
     "specivo_ai_billing_accounts",
 )
 
-# Ops list, presets, add, update, end, delete: add is not idempotent, and delete
-# removes a subscription for good, together with its share of past spend reports.
+# Ops list, presets, add, update, end, delete, members, add_member, end_member,
+# remove_member: add and add_member are not idempotent, and delete and
+# remove_member remove a plan or a seat for good, together with its share of past
+# spend reports.
 # Ops list, get, create, refresh, submit, withdraw, approve, reject, paid, delete, export:
 # create adds a claim, and delete removes a draft or rejected one for good.
 _ADDITIVE_AND_DESTRUCTIVE = ("specivo_ai_subscriptions", "specivo_ai_reimbursement_claims")
