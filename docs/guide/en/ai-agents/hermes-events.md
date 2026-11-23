@@ -87,6 +87,10 @@ project: when the agent tells Specivo, over MCP, which Hermes session it is in a
 working on, the Hermes session takes that issue. Events of a session on no issue are kept in the
 security audit log only.
 
+On the issue itself, the [Agents tab](capabilities.md#the-agents-tab-on-an-issue) shows each Hermes
+run as one block: its tool calls, the approvals it asked for and how they were answered, its
+subagents, whether it completed or was interrupted, and the AI cost the reporter sent for it.
+
 ## Manage receivers
 
 The list shows each receiver's name, when it was created and when its last event arrived. You can:

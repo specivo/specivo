@@ -288,6 +288,9 @@
         {% if show_ai_usage_tab %}
         <a class="activity-tab" data-tab="ai-usage" data-testid="ai-usage-tab" :class="{ active: tab === 'ai-usage' }" @click.prevent="show('ai-usage')" href="#ai-usage">{% trans %}AI usage{% endtrans %}{% if ai_usage_count %} <span class="tab-count" data-testid="ai-usage-tab-count">{{ ai_usage_count }}</span>{% endif %}</a>
         {% endif %}
+        {% if show_agents_tab %}
+        <a class="activity-tab" data-tab="agents" data-testid="agents-tab-link" :class="{ active: tab === 'agents' }" @click.prevent="show('agents')" href="#agents">{% trans %}Agents{% endtrans %}{% if agent_session_count %} <span class="tab-count" data-testid="agents-tab-count">{{ agent_session_count }}</span>{% endif %}</a>
+        {% endif %}
         <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
         <a class="activity-tab" data-tab="attachments" :class="{ active: tab === 'attachments' }" @click.prevent="show('attachments')" href="#attachments">{% trans %}Attachments{% endtrans %}</a>
@@ -511,6 +514,18 @@
            hx-trigger="sp-show-tab-ai-usage from:body once"
            hx-swap="innerHTML">
         <div class="sp-aiu-empty">{% trans %}Loading AI usage…{% endtrans %}</div>
+      </div>
+      {% endif %}
+
+      {# Agents tab: what agent sessions did for the issue, loaded via htmx when first opened #}
+      {% if show_agents_tab %}
+      <div x-show="tab === 'agents'" x-cloak
+           id="issue-agents-tab"
+           data-testid="agents-tab-panel"
+           hx-get="{{ base }}/partials/issues/{{ issue.display_key }}/agents/"
+           hx-trigger="sp-show-tab-agents from:body once"
+           hx-swap="innerHTML">
+        <div class="sp-as-empty">{% trans %}Loading agent sessions…{% endtrans %}</div>
       </div>
       {% endif %}
 

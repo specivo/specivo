@@ -53,6 +53,8 @@ from specivo.web.deps import (
 )
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.pages.ai_issue_usage import tab_entry_count as ai_usage_tab_entry_count
+from specivo.web.pages.issue_agents import can_view_agents
+from specivo.web.pages.issue_agents import tab_session_count as agents_tab_session_count
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
@@ -483,6 +485,9 @@ async def _issue_page_permissions(db: AsyncSession, user: User, project: Project
         await check_permission(user, project.id, Permission.VIEW_AI_USAGE, db)
         or await check_permission(user, project.id, Permission.LOG_AI_USAGE, db)
     )
+    # The Agents tab (/partials/issues/{key}/agents/) shows agent sessions'
+    # audit rows, so it needs manage_project, as the agent session pages do.
+    show_agents_tab = not anonymous and await can_view_agents(db, user, project)
     return {
         "anon_can_view_wiki": anon_can_view_wiki,
         "can_manage_relations": can_manage_relations,
@@ -490,6 +495,7 @@ async def _issue_page_permissions(db: AsyncSession, user: User, project: Project
         "can_log_time": can_log_time,
         "can_tag_issue": can_tag_issue,
         "show_ai_usage_tab": show_ai_usage_tab,
+        "show_agents_tab": show_agents_tab,
     }
 
 
@@ -662,6 +668,7 @@ async def issue_detail(
 
     flags = await _issue_page_permissions(db, user, project)
     ai_usage_count = await ai_usage_tab_entry_count(db, user, project, issue) if flags["show_ai_usage_tab"] else 0
+    agent_session_count = await agents_tab_session_count(db, user, project, issue) if flags["show_agents_tab"] else 0
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -745,6 +752,7 @@ async def issue_detail(
             "relations": relations,
             **flags,
             "ai_usage_count": ai_usage_count,
+            "agent_session_count": agent_session_count,
             "issue_tags": sidebar["issue_tags"],
             **controls,
             "metadata_value_names": value_names,
