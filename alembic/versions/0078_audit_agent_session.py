@@ -1,8 +1,8 @@
 """Audit rows name the agent session of an MCP tool call; sessions count their tool calls.
 
 Create Date: 2026-11-23
-Revision ID: 0077
-Revises: 0076
+Revision ID: 0078
+Revises: 0077
 
 The security audit log recorded every MCP tool call without the agent session
 it belonged to, so a session's calls could not be listed.
@@ -23,8 +23,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0077"
-down_revision = "0076"
+revision = "0078"
+down_revision = "0077"
 branch_labels = None
 depends_on = None
 
