@@ -735,6 +735,26 @@ async def test_upsert_keeps_an_attribution_once_set(db_session: AsyncSession, w:
     assert resent.entry.issue_id == w.public_issue.id
 
 
+async def test_logged_with_a_key_is_upserted_and_repriced_at_its_priced_at(db_session: AsyncSession, w: World) -> None:
+    started = utc(2026, 3, 10, 9, 0)
+    first = await _svc.log_with_status(
+        db_session, w.alice, usage(idempotency_key="m-1", started_at=started, cost_type="api"), source="mcp"
+    )
+    assert first.status == "created" and first.entry.api_equivalent == Money("3", "USD")
+    # A replay after the June price change is priced at the bucket's instant (March), not at the latest price.
+    bigger = usage(
+        idempotency_key="m-1", started_at=started, cost_type="api", tokens={"input": 2_000_000, "output": 100_000}
+    )
+    again = await _svc.log_with_status(db_session, w.alice, bigger, source="mcp")
+    assert (again.status, again.entry.id, again.entry.revision) == ("updated", first.entry.id, 2)
+    assert again.entry.priced_at == started
+    assert again.entry.api_equivalent == Money("5", "USD")
+    assert again.entry.source == "mcp" and not again.entry.is_locked
+    # ``log`` takes the same path and hands back the entry.
+    same = await _svc.log(db_session, w.alice, bigger, source="api")
+    assert same.id == first.entry.id and same.revision == 2
+
+
 async def test_key_of_another_reporter_is_a_conflict(db_session: AsyncSession, w: World) -> None:
     await _svc.upsert(db_session, w.runner, usage(project_id=w.p.id, idempotency_key="b-3"), target=w.alice)
     with pytest.raises(AppError) as exc:

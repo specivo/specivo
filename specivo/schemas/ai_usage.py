@@ -7,7 +7,12 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from specivo.core.ai_usage import COMMENTS_MAX_LENGTH, MAX_REQUEST_COUNT, MAX_TOKENS_PER_CLASS
+from specivo.core.ai_usage import (
+    COMMENTS_MAX_LENGTH,
+    IDEMPOTENCY_KEY_MAX_LENGTH,
+    MAX_REQUEST_COUNT,
+    MAX_TOKENS_PER_CLASS,
+)
 from specivo.schemas.common import IdName, PaginatedResponse
 from specivo.schemas.money import MoneyIn, MoneyOut
 
@@ -41,6 +46,11 @@ class AiUsageCreate(BaseModel):
     amount actually paid, if known; it is the spend only for ``cost_type``
     ``api``. Leave ``cost_type`` out to have it derived from the user's AI
     subscriptions (``subscription`` when one covers the tool, else ``unknown``).
+
+    With ``idempotency_key`` the entry is the bucket of that key for its user:
+    sending the key again replaces the bucket's totals (or changes nothing when
+    they are the same), so a client that retries after a timeout never counts
+    twice. The route answers 201 for a new bucket and 200 for a replay.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -78,6 +88,17 @@ class AiUsageCreate(BaseModel):
     external_session_id: str | None = Field(None, max_length=200)
     git_branch: str | None = Field(None, max_length=255)
     repo_hint: str | None = Field(None, max_length=255)
+    idempotency_key: str | None = Field(
+        None,
+        min_length=1,
+        max_length=IDEMPOTENCY_KEY_MAX_LENGTH,
+        pattern=r"^[\x21-\x7e]+$",
+        examples=["9f2c4e1a7b..."],
+        description=(
+            "Names the bucket for its user, so a retry replaces the totals instead of adding them: printable "
+            "ASCII without spaces. Recommended: sha256 of 'v1|<tool>|<session_id>|<model>|<usage_date>'"
+        ),
+    )
 
 
 class AiUsageUpdate(BaseModel):

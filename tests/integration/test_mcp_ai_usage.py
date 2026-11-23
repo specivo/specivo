@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -359,3 +359,104 @@ async def test_own_entries_show_and_filter_by_their_session(db_session: AsyncSes
     assert f"#{in_project} " in everyone and "session=" not in everyone
     assert "Session:" not in await server.specivo_ai_usage(op="get", entry_id=in_project)
     assert "(0 total" in await server.specivo_ai_usage(op="list", project_key="MAUA", session_id="sess-one")
+
+
+# ---------------------------------------------------------------------------
+# Idempotency key, started_at and ended_at
+# ---------------------------------------------------------------------------
+
+
+async def _entries_with_key(db: AsyncSession, key: str) -> list[AiUsageEntry]:
+    rows = await db.execute(select(AiUsageEntry).where(AiUsageEntry.idempotency_key == key))
+    return list(rows.scalars().all())
+
+
+async def test_same_key_twice_records_one_entry(db_session: AsyncSession, w: World) -> None:
+    first = await _log(w, "alice", issue_ref="MAUA-1", idempotency_key="mau-run-1")
+    assert first.rstrip().endswith("(created)")
+    again = await _log(w, "alice", issue_ref="MAUA-1", idempotency_key="mau-run-1")
+    assert again.rstrip().endswith("(unchanged)")
+    assert _entry_id(again) == _entry_id(first)
+    entries = await _entries_with_key(db_session, "mau-run-1")
+    assert len(entries) == 1
+    entry = await _entry(db_session, entries[0].id)
+    assert (entry.revision, entry.source, entry.is_locked) == (1, "mcp", False)
+
+    events = (
+        (
+            await db_session.execute(
+                select(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AI_USAGE_LOGGED.value)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert sorted(e.details["upsert"] for e in events) == ["created", "unchanged"]
+    assert all("mau-run-1" not in str(e.details) for e in events)
+
+
+async def test_same_key_with_new_totals_replaces_them(db_session: AsyncSession, w: World) -> None:
+    first = await _log(w, "alice", idempotency_key="mau-run-2", comments="First try")
+    text = await _log(w, "alice", idempotency_key="mau-run-2", input_tokens=2_000_000, comments="Ignored")
+    assert text.rstrip().endswith("(updated, revision 2)")
+    assert _entry_id(text) == _entry_id(first)
+    assert "API equivalent: 5" in text
+    entry = await _entry(db_session, _entry_id(text))
+    assert (entry.input, entry.revision) == (2_000_000, 2)
+    assert entry.comments == "First try"  # a replay never touches the comments
+    assert len(await _entries_with_key(db_session, "mau-run-2")) == 1
+
+    # Still editable by its person: MCP entries with a key are not locked.
+    _as(w, "alice")
+    await server.specivo_ai_usage(op="update", entry_id=entry.id, input_tokens=3_000_000)
+    entry = await _entry(db_session, entry.id)
+    assert (entry.input, entry.revision) == (3_000_000, 3)
+
+
+async def test_started_at_with_an_offset_is_stored_in_utc(db_session: AsyncSession, w: World) -> None:
+    text = await _log(
+        w,
+        "alice",
+        usage_date=None,
+        idempotency_key="mau-run-3",
+        started_at="2026-03-10T09:15:00+07:00",
+        ended_at="2026-03-10T10:45:00+07:00",
+    )
+    entry = await _entry(db_session, _entry_id(text))
+    assert entry.started_at == datetime(2026, 3, 10, 2, 15, tzinfo=UTC)
+    assert entry.ended_at == datetime(2026, 3, 10, 3, 45, tzinfo=UTC)
+    assert entry.usage_date == date(2026, 3, 10)
+    assert entry.priced_at == entry.started_at
+
+    # 06:30 in Bangkok on 11 March is still 10 March in UTC.
+    early = await _log(w, "alice", usage_date=None, started_at="2026-03-11T06:30:00+07:00")
+    assert (await _entry(db_session, _entry_id(early))).usage_date == date(2026, 3, 10)
+
+
+async def test_started_at_and_ended_at_are_validated(w: World) -> None:
+    assert "time zone offset" in await _refused(_log(w, "alice", started_at="2026-03-10T09:15:00"))
+    assert "started_at" in await _refused(_log(w, "alice", started_at="not a time"))
+    assert "started_at must fall on usage_date" in await _refused(
+        _log(w, "alice", usage_date="2026-03-11", started_at="2026-03-10T09:15:00Z")
+    )
+    assert "ended_at must not be before started_at" in await _refused(
+        _log(w, "alice", started_at="2026-03-10T09:15:00Z", ended_at="2026-03-10T09:00:00Z")
+    )
+    assert "ended_at must fall on usage_date" in await _refused(_log(w, "alice", ended_at="2026-03-11T00:00:01Z"))
+    assert "idempotency_key" in await _refused(_log(w, "alice", idempotency_key="has a space"))
+    assert "idempotency_key" in await _refused(_log(w, "alice", idempotency_key="k" * 129))
+
+
+async def test_key_of_another_reporter_is_refused(db_session: AsyncSession, w: World) -> None:
+    await _log(w, "runner", project_key="MAUA", on_behalf_of="mau_alice", idempotency_key="mau-run-4")
+    refused = await _refused(_log(w, "alice", project_key="MAUA", idempotency_key="mau-run-4"))
+    assert "another account reported" in refused
+    # The same key in another user's name is another bucket.
+    assert (await _log(w, "bob", project_key="MAUA", idempotency_key="mau-run-4")).rstrip().endswith("(created)")
+    assert len(await _entries_with_key(db_session, "mau-run-4")) == 2
+
+
+async def test_replay_naming_another_project_is_refused(w: World) -> None:
+    await _log(w, "mgr", issue_ref="MAUA-1", idempotency_key="mau-run-5")
+    refused = await _refused(_log(w, "mgr", project_key="MAUB", idempotency_key="mau-run-5"))
+    assert "belongs to another project" in refused

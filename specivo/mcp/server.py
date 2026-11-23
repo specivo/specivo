@@ -1328,6 +1328,12 @@ _NO_COUNTERS = (
         "The server prices the tokens itself. cost_type (subscription, api, local, free, unknown) defaults "
         "from the user's AI subscriptions; cost_amount + cost_currency is what the usage actually cost, used as "
         "the spend for cost_type 'api'. Entries are stored with source 'mcp' and the calling key."
+        "\n\nRetries: pass idempotency_key (printable ASCII without spaces, at most 128 characters; recommended "
+        "sha256 of 'v1|<tool>|<session_id>|<model>|<usage_date>') to make the call safe to repeat. The key names "
+        "one bucket for the user: sending it again replaces the bucket's totals instead of adding them, and the "
+        "reply ends with (created), (updated, revision N) or (unchanged). started_at and ended_at are ISO 8601 "
+        "instants with an offset, stored in UTC; started_at must fall on usage_date (which defaults to its UTC "
+        "day), ended_at not before it and not after the end of that UTC day."
     ),
 )
 async def specivo_log_ai_usage(  # noqa: PLR0913
@@ -1350,10 +1356,20 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
         str | None, Field(description="What the usage cost, as a decimal string, e.g. '0.42'. Needs cost_currency.")
     ] = None,
     cost_currency: Annotated[str | None, Field(description="ISO currency code of cost_amount, e.g. 'USD'.")] = None,
-    usage_date: Annotated[str | None, Field(description="UTC day YYYY-MM-DD. Defaults to today (UTC).")] = None,
+    usage_date: Annotated[
+        str | None, Field(description="UTC day YYYY-MM-DD. Defaults to the UTC day of started_at, else today (UTC).")
+    ] = None,
     on_behalf_of: Annotated[str | None, Field(description="Login of the user whose usage this is.")] = None,
     comments: Annotated[str | None, Field(description="A short note. Never paste prompts or code.")] = None,
     session_id: Annotated[str | None, Field(description="The tool's own session id, if known.")] = None,
+    idempotency_key: Annotated[
+        str | None,
+        Field(description="Names the bucket, so a retry replaces it instead of counting twice. See Retries."),
+    ] = None,
+    started_at: Annotated[
+        str | None, Field(description="When the usage started, e.g. '2026-11-23T09:15:00+07:00'.")
+    ] = None,
+    ended_at: Annotated[str | None, Field(description="When the usage ended, an instant with an offset.")] = None,
 ) -> str:
     tokens = {
         "input": input_tokens,
@@ -1381,6 +1397,9 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
             on_behalf_of=on_behalf_of,
             comments=comments,
             session_id=session_id,
+            idempotency_key=idempotency_key,
+            started_at=started_at,
+            ended_at=ended_at,
         )
 
 

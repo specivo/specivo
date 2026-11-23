@@ -22,6 +22,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded that notifications and mail are rendered per recipient, in their language and timezone, with links built from `APP_URL` (§6).
 **Revised:** 2026-11-07 — recorded the AI spend report drill-down: URL state, narrowing filters and bounds (§4).
 **Revised:** 2026-11-21 — recorded AI spend by release and sprint: the nearest-ancestor lookup, its visibility and its query shape (§4).
+**Revised:** 2026-11-23 — recorded the optional idempotency key on manual, API and MCP AI usage entries (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -278,6 +279,16 @@ A missing cost type defaults to `subscription` when `AiSubscriptionService.subsc
 `specivo.tasks.ai_usage.recompute_ai_usage_costs`, started from `POST /api/v1/admin/ai-usage/recompute/` or the offer on
 the admin price page after a past period is entered) re-prices entries, each at its own `priced_at`, bumping `revision`
 where costs change. No prompt, code or file path is ever stored.
+
+Manual, API and MCP entries may carry an `idempotency_key` too (optional on `POST /projects/{key}/ai-usage/`,
+`POST /my/ai-usage/` and `specivo_log_ai_usage`). With a key, `AiUsageService.log_with_status` (which `log` and
+`create_for` use) hands the write to `upsert` with the caller's source, so the key names the same per-user bucket as
+the reporter's and a retry follows the same rules (`created` / `updated` / `unchanged`, `key_conflict`,
+`ai_usage_attribution_conflict`). Such an entry keeps its source and stays editable by people: only `reporter` and
+`import` entries are locked. The REST routes answer 201 for a new bucket and 200 for a replay; the MCP reply ends with
+the outcome, which the `AI_USAGE_LOGGED` audit details record as `upsert` (the key itself is never audited).
+`started_at` / `ended_at` follow the ingest rules for every source: `ended_at` lies within `usage_date` or at its
+end, and not before `started_at`.
 
 **Agent sessions.** `agent_sessions` holds one row per activity window of an API key (requests less than
 `agent_session_timeout` apart), started or extended by `AgentSessionService.get_or_create_session` on every

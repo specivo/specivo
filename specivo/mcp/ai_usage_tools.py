@@ -169,6 +169,23 @@ def _parse_date(value: str | None, field: str) -> date | None:
         raise ValidationError(message=f"{field} must be a date such as 2026-11-05", field=field) from None
 
 
+def _parse_instant(value: str | None, field: str) -> datetime | None:
+    """An ISO 8601 instant with an offset (``2026-11-23T09:15:00+07:00``, ``...Z``); None when empty."""
+    if value is None or not value.strip():
+        return None
+    try:
+        instant = datetime.fromisoformat(value.strip())
+    except ValueError:
+        raise ValidationError(
+            message=f"{field} must be an ISO 8601 instant such as 2026-11-05T09:15:00+07:00", field=field
+        ) from None
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValidationError(
+            message=f"{field} needs a time zone offset, for example 2026-11-05T09:15:00Z", field=field
+        )
+    return instant.astimezone(UTC)
+
+
 def _cost(amount: Any, currency: str | None) -> Money | None:
     if amount is None or (isinstance(amount, str) and not amount.strip()):
         if currency:
@@ -236,9 +253,19 @@ async def _log_ai_usage(  # noqa: PLR0913
     on_behalf_of: str | None = None,
     comments: str | None = None,
     session_id: str | None = None,
+    idempotency_key: str | None = None,
+    started_at: str | None = None,
+    ended_at: str | None = None,
 ) -> str:
-    """Log one AI usage entry (source ``mcp``); see ``specivo_log_ai_usage`` for the rules."""
-    day = _parse_date(usage_date, "usage_date") or datetime.now(UTC).date()
+    """Log one AI usage entry (source ``mcp``); see ``specivo_log_ai_usage`` for the rules.
+
+    With *idempotency_key* the entry is the caller's (or the target's) bucket
+    of that key: a retry replaces its totals or changes nothing, and the reply
+    ends with ``(created)``, ``(updated, revision N)`` or ``(unchanged)``.
+    """
+    started = _parse_instant(started_at, "started_at")
+    ended = _parse_instant(ended_at, "ended_at")
+    day = _parse_date(usage_date, "usage_date") or (started.date() if started else datetime.now(UTC).date())
     project: Project | None = None
     issue: Issue | None = None
     method: str | None = None
@@ -273,8 +300,11 @@ async def _log_ai_usage(  # noqa: PLR0913
         client_name=client.name if client is not None else None,
         client_version=client.version if client is not None else None,
         comments=comments,
+        started_at=started,
+        ended_at=ended,
+        idempotency_key=idempotency_key,
     )
-    entry = await _usage.create_for(
+    result = await _usage.create_for(
         session,
         user,
         data,
@@ -283,6 +313,7 @@ async def _log_ai_usage(  # noqa: PLR0913
         source="mcp",
         api_key_id=mcp_api_key_id_var.get(),
     )
+    entry = result.entry
     await session.flush()
     refs = await _usage.references(session, user, [entry])
     await _log_tool(
@@ -298,6 +329,7 @@ async def _log_ai_usage(  # noqa: PLR0913
             "usage_date": entry.usage_date.isoformat(),
             "project_key": refs.project_keys.get(entry.project_id) if entry.project_id else None,
             "issue": refs.issue_keys.get(entry.issue_id) if entry.issue_id else None,
+            "upsert": result.status,
         },
         project_id=entry.project_id,
     )
@@ -305,12 +337,17 @@ async def _log_ai_usage(  # noqa: PLR0913
     if method == "mcp_session":
         where += " (the issue this agent session works on)"
     for_whom = f" for {_login(refs, entry.user_id)}" if entry.user_id != user.id else ""
-    return (
+    text = (
         f"Logged AI usage entry #{entry.id}{for_whom} on {where}: {entry.tool_slug}/{entry.model}, "
         f"{_tokens(entry)}.\n"
         f"Cost type: {entry.cost_type}. Marginal cost: {_money(entry.marginal)}. "
         f"API equivalent: {_money(entry.api_equivalent)} ({entry.cost_basis})."
     )
+    if entry.idempotency_key is None:
+        return text
+    if result.status == "updated":
+        return f"{text} (updated, revision {entry.revision})"
+    return f"{text} ({result.status})"
 
 
 # ---------------------------------------------------------------------------

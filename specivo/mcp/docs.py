@@ -233,7 +233,9 @@ The reporter (`POST /api/v1/ai-usage/ingest/`) is the routine way; the tools are
 and corrections.
 1. `specivo_log_ai_usage(tool="claude-code", model="claude-sonnet-4-5", input_tokens=N, output_tokens=N,
    cache_read_tokens=N, issue_ref="ACME-12")` -- without `issue_ref` / `project_key` the entry goes to
-   the issue this agent session works on, else stays unassigned; the server prices it
+   the issue this agent session works on, else stays unassigned; the server prices it. A client that
+   may retry passes `idempotency_key` (plus `started_at` / `ended_at` with an offset): the same key
+   again replaces the entry's totals instead of counting twice
 2. `specivo_ai_usage(op="list")` -- the entries logged in your name (unassigned ones included);
    `project_key="ACME"` for a project's entries you may read. Your own entries show the agent
    session they came from (`session=`); `session_id="..."` lists just that session's entries, to

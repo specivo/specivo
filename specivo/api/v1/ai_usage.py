@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from specivo.core.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from specivo.core.database import DbSession
@@ -46,6 +46,11 @@ _service = AiUsageService()
 _projects = ProjectService()
 
 _REQUIRED_ON_PATCH = ("tool", "model", "usage_date", "request_count")
+
+#: The 200 of a create sent again with its idempotency key.
+_REPLAYED: dict[int | str, dict[str, Any]] = {
+    200: {"model": AiUsageEntryOut, "description": "The idempotency key's bucket existed: replaced or unchanged"}
+}
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +159,7 @@ def input_of(data: AiUsageCreate) -> AiUsageInput:
         git_branch=data.git_branch,
         repo_hint=data.repo_hint,
         comments=data.comments,
+        idempotency_key=data.idempotency_key,
     )
 
 
@@ -254,11 +260,13 @@ async def list_project_ai_usage(  # noqa: PLR0913
     "/projects/{project_key}/ai-usage/",
     response_model=AiUsageEntryOut,
     status_code=status.HTTP_201_CREATED,
+    responses=_REPLAYED,
 )
 async def create_project_ai_usage(
     project_key: str,
     data: AiUsageCreate,
     request: Request,
+    response: Response,
     db: DbSession,
     current_user: User = Depends(get_current_user),
 ) -> AiUsageEntryOut:
@@ -267,11 +275,14 @@ async def create_project_ai_usage(
     Needs ``log_ai_usage`` there for one's own usage. With ``on_behalf_of``
     it needs ``log_ai_usage_for_others`` and the user must be an active member
     of the project; without that permission every login gets the same 403.
+    With ``idempotency_key``: 201 for a new bucket, 200 when it existed (its
+    totals replaced, or unchanged); 409 ``key_conflict`` when another account
+    reported it, 409 ``ai_usage_attribution_conflict`` when it is in another project.
     """
     project = await _projects.get_by_key(db, project_key.upper())
     await _projects.require_project_access(db, project, current_user)
     source, key_id = _source(request)
-    entry = await _service.create_for(
+    result = await _service.create_for(
         db,
         current_user,
         input_of(data),
@@ -281,7 +292,9 @@ async def create_project_ai_usage(
         api_key_id=key_id,
         request=request,
     )
-    return await _one_out(db, current_user, entry)
+    if result.status != "created":
+        response.status_code = status.HTTP_200_OK
+    return await _one_out(db, current_user, result.entry)
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +345,11 @@ async def list_my_ai_usage(  # noqa: PLR0913
     return await _page_out(db, current_user, entries, total, offset, limit)
 
 
-@router.post("/my/ai-usage/", response_model=AiUsageEntryOut, status_code=status.HTTP_201_CREATED)
+@router.post("/my/ai-usage/", response_model=AiUsageEntryOut, status_code=status.HTTP_201_CREATED, responses=_REPLAYED)
 async def create_my_ai_usage(
     data: AiUsageCreate,
     request: Request,
+    response: Response,
     db: DbSession,
     current_user: User = Depends(get_current_user),
 ) -> AiUsageEntryOut:
@@ -343,9 +357,11 @@ async def create_my_ai_usage(
 
     Needs no permission for one's own usage; ``on_behalf_of`` is for
     administrators only here. ``issue_id`` needs a project: use the project route.
+    With ``idempotency_key``: 201 for a new bucket, 200 when it existed (see the
+    project route).
     """
     source, key_id = _source(request)
-    entry = await _service.create_for(
+    result = await _service.create_for(
         db,
         current_user,
         input_of(data),
@@ -355,7 +371,9 @@ async def create_my_ai_usage(
         api_key_id=key_id,
         request=request,
     )
-    return await _one_out(db, current_user, entry)
+    if result.status != "created":
+        response.status_code = status.HTTP_200_OK
+    return await _one_out(db, current_user, result.entry)
 
 
 # ---------------------------------------------------------------------------
