@@ -790,8 +790,10 @@ edits to issues and wiki pages are not audit events: they live in issue and wiki
 (`_log_tool`, from `agent_session_id_var`; no foreign key, as for `user_id` and `project_id`, because audit
 rows outlive sessions), and `agent_sessions.tool_call_count` goes up in the same transaction, so the session
 list needs no join to the partitioned table. A project's session page lists a session's rows in the project
-and its project-less ones (`list_events(agent_session_id=..., project_id=..., include_projectless=True)`), for
-`manage_project` only; opening it writes `RESOURCE_ACCESS` with `resource_type` `agent_session`. Other write
+and the project-less rows of tools that act in no project (`list_events(agent_session_id=..., project_id=...,
+projectless_tools=PROJECT_FREE_TOOLS)`): other project-less rows can name issues in projects the reader cannot
+see. It is for `manage_project` only, and its parent ids and related sessions pass the same visibility rule as
+the session list; opening it writes `RESOURCE_ACCESS` with `resource_type` `agent_session`. Other write
 paths leave the column empty.
 
 **Noise rules.** Each of these was one row per routine request, so it is not written:

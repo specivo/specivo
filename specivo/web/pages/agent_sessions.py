@@ -30,7 +30,7 @@ from specivo.models.agent_session import AgentSession
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.services.agent_session_service import AgentSessionService
+from specivo.services.agent_session_service import PROJECT_FREE_TOOLS, AgentSessionService
 from specivo.services.agent_session_usage import SessionUsage, session_entries, usage_by_session
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.security_audit_service import SecurityAuditService
@@ -95,8 +95,11 @@ async def _issues(db: AsyncSession, issue_ids: set[int]) -> dict[int, tuple[str,
     return {iid: (f"{key}-{number}", subject) for iid, key, number, subject in rows.all()}
 
 
-async def _session_rows(db: AsyncSession, viewer: User, sessions: list[AgentSession]) -> list[dict[str, Any]]:
-    """The sessions as the list and the detail header show them."""
+async def _session_rows(
+    db: AsyncSession, viewer: User, project: Project, sessions: list[AgentSession]
+) -> list[dict[str, Any]]:
+    """The sessions as the list and the detail header show them; a parent hidden from *viewer* is left out."""
+    hidden = await _sessions.hidden_parents(db, project.id, viewer, sessions)
     users = await _users(db, {s.user_id for s in sessions})
     issues = await _issues(db, {s.issue_id for s in sessions if s.issue_id is not None})
     usage = await usage_by_session(db, viewer, [s.id for s in sessions])
@@ -106,6 +109,7 @@ async def _session_rows(db: AsyncSession, viewer: User, sessions: list[AgentSess
         account = users.get(s.user_id)
         issue = issues.get(s.issue_id) if s.issue_id is not None else None
         session_usage = usage.get(s.id)
+        parent_shown = s.id not in hidden
         rows.append(
             {
                 "id": s.id,
@@ -117,8 +121,8 @@ async def _session_rows(db: AsyncSession, viewer: User, sessions: list[AgentSess
                 "issue_key": issue[0] if issue else "",
                 "issue_subject": issue[1] if issue else "",
                 "external_session_id": s.external_session_id or "",
-                "parent_external_session_id": s.parent_external_session_id or "",
-                "parent_session_id": s.parent_session_id,
+                "parent_external_session_id": (s.parent_external_session_id or "") if parent_shown else "",
+                "parent_session_id": s.parent_session_id if parent_shown else None,
                 "started_at": s.started_at,
                 "last_activity_at": s.last_activity_at,
                 "ended_at": s.ended_at,
@@ -165,7 +169,8 @@ async def timeline_context(
 ) -> dict[str, Any]:
     """The context ``pages/agent_sessions/_timeline.html`` renders: one page of the session's tool calls.
 
-    Rows of this project and rows without a project; newest first, at most
+    Rows of this project and the project-less rows of ``PROJECT_FREE_TOOLS``
+    (the others can name other projects' issues); newest first, at most
     ``TIMELINE_PAGE_SIZE`` per page. Embedding pages pass the result as
     ``timeline`` and include the template.
     """
@@ -173,7 +178,7 @@ async def timeline_context(
         db,
         agent_session_id=agent_session.id,
         project_id=project.id,
-        include_projectless=True,
+        projectless_tools=PROJECT_FREE_TOOLS,
         offset=offset,
         limit=TIMELINE_PAGE_SIZE,
     )
@@ -234,7 +239,7 @@ async def agent_session_list(
             "active_page": "agent_sessions",
             "active_project": project,
             "project": project,
-            "rows": await _session_rows(db, user, sessions),
+            "rows": await _session_rows(db, user, project, sessions),
             "total": total,
             "offset": offset,
             "limit": limit,
@@ -259,8 +264,8 @@ async def agent_session_detail(
     from specivo.web.pages.ai_usage.rows import _rows
 
     agent_session = await _managed_session(request, db, user, project, session_id)
-    [row] = await _session_rows(db, user, [agent_session])
-    lineage = await _sessions.lineage(db, agent_session)
+    [row] = await _session_rows(db, user, project, [agent_session])
+    lineage = await _sessions.visible_lineage(db, project.id, agent_session, user)
     entries, usage_total = await session_entries(db, user, agent_session, limit=USAGE_ENTRIES_SHOWN)
     refs = await AiUsageService().references(db, user, entries)
     usage_rows = await _rows(db, user, entries, refs)

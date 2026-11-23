@@ -30,7 +30,7 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.client_ip import get_client_ip
@@ -1632,7 +1632,7 @@ class SecurityAuditService:
         event_types: Sequence[str] | None = None,
         ip_address: str | None = None,
         agent_session_id: int | None = None,
-        include_projectless: bool = False,
+        projectless_tools: Sequence[str] | None = None,
     ) -> tuple[list[SecurityAuditLog], int]:
         """Query audit logs with optional filters, newest first. Returns (items, total_count).
 
@@ -1640,9 +1640,11 @@ class SecurityAuditService:
         must match each one given); an empty ``event_types`` matches nothing.
         ``after`` is inclusive and ``before`` exclusive; a time range lets
         PostgreSQL skip the partitions outside it. ``agent_session_id`` keeps
-        the MCP tool calls of one agent session. With ``include_projectless``
-        a ``project_id`` filter also keeps the rows that name no project (an
-        agent's ``whoami`` or lookups next to its work in the project).
+        the MCP tool calls of one agent session. With ``projectless_tools`` a
+        ``project_id`` filter also keeps the rows that name no project, but
+        only those of the MCP tools listed (``details.tool``): tools that act in
+        no project at all, such as ``whoami``. Project-less rows of other tools
+        can name issues or pages in projects the reader cannot see.
         """
         conditions: list[ColumnElement[bool]] = []
         if event_type is not None:
@@ -1655,9 +1657,14 @@ class SecurityAuditService:
             conditions.append(SecurityAuditLog.agent_session_id == agent_session_id)
         if project_id is not None:
             in_project = SecurityAuditLog.project_id == project_id
-            conditions.append(
-                or_(in_project, SecurityAuditLog.project_id.is_(None)) if include_projectless else in_project
-            )
+            if projectless_tools:
+                projectless = and_(
+                    SecurityAuditLog.project_id.is_(None),
+                    SecurityAuditLog.details["tool"].astext.in_(list(projectless_tools)),
+                )
+                conditions.append(or_(in_project, projectless))
+            else:
+                conditions.append(in_project)
         if ip_address is not None:
             conditions.append(SecurityAuditLog.ip_address == ip_address)
         if after is not None:

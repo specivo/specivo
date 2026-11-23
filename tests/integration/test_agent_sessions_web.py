@@ -21,7 +21,7 @@ from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
 from specivo.services.auth_service import _make_access_token
 from specivo.services.permission_service import clear_role_cache
-from tests.integration.agent_session_world import SessionWorld, build_session_world
+from tests.integration.agent_session_world import SessionWorld, add_hidden_parent, build_session_world
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -144,3 +144,27 @@ async def test_signed_out_reader_is_sent_to_login(client: AsyncClient, world: Se
     resp = await client.get(f"/projects/{world.p.key}/agent-sessions/")
     assert resp.status_code in (302, 303)
     assert "/login/" in resp.headers["location"]
+
+
+async def test_detail_leaves_out_projectless_rows_of_project_tools(client: AsyncClient, world: SessionWorld) -> None:
+    w = world
+    for suffix in ("", "timeline/"):
+        resp = await client.get(f"/projects/{w.p.key}/agent-sessions/{w.live.id}/{suffix}", cookies=_cookie(w.manager))
+        assert resp.status_code == 200, resp.text
+        assert "show_issue" not in resp.text
+        assert w.q_issue.display_key not in resp.text
+
+
+async def test_detail_hides_lineage_outside_the_project(
+    client: AsyncClient, db_session: AsyncSession, world: SessionWorld
+) -> None:
+    w = world
+    parent = await add_hidden_parent(db_session, w)
+    resp = await client.get(f"/projects/{w.p.key}/agent-sessions/{w.live.id}/", cookies=_cookie(w.manager))
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert "far-parent" not in html
+    assert f"/agent-sessions/{parent.id}/" not in html
+    assert 'data-testid="as-parent-link"' not in html
+    resp = await client.get(f"/projects/{w.p.key}/agent-sessions/{parent.id}/", cookies=_cookie(w.manager))
+    assert resp.status_code == 404

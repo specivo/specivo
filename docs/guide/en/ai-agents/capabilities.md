@@ -176,7 +176,9 @@ was last active and ended, the **Related sessions** in its parent chain, and its
 the MCP tools it ran, newest first, 50 per page, with the event and what each call named (project
 keys, issue keys, page slugs). They come from the security audit log, so only that metadata is
 shown, never what was sent to a tool or what it returned. Calls the session made in other projects
-are left out; calls that name no project (such as `specivo_whoami`) are shown. Below them is the AI
+are left out, and so are calls without a project from tools that work in projects; calls of
+`specivo_whoami`, `specivo_list_projects` and `specivo_list_lookups` are shown. **Parent session** and
+**Related sessions** show only sessions you could open on this page. Below them is the AI
 usage linked to the session: the entries reported with its client session id, or, when it has none,
 the entries of the same account whose start and end fall in the session's time. Opening a session
 is recorded in the audit log.

@@ -20,7 +20,7 @@ from specivo.models.user import User
 from specivo.schemas.agent_session import AgentSessionDetailOut, AgentSessionOut
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.security_audit import AuditLogOut
-from specivo.services.agent_session_service import AgentSessionService
+from specivo.services.agent_session_service import PROJECT_FREE_TOOLS, AgentSessionService
 from specivo.services.agent_session_usage import session_entries
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -55,6 +55,15 @@ async def _managed_session(
         raise PermissionDeniedError("You do not have permission to inspect agent sessions in this project")
     agent_session = await _session_service.get_for_project(db, project.id, session_id, user)
     return project, agent_session
+
+
+_HIDDEN_PARENT = {"parent_session_id": None, "parent_external_session_id": None}
+
+
+def _out[T: AgentSessionOut](schema: type[T], agent_session: AgentSession, hidden: set[int], **extra: object) -> T:
+    """*agent_session* as *schema*, without its parent ids when the parent is hidden from the caller."""
+    update: dict[str, object] = {**extra, **(_HIDDEN_PARENT if agent_session.id in hidden else {})}
+    return schema.model_validate(agent_session).model_copy(update=update)
 
 
 @router.get("/", response_model=PaginatedResponse[AgentSessionOut])
@@ -93,11 +102,12 @@ async def list_agent_sessions(
         sessions, total = await _session_service.list_for_project(
             db, project.id, current_user, filters, offset=offset, limit=limit
         )
+    hidden = await _session_service.hidden_parents(db, project.id, current_user, sessions)
     return PaginatedResponse[AgentSessionOut](
         total_count=total,
         offset=offset,
         limit=limit,
-        items=[AgentSessionOut.model_validate(s) for s in sessions],
+        items=[_out(AgentSessionOut, s, hidden) for s in sessions],
     )
 
 
@@ -121,7 +131,8 @@ async def get_agent_session(
         project_id=project.id,
         request=request,
     )
-    return AgentSessionDetailOut.model_validate(agent_session).model_copy(update={"usage_entry_count": usage_total})
+    hidden = await _session_service.hidden_parents(db, project.id, current_user, [agent_session])
+    return _out(AgentSessionDetailOut, agent_session, hidden, usage_entry_count=usage_total)
 
 
 @router.get("/{session_id}/events/", response_model=PaginatedResponse[AuditLogOut])
@@ -136,7 +147,8 @@ async def list_agent_session_events(
 ) -> PaginatedResponse[AuditLogOut]:
     """The session's MCP tool calls from the security audit log, newest first. Needs manage_project.
 
-    Rows in this project and rows that name no project are listed; the
+    Rows in this project are listed, and the project-less rows of tools that
+    act in no project (``whoami``, ``list_projects``, ``list_lookups``); the
     session's calls in other projects are not.
     """
     project, agent_session = await _managed_session(db, project_key, session_id, current_user, request)
@@ -144,7 +156,7 @@ async def list_agent_session_events(
         db,
         agent_session_id=agent_session.id,
         project_id=project.id,
-        include_projectless=True,
+        projectless_tools=PROJECT_FREE_TOOLS,
         offset=offset,
         limit=limit,
     )

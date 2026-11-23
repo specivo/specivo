@@ -10,8 +10,8 @@ key prefix, so modules running on different workers never share unique keys.
 - Sessions of the agent: ``old`` (REST, two days old, no issue, client id
   ``<low>-root``), ``live`` (MCP, active, on ``pub``, client id ``<low>-live``,
   child of ``old``) and ``hidden`` (MCP, on ``priv``, no client id).
-- Audit rows of ``live``: ``whoami`` (no project), ``create_issue`` in P and
-  ``search`` in Q.
+- Audit rows of ``live``: ``whoami`` (no project), ``create_issue`` in P,
+  ``search`` in Q and a project-less ``show_issue`` naming Q's issue.
 - AI usage of the agent: on ``live`` by client id (counted, 1.50 USD) and an
   excluded one; on ``hidden`` by time overlap (on ``priv``, 2.00 USD).
 """
@@ -54,6 +54,7 @@ class SessionWorld:
     q: Project
     pub: Issue
     priv: Issue
+    q_issue: Issue
     old: AgentSession
     live: AgentSession
     hidden: AgentSession
@@ -129,6 +130,25 @@ def _usage(user: User, project: Project, issue: Issue, amount: str, **kw: Any) -
     )
 
 
+async def add_hidden_parent(db: AsyncSession, w: SessionWorld) -> AgentSession:
+    """Make ``live`` the child of a session on Q's issue, which P's pages must not reveal."""
+    parent = AgentSession(
+        api_key_id=w.live.api_key_id,
+        user_id=w.agent.id,
+        issue_id=w.q_issue.id,
+        client_type="mcp",
+        external_session_id="far-parent",
+        started_at=w.live.started_at - timedelta(hours=1),
+        last_activity_at=w.live.started_at - timedelta(minutes=30),
+    )
+    db.add(parent)
+    await db.flush()
+    w.live.parent_session_id = parent.id
+    w.live.parent_external_session_id = "far-parent"
+    await db.commit()
+    return parent
+
+
 async def build_session_world(db: AsyncSession, prefix: str) -> SessionWorld:
     """Build the world under project keys and logins starting with *prefix*."""
     low = prefix.lower()
@@ -165,6 +185,7 @@ async def build_session_world(db: AsyncSession, prefix: str) -> SessionWorld:
 
     pub = await _issue(db, p, lookups, manager, f"{prefix} open otter")
     priv = await _issue(db, p, lookups, manager, f"{prefix} secret otter", is_private=True)
+    q_issue = await _issue(db, q, lookups, manager, f"{prefix} far otter")
 
     key, raw = await ApiKeyService().create_key(session=db, user_id=agent.id, name=f"{low}-agent")
     now = utcnow()
@@ -232,6 +253,8 @@ async def build_session_world(db: AsyncSession, prefix: str) -> SessionWorld:
         issue_ref=pub.display_key,
     )
     audit("search_query", f"search_{low}", q, now - timedelta(minutes=30), project_key=q.key)
+    # A project-less row of a tool that acts in projects: it names Q's issue, so P's page must not show it.
+    audit("resource_access", "show_issue", None, now - timedelta(minutes=20), issue_ref=q_issue.display_key)
 
     db.add_all(
         [
@@ -259,6 +282,7 @@ async def build_session_world(db: AsyncSession, prefix: str) -> SessionWorld:
         q=q,
         pub=pub,
         priv=priv,
+        q_issue=q_issue,
         old=old,
         live=live,
         hidden=hidden,

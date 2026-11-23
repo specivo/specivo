@@ -50,6 +50,11 @@ CLIENT_TYPES = (CLIENT_TYPE_MCP, CLIENT_TYPE_REST, CLIENT_TYPE_WEBHOOK)
 EXTERNAL_SESSION_ID_MAX = 200
 _EXTERNAL_SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}")
 
+#: MCP tools that act in no project: their project-less audit rows name nothing of any project,
+#: so a project's session timeline shows them. Project-less rows of every other tool are left out,
+#: because they can name issues or pages in projects the reader cannot see.
+PROJECT_FREE_TOOLS = ("whoami", "list_projects", "list_lookups")
+
 #: How many generations ``lineage`` walks up and down from a session.
 LINEAGE_MAX_DEPTH = 10
 
@@ -589,3 +594,33 @@ class AgentSessionService:
             issue_id = issue.id
         external = external_session_id.strip() if external_session_id and external_session_id.strip() else None
         return AgentSessionFilters(user_id=user_id, issue_id=issue_id, active=active, external_session_id=external)
+
+    async def visible_ids(self, session: AsyncSession, project_id: int, user: User, ids: set[int]) -> set[int]:
+        """The ids among *ids* of *project_id*'s sessions that *user* may see (``get_for_project``'s rule)."""
+        if not ids:
+            return set()
+        conditions = await self._project_conditions(session, project_id, user)
+        stmt = select(AgentSession.id).where(AgentSession.id.in_(ids), *conditions)
+        return set((await session.execute(stmt)).scalars().all())
+
+    async def visible_lineage(
+        self, session: AsyncSession, project_id: int, agent_session: AgentSession, user: User
+    ) -> list[AgentSession]:
+        """``lineage`` of *agent_session*, keeping only the sessions *user* may see in *project_id*."""
+        lineage = await self.lineage(session, agent_session)
+        visible = await self.visible_ids(session, project_id, user, {s.id for s in lineage})
+        return [s for s in lineage if s.id in visible]
+
+    async def hidden_parents(
+        self, session: AsyncSession, project_id: int, user: User, sessions: list[AgentSession]
+    ) -> set[int]:
+        """The ids of the *sessions* whose linked parent *user* may not see in *project_id*.
+
+        Their ``parent_session_id`` and ``parent_external_session_id`` are
+        left out of what *user* is shown: the parent's id names a session
+        working in another project or on a hidden issue. A parent id the
+        client reported but no session row matches names nothing and stays.
+        """
+        parents = {s.parent_session_id for s in sessions if s.parent_session_id is not None}
+        visible = await self.visible_ids(session, project_id, user, parents)
+        return {s.id for s in sessions if s.parent_session_id is not None and s.parent_session_id not in visible}

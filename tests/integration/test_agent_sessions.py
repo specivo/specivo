@@ -400,3 +400,33 @@ class TestDetailAndEvents:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["usage_entry_count"] == 1
+
+
+class TestNoCrossProjectLeaks:
+    async def test_projectless_rows_of_project_tools_are_left_out(self, client: AsyncClient, world):
+        w = world
+        resp = await client.get(
+            f"/api/v1/projects/{w.p.key}/agent-sessions/{w.live.id}/events/",
+            headers=await _bearer(client, w.manager.login),
+        )
+        assert resp.status_code == 200, resp.text
+        assert "show_issue" not in {i["details"]["tool"] for i in resp.json()["items"]}
+        assert w.q_issue.display_key not in resp.text
+
+    async def test_parent_outside_the_project_is_hidden(self, client: AsyncClient, db_session: AsyncSession, world):
+        from tests.integration.agent_session_world import add_hidden_parent
+
+        w = world
+        parent = await add_hidden_parent(db_session, w)
+        headers = await _bearer(client, w.manager.login)
+
+        resp = await client.get(f"/api/v1/projects/{w.p.key}/agent-sessions/{w.live.id}/", headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["parent_session_id"] is None
+        assert resp.json()["parent_external_session_id"] is None
+
+        resp = await client.get(f"/api/v1/projects/{w.p.key}/agent-sessions/", headers=headers)
+        [item] = [i for i in resp.json()["items"] if i["id"] == w.live.id]
+        assert item["parent_session_id"] is None
+        assert "far-parent" not in resp.text
+        assert parent.id not in {i["id"] for i in resp.json()["items"]}
