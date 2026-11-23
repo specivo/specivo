@@ -103,6 +103,8 @@ _IDEMPOTENT = (
     "specivo_tag",
     # Ops list, get, update, exclude, include: none of them adds or deletes entries.
     "specivo_ai_usage",
+    # Ops set, get: setting the same external id and parent again changes nothing.
+    "specivo_agent_session",
 )
 
 # Writes that add something or apply a relative change each time they run.

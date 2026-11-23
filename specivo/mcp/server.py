@@ -19,7 +19,6 @@ from typing import Annotated, Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from specivo.core.database import get_session_factory
@@ -1311,7 +1310,7 @@ async def specivo_timer(
         return await _timer(session, user, op, issue_ref, activity, comments)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
+@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_agent_session"])
 async def specivo_agent_session(
     op: Annotated[str, Field(description="One of: set, get.")],
     external_session_id: Annotated[
