@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+{% from "pages/agent_sessions/_macros.html" import session_state, account_cell, client_type_label with context %}
+{% from "pages/ai_usage/_macros.html" import entry_table with context %}
+
+{% block title %}{% trans id=session.id %}Agent session #{{ id }}{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Projects"), "url": base ~ "/projects/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": _("Agent sessions"), "url": base ~ "/projects/" ~ project.key ~ "/agent-sessions/"},
+  {"label": "#" ~ session.id}
+]) }}
+
+<h1 class="sp-page-h1">{% trans id=session.id %}Agent session #{{ id }}{% endtrans %}</h1>
+
+<div class="card sp-card-pad" data-testid="as-header">
+  <div class="sp-as-header">
+    <div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Account{% endtrans %}</span><span class="sp-info-value">{{ account_cell(session) }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Client{% endtrans %}</span><span class="sp-info-value">{{ session.client or "–" }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Type{% endtrans %}</span><span class="sp-info-value">{{ client_type_label(session.client_type) }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Issue{% endtrans %}</span><span class="sp-info-value">
+        {% if session.issue_key %}<a class="issue-key" href="{{ base }}/issue/{{ session.issue_key }}/" data-testid="as-issue-link">{{ session.issue_key }}</a> {{ session.issue_subject }}{% else %}–{% endif %}
+      </span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Client session id{% endtrans %}</span><span class="sp-info-value">{% if session.external_session_id %}<span class="sp-as-id">{{ session.external_session_id }}</span>{% else %}–{% endif %}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Parent session{% endtrans %}</span><span class="sp-info-value">
+        {% if session.parent_session_id %}<a href="{{ base }}/projects/{{ project.key }}/agent-sessions/{{ session.parent_session_id }}/" data-testid="as-parent-link">#{{ session.parent_session_id }}</a>{% endif %}
+        {% if session.parent_external_session_id %}<span class="sp-as-id">{{ session.parent_external_session_id }}</span>{% elif not session.parent_session_id %}–{% endif %}
+      </span></div>
+    </div>
+    <div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}State{% endtrans %}</span><span class="sp-info-value">{{ session_state(session) }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Started{% endtrans %}</span><span class="sp-info-value">{{ session.started_at | localdt(user.timezone) }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Last activity{% endtrans %}</span><span class="sp-info-value">{{ session.last_activity_at | localdt(user.timezone) }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Ended{% endtrans %}</span><span class="sp-info-value">{% if session.ended_at %}{{ session.ended_at | localdt(user.timezone) }}{% else %}–{% endif %}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}Tool calls{% endtrans %}</span><span class="sp-info-value" data-testid="as-tool-calls">{{ session.tool_calls }}</span></div>
+      <div class="sp-info-row"><span class="sp-info-label">{% trans %}AI usage{% endtrans %}</span><span class="sp-info-value">
+        {% if session.usage_entries %}{% trans count=session.usage_entries %}{{ count }} entry{% pluralize %}{{ count }} entries{% endtrans %}{% if session.spend %} · {{ session.spend }}{% endif %}{% else %}–{% endif %}
+      </span></div>
+    </div>
+  </div>
+</div>
+
+{% if lineage %}
+<h2 class="sp-as-section-title">{% trans %}Related sessions{% endtrans %}</h2>
+<div class="card sp-card-pad">
+  <ul class="sp-as-lineage" data-testid="as-lineage">
+    {% for s in lineage %}
+    <li>
+      <a href="{{ base }}/projects/{{ project.key }}/agent-sessions/{{ s.id }}/">#{{ s.id }}</a>
+      {% if s.is_parent %}<span class="sp-badge-info">{% trans %}Parent{% endtrans %}</span>{% endif %}
+      {% if s.external_session_id %}<span class="sp-as-id">{{ s.external_session_id }}</span>{% endif %}
+      <span class="sp-text-muted-xs">{{ s.client }} · {{ s.started_at | localdt(user.timezone) }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<h2 class="sp-as-section-title">{% trans %}Tool calls{% endtrans %}</h2>
+<p class="sp-text-muted-xs">{% trans %}From the security audit log: which tool ran and on what, never its arguments or results. Calls in other projects are not shown.{% endtrans %}</p>
+{% include "pages/agent_sessions/_timeline.html" %}
+
+<h2 class="sp-as-section-title">{% trans %}AI usage{% endtrans %}</h2>
+{% if usage_rows %}
+<div class="card">
+  {{ entry_table(usage_rows, return_to, show_project=True) }}
+</div>
+{% if usage_total > usage_shown %}<p class="sp-text-muted-xs">{% trans shown=usage_shown, total=usage_total %}Showing the newest {{ shown }} of {{ total }} entries.{% endtrans %}</p>{% endif %}
+{% else %}
+<div class="card sp-as-empty" data-testid="as-usage-empty">{% trans %}No AI usage you can see is linked to this session.{% endtrans %}</div>
+{% endif %}
+{% endblock %}

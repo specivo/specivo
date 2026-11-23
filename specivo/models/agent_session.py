@@ -25,6 +25,10 @@ class AgentSession(Base, TimestampMixin):
     this window through MCP (moving it to an ``active`` status, assigning it to
     itself, starting a timer on it). It is an attribution hint for AI usage
     ingest, not a permission.
+
+    ``tool_call_count`` counts the MCP tool calls written to the security
+    audit log for this session (``security_audit_logs.agent_session_id``), so
+    the session list needs no join to the partitioned audit table.
     """
 
     __tablename__ = "agent_sessions"
@@ -66,6 +70,7 @@ class AgentSession(Base, TimestampMixin):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tool_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     def __repr__(self) -> str:
         return (

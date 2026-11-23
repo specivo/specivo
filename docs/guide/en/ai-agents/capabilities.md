@@ -158,9 +158,37 @@ session of the same account, so another account's ids never attach to yours. Whe
 [reporter](reporting-ai-usage.md) later sends usage with the same `session_id`, Specivo attributes it
 to that session's issue (or, when that session names none, to the nearest one in its parent chain)
 instead of guessing from the time of the work. `specivo_agent_session(op="get")` shows the session.
-Setting ids is recorded in the audit log. The REST list of a project's agent sessions
-(`GET /api/v1/projects/{key}/agent-sessions/`) shows the same fields and takes an
-`external_session_id` filter.
+Setting ids is recorded in the audit log.
+
+### The Agent sessions page
+
+Every project has an **Agent sessions** page in its sidebar. It lists the sessions of the project's
+member accounts, most recently active first: the **Account** (with a **Service account** badge for
+agent accounts), the **Client**, the **Type** (MCP or REST), the **Issue** the session works on,
+when it **Started**, its **Last activity** (with an **Active**, **Inactive** or **Ended** mark), the
+number of **Tool calls**, and the **AI usage** linked to it (entries and spend you are allowed to
+see). Filter by **Account** (a login), **Issue** (a key such as `ACME-12`) and **Show** (all, active
+only, inactive only). A session working on an issue you cannot see is not listed.
+
+Project managers (anyone with **Manage project**, and administrators) can open a session. Its page
+shows the account and client, the client's session id and its **Parent session**, when it started,
+was last active and ended, the **Related sessions** in its parent chain, and its **Tool calls**:
+the MCP tools it ran, newest first, 50 per page, with the event and what each call named (project
+keys, issue keys, page slugs). They come from the security audit log, so only that metadata is
+shown, never what was sent to a tool or what it returned. Calls the session made in other projects
+are left out, and so are calls without a project from tools that work in projects; calls of
+`specivo_whoami`, `specivo_list_projects` and `specivo_list_lookups` are shown. **Parent session** and
+**Related sessions** show only sessions you could open on this page. Below them is the AI
+usage linked to the session: the entries reported with its client session id, or, when it has none,
+the entries of the same account whose start and end fall in the session's time. Opening a session
+is recorded in the audit log.
+
+Tool calls made before this page existed are not linked to a session, so older sessions show none.
+
+The same data is in the REST API: `GET /api/v1/projects/{key}/agent-sessions/` returns a paginated
+list (`offset`, `limit`, and the filters `account`, `issue`, `active` and `external_session_id`),
+and, for project managers, `GET .../agent-sessions/{id}/` returns one session with
+`tool_call_count` and `usage_entry_count`, and `GET .../agent-sessions/{id}/events/` its tool calls.
 
 The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
 an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about

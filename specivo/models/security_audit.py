@@ -30,6 +30,8 @@ class SecurityAuditLog(Base):
         # Composite indexes for admin listing: WHERE event_type = X ORDER BY created_at DESC
         Index("ix_security_audit_event_type_created", "event_type", "created_at"),
         Index("ix_security_audit_user_id_created", "user_id", "created_at"),
+        # The tool calls of one agent session, in order (session detail page).
+        Index("ix_security_audit_agent_session_created", "agent_session_id", "created_at"),
         {"postgresql_partition_by": "RANGE (created_at)"},
     )
 
@@ -48,6 +50,8 @@ class SecurityAuditLog(Base):
         index=True,
     )
     permission: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # The agent session of an MCP tool call. Not a foreign key: audit rows outlive sessions.
+    agent_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)

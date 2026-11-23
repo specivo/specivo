@@ -1,0 +1,36 @@
+/* Project > Agent sessions: the session list, a session's header and its tool-call timeline. */
+
+.sp-as-table td { vertical-align: top; }
+.sp-as-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-as-nowrap { white-space: nowrap; }
+.sp-as-account { font-weight: 500; color: var(--sp-text-primary); }
+.sp-as-id { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); overflow-wrap: anywhere; }
+
+.sp-as-state { display: inline-flex; align-items: center; gap: 6px; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-as-state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--sp-border); }
+.sp-as-state--active { color: var(--sp-success); }
+.sp-as-state--active::before { background: var(--sp-success); }
+
+.sp-as-header { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--sp-space-2xl); }
+.sp-as-header .sp-info-row { align-items: flex-start; gap: var(--sp-space-md); }
+.sp-as-header .sp-info-value { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+
+.sp-as-section-title { font-size: var(--sp-font-size-md); font-weight: 600; margin: var(--sp-space-2xl) 0 var(--sp-space-md); }
+.sp-as-lineage { list-style: none; margin: 0; padding: 0; }
+.sp-as-lineage li { padding: var(--sp-space-xs) 0; font-size: var(--sp-font-size-sm); }
+
+.sp-as-timeline .sp-table td { vertical-align: top; }
+.sp-as-event { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); }
+.sp-as-tool { font-weight: 600; color: var(--sp-text-primary); }
+.sp-as-details { display: flex; flex-wrap: wrap; gap: 4px; }
+.sp-as-detail { display: inline-flex; gap: 4px; padding: 1px 6px; border-radius: 4px; background: var(--sp-bg-page); font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }
+.sp-as-detail-key { color: var(--sp-text-muted); }
+.sp-as-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-space-md); padding: var(--sp-space-md) var(--sp-space-lg); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); }
+.sp-as-pager-links { display: flex; gap: var(--sp-space-sm); }
+.sp-as-empty { padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); }
+
+/* ADR-0005: secondary columns go at the 768px breakpoint, the header stacks. */
+@media (max-width: 768px) {
+  .sp-as-hide-md { display: none; }
+  .sp-as-header { grid-template-columns: 1fr; }
+}

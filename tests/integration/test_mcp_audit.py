@@ -347,3 +347,56 @@ class TestMcpToolAuditLogging:
                 assert e.details.get("source") == "mcp"
         finally:
             _clear_mcp_key()
+
+
+# ---------------------------------------------------------------------------
+# Agent session of a tool call
+# ---------------------------------------------------------------------------
+
+
+class TestToolCallAgentSession:
+    async def test_tool_call_names_its_agent_session_and_counts_it(
+        self, db_session: AsyncSession, agent_user: User, agent_api_key, project: Project
+    ):
+        from specivo.mcp.client_context import agent_session_id_var
+        from specivo.mcp.tools import _list_projects, _whoami
+        from specivo.models.agent_session import AgentSession
+
+        agent_session = AgentSession(api_key_id=agent_api_key[0].id, user_id=agent_user.id, client_type="mcp")
+        db_session.add(agent_session)
+        await db_session.commit()
+
+        _set_mcp_key(agent_api_key[1])
+        token = agent_session_id_var.set(agent_session.id)
+        try:
+            await _whoami(db_session, agent_user)
+            await _list_projects(db_session, agent_user)
+        finally:
+            agent_session_id_var.reset(token)
+            _clear_mcp_key()
+
+        rows = (
+            (
+                await db_session.execute(
+                    select(SecurityAuditLog).where(SecurityAuditLog.agent_session_id == agent_session.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert sorted(row.details["tool"] for row in rows) == ["list_projects", "whoami"]
+        await db_session.refresh(agent_session)
+        assert agent_session.tool_call_count == 2
+
+    async def test_tool_call_outside_a_session_names_none(
+        self, db_session: AsyncSession, agent_user: User, agent_api_key
+    ):
+        from specivo.mcp.tools import _whoami
+
+        _set_mcp_key(agent_api_key[1])
+        try:
+            await _whoami(db_session, agent_user)
+        finally:
+            _clear_mcp_key()
+        events = [e for e in await _get_mcp_audit_events(db_session) if e.details.get("tool") == "whoami"]
+        assert events and all(e.agent_session_id is None for e in events)
