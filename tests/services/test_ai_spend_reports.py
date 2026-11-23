@@ -186,6 +186,10 @@ async def entry(
     excluded: bool = False,
     unattended: bool = False,
     profile: str | None = None,
+    payer: str = "unknown",
+    billing_account_id: int | None = None,
+    billing_method: str = "none",
+    route: str | None = None,
 ) -> AiUsageEntry:
     """An entry with fixed costs. ``marginal`` defaults to ``api`` for api usage and to 0 for subscriptions."""
     if marginal is None:
@@ -216,6 +220,10 @@ async def entry(
         git_branch=branch,
         unattended=unattended,
         profile=profile,
+        payer=payer,
+        billing_account_id=billing_account_id,
+        billing_method=billing_method,
+        route=route,
         excluded_at=datetime(2026, 5, 1, tzinfo=UTC) if excluded else None,
     )
     db.add(row)
@@ -355,6 +363,8 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         tool="codex",
         unattended=True,
         profile="research",
+        payer="employer",
+        route="corp-gateway",
     )
     await entry(db, w.bob, project=None, day=date(2026, 3, 4), api="5", cost_type="free")
     report = await run(db, w.admin, group_by=[dim], include_seat_cost=False)
@@ -374,6 +384,9 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         "branch": {"feat/a", None},
         "attended": {False, True},
         "profile": {"research", None},
+        "payer": {"employer", "unknown"},
+        "billing_account": {None},
+        "route": {"corp-gateway", None},
         # Planning dimensions come from the issue: none of these issues is planned.
         "version": {None},
         "sprint": {None},
@@ -388,6 +401,8 @@ async def test_each_group_by(db_session: AsyncSession, w: World, dim: str) -> No
         assert labels == {"RPA-1", ""}
     if dim == "attended":
         assert labels == {"Attended", "Unattended"}
+    if dim == "payer":
+        assert labels == {"Employer", "Unknown"}
 
 
 async def test_attended_rows_sum_to_the_ungrouped_total(db_session: AsyncSession, w: World) -> None:

@@ -35,6 +35,7 @@ from specivo.models.user import User
 from specivo.schemas.ai_spend_report import SpendModelSuggestionOut, SpendReportOut
 from specivo.schemas.ai_usage import AiUsageCostType
 from specivo.schemas.project import AssigneeSuggestionOut
+from specivo.services.ai_spend_billing import parse_payer, parse_scope, resolve_billing_account, route_filter
 from specivo.services.ai_spend_planning import resolve_planning
 from specivo.services.ai_spend_report_service import (
     AiSpendReportService,
@@ -69,7 +70,9 @@ _GROUP_BY = Query(
     "user",
     description=(
         "Comma-separated: version (the release), sprint, user, project, issue, tool, provider, model, cost_type, "
-        "branch, attended (attended or unattended runs), profile (the agent profile) (may be empty)"
+        "branch, attended (attended or unattended runs), profile (the agent profile), payer (employer, employee "
+        "or unknown), billing_account (a personal account you may not see is 'Personal account'), route "
+        "(the backend the usage went through) (may be empty)"
     ),
 )
 
@@ -103,6 +106,10 @@ async def _report(  # noqa: PLR0913
     sprint: str | None = None,
     attended: str | None = None,
     profile: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
+    route: str | None = None,
+    scope: str | None = None,
     offset: int = 0,
     limit: int = JSON_ROWS_DEFAULT,
 ) -> SpendReportOut | Response:
@@ -111,6 +118,7 @@ async def _report(  # noqa: PLR0913
     narrowing, selected = await _narrowing(db, user, project, project_filter, issue, branch)
     narrowing.update(await _planning_narrowing(db, user, project or selected, version, sprint))
     narrowing.update(session_context_filters(attended, profile))
+    narrowing.update(await _billing_narrowing(db, user, payer, billing_account, route, scope))
     report = await _service.report(
         db,
         user,
@@ -183,6 +191,29 @@ async def _narrowing(
     return out, selected
 
 
+async def _billing_narrowing(
+    db: DbSession,
+    user: User,
+    payer: str | None,
+    billing_account: str | None,
+    route: str | None,
+    scope: str | None,
+) -> dict[str, Any]:
+    """The payer, billing account, route and scope filters (``ReportFilters`` fields).
+
+    A billing account is an id or a slug (``-``: none); one the caller may
+    not see, or none by that id or slug, matches nothing.
+    """
+    out: dict[str, Any] = {}
+    if (found := parse_payer(payer)) is not None:
+        out["payer"] = found
+    out.update((await resolve_billing_account(db, user, billing_account)).fields)
+    out.update(route_filter(route))
+    if parse_scope(scope):
+        out["organization"] = True
+    return out
+
+
 async def _planning_narrowing(
     db: DbSession, user: User, project: Project | None, version: str | None, sprint: str | None
 ) -> dict[str, Any]:
@@ -214,6 +245,20 @@ _SPRINT = Query(
 )
 _ATTENDED = Query(None, description="'attended' for runs a person attended, 'unattended' for cron and scheduled runs")
 _PROFILE = Query(None, max_length=100, description="An agent profile, or '-' for entries without one")
+_PAYER = Query(None, description="Who paid: 'employer', 'employee' or 'unknown'")
+_BILLING_ACCOUNT = Query(
+    None,
+    max_length=64,
+    description="A billing account id or slug, or '-' for entries without one; one you may not see matches nothing",
+)
+_ROUTE = Query(None, max_length=100, description="A route (the backend the usage went through), or '-' for none")
+_SCOPE = Query(
+    None,
+    description=(
+        "'all' (default) or 'organization': leave out personal usage (no project, or a project whose payer "
+        "default is employee)"
+    ),
+)
 
 
 @router.get(
@@ -247,6 +292,10 @@ async def project_ai_spend_report(  # noqa: PLR0913
     sprint: str | None = _SPRINT,
     attended: Literal["attended", "unattended"] | None = _ATTENDED,
     profile: str | None = _PROFILE,
+    payer: Literal["employer", "employee", "unknown"] | None = _PAYER,
+    billing_account: str | None = _BILLING_ACCOUNT,
+    route: str | None = _ROUTE,
+    scope: Literal["all", "organization"] | None = _SCOPE,
     sort: Literal["key", "spend"] = Query("key", description="By the grouping key (default), or by total spend"),
     format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
@@ -288,6 +337,10 @@ async def project_ai_spend_report(  # noqa: PLR0913
         sprint=sprint,
         attended=attended,
         profile=profile,
+        payer=payer,
+        billing_account=billing_account,
+        route=route,
+        scope=scope,
         offset=offset,
         limit=limit,
     )
@@ -322,6 +375,10 @@ async def instance_ai_spend_report(  # noqa: PLR0913
     sprint: str | None = _SPRINT,
     attended: Literal["attended", "unattended"] | None = _ATTENDED,
     profile: str | None = _PROFILE,
+    payer: Literal["employer", "employee", "unknown"] | None = _PAYER,
+    billing_account: str | None = _BILLING_ACCOUNT,
+    route: str | None = _ROUTE,
+    scope: Literal["all", "organization"] | None = _SCOPE,
     sort: Literal["key", "spend"] = Query("key"),
     format: Literal["json", "csv"] = Query("json"),
     offset: int = _OFFSET,
@@ -361,6 +418,10 @@ async def instance_ai_spend_report(  # noqa: PLR0913
         sprint=sprint,
         attended=attended,
         profile=profile,
+        payer=payer,
+        billing_account=billing_account,
+        route=route,
+        scope=scope,
         offset=offset,
         limit=limit,
     )
