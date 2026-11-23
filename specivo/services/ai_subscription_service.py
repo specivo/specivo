@@ -8,6 +8,10 @@
   instance setting ``ai_subscriptions_self_service`` is on (the default). People
   see only their own, administrators see all; nobody else does, project
   managers included. Service accounts and system accounts hold none.
+- **Billing account**: each subscription is the fee schedule of a personal
+  billing account of kind ``subscription`` (``billing_account_id``), created
+  with it (see :mod:`specivo.services.ai_billing_account_service`). Deleting
+  the subscription leaves the account, which usage may point at.
 - **Coverage** (:meth:`AiSubscriptionService.subscription_for`) and **seat cost**
   (:meth:`AiSubscriptionService.seat_cost`) apply the rules in
   :mod:`specivo.core.ai_subscriptions`.
@@ -49,6 +53,7 @@ from specivo.core.ai_subscriptions import (
 )
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.money import Money, MoneyError, check_minor_units, format_decimal_plain, to_decimal
+from specivo.models.ai_billing_account import subscription_account
 from specivo.models.ai_subscription import AiSubscription, AiTool
 from specivo.models.user import User
 from specivo.services.api_key_scope import is_global_admin
@@ -442,6 +447,18 @@ class AiSubscriptionService:
         values = await self._validated(session, data.as_changes(), current=None)
         sub = AiSubscription(user_id=owner.id, created_by_id=actor.id, **values)
         session.add(sub)
+        await session.flush()
+        # Every subscription is the fee schedule of a personal billing account.
+        account = subscription_account(
+            subscription_id=sub.id,
+            user_id=owner.id,
+            plan_key=sub.plan_key,
+            plan_name=sub.plan_name,
+            created_by_id=actor.id,
+        )
+        session.add(account)
+        await session.flush()
+        sub.billing_account_id = account.id
         await session.flush()
         if actor.id != owner.id:
             await self._audit(

@@ -9,6 +9,10 @@ logged (on behalf of), and ``reporter_user_id`` / ``reporter_api_key_id``, the
 account and key that wrote it. The reporter columns, ``source`` and the client
 name and version never change after the insert.
 
+``payer`` and ``billing_account_id`` say who paid and through which billing
+account; ``route`` is the backend the usage went through. Like ``cost_type``
+they are snapshots.
+
 Costs are a **snapshot at write time** (see ``AiUsageService``):
 ``price_id`` and ``priced_at`` record which price row was used and at which
 instant; editing or adding prices never changes an entry by itself. Only an
@@ -41,6 +45,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from specivo.core.ai_billing import ENTRY_PAYERS, PAYER_UNKNOWN
 from specivo.core.ai_pricing import TOKEN_CLASSES
 from specivo.core.money import Money
 from specivo.models.base import Base, TimestampMixin
@@ -91,6 +96,7 @@ class AiUsageEntry(Base, TimestampMixin):
         ),
         CheckConstraint(_in("cost_type", AI_USAGE_COST_TYPES), name="ck_ai_usage_entries_cost_type"),
         CheckConstraint(_in("cost_basis", AI_USAGE_COST_BASES), name="ck_ai_usage_entries_cost_basis"),
+        CheckConstraint(_in("payer", ENTRY_PAYERS), name="ck_ai_usage_entries_payer"),
         CheckConstraint(
             "source NOT IN ('reporter', 'import') OR idempotency_key IS NOT NULL",
             name="ck_ai_usage_entries_key_required",
@@ -134,6 +140,7 @@ class AiUsageEntry(Base, TimestampMixin):
         Index("ix_ai_usage_entries_reporter_api_key_id", "reporter_api_key_id"),
         Index("ix_ai_usage_entries_tool_slug", "tool_slug"),
         Index("ix_ai_usage_entries_subscription_id", "subscription_id"),
+        Index("ix_ai_usage_entries_billing_account_id", "billing_account_id"),
         Index("ix_ai_usage_entries_price_id", "price_id"),
         Index("ix_ai_usage_entries_excluded_by_id", "excluded_by_id"),
     )
@@ -190,10 +197,19 @@ class AiUsageEntry(Base, TimestampMixin):
     reported_cost_amount: Mapped[Decimal | None] = amount_column(nullable=True)
     reported_cost_currency: Mapped[str | None] = currency_column(nullable=True)
     cost_basis: Mapped[str] = mapped_column(String(10), nullable=False, default="unpriced", server_default="unpriced")
+    #: Who paid and through which billing account: snapshots, set the same way
+    #: as ``cost_type`` (see :mod:`specivo.core.ai_billing`).
+    billing_account_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ai_billing_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    payer: Mapped[str] = mapped_column(String(8), nullable=False, default=PAYER_UNKNOWN, server_default=PAYER_UNKNOWN)
 
     # -- context -------------------------------------------------------------
     external_session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     git_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: The raw backend id the usage went through (for example a gateway name).
+    #: Only selects a billing account; never feeds pricing.
+    route: Mapped[str | None] = mapped_column(String(100), nullable=True)
     repo_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     client_version: Mapped[str | None] = mapped_column(String(50), nullable=True)

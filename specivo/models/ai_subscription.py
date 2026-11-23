@@ -68,7 +68,8 @@ class AiSubscription(Base, TimestampMixin):
     ``tool_slugs`` lists the tools the plan covers; empty means every tool of
     ``provider``. The fee is ``amount`` in ``currency_code`` per
     ``billing_period`` (``month`` or ``year``), as the person typed it, so it
-    is validated to the currency's minor units.
+    is validated to the currency's minor units. ``billing_account_id`` links
+    the plan to the billing account it is the fee schedule of.
     """
 
     __tablename__ = "ai_subscriptions"
@@ -82,6 +83,7 @@ class AiSubscription(Base, TimestampMixin):
         Index("ix_ai_subscriptions_user_starts", "user_id", "starts_on"),
         Index("ix_ai_subscriptions_currency_code", "currency_code"),
         Index("ix_ai_subscriptions_created_by_id", "created_by_id"),
+        Index("ix_ai_subscriptions_billing_account_id", "billing_account_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -100,6 +102,11 @@ class AiSubscription(Base, TimestampMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    #: The billing account this plan is the fee schedule of (a personal
+    #: ``subscription`` account, created with the subscription).
+    billing_account_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ai_billing_accounts.id", ondelete="SET NULL"), nullable=True
     )
 
     @property

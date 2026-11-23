@@ -2,6 +2,7 @@
 # when it inspects Base.metadata.
 from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPolicy
 from specivo.models.agent_session import AgentSession
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.ai_subscription import AiSubscription, AiTool
 from specivo.models.ai_usage_entry import AiUsageEntry
@@ -63,6 +64,7 @@ __all__ = [
     "AgentGroup",
     "AgentGroupMembership",
     "AgentSession",
+    "AiBillingAccount",
     "AiModelPrice",
     "AiSubscription",
     "AiTool",
