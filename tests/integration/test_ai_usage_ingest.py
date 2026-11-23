@@ -226,6 +226,7 @@ async def test_info_lists_versions_limits_tools_and_currencies(client: AsyncClie
     assert "claude-code" in body["tools"]
     assert {"USD", "THB"} <= set(body["currencies"])
     assert body["issue_ref_sources"] == ["explicit", "env", "agent_log"]
+    assert body["optional_fields"] == ["route", "billing_account"]
     assert datetime.fromisoformat(body["server_time"]).tzinfo is not None
 
     assert (await client.get(URL + "/", headers=w.auth("bot"))).status_code == 200
@@ -464,6 +465,24 @@ async def test_unknown_record_fields_are_ignored_with_a_warning(client: AsyncCli
     assert result["status"] == "created"
     assert codes(result) == ["unknown_fields"]
     assert result["warnings"][0]["message"].endswith("attribution.x, future_field, tokens.audio")
+
+
+async def test_route_and_billing_account_are_accepted_without_warnings(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-route", route="llm-gateway.example.com", billing_account="acme-gateway"),
+        record("k-route-null", route=None, billing_account=None),
+        record("k-route-long", route="r" * 101),
+        record("k-account-bad", billing_account="Acme Gateway"),
+    )
+    assert [r["status"] for r in results] == ["created", "created", "rejected", "rejected"]
+    assert [codes(r) for r in results[:2]] == [[], []]
+    assert [(r["error"]["code"], r["error"]["field"]) for r in results[2:]] == [
+        ("invalid_record", "route"),
+        ("invalid_record", "billing_account"),
+    ]
 
 
 # ---------------------------------------------------------------------------

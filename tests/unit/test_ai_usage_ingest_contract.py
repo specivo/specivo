@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from specivo.core.ai_usage_ingest import (
+    OPTIONAL_FIELDS,
     SCHEMA_DIR,
     RecordRejectedError,
     check_schema,
@@ -170,6 +171,52 @@ def test_attribution_is_normalised() -> None:
     assert parsed.attribution.issue_method == "env"
     assert parsed.attribution.project_key == "ACME"
     assert parsed.attribution.commits == ["ab" * 20]
+
+
+def test_optional_fields_are_optional_record_properties() -> None:
+    record = _published()["record.schema.json"]
+    assert OPTIONAL_FIELDS == ("route", "billing_account")
+    for name in OPTIONAL_FIELDS:
+        assert name in record["properties"], name
+        assert name not in record["required"], name
+    info = _published()["info.schema.json"]
+    assert info["properties"]["optional_fields"]["type"] == "array"
+    assert "optional_fields" not in info["required"]
+
+
+def test_route_and_billing_account_are_parsed() -> None:
+    parsed = parse_record(_record(route="  llm-gateway.example.com ", billing_account="acme-gateway"), NOW)
+    assert parsed.route == "llm-gateway.example.com"
+    assert parsed.billing_account == "acme-gateway"
+    bare = parse_record(_record(route=None, billing_account=None), NOW)
+    assert (bare.route, bare.billing_account) == (None, None)
+    assert parse_record(_record(route="   "), NOW).route is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"route": "r" * 101}, "route"),
+        ({"route": ""}, "route"),
+        ({"route": "gateway\nhost"}, "route"),
+        ({"route": 7}, "route"),
+        ({"billing_account": "Acme-Gateway"}, "billing_account"),
+        ({"billing_account": "a" * 65}, "billing_account"),
+        ({"billing_account": "-acme"}, "billing_account"),
+        ({"billing_account": "acme gateway"}, "billing_account"),
+        ({"billing_account": ""}, "billing_account"),
+    ],
+)
+def test_route_and_billing_account_bounds(changes: dict[str, Any], field: str) -> None:
+    unknown, problem = check_schema(record_validator(), _record(**changes))
+    assert unknown == []
+    assert problem is not None
+    assert problem.field == field
+
+
+def test_route_and_billing_account_at_their_limits_are_valid() -> None:
+    unknown, problem = check_schema(record_validator(), _record(route="r" * 100, billing_account="a" + "-" * 63))
+    assert (unknown, problem) == ([], None)
 
 
 @pytest.mark.parametrize(

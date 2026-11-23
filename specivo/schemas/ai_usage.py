@@ -243,6 +243,9 @@ class AiUsageIngestInfoOut(BaseModel):
     tools: list[str] = Field(description="Slugs of the active AI tools; other valid slugs are accepted too")
     currencies: list[str] = Field(description="Currency codes accepted in reported_cost")
     issue_ref_sources: list[str] = Field(description="Values of attribution.issue_ref_source the server knows")
+    optional_fields: list[str] = Field(
+        description="Record properties added within v1 that the server accepts; send them only when listed"
+    )
 
 
 class AiUsageIngestProblemOut(BaseModel):

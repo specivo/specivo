@@ -58,6 +58,10 @@ ISSUE_REF_METHODS: dict[str, str] = {"explicit": "explicit", "env": "env", "agen
 #: Issue sources a person chose: such an ``issue_ref`` rejects the record when it cannot be used.
 #: The others (``agent_log``) are dropped with a warning instead.
 EXPLICIT_ISSUE_METHODS: frozenset[str] = frozenset({"explicit", "env"})
+#: Record properties added within v1, listed in the ``info`` response as
+#: ``optional_fields``: a client sends one only to a server that lists it.
+#: Append a name here when its property joins ``record.schema.json``.
+OPTIONAL_FIELDS: tuple[str, ...] = ("route", "billing_account")
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +294,10 @@ class IngestRecord:
     cost_type: str | None = None
     on_behalf_of: str | None = None
     attribution: Attribution = field(default_factory=Attribution)
+    #: Raw id of the backend the requests went through (never used for pricing).
+    route: str | None = None
+    #: Slug of the billing account the record names; resolving it to an account is the service's job.
+    billing_account: str | None = None
 
 
 def _instant(value: str | None, name: str) -> datetime | None:
@@ -379,6 +387,8 @@ def parse_record(raw: Mapping[str, Any], now: datetime) -> IngestRecord:
         cost_type=raw.get("cost_type"),
         on_behalf_of=_clean(raw.get("on_behalf_of")),
         attribution=attribution,
+        route=_clean(raw.get("route")),
+        billing_account=raw.get("billing_account"),
     )
 
 
