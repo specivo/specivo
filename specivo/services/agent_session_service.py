@@ -473,7 +473,9 @@ class AgentSessionService:
         parent (*parent_external_id*) is resolved and earlier children are
         linked by ``set_external``, within *user*'s sessions only. When some
         row of *user* with that id (or its lineage) names an issue, a session
-        without one takes it, so its activity shows on that issue's project.
+        without one takes it, so its activity shows on that issue's project;
+        on every event the issue is kept only while *user* may still log on
+        it (``can_log_on``), else the session names none.
 
         Raises ``ValidationError`` for an id of the wrong shape.
         """
@@ -511,12 +513,36 @@ class AgentSessionService:
             agent_session.last_activity_at = now
             if parent_external_id is not None and agent_session.parent_external_session_id is None:
                 await self.set_external(session, agent_session.id, user, None, parent_external_id)
-        if agent_session.issue_id is None:
-            issue_id = await self.issue_for_external(session, user.id, external_id)
-            if issue_id is not None:
-                agent_session.issue_id = issue_id
+        candidate = agent_session.issue_id or await self.issue_for_external(session, user.id, external_id)
+        usable = candidate if candidate is not None and await self.can_log_on(session, user, candidate) else None
+        if agent_session.issue_id != usable:
+            agent_session.issue_id = usable
         await session.flush()
         return agent_session
+
+    async def can_log_on(self, session: AsyncSession, user: User, issue_id: int) -> bool:
+        """Whether *user* may still log AI usage on issue *issue_id*: the check MCP and the ingest use.
+
+        An attribution hint from a session is only followed into a project the
+        account can still log in (``AiUsageService.require_can_log``), so an
+        account that lost access does not keep writing into that project.
+        """
+        from specivo.core.exceptions import AppError
+        from specivo.models.issue import Issue
+        from specivo.models.project import Project
+        from specivo.services.ai_usage_service import AiUsageService
+
+        issue = await session.get(Issue, issue_id)
+        if issue is None or issue.project_id is None:
+            return False
+        project = await session.get(Project, issue.project_id)
+        if project is None:
+            return False
+        try:
+            await AiUsageService().require_can_log(session, user, user, project, issue.id)
+        except AppError:
+            return False
+        return True
 
     async def end_session(self, session: AsyncSession, agent_session: AgentSession) -> None:
         """Mark *agent_session* ended now (the client said so); an ended session stays ended."""

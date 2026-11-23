@@ -121,8 +121,8 @@ class HermesReceiverService:
     async def find_by_token(self, session: AsyncSession, token: str) -> HermesReceiver | None:
         """The active receiver with *token* whose account may still act, else ``None``.
 
-        A deactivated account, a system account and a token of the wrong shape
-        all look like an unknown token. A locked account keeps its receivers,
+        A deactivated account, a system account, a receiver stopped by the
+        kill switch and a token of the wrong shape all look like an unknown token. A locked account keeps its receivers,
         as it keeps its API keys.
         """
         if not TOKEN_PATTERN.fullmatch(token or ""):
@@ -133,6 +133,7 @@ class HermesReceiverService:
             .where(
                 HermesReceiver.token == token,
                 HermesReceiver.is_active.is_(True),
+                HermesReceiver.killed_at.is_(None),
                 User.status.in_(("active", "locked")),
                 ~User.login.startswith("$"),
             )

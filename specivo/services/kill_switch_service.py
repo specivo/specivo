@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.utils import utcnow
 from specivo.models.auth import ApiKey
 from specivo.models.credential import IssuedCredential
+from specivo.models.hermes_receiver import HermesReceiver
 from specivo.models.kill_switch import KillEvent
 from specivo.models.user import User
 
@@ -50,8 +51,17 @@ class KillSwitchService:
         return {
             "api_keys": [{"id": k.id, "name": k.name, "key_prefix": k.key_prefix} for k in keys],
             "credentials": [{"id": c.id, "system_id": c.system_id, "scope": c.scope} for c in creds],
+            "hermes_receivers": await self._live_receiver_ids(session, HermesReceiver.user_id == agent_user_id),
             "snapshot_at": utcnow().isoformat(),
         }
+
+    @staticmethod
+    async def _live_receiver_ids(session: AsyncSession, *where) -> list[int]:
+        """Ids of the Hermes receivers matching *where* that accept events now (active, not killed)."""
+        stmt = select(HermesReceiver.id).where(
+            *where, HermesReceiver.is_active.is_(True), HermesReceiver.killed_at.is_(None)
+        )
+        return list((await session.execute(stmt)).scalars().all())
 
     async def _snapshot_system(self, session: AsyncSession, system_id: int) -> dict:
         """Capture current state of credentials for a system."""
@@ -89,8 +99,10 @@ class KillSwitchService:
         )
         keys = keys_result.scalars().all()
 
+        service_accounts = select(User.id).where(User.is_service_account.is_(True))
         return {
             "api_keys": [{"id": k.id, "user_id": k.user_id, "name": k.name, "key_prefix": k.key_prefix} for k in keys],
+            "hermes_receivers": await self._live_receiver_ids(session, HermesReceiver.user_id.in_(service_accounts)),
             "snapshot_at": utcnow().isoformat(),
         }
 
@@ -105,14 +117,21 @@ class KillSwitchService:
         triggered_by: str,
         reason: str,
     ) -> KillEvent:
-        """Deactivate all API keys for an agent and revoke credentials."""
+        """Deactivate all API keys for an agent, stop its Hermes receivers and revoke credentials."""
         snapshot = await self._snapshot_agent(session, agent_user_id)
 
         # Deactivate all API keys for this agent
         await session.execute(update(ApiKey).where(ApiKey.user_id == agent_user_id).values(is_active=False))
 
-        # Revoke all active credentials for this agent
+        # Stop its Hermes receivers (killed_at, not the owner's is_active, so unkill can restore them exactly)
         now = utcnow()
+        await session.execute(
+            update(HermesReceiver)
+            .where(HermesReceiver.user_id == agent_user_id, HermesReceiver.killed_at.is_(None))
+            .values(killed_at=now)
+        )
+
+        # Revoke all active credentials for this agent
         await session.execute(
             update(IssuedCredential)
             .where(
@@ -186,15 +205,22 @@ class KillSwitchService:
         triggered_by: str,
         reason: str,
     ) -> KillEvent:
-        """Deactivate ALL service account API keys and revoke ALL credentials."""
+        """Deactivate ALL service account API keys, stop their Hermes receivers and revoke ALL credentials."""
         snapshot = await self._snapshot_all(session)
 
         # Deactivate all API keys belonging to service accounts
         service_account_ids = select(User.id).where(User.is_service_account.is_(True))
         await session.execute(update(ApiKey).where(ApiKey.user_id.in_(service_account_ids)).values(is_active=False))
 
-        # Revoke all active credentials
+        # Stop the Hermes receivers of service accounts
         now = utcnow()
+        await session.execute(
+            update(HermesReceiver)
+            .where(HermesReceiver.user_id.in_(service_account_ids), HermesReceiver.killed_at.is_(None))
+            .values(killed_at=now)
+        )
+
+        # Revoke all active credentials
         await session.execute(
             update(IssuedCredential).where(IssuedCredential.revoked_at.is_(None)).values(revoked_at=now)
         )
@@ -222,7 +248,16 @@ class KillSwitchService:
     # ------------------------------------------------------------------
 
     async def unkill_agent(self, session: AsyncSession, agent_user_id: int) -> int:
-        """Re-enable all API keys for an agent. Returns count of reactivated keys."""
+        """Re-enable all API keys for an agent and lift the kill on its Hermes receivers.
+
+        Returns the count of reactivated keys. A receiver comes back only as
+        its owner left it: one switched off (``is_active``) stays off.
+        """
+        await session.execute(
+            update(HermesReceiver)
+            .where(HermesReceiver.user_id == agent_user_id, HermesReceiver.killed_at.is_not(None))
+            .values(killed_at=None)
+        )
         result = await session.execute(
             update(ApiKey)
             .where(
