@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
 {% from "pages/_markdown_editor_i18n.html" import markdown_editor_i18n %}
+{% from "pages/_link_graph.html" import link_graph %}
 
 {% block title %}{{ issue.display_key }} - {{ issue.subject }} - {{ brand_name }}{% endblock %}
 
@@ -293,6 +294,7 @@
         {% endif %}
         <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
+        <a class="activity-tab" data-tab="graph" data-testid="graph-tab" :class="{ active: tab === 'graph' }" @click.prevent="show('graph')" href="#graph">{% trans %}Graph{% endtrans %}</a>
         <a class="activity-tab" data-tab="attachments" :class="{ active: tab === 'attachments' }" @click.prevent="show('attachments')" href="#attachments">{% trans %}Attachments{% endtrans %}</a>
         {% endif %}
       </div>
@@ -649,6 +651,15 @@
         </section>
         {% endif %}
       </div>
+
+      {# Graph tab: the issue's link graph, drawn client-side from the links JSON
+         when the tab is first opened (modules/link-graph-loader.js loads the
+         bundle). A signed-in reader only, like the links API it reads. #}
+      {% if not anonymous %}
+      <div x-show="tab === 'graph'" x-cloak data-testid="graph-tab-panel">
+        {{ link_graph(base ~ "/api/v1/issues/" ~ issue.display_key ~ "/links/", "item", "issue-graph") }}
+      </div>
+      {% endif %}
 
       {# Attachments tab — lazy-loaded via htmx on first click #}
       {% if not anonymous %}

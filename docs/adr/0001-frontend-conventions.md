@@ -12,6 +12,8 @@ gitignored and built in the Docker image, in CI and by the dev watcher container
 npm dependency, tree-shaken into a page-specific bundle (§1, §12).
 **Revised:** 2026-11-21 — every URL the UI writes carries the `STEALTH_PREFIX`: `{{ base }}` in
 templates, `spUrl()` in JS, bundle-relative stylesheet URLs (§13).
+**Revised:** 2026-11-24 — the link graph view gets its own ECharts bundle (`link-graph.min.js`,
+graph series) and its own tree-shaken entry, `lib/echarts-graph.js` (§1, §12).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -44,7 +46,7 @@ generated, content-hashed artifacts under `specivo/static/dist/`. The stack:
   CI, dev watcher)
 - **Apache ECharts** — the chart library, a pinned npm dependency bundled by esbuild (§12)
 
-Four bundles are produced:
+Five bundles are produced:
 
 | Source entry | Bundle | Role |
 |--------------|--------|------|
@@ -52,6 +54,7 @@ Four bundles are produced:
 | `frontend/js/alpine-init.js` | `dist/js/alpine-init.min.js` | registers every Alpine component + store |
 | `frontend/js/app.js` | `dist/js/app.min.js` | vanilla (non-Alpine) modules |
 | `frontend/js/spend-chart.js` | `dist/js/spend-chart.min.js` | AI spend report and My AI usage charts (ECharts); loaded only by those pages |
+| `frontend/js/link-graph.js` | `dist/js/link-graph.min.js` | link graph view (ECharts graph series); loaded only by the graph views |
 
 - **Content hashing + manifest:** esbuild writes `<name>.<hash>.<ext>` plus a `manifest.json`
   per output dir. At startup the app loads the manifests (`load_asset_manifests()` in `specivo/web/assets.py`)
@@ -276,7 +279,7 @@ frontend/                          # esbuild SOURCE (build time only: image stag
 specivo/static/
   dist/                            # GENERATED build output (gitignored), served at runtime
     css/specivo.min.<hash>.css  +  manifest.json
-    js/{alpine-init,app,spend-chart}.min.<hash>.js  +  manifest.json
+    js/{alpine-init,app,spend-chart,link-graph}.min.<hash>.js  +  manifest.json
   sw.js                            # service worker (PWA)
   vendor/                          # third-party — immutable
                                    #   bootstrap, alpine (standard + csp builds), htmx
@@ -329,6 +332,13 @@ exact version in `frontend/package.json` and bundled by esbuild, not vendored:
   download the library. A chart inside an htmx partial (the issue page's AI usage tab) names
   the bundle in a `data-sp-chart-src` attribute instead; `frontend/js/modules/issue-ai-usage.js`
   loads it once when such content is swapped in, and the bundle's own htmx hooks draw later swaps.
+- **The link graph view** (the issue's Graph tab, the wiki page's Graph block, the project's
+  Graph page) uses the graph series (force layout), registered in a module of its own,
+  `frontend/js/lib/echarts-graph.js`: registering it in `lib/echarts.js` would put it in the spend
+  chart bundle as well. Its bundle, `link-graph.min.js`, is loaded by the project page's
+  `chart_js` block and, for the tab and the block, by `frontend/js/modules/link-graph-loader.js`
+  on first opening (from a `data-sp-graph-src` path, as for the issue's AI usage tab). Node titles
+  are drawn as plain-text labels (no `rich` styles) and DOM tooltips, never as HTML.
 - **SVG renderer**, so charts are sharp at any zoom and need no `<canvas>`.
 - **Theme from CSS custom properties.** Colours, text and font are read at draw time
   (`--sp-text-*`, `--sp-border`, `--sp-bg-elevated`, `--sp-font-body`, and the series palette

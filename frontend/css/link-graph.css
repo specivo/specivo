@@ -1,0 +1,182 @@
+/* The link graph view: issue Graph tab, wiki page Graph block, project Graph page.
+   Rendered by pages/_link_graph.html, drawn by js/modules/link-graph.js, which reads the
+   --sp-graph-* colours below at draw time (a theme that redefines them recolours the graph). */
+
+.sp-graph {
+  --sp-graph-issue: var(--sp-chart-2, #2563EB);
+  --sp-graph-wiki: var(--sp-chart-3, #16A34A);
+  --sp-graph-development: var(--sp-chart-4, #7C3AED);
+  --sp-graph-attachment: var(--sp-chart-6, #0891B2);
+  --sp-graph-hub: var(--sp-chart-1, #c49a3c);
+  --sp-graph-broken: var(--sp-danger, #DC2626);
+  --sp-graph-edge: var(--sp-border-strong, #b8b5ad);
+  --sp-graph-suggested: var(--sp-chart-5, #EA580C);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-space-sm);
+  margin-top: var(--sp-space-md);
+  min-width: 0;
+}
+
+.sp-graph-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-space-sm) var(--sp-space-lg);
+}
+.sp-graph-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-space-xs) var(--sp-space-md);
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  flex: 1 1 24rem;
+}
+.sp-graph-controls-label {
+  width: 100%;
+  float: left;
+  font-size: var(--sp-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sp-text-muted);
+  margin: 0 0 2px;
+  padding: 0;
+}
+.sp-graph-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-space-xs);
+  font-size: var(--sp-font-size-sm);
+  color: var(--sp-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sp-graph-check input { margin: 0; accent-color: var(--sp-text-link); }
+.sp-graph-suggest {
+  padding: var(--sp-space-xs) var(--sp-space-sm);
+  border: 1px dashed var(--sp-graph-suggested);
+  border-radius: var(--sp-border-radius);
+  align-self: flex-end;
+}
+
+.sp-graph-status {
+  margin: 0;
+  font-size: var(--sp-font-size-sm);
+  color: var(--sp-text-muted);
+}
+.sp-graph-status--error { color: var(--sp-danger); }
+
+.sp-graph-canvas {
+  height: 440px;
+  width: 100%;
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-border-radius);
+  background: var(--sp-bg-surface);
+  overflow: hidden;
+  touch-action: none;
+}
+.sp-graph[data-scope="project"] .sp-graph-canvas { height: min(640px, 70vh); min-height: 420px; }
+.sp-graph--empty .sp-graph-canvas,
+.sp-graph--empty .sp-graph-legend { display: none; }
+
+.sp-graph-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-space-xs) var(--sp-space-md);
+  font-size: var(--sp-font-size-xs);
+  color: var(--sp-text-muted);
+}
+.sp-graph-legend li { display: inline-flex; align-items: center; gap: var(--sp-space-xs); }
+.sp-graph-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.sp-graph-swatch--issue { background: var(--sp-graph-issue); }
+.sp-graph-swatch--wiki_page { background: var(--sp-graph-wiki); }
+.sp-graph-swatch--development { background: var(--sp-graph-development); }
+.sp-graph-swatch--attachment { background: var(--sp-graph-attachment); }
+.sp-graph-swatch--hub { background: var(--sp-graph-hub); border-radius: 1px; transform: rotate(45deg) scale(0.8); }
+.sp-graph-swatch--broken { background: var(--sp-graph-broken); }
+.sp-graph-swatch--suggested {
+  width: 18px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed var(--sp-graph-suggested);
+}
+
+.sp-graph-list summary {
+  cursor: pointer;
+  font-size: var(--sp-font-size-sm);
+  font-weight: 600;
+  color: var(--sp-text-secondary);
+}
+.sp-graph-list-count { font-weight: 400; color: var(--sp-text-muted); }
+.sp-graph-items {
+  list-style: none;
+  margin: var(--sp-space-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.sp-graph-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-xs) var(--sp-space-sm);
+  padding: var(--sp-space-xs) var(--sp-space-sm);
+  border-bottom: 1px solid var(--sp-border);
+  font-size: var(--sp-font-size-sm);
+  min-width: 0;
+}
+.sp-graph-item-type {
+  font-size: var(--sp-font-size-xs);
+  color: var(--sp-text-muted);
+  min-width: 6.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-space-xs);
+}
+.sp-graph-item-type::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sp-graph-development);
+}
+.sp-graph-item-type--issue::before { background: var(--sp-graph-issue); }
+.sp-graph-item-type--wiki_page::before { background: var(--sp-graph-wiki); }
+.sp-graph-item-type--attachment::before { background: var(--sp-graph-attachment); }
+.sp-graph-item-type--hub::before { background: var(--sp-graph-hub); border-radius: 1px; }
+.sp-graph-item-type--broken::before { background: var(--sp-graph-broken); }
+.sp-graph-item-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; color: var(--sp-text-primary); }
+a.sp-graph-item-name { color: var(--sp-text-link); text-decoration: none; }
+a.sp-graph-item-name:hover { text-decoration: underline; }
+.sp-graph-item-meta { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+
+/* Tooltips are DOM nodes built by the script (text only). */
+.sp-graph-tip { display: flex; flex-direction: column; gap: 2px; max-width: 18rem; white-space: normal; }
+.sp-graph-tip-type { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.sp-graph-tip-ref { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }
+.sp-graph-tip-title { font-weight: 600; overflow-wrap: anywhere; }
+.sp-graph-tip-meta { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); }
+.sp-graph-tip-hint { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); font-style: italic; }
+
+/* The project Graph page */
+.sp-graph-page-intro { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); max-width: 70ch; margin: 0; }
+
+/* The wiki page's Graph block looks like its "Linked from" block (backlinks.css); the graph inside needs no top margin. */
+.sp-graph-block .sp-graph { margin-top: 0; }
+
+@media (max-width: 768px) {
+  .sp-graph-canvas { height: 360px; }
+  .sp-graph[data-scope="project"] .sp-graph-canvas { height: 60vh; min-height: 360px; }
+  .sp-graph-kinds { flex-basis: 100%; }
+  .sp-graph-suggest { align-self: flex-start; }
+  .sp-graph-item-type { min-width: 0; }
+}
