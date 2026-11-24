@@ -232,6 +232,10 @@ class AuditEvent(StrEnum):
     AI_BILLING_ACCOUNT_UPDATED = "ai_billing_account_updated"
     AI_BILLING_ACCOUNT_DEACTIVATED = "ai_billing_account_deactivated"
     AI_USAGE_PAYER_DEFAULT_CHANGED = "ai_usage_payer_default_changed"
+    # A project's AI provider set or removed by an instance administrator (details: ``op``
+    # ``set`` / ``removed``, ``project_key``, ``provider``, ``model``, ``host`` of the base URL,
+    # ``api_key`` ``set`` / ``kept`` / ``removed``; never the key itself).
+    PROJECT_AI_PROVIDER_CHANGED = "project_ai_provider_changed"
     # MCP tool calls that change AI billing accounts (``specivo_ai_billing_accounts``
     # create, update, deactivate; every MCP call is audited): ``op``,
     # ``account_ids``, ``owner`` and, for a change, ``fields``.
@@ -569,6 +573,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
             AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
             AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED,
+            AuditEvent.PROJECT_AI_PROVIDER_CHANGED,
             AuditEvent.AI_SPEND_BUDGET_CREATED,
             AuditEvent.AI_SPEND_BUDGET_UPDATED,
             AuditEvent.AI_SPEND_BUDGET_DELETED,

@@ -1,0 +1,83 @@
+{# Project settings, General tab: concept extraction with the project's own AI provider.
+   Context: concept_extraction (status dict from concept_extraction.project_status, JSON-safe), project, user. #}
+{% set ce = concept_extraction %}
+<div class="card sp-card-pad sp-mt-lg" data-testid="concept-extraction-settings"
+     x-data='projectConceptExtraction({ projectKey: {{ project.key | tojson }}, enabled: {{ ce.enabled | tojson }}, threshold: {{ ce.confidence_threshold | tojson }}, runLimit: {{ ce.run_limit | tojson }}, provider: {{ ce.provider | tojson }}, i18n: {{ {
+    "saved": _("Saved."),
+    "providerSaved": _("AI provider saved."),
+    "providerRemoved": _("AI provider removed. Concept extraction is off."),
+    "queued": _("Extraction queued. Changed issues and pages are sent to the provider."),
+    "notQueued": _("Could not queue the extraction. It runs again tonight."),
+    "confirmRemove": _("Remove the AI provider of this project? Concept extraction is switched off."),
+    "errorWithMessage": _("Error: %(message)s"),
+    "saveFailed": _("Failed to save"),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
+  <h3 class="sp-card-h3">{% trans %}Concept extraction (AI){% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}Your own AI model reads this project's issues and wiki pages and lists the features, external systems, decisions and terms they mention. They appear as concepts in the link graph. Off by default; only changed issues and pages are sent again, and the cost shows in AI spend reports.{% endtrans %}</p>
+
+  <p class="sp-mb-md" data-testid="concept-extraction-provider">
+    <template x-if="provider">
+      <span>{% trans %}AI provider:{% endtrans %} <strong x-text="provider.model"></strong> · <span x-text="provider.base_url"></span></span>
+    </template>
+    <template x-if="!provider">
+      <span class="sp-text-muted">{% trans %}No AI provider is set for this project, so concept extraction cannot be switched on.{% endtrans %}{% if not user.is_admin %} {% trans %}An instance administrator sets one.{% endtrans %}{% endif %}</span>
+    </template>
+  </p>
+
+  {% if user.is_admin %}
+  <div class="sp-mb-md" data-testid="concept-extraction-provider-form">
+    <div class="form-group sp-form-group-mb-md">
+      <label class="form-label" for="ai-provider-base-url">{% trans %}Base URL{% endtrans %}</label>
+      <input class="form-input" type="url" id="ai-provider-base-url" x-model="baseUrl" maxlength="500" placeholder="https://api.openai.com/v1" aria-describedby="ai-provider-base-url-hint">
+      <div class="form-hint" id="ai-provider-base-url-hint">{% trans %}An OpenAI-compatible API. A local server such as Ollama or vLLM works too, for example http://ollama:11434/v1. This project's content, private issues included, is sent here and nowhere else.{% endtrans %}</div>
+    </div>
+    <div class="form-group sp-form-group-mb-md">
+      <label class="form-label" for="ai-provider-model">{% trans %}Model{% endtrans %}</label>
+      <input class="form-input" type="text" id="ai-provider-model" x-model="model" maxlength="200">
+    </div>
+    <div class="form-group sp-form-group-mb-md">
+      <label class="form-label" for="ai-provider-name">{% trans %}Provider name (for pricing){% endtrans %}</label>
+      <input class="form-input" type="text" id="ai-provider-name" x-model="providerName" maxlength="50" placeholder="openai">
+    </div>
+    <div class="form-group sp-form-group-mb-md">
+      <label class="form-label" for="ai-provider-key">{% trans %}API key (optional){% endtrans %}</label>
+      <input class="form-input" type="password" id="ai-provider-key" x-model="apiKey" maxlength="1000" autocomplete="off" aria-describedby="ai-provider-key-hint">
+      <div class="form-hint" id="ai-provider-key-hint" x-text="provider && provider.has_api_key ? {{ _('A key is stored. Leave this empty to keep it.') | tojson }} : {{ _('Local servers usually need none.') | tojson }}"></div>
+      <label class="checkbox-row" for="ai-provider-remove-key" x-show="provider && provider.has_api_key">
+        <input type="checkbox" id="ai-provider-remove-key" x-model="removeKey" class="sp-checkbox-accent-pointer">
+        {% trans %}Remove the stored key{% endtrans %}
+      </label>
+    </div>
+    <div x-show="providerMessage" class="flash sp-mb-md" x-text="providerMessage" role="status" data-testid="concept-extraction-provider-message"></div>
+    <div class="sp-form-row">
+      <button class="sp-btn sp-btn-primary" @click="saveProvider()" :disabled="saving">{% trans %}Save AI provider{% endtrans %}</button>
+      <button class="sp-btn sp-btn-danger" x-show="provider" @click="removeProvider()" :disabled="saving">{% trans %}Remove AI provider{% endtrans %}</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="form-group sp-form-group-mb-md">
+    <label class="checkbox-row" for="concept-extraction-enabled">
+      <input type="checkbox" id="concept-extraction-enabled" x-model="enabled" :disabled="!provider" class="sp-checkbox-accent-pointer" data-testid="concept-extraction-enabled">
+      {% trans %}Extract concepts with this AI provider{% endtrans %}
+    </label>
+    <div class="form-hint">{% trans %}The AI usage is logged in the name of whoever switches this on.{% endtrans %}</div>
+  </div>
+  <div class="form-group sp-form-group-mb-md">
+    <label class="form-label" for="concept-extraction-threshold">{% trans %}Confidence threshold{% endtrans %}</label>
+    <input class="form-input" type="number" id="concept-extraction-threshold" x-model="threshold" min="0.1" max="0.99" step="0.05" aria-describedby="concept-extraction-threshold-hint">
+    <div class="form-hint" id="concept-extraction-threshold-hint">{% trans %}Mentions the model is less sure about are shown only as suggestions.{% endtrans %}</div>
+  </div>
+  <div class="form-group sp-form-group-mb-md">
+    <label class="form-label" for="concept-extraction-run-limit">{% trans %}Issues and pages per run{% endtrans %}</label>
+    <input class="form-input" type="number" id="concept-extraction-run-limit" x-model="runLimit" min="1" max="500" step="1" aria-describedby="concept-extraction-run-limit-hint">
+    <div class="form-hint" id="concept-extraction-run-limit-hint">{% trans %}At most this many changed issues and pages are sent in one run. Runs happen every night; the rest waits for the next run.{% endtrans %}</div>
+  </div>
+  <p class="sp-text-muted sp-mb-md" data-testid="concept-extraction-counts">{% trans concepts=ce.concepts, sources=ce.sources_extracted %}{{ concepts }} concepts from {{ sources }} issues and pages.{% endtrans %}{% if ce.last_extracted_at %} {% trans when=ce.last_extracted_at %}Last extraction: {{ when }}.{% endtrans %}{% endif %}{% if ce.sources_rejected %} {% trans rejected=ce.sources_rejected %}{{ rejected }} answers were unusable and skipped.{% endtrans %}{% endif %}</p>
+  <div x-show="message" class="flash sp-mb-md" x-text="message" role="status" data-testid="concept-extraction-message"></div>
+  <div class="sp-form-row">
+    <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" data-testid="concept-extraction-save">{% trans %}Save{% endtrans %}</button>
+    <button class="sp-btn sp-btn-ghost" @click="runNow()" :disabled="saving || !enabled || !provider" data-testid="concept-extraction-run">{% trans %}Run now{% endtrans %}</button>
+  </div>
+</div>

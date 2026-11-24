@@ -54,6 +54,7 @@ get the issues, not just text matches.
 | `component:ACME/<value>` | a component (the `component` metadata value) |
 | `metadata:ACME/<key>/<value>` | the value of another metadata key your project lists (see below) |
 | `user:<login>` | a person and the issues assigned to them |
+| `concept:ACME/<name>` | a concept extracted by the project's AI provider, and what mentions it (see below) |
 
 From a tag, version, sprint, component, metadata value or person, the result lists the members,
 newest first, up to `limit`. Anywhere else these nodes are leaves with a `degree`, the number of
@@ -66,8 +67,8 @@ The options:
 |---|---|
 | `direction` | `in` (what points here, or a node's members), `out` or `both` (default). |
 | `depth` | `1` (default) or `2`, which expands the linked issues and pages once more. From a tag, version, sprint, component, metadata value or person, `3` is allowed, for example a version, its issues, their tags and the pages with those tags. |
-| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Typed links (accepted suggestions): `typed_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`. Suggested links: `similar` (never returned unless named). Naming a node kind also expands those nodes at depth 2. |
-| `include_suggestions` | `true` adds suggested links (kind `similar`) to the kinds read. Off by default. |
+| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Typed links (accepted suggestions): `typed_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`, `mentions` (concepts; `concept` works too). Suggested links: `similar` (never returned unless named). Naming a node kind also expands those nodes at depth 2. |
+| `include_suggestions` | `true` adds suggested links (kind `similar`) to the kinds read, and the concept mentions below the project's confidence threshold. Off by default. |
 | `limit` | Neighbours at most, 1 to 200 (default 50). `truncated` says when more were left out. |
 | `to` | Another ref. Returns the shortest path between the two instead of the neighbours (see below). |
 | `filter` | Keeps only the issues that match, for example `{"status": "open", "component": "importer"}` (see below). |
@@ -118,6 +119,25 @@ for good. Both need the permission that makes the link, and both are in the audi
     issues or wiki. Versions, sprints and metadata values need permission to view the project's
     issues. A person node appears only for signed-in users, and `user:<login>` works only for
     yourself, an administrator, or a member of a project whose issues you can view.
+
+### Concepts
+
+When a project has [concept extraction](../projects/index.md#concept-extraction-ai) switched on, its
+own AI provider lists the features, external systems, decisions and terms its issues and wiki pages
+talk about. Each is a node `concept:ACME/<name>` (the name in lower case), with the concept's kind
+as its `status`. An issue or page points at each concept it mentions with an edge of kind
+`mentions`: `label` is the model's confidence (for example `0.85`) and `passage` the text it was
+found in.
+
+- `specivo_get_links("concept:ACME/billing gateway")` lists the issues and pages that mention it.
+- `specivo_get_links("ACME-12", types=["mentions"])` lists the concepts of an issue. Without
+  `types` they come as leaves with a `degree`, like tags.
+- Mentions below the project's confidence threshold come only with `include_suggestions=true`,
+  marked `suggested: true`.
+- A path (`to=`) passes through a concept only when `types` names `mentions`.
+
+Concepts are a model's reading of the text, not links anyone made: check the passage before relying
+on one. You see a concept only when you may see an issue or page that mentions it.
 
 ## Read vs write
 

@@ -103,6 +103,8 @@
       <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving" data-testid="project-general-save">{% trans %}Save{% endtrans %}</button>
     </div>
 
+    {% include "pages/projects/_concept_extraction.html" %}
+
     {% if user.is_admin and project.is_public %}
     <!-- Anonymous access: instance administrators only, public projects only -->
     <div class="card sp-card-pad sp-mt-lg" data-testid="anonymous-access-settings"

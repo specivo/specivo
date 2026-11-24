@@ -184,6 +184,24 @@ SIMILAR_LINKS_MIN_THRESHOLD = 0.5
 SIMILAR_LINKS_MAX_THRESHOLD = 0.99
 SIMILAR_LINKS_CANDIDATE_MARGIN = 20
 SIMILAR_LINKS_INLINE_LIMIT = 5
+# Concept extraction (``concept`` nodes, ``mentions`` edges) with the project's own AI provider:
+# the confidence a mention needs to be shown by default (below it, it is a suggestion; per project:
+# settings["concept_confidence_threshold"] within the bounds below), how many changed sources one run
+# sends to the model (settings["concept_extraction_run_limit"]), how much of a source is sent, the
+# answer size, how many concepts are kept per source and per project, and the request timeout.
+CONCEPT_DEFAULT_CONFIDENCE_THRESHOLD = 0.6
+CONCEPT_MIN_CONFIDENCE_THRESHOLD = 0.1
+CONCEPT_MAX_CONFIDENCE_THRESHOLD = 0.99
+CONCEPT_EXTRACTION_DEFAULT_RUN_LIMIT = 50
+CONCEPT_EXTRACTION_MAX_RUN_LIMIT = 500
+CONCEPT_EXTRACTION_MAX_INPUT_CHARS = 12_000
+CONCEPT_EXTRACTION_MAX_OUTPUT_TOKENS = 1_500
+CONCEPT_EXTRACTION_MAX_RESPONSE_BYTES = 256 * 1024
+CONCEPT_EXTRACTION_MAX_PER_SOURCE = 20
+CONCEPT_EXTRACTION_MAX_PER_PROJECT = 5_000
+CONCEPT_EXTRACTION_TIMEOUT_SECONDS = 120
+# Consecutive failed provider calls after which a run stops (the provider is down or refusing).
+CONCEPT_EXTRACTION_MAX_CONSECUTIVE_FAILURES = 3
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3

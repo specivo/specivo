@@ -1471,6 +1471,33 @@ class AiUsageService:
             session, actor, target, existing, data, values, project, request, reattribute=reattribute
         )
 
+    async def record_system_usage(self, session: AsyncSession, user: User, data: AiUsageInput) -> AiUsageEntry:
+        """Add the usage of calls Specivo itself made (concept extraction) to *user*'s bucket ``data.idempotency_key``.
+
+        No permission is checked: the caller is a background job of a feature
+        the project enabled, and *user* is who enabled it (whose usage it is).
+        The entry is a ``reporter`` entry, so its tokens are locked like a
+        reporter's. A new bucket is inserted; an existing one gets the tokens
+        and requests of *data* added and is priced again.
+        """
+        if not (data.idempotency_key or "").strip():
+            raise _invalid("An idempotency key is required", "idempotency_key")
+        values = await self._validated(session, data, source="reporter")
+        project = await self._project(session, data.project_id)
+        existing = await self._by_key(session, user.id, values["idempotency_key"])
+        if existing is None:
+            entry, _billing = await self._insert(session, user, user, data, values, "reporter", None, None, project)
+            return entry
+        for token_class in ("input", "output"):
+            setattr(existing, token_class, getattr(existing, token_class) + int(values.get(token_class) or 0))
+        existing.request_count += int(values.get("request_count") or 0)
+        if values.get("ended_at") is not None:
+            existing.ended_at = values["ended_at"]
+        existing.revision += 1
+        await self.apply_costs(session, existing)
+        await session.flush()
+        return existing
+
     async def _by_key(self, session: AsyncSession, user_id: int, key: str) -> AiUsageEntry | None:
         stmt = (
             select(AiUsageEntry)

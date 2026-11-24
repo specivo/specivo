@@ -13,6 +13,7 @@ import { apiKeyManager } from './components/api-key-manager';
 import { hermesReceiverManager } from './components/hermes-receiver-manager';
 import { projectGeneralSettings } from './components/project-general-settings';
 import { projectAnonymousAccess } from './components/project-anonymous-access';
+import { projectConceptExtraction } from './components/project-concept-extraction';
 import { projectMembers } from './components/project-members';
 import { projectModules } from './components/project-modules';
 import { projectVersions } from './components/project-versions';
@@ -82,6 +83,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('apiKeyManager', apiKeyManager);
   Alpine.data('hermesReceiverManager', hermesReceiverManager);
   Alpine.data('projectGeneralSettings', projectGeneralSettings);
+  Alpine.data('projectConceptExtraction', projectConceptExtraction);
   Alpine.data('projectAnonymousAccess', projectAnonymousAccess);
   Alpine.data('projectMembers', projectMembers);
   Alpine.data('projectModules', projectModules);

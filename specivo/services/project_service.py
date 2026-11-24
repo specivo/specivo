@@ -161,6 +161,41 @@ def _settings_changes(data: ProjectUpdate) -> dict[str, Any]:
         from specivo.services.link_suggestion_service import THRESHOLD_SETTING
 
         changes[THRESHOLD_SETTING] = data.similar_links_threshold
+    if data.concept_confidence_threshold is not None:
+        from specivo.services.concept_extraction import THRESHOLD_SETTING as CONCEPT_THRESHOLD_SETTING
+
+        changes[CONCEPT_THRESHOLD_SETTING] = data.concept_confidence_threshold
+    if data.concept_extraction_run_limit is not None:
+        from specivo.services.concept_extraction import RUN_LIMIT_SETTING
+
+        changes[RUN_LIMIT_SETTING] = data.concept_extraction_run_limit
+    return changes
+
+
+async def _concept_extraction_changes(
+    session: AsyncSession, project: Project, data: ProjectUpdate, actor: User | None
+) -> dict[str, Any]:
+    """Switching concept extraction on or off; on needs the project's AI provider, and records who did it.
+
+    The usage of the extraction is logged in the name of whoever switched it on.
+    """
+    if data.concept_extraction is None:
+        return {}
+    from specivo.services.ai_provider_service import AiProviderService
+    from specivo.services.concept_extraction import ENABLED_BY_SETTING, ENABLED_SETTING, extraction_enabled
+
+    if not data.concept_extraction:
+        return {ENABLED_SETTING: False}
+    if await AiProviderService().get(session, project.id) is None:
+        raise ValidationError(
+            "Concept extraction needs an AI provider for this project; an instance administrator sets one first",
+            field="concept_extraction",
+        )
+    if actor is None:
+        raise ValidationError("Concept extraction is switched on by a person", field="concept_extraction")
+    changes: dict[str, Any] = {ENABLED_SETTING: True}
+    if not extraction_enabled(project.settings) or ENABLED_BY_SETTING not in (project.settings or {}):
+        changes[ENABLED_BY_SETTING] = actor.id
     return changes
 
 
@@ -503,7 +538,7 @@ class ProjectService:
             project.status = data.status
         if data.color is not None:
             project.color = data.color
-        settings_changes = _settings_changes(data)
+        settings_changes = _settings_changes(data) | await _concept_extraction_changes(session, project, data, actor)
         if settings_changes:
             # Reassign a new dict so SQLAlchemy marks the JSONB column dirty.
             project.settings = {**(project.settings or {}), **settings_changes}

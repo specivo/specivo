@@ -126,3 +126,10 @@ is off by default, so an offline host makes no request for them. Enter rates by 
 The AI model prices that value AI usage ship inside the image, as of the release date, and are
 loaded without any download. Enter newer or missing prices by hand; see
 [AI model prices](ai-model-prices.md).
+
+## Concept extraction offline
+
+[Concept extraction](../projects/index.md#concept-extraction-ai) is off by default and calls nothing
+until a project has an AI provider. Point the provider at a model on your own network: any server
+with an OpenAI-compatible API, such as Ollama, vLLM or LM Studio (for example
+`http://ollama:11434/v1`, no API key). The project's content then never leaves the network.

@@ -35,16 +35,17 @@ _KINDS = Query(
         "Comma-separated edge kinds to keep: "
         + ", ".join(sorted(ALL_KINDS))
         + ". When omitted, every kind except the structured-node ones (tagged, in_component, in_metadata, "
-        "targets_version, in_sprint, assigned_to), which add tag, component, metadata, version, sprint and "
-        "user nodes with their degree, and except similar (suggested links), which comes only when named "
-        "or with include_suggestions=true"
+        "targets_version, in_sprint, assigned_to, mentions), which add tag, component, metadata, version, sprint, "
+        "user and concept nodes with their degree, and except similar (suggested links), which comes only when "
+        "named or with include_suggestions=true"
     ),
 )
 _INCLUDE_SUGGESTIONS = Query(
     False,
     description=(
         "Add suggested links (kind similar, suggested: true, the cosine score in label) to the kinds read: "
-        "issues and wiki pages with similar content that are not linked yet"
+        "issues and wiki pages with similar content that are not linked yet. With kind mentions read, also "
+        "keep the concept mentions below the project's confidence threshold (suggested: true)"
     ),
 )
 _LIMIT = Query(ENTITY_LINKS_DEFAULT_LIMIT, ge=1, le=ENTITY_LINKS_MAX_LIMIT, description="Neighbour nodes at most")
@@ -82,6 +83,7 @@ async def _graph(
         kinds=parsed,
         limit=limit,
         default_kinds=ITEM_KINDS,
+        suggestions=include_suggestions,
     )
     return LinkGraphOut.model_validate(graph.as_dict())
 

@@ -293,7 +293,8 @@ class _PathSearch:
             edges.extend(hub_edges)
         edges.extend(await self._member_edges([n for n in frontier if n[0] in HUB_TYPES], budget))
         self.partial = self.partial or cap.hit
-        return edges
+        # A path runs over links, never over suggestions (low-confidence concept mentions).
+        return [e for e in edges if not e.suggested]
 
     async def _member_edges(self, hubs: list[NodeKey], budget: int) -> list[_RawEdge]:
         """The members of the hubs in the frontier, while the budget lasts; at most a few hubs per hop."""
@@ -677,8 +678,8 @@ class _Writer:
 
     def edge(self, edge: LinkEdge) -> str:
         kind = f"{edge.kind}:{edge.relation_type}" if edge.relation_type else edge.kind
-        if edge.suggested or edge.kind == "typed_link":
-            # The score of a suggestion, the type of a typed link.
+        if edge.suggested or edge.kind in ("typed_link", "mentions"):
+            # The score of a suggestion, the type of a typed link, the confidence of a mention.
             kind = f"{edge.kind}:{edge.label}"
         source = self.node(edge.source)
         target = f"{edge.target} (broken)" if edge.broken else self.node(edge.target)

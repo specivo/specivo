@@ -14,24 +14,30 @@ class LinkNodeOut(BaseModel):
     ref: str = Field(
         description=(
             "ACME-12, wiki:ACME/slug, attachment:ID, commit:SHA, pr:ID, tag:ACME/name, component:ACME/value, "
-            "metadata:ACME/key/value, version:ACME/name, sprint:ACME/name or user:login"
+            "metadata:ACME/key/value, version:ACME/name, sprint:ACME/name, concept:ACME/name or user:login"
         )
     )
     type: str = Field(
         description=(
-            "issue, wiki_page, attachment, commit, pull_request, tag, component, metadata, version, sprint or user"
+            "issue, wiki_page, attachment, commit, pull_request, tag, component, metadata, version, sprint, user "
+            "or concept"
         )
     )
     title: str
     status: str | None = Field(
-        default=None, description="Issue status name, pull request state, or version or sprint status"
+        default=None,
+        description=(
+            "Issue status name, pull request state, version or sprint status, or a concept's kind (feature, "
+            "external_system, decision, term)"
+        ),
     )
     url: str | None = None
     project: str | None = Field(default=None, description="Project key of an issue, wiki page or project-level node")
     degree: int | None = Field(
         default=None,
         description=(
-            "For a tag, component, metadata value, version, sprint or user: the items you may see that point at it"
+            "For a tag, component, metadata value, version, sprint, user or concept: the items you may see that "
+            "point at it (for a concept, its mentions at or above the confidence threshold)"
         ),
     )
 
@@ -48,6 +54,7 @@ class LinkEdgeOut(BaseModel):
             "Text links: wiki_link, mention, attachment_link. Typed links (an accepted suggestion): typed_link. "
             "Structured: relation, parent, child, attachment, commit, pull_request. "
             "Structured nodes: tagged, in_component, in_metadata, targets_version, in_sprint, assigned_to. "
+            "Concepts (extracted by the project's AI provider): mentions. "
             "Suggested links: similar (only when asked for)."
         )
     )
@@ -58,14 +65,22 @@ class LinkEdgeOut(BaseModel):
         default=None,
         description=(
             "The link text as written, when it differs from the target; for typed_link its type (documents, "
-            "implements, decided_in, supersedes, see_also); for similar the cosine score, e.g. 0.874"
+            "implements, decided_in, supersedes, see_also); for similar the cosine score, e.g. 0.874; for mentions "
+            "the model's confidence, e.g. 0.85"
         ),
     )
     relation_type: str | None = Field(default=None, description="For relations, labelled from the source's side")
     via: str | None = Field(default=None, description="The comment the link is written in, e.g. ACME-12#3")
     broken: bool = Field(default=False, description="The target does not exist; target is the ref as written")
     suggested: bool = Field(
-        default=False, description="A suggested link (kind similar): similar content, not a link anyone made"
+        default=False,
+        description=(
+            "A suggestion, not a link anyone made: kind similar (similar content), or kind mentions below the "
+            "project's confidence threshold"
+        ),
+    )
+    passage: str | None = Field(
+        default=None, description="For mentions: the passage of the issue or page that mentions the concept"
     )
 
 

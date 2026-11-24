@@ -39,8 +39,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
         "Link graph of an issue, wiki page, tag, version, sprint, component or user: backlinks, links, "
-        "relations, members; depth 1-2 (3 from a hub); to= finds a path; filter=; format='compact'; "
-        "include_suggestions=true adds suggested links"
+        "relations, members, extracted concepts; depth 1-2 (3 from a hub); to= finds a path; filter=; "
+        "format='compact'; include_suggestions=true adds suggested links"
     ),
     "specivo_link_suggestion": (
         "Accept (as a relation or a typed link) or dismiss a suggested link between two issues or wiki pages"
@@ -199,6 +199,14 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    the default), shown as kind `typed_link`. A wrong one: `op="dismiss"`, and it is never suggested
    again. Both need the permission that makes the link (`manage_issue_relations` between issues, else
    `edit_issues` / `manage_wiki` on `ref`).
+11. Concepts: a project can let its own AI provider extract concepts (features, external systems,
+   decisions, terms) from its issues and wiki pages. Each is a hub node `concept:ACME/<name>`; an issue
+   or page points at it with an edge of kind `mentions` (the model's confidence in `label`, the quoted
+   `passage`). `specivo_get_links("concept:ACME/billing gateway")` lists what mentions it;
+   `types=["mentions"]` (or `"concept"`) lists the concepts of an item. Mentions below the project's
+   confidence threshold come only with `include_suggestions=true`, marked `suggested: true`. They are
+   a model's reading of the text, not links anyone made: check the passage. You see a concept only
+   when you may see an issue or page that mentions it.
 
 ### Connecting issues and pages (the link graph)
 - Issue to issue: add a relation with `specivo_add_relation` (`blocks`, `relates`, `duplicates`, ...)

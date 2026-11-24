@@ -35,6 +35,7 @@ from specivo.api.v1.ai_usage_ingest import router as ai_usage_ingest_router
 from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
+from specivo.api.v1.concepts import router as concepts_router
 from specivo.api.v1.currencies import router as currencies_router
 from specivo.api.v1.exchange_rates import router as exchange_rates_router
 from specivo.api.v1.hermes_events import router as hermes_events_router
@@ -71,6 +72,7 @@ api_router.include_router(issues_router)
 api_router.include_router(relations_router)
 api_router.include_router(links_router)
 api_router.include_router(link_suggestions_router)
+api_router.include_router(concepts_router)
 api_router.include_router(link_graph_admin_router)
 api_router.include_router(versions_router)
 api_router.include_router(recurring_patterns_router)
