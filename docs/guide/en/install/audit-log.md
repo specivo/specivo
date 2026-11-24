@@ -213,6 +213,22 @@ These events are in the **AI usage** category, except `ai_reimbursement_claims_c
 Making, refreshing and deleting a draft are not recorded. See
 [AI billing accounts](ai-billing-accounts.md#reimbursement-claims).
 
+### AI spend budgets
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_spend_budget_created` | the person who set the budget | `budget_id`, `target` (`billing_account` or `payer`), `account_id`, `account_slug`, `owner` (`instance` or the owner's login), `payer`, `amount`, `currency`, `thresholds`, `is_active` |
+| `ai_spend_budget_updated` | the person who changed it | the same, plus `changes`: each changed field with `old` and `new` |
+| `ai_spend_budget_deleted` | the person who removed it | the same as `ai_spend_budget_created` |
+| `ai_spend_budget_alert_sent` | none (the hourly check) | the same, plus `month` (`YYYY-MM`), the `thresholds` reached, `spend` and `recipients` (how many people were emailed) |
+| `ai_spend_budgets_changed` | the account whose key an agent used, over MCP (`specivo_ai_spend_budgets`) | `tool: "ai_spend_budgets"`, `source: "mcp"`, `op`, `budget_ids`, `target` |
+
+Budgets on company accounts and payers are always recorded, and an administrator's change to
+**somebody else's** budget; people's changes to their own are not, except over MCP. The first three
+events are in the **Administration** category, `ai_spend_budget_alert_sent` in **AI usage** and
+`ai_spend_budgets_changed` in **Agents**. See
+[AI billing accounts](ai-billing-accounts.md#budgets-and-alerts).
+
 ### AI usage
 
 | Event | Who acted | Details |

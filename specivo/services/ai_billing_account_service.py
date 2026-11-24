@@ -281,6 +281,14 @@ class AiBillingAccountService:
             return False
         return await _subscriptions.can_edit_own(session, actor)
 
+    async def require_can_manage(self, session: AsyncSession, actor: User, owner_user_id: int | None) -> None:
+        """Refuse *actor* changing anything of an account of *owner_user_id* (its budget included).
+
+        403 for an instance account unless an administrator, 404 for
+        somebody else's, 403 while self-service is off.
+        """
+        await self._require_can_manage(session, actor, owner_user_id)
+
     async def _require_can_manage(self, session: AsyncSession, actor: User, owner_user_id: int | None) -> None:
         if is_global_admin(actor):
             return

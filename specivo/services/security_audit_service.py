@@ -252,6 +252,23 @@ class AuditEvent(StrEnum):
     # (``specivo_ai_reimbursement_claims`` create, refresh, submit, withdraw,
     # approve, reject, paid, delete): ``op``, ``claim_ids``, ``holder``.
     AI_REIMBURSEMENT_CLAIMS_CHANGED = "ai_reimbursement_claims_changed"
+    # AI spend budgets, written by ``AiSpendBudgetService`` in the transaction
+    # of the change, for budgets on instance accounts and on a payer, and for
+    # an administrator's change to a budget on somebody else's personal
+    # account (details: ``budget_id``, ``target`` = ``billing_account`` or
+    # ``payer``, ``account_id``, ``account_slug``, ``owner`` = ``instance`` or
+    # the owner's login, ``payer``, ``amount`` at the currency's minor units,
+    # ``currency``, ``thresholds``, ``is_active``; a change adds ``changes``).
+    # A threshold reached in a month (``_alert_sent``, written by the check,
+    # no user): the same plus ``month`` as ``YYYY-MM``, ``thresholds`` reached,
+    # ``spend`` and ``recipients``.
+    AI_SPEND_BUDGET_CREATED = "ai_spend_budget_created"
+    AI_SPEND_BUDGET_UPDATED = "ai_spend_budget_updated"
+    AI_SPEND_BUDGET_DELETED = "ai_spend_budget_deleted"
+    AI_SPEND_BUDGET_ALERT_SENT = "ai_spend_budget_alert_sent"
+    # MCP tool calls that change AI spend budgets (``specivo_ai_spend_budgets``
+    # create, update, delete): ``op``, ``budget_ids``, ``target``.
+    AI_SPEND_BUDGETS_CHANGED = "ai_spend_budgets_changed"
     # AI usage entries. Logged in another user's name (details: ``entry_id``,
     # ``target_user_id``, ``target_login``, ``source``, ``tool``,
     # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
@@ -368,8 +385,19 @@ _AI_REIMBURSEMENT_CLAIM_EVENTS = frozenset(
         AuditEvent.AI_REIMBURSEMENT_CLAIM_EXPORTED,
     }
 )
+_AI_SPEND_BUDGET_EVENTS = frozenset(
+    {
+        AuditEvent.AI_SPEND_BUDGET_CREATED,
+        AuditEvent.AI_SPEND_BUDGET_UPDATED,
+        AuditEvent.AI_SPEND_BUDGET_DELETED,
+        AuditEvent.AI_SPEND_BUDGET_ALERT_SENT,
+    }
+)
 _AI_BILLING_EVENTS = (
-    _AI_BILLING_ACCOUNT_ROW_EVENTS | {AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED} | _AI_REIMBURSEMENT_CLAIM_EVENTS
+    _AI_BILLING_ACCOUNT_ROW_EVENTS
+    | {AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED}
+    | _AI_REIMBURSEMENT_CLAIM_EVENTS
+    | _AI_SPEND_BUDGET_EVENTS
 )
 
 _AI_USAGE_EVENTS = frozenset(
@@ -471,6 +499,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
             AuditEvent.AI_BILLING_ACCOUNTS_CHANGED,
             AuditEvent.AI_REIMBURSEMENT_CLAIMS_CHANGED,
+            AuditEvent.AI_SPEND_BUDGETS_CHANGED,
             AuditEvent.AGENT_SESSION_STARTED,
             AuditEvent.AGENT_TOOL_CALLED,
             AuditEvent.AGENT_APPROVAL_REQUESTED,
@@ -536,6 +565,9 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
             AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
             AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED,
+            AuditEvent.AI_SPEND_BUDGET_CREATED,
+            AuditEvent.AI_SPEND_BUDGET_UPDATED,
+            AuditEvent.AI_SPEND_BUDGET_DELETED,
             AuditEvent.HERMES_RECEIVER_CREATED,
             AuditEvent.HERMES_RECEIVER_UPDATED,
             AuditEvent.HERMES_RECEIVER_DELETED,
@@ -592,6 +624,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_USAGE_LOGGED,
             AuditEvent.AI_USAGE_CHANGED,
             *_AI_REIMBURSEMENT_CLAIM_EVENTS,
+            AuditEvent.AI_SPEND_BUDGET_ALERT_SENT,
         ],
         AuditCategory.AI_USAGE,
     ),
@@ -1746,7 +1779,8 @@ class SecurityAuditService:
         request: Request | None = None,
     ) -> SecurityAuditLog:
         """Log an AI billing account added, changed or deactivated, a project's payer default changed,
-        or a step of an AI reimbursement claim (``resource_type`` ``ai_reimbursement_claim``).
+        a step of an AI reimbursement claim (``resource_type`` ``ai_reimbursement_claim``), or an AI
+        spend budget set, changed, removed or alerting (``ai_spend_budget``).
 
         Written in the caller's transaction, in a savepoint, like
         :meth:`log_exchange_rate_change`.
@@ -1758,6 +1792,8 @@ class SecurityAuditService:
             resource_type = "ai_billing_account"
         elif event_type in _AI_REIMBURSEMENT_CLAIM_EVENTS:
             resource_type = "ai_reimbursement_claim"
+        elif event_type in _AI_SPEND_BUDGET_EVENTS:
+            resource_type = "ai_spend_budget"
         else:
             resource_type = "setting"
         return await self._persist(

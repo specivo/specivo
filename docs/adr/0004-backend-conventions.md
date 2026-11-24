@@ -30,6 +30,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded AI reimbursement claims and their snapshot rule (§4) and the claim audit events (§18).
 **Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
 **Revised:** 2026-11-23 — recorded the manual billing override on AI usage entries (§4) and its audit event (§18).
+**Revised:** 2026-11-24 — recorded AI spend budgets, the viewer-less budget report and the once-per-month alert rule (§4), and the budget audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -438,6 +439,23 @@ queries for any number of claims. The holder creates, refreshes, submits, withdr
 global administrators approve, reject and mark paid, never their own; nobody else sees a claim (404); a
 project-limited key is refused. Notifications are mails (`send_notification_email`): in-app notifications need a
 project and claims have none.
+
+**AI spend budgets.** `ai_spend_budgets` holds one monthly budget per billing account (`billing_account_id`, FK
+`CASCADE`) or per payer (`payer` `employer` / `employee`), exactly one of the two (two partial unique indexes), with
+an amount pair above zero and `thresholds` (`integer[]`, 1 to 5 percents from 1 to 1000, default `{80,100}`); only
+`AiSpendBudgetService` writes it. Budgets on instance accounts and payers are for global administrators only (also
+to read); a personal account's budget is its owner's (under `ai_subscriptions_self_service`, through
+`AiBillingAccountService.require_can_manage`) and administrators'. Spend is
+`AiSpendReportService.budget_spend`: the instance report without a viewer (`_report(viewer=None)`: no visibility
+narrowing, no hidden accounts, no reimbursable, `system_conditions`), grouped by `billing_account`, one report per
+budget currency for the calendar month (UTC) up to the day; an account's spend is its row (allocated and unallocated
+seat cost of plans whose account it is included), a payer's its `payer_totals` row; amounts without a rate are left
+out and flagged. The hourly beat task `check-ai-spend-budgets` (`specivo.tasks.ai_usage`, `beat_lock`) runs
+`AiSpendBudgetService.check`: each threshold reached inserts an `ai_spend_budget_alerts` row (unique per budget,
+month and threshold, `ON CONFLICT DO NOTHING`), and only inserted rows lead to mail, queued by `notify` after the
+commit, so a threshold alerts once per month whatever the run count and an amount change does not re-send it; on a
+month's first day the month that ended is checked too. Mail (`send_notification_email`, per recipient language)
+goes to active administrators and, for a personal account, its owner; in-app notifications need a project.
 
 **Hermes event receivers.** Hermes Agent posts signed outbound webhooks to
 `POST /api/v1/hermes/events/{token}/` (`specivo.api.v1.hermes_events`, served with and without the slash; no
@@ -991,6 +1009,16 @@ value changes; it re-resolves the project's entries in the same transaction. Cat
 `AiReimbursementClaimService` through `log_ai_billing_change`, in the transaction of the step. Creating, refreshing and
 deleting a draft are not audited. MCP changes (`specivo_ai_reimbursement_claims`) also write
 `AI_REIMBURSEMENT_CLAIMS_CHANGED` (category Agents: `op`, `claim_ids`, `holder`).
+
+**AI spend budget events.** `AI_SPEND_BUDGET_CREATED` / `_UPDATED` / `_DELETED` (category Administration,
+`resource_type` `ai_spend_budget`; details: `budget_id`, `target` = `billing_account` or `payer`, `account_id`,
+`account_slug`, `owner` = `instance` or the owner's login, `payer`, `amount` at the currency's minor units,
+`currency`, `thresholds`, `is_active`; an update adds `changes`, only when something changed) are written by
+`AiSpendBudgetService` through `log_ai_billing_change` for instance account and payer budgets and for an
+administrator's change to somebody else's, in the transaction of the change. `AI_SPEND_BUDGET_ALERT_SENT`
+(category AI usage, no user) adds `month`, the `thresholds` reached, `spend` and `recipients`. MCP changes
+(`specivo_ai_spend_budgets`) also write `AI_SPEND_BUDGETS_CHANGED` (category Agents: `op`, `budget_ids`,
+`target`).
 
 **AI usage events** (category AI usage, `resource_type` `ai_usage_entry`, `project_id` set when the entry has one),
 written by `AiUsageService` in the transaction of the change: `AI_USAGE_LOGGED_FOR_OTHER` (an entry created in another

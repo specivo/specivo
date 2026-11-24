@@ -11,6 +11,11 @@ Plain server-rendered forms (no script), like the subscription pages. A form
 that fails validation is rendered again with what was typed and the error; a
 successful write redirects with a ``notice`` code. Accounts are deactivated,
 never deleted.
+
+Each account page also shows and sets the account's monthly spend budget
+(``.../{id}/budget/``), and the admin page the payer budgets
+(``/admin/ai-spend-budgets/payer/{payer}/``): see
+:mod:`specivo.services.ai_spend_budget_service`.
 """
 
 from __future__ import annotations
@@ -33,23 +38,38 @@ from specivo.core.ai_billing import (
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.models.ai_billing_account import AiBillingAccount
+from specivo.models.ai_spend_budget import BUDGET_PAYERS
 from specivo.models.user import User
 from specivo.schemas.ai_billing_account import share_text
 from specivo.services.ai_billing_account_service import AiBillingAccountService, BillingAccountInput
+from specivo.services.ai_spend_budget_service import PAYER_BUDGET_NAMES, AiSpendBudgetService, BudgetInput
 from specivo.services.ai_subscription_service import AiSubscriptionService, AiToolService
 from specivo.services.api_key_scope import require_unlimited_key
 from specivo.web.deps import get_templates, redirect_to, require_user
 from specivo.web.pages.admin import require_admin
+from specivo.web.pages.ai_spend_budget_views import (
+    account_budget_views,
+    blank_budget_form,
+    budget_error,
+    budget_form_from,
+    budget_views,
+    currency_choices,
+    read_budget_form,
+    reporting_currency,
+)
 
 router = APIRouter(tags=["web-ai-billing-accounts"], include_in_schema=False)
 _service = AiBillingAccountService()
+_budgets = AiSpendBudgetService()
 _subscriptions = AiSubscriptionService()
 _tools = AiToolService()
 
 MY_URL = "/my/ai-billing-accounts/"
 ADMIN_URL = "/admin/ai-billing-accounts/"
 
-_NOTICES = frozenset({"created", "saved", "deactivated"})
+_NOTICES = frozenset({"created", "saved", "deactivated", "budget_saved", "budget_removed"})
+#: Where the payer budgets are set (the admin page shows them).
+ADMIN_PAYER_BUDGET_URL = "/admin/ai-spend-budgets/payer/"
 
 
 def _redirect(url: str, params: dict[str, str] | None = None) -> RedirectResponse:
@@ -202,6 +222,7 @@ async def _render_my(
             "active_page": "ai-billing-accounts",
             "instance_accounts": [account_row(a, None, names) for a in instance],
             "accounts": [{**account_row(a, user, names), "subscription_ids": links.get(a.id, [])} for a in own],
+            "budgets": await account_budget_views(db, own),
             "can_hold": _subscriptions.can_hold(user),
             "can_edit": await _service.can_manage(db, user, user.id) and _subscriptions.can_hold(user),
             "form": form,
@@ -268,12 +289,19 @@ async def _render_edit(
     admin_mode: bool,
     form: dict[str, Any] | None = None,
     error: dict[str, str] | None = None,
+    budget_form: dict[str, Any] | None = None,
+    budget_err: dict[str, str] | None = None,
     status_code: int = 200,
 ) -> Response:
     owner = await db.get(User, account.owner_user_id) if account.owner_user_id is not None else None
     form = form or _form_from_row(account)
     base = ADMIN_URL if admin_mode else MY_URL
     links = await _links(db, [account])
+    budget = (await _budgets.for_accounts(db, [account.id])).get(account.id)
+    if budget_form is None:
+        budget_form = (
+            budget_form_from(budget) if budget is not None else blank_budget_form(await reporting_currency(db))
+        )
     return get_templates().TemplateResponse(
         request,
         "pages/auth/ai_billing_account_edit.html",
@@ -290,6 +318,13 @@ async def _render_edit(
             "deactivate_action": f"{base}{account.id}/deactivate/",
             "back_url": base,
             "error": error or {},
+            "budget": (await budget_views(db, [budget], {account.id: account}))[budget.id] if budget else None,
+            "budget_values": budget_form,
+            "budget_error": budget_err or {},
+            "budget_action": f"{base}{account.id}/budget/",
+            "budget_delete_action": f"{base}{account.id}/budget/delete/",
+            "can_budget": await _budgets.can_manage(db, user, account),
+            "currencies": await currency_choices(db, budget_form.get("currency")),
             **await _choices(db, form),
         },
         status_code=status_code,
@@ -383,10 +418,34 @@ async def _render_admin(
     form: dict[str, Any],
     notice: str = "",
     error: dict[str, str] | None = None,
+    budget_forms: dict[str, dict[str, Any]] | None = None,
+    budget_err: dict[str, str] | None = None,
+    budget_payer: str = "",
     status_code: int = 200,
 ) -> Response:
     names = await _tool_names(db)
     rows, _total = await _service.list_accounts(db, scope="instance", limit=200)
+    payer_budgets = await _budgets.for_payers(db)
+    payer_views = await budget_views(db, list(payer_budgets.values()))
+    default_currency = await reporting_currency(db)
+    budget_forms = budget_forms or {}
+    payers = [
+        {
+            "payer": payer,
+            "name": str(PAYER_BUDGET_NAMES[payer]),
+            "budget": payer_views.get(payer_budgets[payer].id) if payer in payer_budgets else None,
+            "form": budget_forms.get(payer)
+            or (
+                budget_form_from(payer_budgets[payer])
+                if payer in payer_budgets
+                else blank_budget_form(default_currency)
+            ),
+            "error": (budget_err or {}) if budget_payer == payer else {},
+            "action": f"{ADMIN_PAYER_BUDGET_URL}{payer}/",
+            "delete_action": f"{ADMIN_PAYER_BUDGET_URL}{payer}/delete/",
+        }
+        for payer in BUDGET_PAYERS
+    ]
     return get_templates().TemplateResponse(
         request,
         "pages/admin/ai_billing_accounts.html",
@@ -394,6 +453,9 @@ async def _render_admin(
             "user": user,
             "active_page": "admin",
             "accounts": [account_row(a, None, names) for a in rows],
+            "budgets": await account_budget_views(db, rows),
+            "payer_budgets": payers,
+            "currencies": await currency_choices(db, None),
             "form": form,
             "form_action": ADMIN_URL,
             "notice": notice if notice in _NOTICES else "",
@@ -506,3 +568,186 @@ async def admin_ai_billing_account_deactivate(
     account = await _service.get(db, account_id)
     await _service.deactivate(db, account, actor=user, request=request)
     return _redirect(ADMIN_URL, {"notice": "deactivated"})
+
+
+# ---------------------------------------------------------------------------
+# Budgets
+# ---------------------------------------------------------------------------
+
+
+async def _save_budget(
+    request: Request,
+    db: AsyncSession,
+    user: User,
+    account: AiBillingAccount,
+    form: dict[str, Any],
+) -> None:
+    """Set or change *account*'s budget from *form* (the service checks who may)."""
+    budget = (await _budgets.for_accounts(db, [account.id])).get(account.id)
+    if budget is None:
+        await _budgets.create(
+            db,
+            BudgetInput(
+                billing_account_id=account.id,
+                amount=form["amount"],
+                currency=form["currency"],
+                thresholds=form["thresholds"],
+                is_active=form["is_active"],
+            ),
+            actor=user,
+            request=request,
+        )
+    else:
+        await _budgets.update(db, budget, form, actor=user, request=request)
+
+
+async def _remove_budget(request: Request, db: AsyncSession, user: User, account: AiBillingAccount) -> None:
+    budget = (await _budgets.for_accounts(db, [account.id])).get(account.id)
+    if budget is not None:
+        await _budgets.delete(db, budget, actor=user, request=request)
+
+
+@router.post(MY_URL + "{account_id}/budget/", response_model=None)
+async def my_ai_billing_account_budget(
+    account_id: int,
+    request: Request,
+    user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = DB_SESSION,
+    amount: str = Form(""),
+    currency: str = Form(""),
+    thresholds: str = Form(""),
+    is_active: str = Form(""),
+) -> Response:
+    """Set or change the monthly budget of one of the signed-in person's accounts."""
+    require_unlimited_key()
+    account = await _own_or_404(db, user, account_id)
+    form = read_budget_form(amount=amount, currency=currency, thresholds=thresholds, is_active=is_active == "1")
+    try:
+        await _save_budget(request, db, user, account, form)
+    except (AppError, PermissionDeniedError) as exc:
+        account = await _service.get(db, account_id)
+        return await _render_edit(
+            request,
+            db,
+            user,
+            account,
+            admin_mode=False,
+            budget_form=form,
+            budget_err=budget_error(exc),
+            status_code=422,
+        )
+    return _redirect(MY_URL, {"notice": "budget_saved"})
+
+
+@router.post(MY_URL + "{account_id}/budget/delete/", response_model=None)
+async def my_ai_billing_account_budget_delete(
+    account_id: int,
+    request: Request,
+    user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    require_unlimited_key()
+    account = await _own_or_404(db, user, account_id)
+    await _remove_budget(request, db, user, account)
+    return _redirect(MY_URL, {"notice": "budget_removed"})
+
+
+@router.post(ADMIN_URL + "{account_id}/budget/", response_model=None)
+async def admin_ai_billing_account_budget(
+    account_id: int,
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    amount: str = Form(""),
+    currency: str = Form(""),
+    thresholds: str = Form(""),
+    is_active: str = Form(""),
+) -> Response:
+    """Set or change any account's monthly budget. Audited."""
+    account = await _service.get(db, account_id)
+    form = read_budget_form(amount=amount, currency=currency, thresholds=thresholds, is_active=is_active == "1")
+    try:
+        await _save_budget(request, db, user, account, form)
+    except (AppError, PermissionDeniedError) as exc:
+        account = await _service.get(db, account_id)
+        return await _render_edit(
+            request, db, user, account, admin_mode=True, budget_form=form, budget_err=budget_error(exc), status_code=422
+        )
+    return _redirect(ADMIN_URL, {"notice": "budget_saved"})
+
+
+@router.post(ADMIN_URL + "{account_id}/budget/delete/", response_model=None)
+async def admin_ai_billing_account_budget_delete(
+    account_id: int,
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    account = await _service.get(db, account_id)
+    await _remove_budget(request, db, user, account)
+    return _redirect(ADMIN_URL, {"notice": "budget_removed"})
+
+
+def _payer_or_404(payer: str) -> str:
+    if payer not in BUDGET_PAYERS:
+        raise NotFoundError("Not a payer")
+    return payer
+
+
+@router.post(ADMIN_PAYER_BUDGET_URL + "{payer}/", response_model=None)
+async def admin_payer_budget(
+    payer: str,
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    amount: str = Form(""),
+    currency: str = Form(""),
+    thresholds: str = Form(""),
+    is_active: str = Form(""),
+) -> Response:
+    """Set or change the budget on everything one payer pays (``employer`` or ``employee``). Audited."""
+    payer = _payer_or_404(payer)
+    form = read_budget_form(amount=amount, currency=currency, thresholds=thresholds, is_active=is_active == "1")
+    try:
+        budget = (await _budgets.for_payers(db)).get(payer)
+        if budget is None:
+            await _budgets.create(
+                db,
+                BudgetInput(
+                    payer=payer,
+                    amount=form["amount"],
+                    currency=form["currency"],
+                    thresholds=form["thresholds"],
+                    is_active=form["is_active"],
+                ),
+                actor=user,
+                request=request,
+            )
+        else:
+            await _budgets.update(db, budget, form, actor=user, request=request)
+    except AppError as exc:
+        return await _render_admin(
+            request,
+            db,
+            user,
+            form=_blank_form(personal=False),
+            budget_forms={payer: form},
+            budget_err=budget_error(exc),
+            budget_payer=payer,
+            status_code=422,
+        )
+    return _redirect(ADMIN_URL, {"notice": "budget_saved"})
+
+
+@router.post(ADMIN_PAYER_BUDGET_URL + "{payer}/delete/", response_model=None)
+async def admin_payer_budget_delete(
+    payer: str,
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    payer = _payer_or_404(payer)
+    budget = (await _budgets.for_payers(db)).get(payer)
+    if budget is not None:
+        await _budgets.delete(db, budget, actor=user, request=request)
+    return _redirect(ADMIN_URL, {"notice": "budget_removed"})

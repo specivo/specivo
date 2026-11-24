@@ -1,0 +1,35 @@
+/* AI spend budgets: a month's progress (billing account pages, the admin spend report) and the payer budgets. */
+.sp-budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-xs) var(--sp-space-sm);
+  min-width: 12rem;
+}
+.sp-budget-meter {
+  width: 8rem;
+  height: 0.75rem;
+}
+.sp-budget-text {
+  font-size: var(--sp-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sp-budget-warn .sp-budget-text { color: var(--sp-warning); font-weight: 600; }
+.sp-budget-over .sp-budget-text { color: var(--sp-danger); font-weight: 600; }
+.sp-budget-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-space-xs);
+  min-height: var(--sp-control-height);
+  font-size: var(--sp-font-size-sm);
+}
+.sp-budget-payer + .sp-budget-payer {
+  border-top: 1px solid var(--sp-border);
+  padding-top: var(--sp-space-md);
+}
+.sp-budget-payer-title {
+  margin: 0 0 var(--sp-space-xs);
+  font-size: var(--sp-font-size-base);
+}
+.sp-budget-payer .sp-budget { margin-bottom: var(--sp-space-sm); }

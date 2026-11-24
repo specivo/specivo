@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "pages/auth/_ai_billing_account_macros.html" import error_text with context %}
+{% from "pages/auth/_ai_spend_budget_macros.html" import budget_meter, budget_error_text, budget_form with context %}
 
 {% block title %}{{ account.name }} - {% trans %}AI billing accounts{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -33,6 +34,16 @@
   {% set edit = True %}
   {% include "pages/auth/_ai_billing_account_form.html" %}
 </div>
+
+{% if budget or can_budget %}
+<div class="card sp-card-pad sp-mb-md" id="budget" data-testid="billing-account-budget-card">
+  <h3 class="sp-card-h3">{% trans %}Monthly budget{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% if account.is_instance %}{% trans %}What usage paid through this account may cost in a calendar month (UTC): marginal spend plus seat cost, every project. Administrators are mailed when the month's spend reaches each alert threshold, once per month.{% endtrans %}{% else %}{% trans %}What usage paid through this account may cost in a calendar month (UTC): marginal spend plus seat cost, every project. You and the administrators are mailed when the month's spend reaches each alert threshold, once per month.{% endtrans %}{% endif %}</p>
+  {% if budget %}{{ budget_meter(budget) }}{% if budget.alerted %}<p class="sp-text-muted-xs" data-testid="budget-alerted">{% trans thresholds=budget.alerted | join("%, ") %}Alerts sent this month at {{ thresholds }}%.{% endtrans %}</p>{% endif %}{% endif %}
+  {% if budget_error.code %}<div class="flash flash-error" role="alert" data-testid="budget-error">{{ budget_error_text(budget_error) }}</div>{% endif %}
+  {% if can_budget %}{{ budget_form(budget_values, budget_action, currencies, "account-budget", budget, budget_delete_action) }}{% endif %}
+</div>
+{% endif %}
 
 {% if account.is_active %}
 <div class="card sp-card-pad" data-testid="deactivate-billing-account-card">

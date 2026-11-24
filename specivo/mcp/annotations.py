@@ -139,7 +139,13 @@ _ADDITIVE = (
 # spend reports.
 # Ops list, get, create, refresh, submit, withdraw, approve, reject, paid, delete, export:
 # create adds a claim, and delete removes a draft or rejected one for good.
-_ADDITIVE_AND_DESTRUCTIVE = ("specivo_ai_subscriptions", "specivo_ai_reimbursement_claims")
+# Ops list, create, update, delete: create sets a budget, and delete removes it with its
+# alert history for good.
+_ADDITIVE_AND_DESTRUCTIVE = (
+    "specivo_ai_subscriptions",
+    "specivo_ai_reimbursement_claims",
+    "specivo_ai_spend_budgets",
+)
 
 
 TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {

@@ -92,6 +92,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
         "Monthly AI reimbursement claims: op='list', 'get', 'create', 'refresh', 'submit', 'withdraw', "
         "'delete', 'export'; administrators 'approve', 'reject', 'paid'"
     ),
+    "specivo_ai_spend_budgets": (
+        "Monthly AI spend budgets on a billing account or payer, alerted at thresholds: op='list', 'create', "
+        "'update' or 'delete'"
+    ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -340,6 +344,17 @@ An employee-paid account with a `reimburse_share` makes its usage in company pro
 An entry edited, re-priced, re-billed, excluded or deleted after submission is reported as CHANGED;
 the claim keeps its amount. `op="withdraw"` takes a submitted claim back to draft.
 
+### Budget AI spend
+A monthly budget on a billing account, or on everything one payer pays, mails administrators and the
+account holder when this month's spend reaches a threshold (once per threshold and month):
+1. `specivo_ai_spend_budgets(op="create", billing_account="corp-gateway", amount="2000", currency="USD")`
+   -- alerts at 80% and 100% unless you pass `thresholds=[50, 80, 100]`
+2. Administrators: `op="create", payer="employer", amount="5000", currency="USD"` for the company's
+   whole AI spend
+3. `op="list"` shows each budget with this month's spend, percent and the alerts already sent;
+   `op="update"` (`budget_id` plus `amount`, `currency`, `thresholds` or `is_active`) and `op="delete"`
+Spend is the spend report's (marginal spend plus seat cost) for the calendar month so far.
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -462,6 +477,10 @@ the security audit log. Notable cases:
   claims; administrators see everyone's and approve, reject or mark paid somebody else's. Each step
   writes an `ai_reimbursement_claim_*` event, and every change over MCP also writes
   `ai_reimbursement_claims_changed`.
+- `specivo_ai_spend_budgets` needs an unlimited key. Administrators see and change every budget;
+  anyone else sees and changes the budgets on their own accounts (with self-service on). Budgets on company
+  accounts, on a payer and administrators' changes to somebody else's write `ai_spend_budget_*`
+  events; every change over MCP writes `ai_spend_budgets_changed`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
@@ -480,8 +499,8 @@ on them for approvals and retries:
   dropped session.
 - **destructiveHint: true** -- deletes, `specivo_remove_relation`,
   `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence`,
-  `specivo_ai_subscriptions` (its `delete` and `remove_member` ops) and
-  `specivo_ai_reimbursement_claims` (its `delete` op).
+  `specivo_ai_subscriptions` (its `delete` and `remove_member` ops),
+  `specivo_ai_reimbursement_claims` and `specivo_ai_spend_budgets` (their `delete` ops).
 - **idempotentHint: true** -- updates by key, deletes, `specivo_add_relation`,
   `specivo_tag` and `specivo_ai_usage`: a repeat with the same arguments
   changes nothing more.

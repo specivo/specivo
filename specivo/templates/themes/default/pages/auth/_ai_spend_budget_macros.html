@@ -1,0 +1,60 @@
+{# AI spend budgets: the progress of a month, the budget form and its errors (billing account pages, spend report). #}
+
+{% macro budget_meter(b) -%}
+{% if b and b.has_progress %}
+<div class="sp-budget{{ ' sp-budget-over' if b.over else (' sp-budget-warn' if b.warn else '') }}" data-testid="budget-progress" data-budget-id="{{ b.id }}" data-percent="{{ b.percent }}">
+  <meter class="sp-budget-meter" min="0" max="100" low="{{ b.low }}" high="100" optimum="0" value="{{ b.meter }}" aria-label="{{ _('Share of the monthly budget spent') }}">{{ b.percent }}%</meter>
+  <span class="sp-budget-text">{% trans spend=b.spend, amount=b.amount, percent=b.percent %}{{ spend }} of {{ amount }} ({{ percent }}%){% endtrans %}</span>
+  {% if not b.is_active %}<span class="sp-sub-badge">{% trans %}Alerts off{% endtrans %}</span>{% endif %}
+  {% if b.unconverted %}<span class="sp-text-muted-xs" data-testid="budget-unconverted">{% trans %}Some spend has no exchange rate yet and is not counted.{% endtrans %}</span>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro budget_cell(b) -%}
+{% if b %}{{ budget_meter(b) }}{% else %}<span class="sp-text-muted">{% trans %}No budget{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro budget_error_text(error) -%}
+{% set code = error.code %}{% set field = error.field %}
+{% if code == "self_service_off" %}{% trans %}An administrator manages budgets for this account. Ask one to change it.{% endtrans %}
+{% elif code == "ai_spend_budget_exists" %}{% trans %}This already has a budget. Change that one.{% endtrans %}
+{% elif code in ("currency_unknown", "currency_inactive") %}{% trans %}Choose an active currency.{% endtrans %}
+{% elif code == "ai_spend_budget_invalid" %}
+  {% if field == "amount" %}{% trans %}Enter the monthly budget as an amount above zero, with no more decimal places than the currency has.{% endtrans %}
+  {% elif field == "currency" %}{% trans %}Choose a currency.{% endtrans %}
+  {% elif field == "thresholds" %}{% trans %}List up to 5 alert thresholds as whole percents from 1 to 1000, such as 80, 100.{% endtrans %}
+  {% else %}{% trans %}Check the budget and try again.{% endtrans %}{% endif %}
+{% elif code %}{% trans %}The budget could not be saved.{% endtrans %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro budget_form(form, action, currencies, prefix, has_budget, delete_action) -%}
+<form method="post" action="{{ action | prefixed }}" class="sp-form-row sp-mb-md" data-testid="{{ prefix }}-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="sp-form-field">
+    <label class="filter-label" for="{{ prefix }}-amount">{% trans %}Monthly budget{% endtrans %}</label>
+    <input id="{{ prefix }}-amount" name="amount" class="filter-input" inputmode="decimal" value="{{ form.amount }}" required data-testid="{{ prefix }}-amount">
+  </div>
+  <div class="sp-form-field">
+    <label class="filter-label" for="{{ prefix }}-currency">{% trans %}Currency{% endtrans %}</label>
+    <select id="{{ prefix }}-currency" name="currency" class="filter-select" data-testid="{{ prefix }}-currency">
+      {% for code in currencies %}<option value="{{ code }}"{% if code == form.currency %} selected{% endif %}>{{ code }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="sp-form-field">
+    <label class="filter-label" for="{{ prefix }}-thresholds">{% trans %}Alert at (% of the budget){% endtrans %}</label>
+    <input id="{{ prefix }}-thresholds" name="thresholds" class="filter-input" value="{{ form.thresholds }}" data-testid="{{ prefix }}-thresholds">
+  </div>
+  <div class="sp-form-field">
+    <label class="sp-budget-check"><input type="checkbox" name="is_active" value="1"{% if form.is_active %} checked{% endif %}> {% trans %}Send alerts{% endtrans %}</label>
+  </div>
+  <button type="submit" class="sp-btn sp-btn-primary" data-testid="{{ prefix }}-save">{% if has_budget %}{% trans %}Save budget{% endtrans %}{% else %}{% trans %}Set budget{% endtrans %}{% endif %}</button>
+</form>
+{% if has_budget %}
+<form method="post" action="{{ delete_action | prefixed }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="sp-btn sp-btn-ghost" data-testid="{{ prefix }}-remove">{% trans %}Remove budget{% endtrans %}</button>
+</form>
+{% endif %}
+{%- endmacro %}
