@@ -301,7 +301,7 @@ async def test_a_threshold_alerts_once_per_month(db_session: AsyncSession, b: Bi
     assert "/my/ai-billing-accounts/" in by_address[w.alice.email][3]
     assert "14" in alice_html
     gateway_mail = next(c.args for c in mails.call_args_list if "Corp gateway" in c.args[1])
-    assert "100%" in gateway_mail[1] and f"/admin/ai-billing-accounts/{b.gateway.id}/" in gateway_mail[3]
+    assert "100 percent" in gateway_mail[1] and f"/admin/ai-billing-accounts/{b.gateway.id}/" in gateway_mail[3]
 
     rows = (await db.execute(select(AiSpendBudgetAlert).order_by(AiSpendBudgetAlert.threshold))).scalars().all()
     assert {(r.budget_id, r.threshold) for r in rows} == {(key.id, 50), (gateway.id, 80), (gateway.id, 100)}

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core import secret_box
 from specivo.core.ai_pricing import normalize_provider
 from specivo.core.exceptions import ValidationError
+from specivo.core.i18n import gettext as _
 from specivo.models.ai_provider import AI_PROVIDER_SECRET_PURPOSE, ProjectAiProvider
 from specivo.models.project import Project
 from specivo.models.user import User
@@ -51,20 +52,23 @@ def check_base_url(value: str) -> str:
     """The endpoint base URL, without a trailing slash; 422 for anything but a plain http(s) URL."""
     url = (value or "").strip()
     if not url or len(url) > _URL_MAX:
-        raise ValidationError(f"Enter the provider's base URL, at most {_URL_MAX} characters", field="base_url")
+        raise ValidationError(
+            _("Enter the provider's base URL, at most %(count)d characters") % {"count": _URL_MAX}, field="base_url"
+        )
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise ValidationError(
-            "The base URL starts with http:// or https:// and names a host, for example https://api.openai.com/v1",
+            _("The base URL starts with http:// or https:// and names a host, for example %(example)s")
+            % {"example": "https://api.openai.com/v1"},
             field="base_url",
         )
     if parts.username or parts.password or parts.query or parts.fragment:
         raise ValidationError(
-            "The base URL must not hold a user name, password, query or fragment; enter the key in its own field",
+            _("The base URL must not hold a user name, password, query or fragment; enter the key in its own field"),
             field="base_url",
         )
     if any(ch.isspace() or ord(ch) < 32 for ch in url):
-        raise ValidationError("The base URL must not contain spaces or control characters", field="base_url")
+        raise ValidationError(_("The base URL must not contain spaces or control characters"), field="base_url")
     return url.rstrip("/")
 
 
@@ -87,10 +91,18 @@ class AiProviderService:
     async def set(self, session: AsyncSession, project: Project, data: ProviderInput, actor: User) -> ProjectAiProvider:
         """Create or replace the project's provider (the caller checked that *actor* is an administrator)."""
         base_url = check_base_url(data.base_url)
-        model = _check_text(data.model, "model", _MODEL_MAX, f"Enter the model name, at most {_MODEL_MAX} characters")
+        model = _check_text(
+            data.model,
+            "model",
+            _MODEL_MAX,
+            _("Enter the model name, at most %(count)d characters") % {"count": _MODEL_MAX},
+        )
         provider = normalize_provider(
             _check_text(
-                data.provider, "provider", _PROVIDER_MAX, f"Enter a provider name, at most {_PROVIDER_MAX} characters"
+                data.provider,
+                "provider",
+                _PROVIDER_MAX,
+                _("Enter a provider name, at most %(count)d characters") % {"count": _PROVIDER_MAX},
             )
         )
         row = await self.get(session, project.id)
@@ -109,7 +121,9 @@ class AiProviderService:
         if data.api_key is not None:
             key = data.api_key.strip()
             if len(key) > _KEY_MAX or any(ord(ch) < 32 for ch in key):
-                raise ValidationError(f"The API key is at most {_KEY_MAX} printable characters", field="api_key")
+                raise ValidationError(
+                    _("The API key is at most %(count)d printable characters") % {"count": _KEY_MAX}, field="api_key"
+                )
             row.api_key_encrypted = secret_box.encrypt(key, AI_PROVIDER_SECRET_PURPOSE) if key else None
         await session.flush()
         return row

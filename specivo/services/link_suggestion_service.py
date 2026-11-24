@@ -56,6 +56,7 @@ from specivo.core.constants import (
     SIMILAR_LINKS_MIN_THRESHOLD,
     SIMILAR_LINKS_TOP_K,
 )
+from specivo.core.i18n import gettext as _
 from specivo.models.entity_link import KIND_TYPED_LINK, TYPED_LINK_TYPES, EntityLink
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
@@ -711,9 +712,9 @@ async def decide(
     if op not in OPS:
         raise ValidationError(f"op must be one of {', '.join(OPS)}", field="op")
     if source == target:
-        raise ValidationError("An item cannot be linked to itself", field="other_ref")
+        raise ValidationError(_("An item cannot be linked to itself"), field="other_ref")
     if source[0] not in ITEM_TYPES or target[0] not in ITEM_TYPES:
-        raise ValidationError("Suggested links join issues and wiki pages only", field="other_ref")
+        raise ValidationError(_("Suggested links join issues and wiki pages only"), field="other_ref")
     value = check_link_type(source, target, link_type) if op == OP_ACCEPT else ""
 
     source_project_id, source_ref = await _item_info(session, source)
@@ -740,8 +741,14 @@ async def decide(
         ).scalar_one_or_none()
     if row is None or row.status != STATUS_SUGGESTED:
         if row is not None:
-            raise ValidationError(f"The suggested link between {source_ref} and {target_ref} was already {row.status}")
-        raise NotFoundError(f"No suggested link between {source_ref} and {target_ref}")
+            if row.status == STATUS_ACCEPTED:
+                message = _("The suggested link between %(source)s and %(target)s was already accepted")
+            else:
+                message = _("The suggested link between %(source)s and %(target)s was already dismissed")
+            raise ValidationError(message % {"source": source_ref, "target": target_ref})
+        raise NotFoundError(
+            _("No suggested link between %(source)s and %(target)s") % {"source": source_ref, "target": target_ref}
+        )
 
     decision = Decision(op=op, status="", source_ref=source_ref, target_ref=target_ref, project_id=source_project_id)
     if op == OP_ACCEPT:
@@ -775,7 +782,7 @@ async def _add_typed_link(
     from specivo.core.exceptions import ValidationError
     from specivo.services.entity_link_service import _lock_projects
 
-    target_project_id, _ = await _item_info(session, target)
+    target_project_id, _target_ref = await _item_info(session, target)
     await _lock_projects(session, [source_project_id, target_project_id])
     # One typed link per pair, whichever way it points.
     ends = [
@@ -786,7 +793,7 @@ async def _add_typed_link(
         select(EntityLink.id).where(EntityLink.kind == KIND_TYPED_LINK, or_(*ends)).limit(1)
     )
     if existing is not None:
-        raise ValidationError("A typed link between these items already exists", field="other_ref")
+        raise ValidationError(_("A typed link between these items already exists"), field="other_ref")
     stored_ref = target_ref.split("/", 1)[1] if target[0] == ITEM_WIKI_PAGE else target_ref
     link = EntityLink(
         source_type=source[0],
