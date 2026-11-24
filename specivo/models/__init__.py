@@ -4,6 +4,7 @@ from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPo
 from specivo.models.agent_session import AgentSession
 from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_model_price import AiModelPrice
+from specivo.models.ai_provider import ProjectAiProvider
 from specivo.models.ai_reimbursement_claim import AiReimbursementClaim, AiReimbursementClaimEntry
 from specivo.models.ai_spend_budget import AiSpendBudget, AiSpendBudgetAlert
 from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember, AiTool
@@ -12,6 +13,7 @@ from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.billing_rate import BillingRate
+from specivo.models.concept import ConceptExtractionSource, ConceptMention, EntityConcept
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
 from specivo.models.currency import Currency
 from specivo.models.entity_link import EntityLink
@@ -132,6 +134,10 @@ __all__ = [
     "EnabledModule",
     "EntityLink",
     "EntitySuggestion",
+    "EntityConcept",
+    "ConceptMention",
+    "ConceptExtractionSource",
+    "ProjectAiProvider",
     "EntityVector",
     "ExchangeRate",
     "ProjectKeyAlias",

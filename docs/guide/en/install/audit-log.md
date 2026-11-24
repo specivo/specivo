@@ -197,6 +197,14 @@ personal account. People's changes to their own accounts are not, except that ev
 is `ai_billing_accounts_changed`. When a change re-prices usage, `ai_usage_costs_recomputed` is
 written too. See [AI billing accounts](ai-billing-accounts.md).
 
+### Project AI providers
+
+| Event | Account | Details |
+|---|---|---|
+| `project_ai_provider_changed` | the administrator | `op` (`set` or `removed`), `project_key`; for `set` also `provider`, `model`, `host` (of the base URL) and `api_key` (`set`, `kept` or `removed`; the key itself is never recorded) |
+
+See [Concept extraction](../projects/index.md#concept-extraction-ai).
+
 ### AI reimbursement claims
 
 | Event | Account | Details |

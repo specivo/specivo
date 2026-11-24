@@ -124,6 +124,7 @@ async def _get_links(  # noqa: PLR0913 - one parameter per tool argument
     import json
 
     from specivo.core.constants import ENTITY_LINKS_MAX_LIMIT
+    from specivo.services.entity_link_concepts import KIND_MENTIONS, NODE_CONCEPT
     from specivo.services.entity_link_query import (
         apply_filter,
         cap_nodes,
@@ -143,12 +144,14 @@ async def _get_links(  # noqa: PLR0913 - one parameter per tool argument
         if flt:
             raise ValueError("filter cannot be combined with to=; a path is the shortest one, whatever it passes")
         goal = await resolve_root(session, user, to, hubs=True)
-        path = await find_path(session, user, root, goal, types=types)
+        path_types = [KIND_MENTIONS if t == NODE_CONCEPT else t for t in types] if types else types
+        path = await find_path(session, user, root, goal, types=path_types)
         await _log_tool(session, user, event, "get_links", {"ref": ref, "to": to})
         if format == "compact":
             return compact_path(path)
         return json.dumps(path.as_dict(), ensure_ascii=False, indent=1)
-    kinds: list[str] | None = list(types) if types else None
+    # ``concept`` names the node type; its edges are ``mentions``.
+    kinds: list[str] | None = [KIND_MENTIONS if t == NODE_CONCEPT else t for t in types] if types else None
     if include_suggestions:
         kinds = sorted(set(kinds or AGENT_DEFAULT_KINDS) | {KIND_SIMILAR})
     graph = await _link_svc.get_links(
@@ -162,6 +165,7 @@ async def _get_links(  # noqa: PLR0913 - one parameter per tool argument
         limit=ENTITY_LINKS_MAX_LIMIT if flt else limit,
         default_kinds=AGENT_DEFAULT_KINDS,
         count_attachments=True,
+        suggestions=include_suggestions,
     )
     if flt:
         cap_nodes(await apply_filter(session, user, graph, flt), limit)

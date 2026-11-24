@@ -84,6 +84,12 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.link_suggestions.sweep_similar_links",
                 "schedule": crontab(minute=40, hour=3),
             },
+            # Concept extraction with each project's own AI provider: only projects that switched
+            # it on, and only their changed issues and pages, up to each project's run limit.
+            "sweep-concept-extraction": {
+                "task": "specivo.tasks.concepts.sweep_concept_extraction",
+                "schedule": crontab(minute=10, hour=4),
+            },
             "queue-link-graph-backfill": {
                 "task": "specivo.tasks.entity_links.queue_link_graph_backfill",
                 "schedule": 3600,  # every hour
@@ -146,6 +152,7 @@ from specivo.tasks import (  # noqa: E402, F401
     ai_model_prices,
     ai_usage,
     cleanup,
+    concepts,
     embeddings,
     entity_links,
     exchange_rates,

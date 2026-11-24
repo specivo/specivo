@@ -661,7 +661,7 @@ class EntityLinkService:
 
     # -- reading ------------------------------------------------------------
 
-    async def get_links(
+    async def get_links(  # noqa: PLR0913 - one keyword per read option
         self,
         session: AsyncSession,
         user: User,
@@ -674,6 +674,7 @@ class EntityLinkService:
         default_kinds: frozenset[str] = DEFAULT_KINDS,
         count_attachments: bool = False,
         reader: _Reader | None = None,
+        suggestions: bool = False,
     ) -> LinkGraph:
         """Return the neighbours of *root* that *user* may see.
 
@@ -704,6 +705,9 @@ class EntityLinkService:
           of files attached to it.
         - ``reader``: a ``_Reader`` to share between several reads by the same
           user (its visibility answers are cached).
+        - ``suggestions``: also keep the ``mentions`` edges below their
+          project's confidence threshold (``suggested: true``); the ``similar``
+          suggestions follow *kinds* as above.
         """
         wanted, explicit = _check_read(direction, depth, kinds, default_kinds, hub_root=root[0] in HUB_TYPES)
         if root[0] in HUB_TYPES:
@@ -726,6 +730,8 @@ class EntityLinkService:
                         session, node, direction, wanted, hubs=reader.hubs, cap=limit + 1, model_id=model_id
                     )
                 )
+            if not suggestions:
+                raw = [e for e in raw if not e.suggested or e.kind == KIND_SIMILAR]
             next_frontier = walk.take(await reader.filter(raw), hop, explicit)
             # The last frontier is never expanded, so capping it would leave nothing out.
             if hop < depth - 1 and len(next_frontier) > ENTITY_LINKS_MAX_EXPANDED:
@@ -1199,6 +1205,11 @@ class _RawEdge:
     # A repository commit matched from the source issue's ``commits`` metadata: the bare
     # ``commit:<sha12>`` node shown instead when the reader may not see that commit.
     fallback: NodeKey | None = None
+    # A suggestion rather than a link: a ``similar`` edge, or a ``mentions`` edge below the
+    # project's confidence threshold. Read only when suggestions are asked for.
+    suggested: bool = False
+    # For a ``mentions`` edge: the passage of the source that mentions the concept.
+    passage: str | None = None
 
 
 def _first_sighting(seen: set[tuple[Any, ...]], edge: _RawEdge) -> bool:
@@ -1229,6 +1240,7 @@ async def _similar_edges(session: AsyncSession, node: NodeKey, model_id: int) ->
             KIND_SIMILAR,
             label=f"{suggestion.score:.3f}",
             identity=(KIND_SIMILAR, suggestion.id),
+            suggested=True,
         )
         for suggestion in await pending_suggestions(session, (node[0], int(node[1])), model_id)
     ]
@@ -1319,8 +1331,10 @@ class LinkEdge:
     broken: bool = False
     # Where the comment a link is written in is shown; for the web page, not the JSON.
     via_url: str | None = None
-    # A suggested link (kind ``similar``), not a link anyone made.
+    # A suggested link (kind ``similar``, or a low-confidence ``mentions``), not a link anyone made.
     suggested: bool = False
+    # For a ``mentions`` edge: the passage that mentions the concept.
+    passage: str | None = None
 
 
 @dataclass(slots=True)
@@ -1365,7 +1379,7 @@ def _edge_dict(edge: LinkEdge) -> dict[str, Any]:
         "kind": edge.kind,
         "direction": edge.direction,
     }
-    for name in ("label", "relation_type", "via"):
+    for name in ("label", "relation_type", "via", "passage"):
         value = getattr(edge, name)
         if value:
             out[name] = value
@@ -1687,7 +1701,8 @@ class _Reader:
                     via=journal_refs[raw.via_journal_id][0] if raw.via_journal_id in journal_refs else None,
                     via_url=journal_refs[raw.via_journal_id][1] if raw.via_journal_id in journal_refs else None,
                     broken=raw.target is None,
-                    suggested=raw.kind == KIND_SIMILAR,
+                    suggested=raw.suggested or raw.kind == KIND_SIMILAR,
+                    passage=raw.passage,
                 )
             )
         graph.raw_edges = []

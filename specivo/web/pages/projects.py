@@ -559,7 +559,20 @@ async def _settings_instance_switches(db: AsyncSession, project: Project, user: 
         "currency_choices": currency_choices,
         "instance_reporting_currency": await currency_svc.get_instance_reporting_currency(db),
         "ai_usage_payer_default": project_payer_default(project.settings),
+        "concept_extraction": await _concept_extraction_status(db, project, user),
     }
+
+
+async def _concept_extraction_status(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """The concept extraction card's data, JSON-safe (the last run as UTC text)."""
+    from specivo.services.concept_extraction import project_status
+
+    data = await project_status(db, project, full_url=user.is_admin)
+    if data["provider"] is not None:
+        data["provider"] = {k: v for k, v in data["provider"].items() if k != "updated_at"}
+    last = data["last_extracted_at"]
+    data["last_extracted_at"] = last.strftime("%Y-%m-%d %H:%M UTC") if last is not None else None
+    return data
 
 
 @router.get("/projects/{key}/settings/", response_class=HTMLResponse)

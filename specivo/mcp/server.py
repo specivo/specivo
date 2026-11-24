@@ -671,7 +671,7 @@ async def specivo_get_links(
             description=(
                 "An issue (ACME-12), a wiki page (wiki:ACME/<slug>), or a structured node: tag:ACME/<name>, "
                 "component:ACME/<value>, metadata:ACME/<key>/<value>, version:ACME/<name>, sprint:ACME/<name>, "
-                "user:<login>."
+                "user:<login>, or an extracted concept: concept:ACME/<name>."
             )
         ),
     ],
@@ -707,7 +707,8 @@ async def specivo_get_links(
                 "Structured nodes: tagged, in_component, in_metadata, targets_version, in_sprint, assigned_to. "
                 "Naming a structured-node kind also expands those nodes at depth 2. typed_link: a link someone "
                 "made by accepting a suggestion. similar: suggested links, only when named (or with "
-                "include_suggestions)."
+                "include_suggestions). mentions (or concept): concepts extracted by the project's AI provider "
+                "(features, external systems, decisions, terms), confidence in label, passage quoted."
             )
         ),
     ] = None,
@@ -747,7 +748,8 @@ async def specivo_get_links(
         Field(
             description=(
                 "Also return suggested links: edges of kind similar (suggested: true, the cosine score in label) "
-                "to issues and wiki pages with similar content that nothing links yet. Off by default."
+                "to issues and wiki pages with similar content that nothing links yet, and concept mentions below "
+                "the project's confidence threshold (kind mentions, suggested: true). Off by default."
             )
         ),
     ] = False,
@@ -764,7 +766,14 @@ async def specivo_get_links(
     document an issue, everything in a version or component, or everything
     that would be affected by a change.
 
-    Tags, versions, sprints, components and users are hubs: a hub you start
+    Concepts (``concept:ACME/<name>``) are features, external systems,
+    decisions and terms that the project's own AI provider extracted from its
+    issues and wiki pages, when the project switched that on; an issue or page
+    points at each concept it mentions (kind ``mentions``, the model's
+    confidence in ``label``, the quoted ``passage``). They are hints made by a
+    model: read the passage before relying on one.
+
+    Tags, versions, sprints, components, users and concepts are hubs: a hub you start
     from lists its members (``version:ACME/1.2`` gives the issues in 1.2; add
     depth=2 and types such as ["targets_version", "assigned_to", "tagged"] for
     their assignees and tags). Elsewhere a hub is a leaf with ``degree``, the

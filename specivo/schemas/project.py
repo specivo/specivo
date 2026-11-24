@@ -9,6 +9,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from specivo.core.constants import (
+    CONCEPT_EXTRACTION_MAX_RUN_LIMIT,
+    CONCEPT_MAX_CONFIDENCE_THRESHOLD,
+    CONCEPT_MIN_CONFIDENCE_THRESHOLD,
     GRAPH_METADATA_KEY_MAX_LENGTH,
     GRAPH_METADATA_KEYS_MAX,
     SIMILAR_LINKS_MAX_THRESHOLD,
@@ -164,6 +167,31 @@ class ProjectUpdate(BaseModel):
             "set. Applies from the next computation of the project's suggestions."
         ),
     )
+    # Concept extraction with the project's AI provider (off unless switched on).
+    concept_extraction: bool | None = Field(
+        default=None,
+        description=(
+            "Extract concepts (features, external systems, decisions, terms) from the project's issues and wiki "
+            "pages with the project's AI provider, as concept nodes of the link graph. Switching it on needs a "
+            "provider (PUT /projects/{key}/ai-provider/, instance administrators); the AI usage is logged in the "
+            "name of whoever switched it on."
+        ),
+    )
+    concept_confidence_threshold: float | None = Field(
+        default=None,
+        ge=CONCEPT_MIN_CONFIDENCE_THRESHOLD,
+        le=CONCEPT_MAX_CONFIDENCE_THRESHOLD,
+        description=(
+            "The confidence a concept mention needs to be shown by default; below it, it is a suggestion "
+            "(include_suggestions=true). 0.6 when never set."
+        ),
+    )
+    concept_extraction_run_limit: int | None = Field(
+        default=None,
+        ge=1,
+        le=CONCEPT_EXTRACTION_MAX_RUN_LIMIT,
+        description="How many changed issues and pages one extraction run sends to the provider. 50 when never set.",
+    )
     # Currency the project's money reports use. Only applied when present in
     # the payload: a code sets the override (it must be an enabled currency),
     # null or "" clears it so the instance reporting currency applies.
@@ -287,6 +315,10 @@ class ProjectOut(BaseModel):
     graph_metadata_keys: list[str] | None = None
     # Detail only: the cosine similarity a suggested link needs in the project.
     similar_links_threshold: float | None = None
+    # Detail only: concept extraction switch, confidence threshold and run limit.
+    concept_extraction: bool | None = None
+    concept_confidence_threshold: float | None = None
+    concept_extraction_run_limit: int | None = None
     # The project's own reporting currency; ``None`` means it follows the
     # instance setting. Left ``None`` for anonymous visitors.
     reporting_currency_code: str | None = None

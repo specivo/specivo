@@ -32,6 +32,7 @@ from specivo.schemas.project import (
 from specivo.services.api_key_scope import is_global_admin
 from specivo.services.branch_name import BranchNameSettings
 from specivo.services.computed_metadata_service import computed_values
+from specivo.services.concept_extraction import confidence_threshold, extraction_enabled, run_limit
 from specivo.services.currency_service import reporting_currency_for
 from specivo.services.entity_link_nodes import graph_metadata_keys
 from specivo.services.link_suggestion_service import similarity_threshold
@@ -150,6 +151,9 @@ def _project_out(
         similar_issues=project_setting_enabled(project.settings) if detail else None,
         graph_metadata_keys=list(graph_metadata_keys(project.settings)) if detail else None,
         similar_links_threshold=similarity_threshold(project.settings) if detail else None,
+        concept_extraction=extraction_enabled(project.settings) if detail else None,
+        concept_confidence_threshold=confidence_threshold(project.settings) if detail else None,
+        concept_extraction_run_limit=run_limit(project.settings) if detail else None,
         reporting_currency_code=project.reporting_currency_code,
         reporting_currency=reporting_currency,
         ai_usage_payer_default=project_payer_default(project.settings) if detail else None,
