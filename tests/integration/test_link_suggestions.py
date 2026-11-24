@@ -24,7 +24,7 @@ from specivo.models.relation import IssueRelation
 from specivo.models.search import SearchSource
 from specivo.services import link_suggestion_service as svc
 from specivo.services.entity_link_service import KIND_SIMILAR, EntityLinkService
-from tests.integration.link_graph_helpers import World, build_world, comment, issue, page, rebuild, wiki_ref
+from tests.integration.link_graph_helpers import World, build_world, comment, grant, issue, page, rebuild, wiki_ref
 from tests.integration.link_suggestion_helpers import (
     _no_queued_tasks,
     add_permission,
@@ -388,3 +388,31 @@ async def test_typed_links_count_in_paths_and_inline_lines(db_session, world, mo
     assert path.edges is not None and [e.kind for e in path.edges] == [KIND_TYPED_LINK]
     lines = await _link_lines(db_session, world.reader, key(root))
     assert f"Links to: {wiki_ref(world.home, 'spec')} Spec (implements)" in lines
+
+
+async def test_deciding_checks_visibility_itself(db_session, world, model):
+    root = await issue(db_session, world, world.home, "Root")
+    private = await issue(db_session, world, world.home, "Private", private=True)
+    for item in (root, private):
+        await embed(db_session, model, item, A)
+    await svc.compute_for_project(db_session, world.home.id)
+    await add_permission(db_session, world.reader, world.home, "manage_issue_relations")
+    with pytest.raises(NotFoundError):
+        await svc.decide(db_session, world.reader, "dismiss", key(root), key(private))
+
+
+async def test_a_pair_across_projects_needs_the_permission_in_both(db_session, world, model):
+    root = await issue(db_session, world, world.home, "Root")
+    spec = await page(db_session, world, world.home, "Spec")
+    for item in (root, spec):
+        await embed(db_session, model, item, A)
+    await svc.compute_for_project(db_session, world.home.id)
+    # The issue moves to a project where the reader may edit issues; the page stays where they may only read.
+    root.project_id = world.hidden.id
+    await db_session.commit()
+    await grant(db_session, world.reader, world.hidden, ["view_issues", "edit_issues"])
+    with pytest.raises(PermissionDeniedError):
+        await svc.decide(db_session, world.reader, "dismiss", key(root), key(spec))
+    await add_permission(db_session, world.reader, world.home, "manage_wiki")
+    decision = await svc.decide(db_session, world.reader, "dismiss", key(root), key(spec))
+    assert decision.status == "dismissed"

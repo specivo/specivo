@@ -622,25 +622,50 @@ async def _item_info(session: AsyncSession, item: Item) -> tuple[int, str]:
             .join(Project, Project.id == Wiki.project_id)
             .where(WikiPage.id == item[1])
         )
-    ).one()
+    ).one_or_none()
+    if row is None:
+        from specivo.core.exceptions import NotFoundError
+
+        raise NotFoundError("Wiki page not found")
     return row.project_id, f"wiki:{row.key}/{row.slug}"
 
 
 async def _require_decide_permission(
-    session: AsyncSession, user: User, source: Item, target: Item, source_project_id: int
+    session: AsyncSession, user: User, source: Item, target: Item, source_project_id: int, target_project_id: int
 ) -> None:
-    """The permission that makes the link: a relation between issues, else an edit of the source."""
+    """The permission that makes the link: a relation between issues, else an edit of the source.
+
+    When the two items are in different projects (one was moved after the
+    suggestion was made), the matching permission is needed on the target's
+    project too, so nobody decides for a project where they may not link.
+    """
     from specivo.core.exceptions import PermissionDeniedError
     from specivo.services.permission_service import Permission, check_permission
 
-    if source[0] == ITEM_ISSUE and target[0] == ITEM_ISSUE:
-        permission = Permission.MANAGE_ISSUE_RELATIONS
-    elif source[0] == ITEM_ISSUE:
-        permission = Permission.EDIT_ISSUES
-    else:
-        permission = Permission.MANAGE_WIKI
-    if not await check_permission(user, source_project_id, permission, session):
-        raise PermissionDeniedError(f"Permission '{permission}' denied for this project")
+    def needed(item: Item) -> Permission:
+        if source[0] == ITEM_ISSUE and target[0] == ITEM_ISSUE:
+            return Permission.MANAGE_ISSUE_RELATIONS
+        return Permission.EDIT_ISSUES if item[0] == ITEM_ISSUE else Permission.MANAGE_WIKI
+
+    checks = [(source_project_id, needed(source))]
+    if target_project_id != source_project_id:
+        checks.append((target_project_id, needed(target)))
+    for project_id, permission in checks:
+        if not await check_permission(user, project_id, permission, session):
+            raise PermissionDeniedError(f"Permission '{permission}' denied for this project")
+
+
+async def _require_visible(session: AsyncSession, user: User, items: Iterable[Item]) -> None:
+    """Refuse (not found) an item *user* may not see; callers resolve refs first, this is the backstop."""
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.entity_link_service import _Reader
+
+    reader = _Reader(session, user)
+    wanted = list(items)
+    await reader._load_issues({i for t, i in wanted if t == ITEM_ISSUE})
+    await reader._load_pages({i for t, i in wanted if t == ITEM_WIKI_PAGE})
+    if not all(reader.visible(item) for item in wanted):
+        raise NotFoundError("Item not found")
 
 
 def check_link_type(source: Item, target: Item, link_type: str | None) -> str:
@@ -692,8 +717,9 @@ async def decide(
     value = check_link_type(source, target, link_type) if op == OP_ACCEPT else ""
 
     source_project_id, source_ref = await _item_info(session, source)
-    _target_project_id, target_ref = await _item_info(session, target)
-    await _require_decide_permission(session, user, source, target, source_project_id)
+    target_project_id, target_ref = await _item_info(session, target)
+    await _require_visible(session, user, [source, target])
+    await _require_decide_permission(session, user, source, target, source_project_id, target_project_id)
 
     model_id = await default_model_id(session)
     first, second = pair_key(source, target)
