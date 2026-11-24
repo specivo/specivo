@@ -39,7 +39,11 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
         "Link graph of an issue, wiki page, tag, version, sprint, component or user: backlinks, links, "
-        "relations, members; depth 1-2 (3 from a hub); to= finds a path; filter=; format='compact'"
+        "relations, members; depth 1-2 (3 from a hub); to= finds a path; filter=; format='compact'; "
+        "include_suggestions=true adds suggested links"
+    ),
+    "specivo_link_suggestion": (
+        "Accept (as a relation or a typed link) or dismiss a suggested link between two issues or wiki pages"
     ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
@@ -183,6 +187,18 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    tags, versions and other structured nodes unless `types` names their kind.
 9. Save tokens with `format="compact"`: one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook
    "Runbook"`, titles written once, after a header line with the root and whether it was truncated.
+10. Suggested links: `specivo_show_issue` and `specivo_read_wiki` end with `Possibly related (suggested,
+   not linked):` -- up to 5 issues or pages of the same project whose content is close to this one
+   (cosine score in brackets) and that nothing links yet. They are hints from embeddings, not links:
+   read them before relying on them. `specivo_get_links(ref, include_suggestions=true)` (or
+   `types=["similar"]`) returns them as edges of kind `similar` with `suggested: true` and the score in
+   `label`; they are never returned otherwise. One that is right:
+   `specivo_link_suggestion(op="accept", ref, other_ref, link_type)`. Two issues get a relation
+   (`link_type` is the relation type, default `relates`); an issue and a page, or two pages, get a typed
+   link from `ref` to `other_ref` (`documents`, `implements`, `decided_in`, `supersedes` or `see_also`,
+   the default), shown as kind `typed_link`. A wrong one: `op="dismiss"`, and it is never suggested
+   again. Both need the permission that makes the link (`manage_issue_relations` between issues, else
+   `edit_issues` / `manage_wiki` on `ref`).
 
 ### Connecting issues and pages (the link graph)
 - Issue to issue: add a relation with `specivo_add_relation` (`blocks`, `relates`, `duplicates`, ...)

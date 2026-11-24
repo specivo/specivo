@@ -26,12 +26,19 @@ KIND_MENTION = "mention"  # KEY-123, or a link to a page of this instance
 KIND_ATTACHMENT_LINK = "attachment_link"  # a bare attachment filename as a link or image target
 TEXT_KINDS = (KIND_WIKI_LINK, KIND_MENTION, KIND_ATTACHMENT_LINK)
 
+# A link someone made on purpose, by accepting a suggested link between an issue
+# and a wiki page or between two pages (two issues get an ``IssueRelation``).
+# It is not parsed from text, so rebuilding a source leaves it alone.
+KIND_TYPED_LINK = "typed_link"
+# What a typed link says about its target, read from the source: "this page documents ...".
+TYPED_LINK_TYPES = ("documents", "implements", "decided_in", "supersedes", "see_also")
+
 
 class EntityLink(Base):
     """One link from a source text to an issue, wiki page or attachment.
 
-    Rows are derived data: ``EntityLinkService.rebuild_source`` replaces all
-    the rows of one source from its committed text, so they are never edited
+    Text links are derived data: ``EntityLinkService.rebuild_source`` replaces
+    the text-link rows of one source from its committed text, so they are never edited
     in place except to resolve a target that did not exist yet.
 
     Typed foreign keys
@@ -45,6 +52,11 @@ class EntityLink(Base):
 
     Structured connections (relations, parent/child, attachments, commits and
     pull requests) live in their own tables and are merged at read time.
+
+    One kind is not derived: ``typed_link`` rows are written when someone
+    accepts a suggested link (``link_suggestion_service``) and are never
+    touched by a rebuild. They come from an issue or a wiki page, never from a
+    comment, and carry a ``link_type``.
     """
 
     __tablename__ = "entity_links"
@@ -59,6 +71,12 @@ class EntityLink(Base):
             "(target_issue_id IS NOT NULL)::int + (target_wiki_page_id IS NOT NULL)::int"
             " + (target_attachment_id IS NOT NULL)::int <= 1",
             name="ck_entity_links_one_target",
+        ),
+        CheckConstraint(
+            "(kind = 'typed_link') = (link_type IS NOT NULL)"
+            " AND (link_type IS NULL OR link_type IN"
+            " ('documents', 'implements', 'decided_in', 'supersedes', 'see_also'))",
+            name="ck_entity_links_link_type",
         ),
         Index(
             "uq_entity_links_source_target",
@@ -111,6 +129,8 @@ class EntityLink(Base):
     target_project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     target_ref: Mapped[str] = mapped_column(String(255), nullable=False)
     display_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Only for ``typed_link``: one of ``TYPED_LINK_TYPES``.
+    link_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     @property

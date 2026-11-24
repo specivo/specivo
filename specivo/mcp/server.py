@@ -49,7 +49,7 @@ from specivo.mcp.tools.issues import (
     _show_issue,
     _update_issue,
 )
-from specivo.mcp.tools.links import _get_links
+from specivo.mcp.tools.links import _get_links, _link_suggestion
 from specivo.mcp.tools.lookups import _list_lookups, _list_members, _list_projects, _whoami
 from specivo.mcp.tools.metadata import (
     _create_metadata_schema,
@@ -705,7 +705,9 @@ async def specivo_get_links(
                 "Edge kinds to keep; when omitted, all but attachment. Text links: wiki_link, mention, "
                 "attachment_link. Structured: relation, parent, child, attachment, commit, pull_request. "
                 "Structured nodes: tagged, in_component, in_metadata, targets_version, in_sprint, assigned_to. "
-                "Naming a structured-node kind also expands those nodes at depth 2."
+                "Naming a structured-node kind also expands those nodes at depth 2. typed_link: a link someone "
+                "made by accepting a suggestion. similar: suggested links, only when named (or with "
+                "include_suggestions)."
             )
         ),
     ] = None,
@@ -740,6 +742,15 @@ async def specivo_get_links(
             )
         ),
     ] = "json",
+    include_suggestions: Annotated[
+        bool,
+        Field(
+            description=(
+                "Also return suggested links: edges of kind similar (suggested: true, the cosine score in label) "
+                "to issues and wiki pages with similar content that nothing links yet. Off by default."
+            )
+        ),
+    ] = False,
 ) -> str:
     """Navigate the link graph: backlinks and links of an issue or wiki page, or the members of a tag, version, etc.
 
@@ -781,9 +792,56 @@ async def specivo_get_links(
     ``version:ACME/1.2`` with ``{"component": "importer"}``); tags, versions and
     other structured nodes stay while they are linked to a kept issue.
     ``format="compact"`` saves tokens: one line per edge, titles written once.
+
+    Suggested links (kind ``similar``) are left out unless ``types`` names
+    ``similar`` or ``include_suggestions`` is true. They are not links: they
+    pair items whose content is close (same project, same embedding model)
+    and that nothing links yet. Accept or dismiss one with
+    specivo_link_suggestion.
     """
     async with _get_session_and_user() as (session, user):
-        return await _get_links(session, user, ref, direction, depth, types, limit, to, filter, format)
+        return await _get_links(
+            session, user, ref, direction, depth, types, limit, to, filter, format, include_suggestions
+        )
+
+
+@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_link_suggestion"])
+async def specivo_link_suggestion(
+    op: Annotated[str, Field(description="accept (make it a real link) or dismiss (never suggest it again).")],
+    ref: Annotated[
+        str,
+        Field(
+            description=(
+                "The issue (ACME-12) or wiki page (wiki:ACME/<slug>) the link goes from; the permission is "
+                "checked in its project."
+            )
+        ),
+    ],
+    other_ref: Annotated[str, Field(description="The other end of the suggested link, an issue or wiki page ref.")],
+    link_type: Annotated[
+        str | None,
+        Field(
+            description=(
+                "With accept. Two issues: a relation type, read 'ref <type> other_ref' (relates, blocks, blocked, "
+                "duplicates, duplicated, precedes, follows, copied_to, copied_from; default relates). An issue and "
+                "a page, or two pages: documents, implements, decided_in, supersedes or see_also (default "
+                "see_also)."
+            )
+        ),
+    ] = None,
+) -> str:
+    """Accept or dismiss a suggested link (kind ``similar``) between two issues or wiki pages.
+
+    Suggestions are listed as ``Possibly related`` by specivo_show_issue and
+    specivo_read_wiki, and by specivo_get_links with include_suggestions=true.
+    Accepting two issues creates a normal relation (needs
+    manage_issue_relations); accepting an issue and a page, or two pages,
+    stores a typed link from ``ref`` to ``other_ref`` (needs edit_issues on an
+    issue, manage_wiki on a page) that the link graph lists as ``typed_link``.
+    Dismissing needs the same permission and hides the pair for good.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _link_suggestion(session, user, op, ref, other_ref, link_type)
 
 
 @mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_wiki_pages"])

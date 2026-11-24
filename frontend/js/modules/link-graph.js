@@ -354,11 +354,15 @@ export function buildOption(state, theme, width) {
             autoCurveness: true,
             data: nodes,
             links,
+            // A little zoomed out, and long labels cut, so labels at the edge of the layout stay in view.
+            zoom: narrow ? 0.8 : 0.9,
             label: {
                 position: 'right',
                 color: theme.text,
                 fontFamily: theme.font,
                 fontSize: narrow ? 10 : 11,
+                width: narrow ? 90 : 140,
+                overflow: 'truncate',
             },
             labelLayout: { hideOverlap: true },
             emphasis: { focus: 'adjacency', label: { show: true }, lineStyle: { width: 2 } },

@@ -638,6 +638,17 @@
             <div class="sp-backlinks-empty">{% trans %}Loading mentions…{% endtrans %}</div>
           </div>
         </section>
+        {# Possibly related: suggested links (similar content, not linked yet), with
+           Accept and Dismiss for those who may link the items. Loaded with the tab. #}
+        <section class="sp-mentions">
+          <h3 class="sp-mentions-title">{% trans %}Possibly related{% endtrans %}</h3>
+          <div id="issue-suggestions"
+               hx-get="{{ base }}/partials/issues/{{ issue.display_key }}/suggestions/"
+               hx-trigger="sp-show-tab-relations from:body once"
+               hx-swap="innerHTML">
+            <div class="sp-backlinks-empty">{% trans %}Loading suggestions…{% endtrans %}</div>
+          </div>
+        </section>
         {% endif %}
       </div>
 

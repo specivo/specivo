@@ -8,7 +8,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from specivo.core.constants import GRAPH_METADATA_KEY_MAX_LENGTH, GRAPH_METADATA_KEYS_MAX
+from specivo.core.constants import (
+    GRAPH_METADATA_KEY_MAX_LENGTH,
+    GRAPH_METADATA_KEYS_MAX,
+    SIMILAR_LINKS_MAX_THRESHOLD,
+    SIMILAR_LINKS_MIN_THRESHOLD,
+)
 from specivo.services.branch_name import (
     DEFAULT_BRANCH_FORMAT,
     DEFAULT_BRANCH_TYPE,
@@ -148,6 +153,17 @@ class ProjectUpdate(BaseModel):
             "An empty list turns them all off."
         ),
     )
+    # Cosine similarity a suggested link needs in this project (default 0.80).
+    similar_links_threshold: float | None = Field(
+        default=None,
+        ge=SIMILAR_LINKS_MIN_THRESHOLD,
+        le=SIMILAR_LINKS_MAX_THRESHOLD,
+        description=(
+            "Cosine similarity two issues or wiki pages need to be suggested as related (kind similar in the "
+            f"link graph), from {SIMILAR_LINKS_MIN_THRESHOLD} to {SIMILAR_LINKS_MAX_THRESHOLD}; 0.80 when never "
+            "set. Applies from the next computation of the project's suggestions."
+        ),
+    )
     # Currency the project's money reports use. Only applied when present in
     # the payload: a code sets the override (it must be an enabled currency),
     # null or "" clears it so the instance reporting currency applies.
@@ -269,6 +285,8 @@ class ProjectOut(BaseModel):
     similar_issues: bool | None = None
     # The issue metadata keys that become link graph nodes (default ["component"]). ``None`` in list responses.
     graph_metadata_keys: list[str] | None = None
+    # Detail only: the cosine similarity a suggested link needs in the project.
+    similar_links_threshold: float | None = None
     # The project's own reporting currency; ``None`` means it follows the
     # instance setting. Left ``None`` for anonymous visitors.
     reporting_currency_code: str | None = None

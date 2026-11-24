@@ -22,6 +22,7 @@ from specivo.models.issue import Issue
 from specivo.models.issue_source_ref import IssueSourceRef
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.kill_switch import KillEvent, KillTriggerConfig
+from specivo.models.link_suggestion import EntitySuggestion, EntityVector
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.metadata_schema import MetadataSchema
@@ -130,6 +131,8 @@ __all__ = [
     "GroupPolicy",
     "EnabledModule",
     "EntityLink",
+    "EntitySuggestion",
+    "EntityVector",
     "ExchangeRate",
     "ProjectKeyAlias",
     "Member",

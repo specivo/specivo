@@ -61,7 +61,8 @@ def test_issue_relations_tab_lists_mentions(admin_page: Page, linked: dict) -> N
 def test_wiki_page_linked_from(admin_page: Page, linked: dict) -> None:
     tracker = ConsoleErrorTracker().attach(admin_page)
     admin_page.goto(f"/projects/{linked['key']}/wiki/key-rotation/")
-    block = admin_page.locator(".sp-linked-from")
+    # The "Linked from" block, not "Possibly related" (suggested links) beside it.
+    block = admin_page.locator(".sp-linked-from", has=admin_page.locator("#wiki-backlinks"))
     expect(block.locator(".sp-backlinks-row")).to_have_count(0)
     block.locator("summary").click()
     expect(block.locator(".sp-backlinks-row")).to_have_count(1)
