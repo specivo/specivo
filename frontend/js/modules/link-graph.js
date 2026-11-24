@@ -5,7 +5,7 @@
    drawing area and a list of the same items for keyboard and screen reader
    users. Its data is the link graph JSON of data-endpoint (an issue, a wiki
    page or a project); hub nodes (tags, components, versions, sprints,
-   assignees) are expanded through data-expand-endpoint with the hub as root.
+   assignees, concepts) are expanded through data-expand-endpoint with the hub as root.
 
    - Every request names the checked kinds; changing a checkbox reloads.
      "Show suggestions" adds include_suggestions=true, which a server without
@@ -30,7 +30,7 @@ export const MAX_NODES = 300;
 /** Neighbours asked of the server: an item reads two hops, a project one. */
 const LIMITS = { item: 100, project: 200 };
 const HUB_LIMIT = 50;
-const HUB_TYPES = new Set(['tag', 'component', 'metadata', 'version', 'sprint', 'user']);
+const HUB_TYPES = new Set(['tag', 'component', 'metadata', 'version', 'sprint', 'user', 'concept']);
 const THEME_ATTRS = ['class', 'style', 'data-theme', 'data-bs-theme'];
 /** Edge kinds drawn without an arrow: they say "these two belong together", not "this points at that". */
 const UNDIRECTED = new Set(['similar']);

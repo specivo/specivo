@@ -27,6 +27,7 @@
   ("targets_version", _("Versions"), false),
   ("in_sprint", _("Sprints"), false),
   ("assigned_to", _("Assignees"), false),
+  ("mentions", _("Concepts (AI)"), false),
 ] %}
 {% set type_labels = {
   "issue": _("Issue"),
@@ -40,6 +41,7 @@
   "version": _("Version"),
   "sprint": _("Sprint"),
   "user": _("Assignee"),
+  "concept": _("Concept"),
   "broken": _("Missing target"),
 } %}
 {% set kind_labels = {
@@ -60,6 +62,7 @@
   "assigned_to": _("assignee"),
   "typed_link": _("accepted suggestion"),
   "similar": _("suggested: similar content"),
+  "mentions": _("mentions concept"),
 } %}
 <div class="sp-graph"
      data-sp-link-graph

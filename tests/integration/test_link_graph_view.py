@@ -311,6 +311,7 @@ async def test_project_graph_page(client, db_session, world):
     assert 'value="attachment" data-graph-kind>' in html
     assert 'value="relation" data-graph-kind checked>' in html
     assert 'value="tagged" data-graph-kind>' in html
+    assert 'value="mentions" data-graph-kind>' in html
 
 
 async def test_project_graph_page_refusals(client, db_session, world):
