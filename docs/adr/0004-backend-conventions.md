@@ -386,6 +386,19 @@ about its ids is trusted within its own account, never across accounts. AI usage
 lineage, depth bounded at `LINEAGE_MAX_DEPTH`) before the time overlap, for the reporting account and then the target
 user; when the record's own id names nothing, its `parent_session_id` is looked up the same way (a subagent's usage
 goes to its parent's issue). The stored method stays `mcp_session`.
+One connection can carry several client sessions (a client running subagents or chats over one MCP connection).
+`set` with an `external_session_id` the current row does not carry goes through
+`AgentSessionService.select_for_client`: the connection's open row with that id, else the current row when it has no
+id yet, else a new row that copies the connection's API key, `connection_hash`, `client_type` and client. The selected
+row is made active now, so `get_or_create_session` (most recently active row of the connection, ties by id) returns it
+for later calls, and the tool re-publishes `agent_session_id_var` for the rest of its own call, so the working issue,
+the audit row and `tool_call_count` go to it. Rows are only ever read across one connection and one account
+(`find_on_connection`), never linked to each other by `parent_session_id` (that stays the client's own lineage), and
+each keeps its own `external_session_id`, so the issue timeline, the event receiver and ingest matching see one row
+per client session exactly as with one connection each. Calls running at the same time on one connection still go
+to whichever row was selected last; a client that needs them apart opens a connection per session.
+`set` with `issue_ref=""` clears the session's issue (`clear_issue`), audited like a set (`AGENT_SESSION_LINKED`,
+`issue_cleared` names the key, the row in that issue's project); a session with no issue writes nothing.
 
 Entries also store where in an agent's work the usage happened, all optional on ingest records (listed in
 `optional_fields`), `AiUsageCreate` and `specivo_log_ai_usage`: `parent_session_id` (opaque, like

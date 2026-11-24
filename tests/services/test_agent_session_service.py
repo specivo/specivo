@@ -593,3 +593,58 @@ async def test_usage_by_session_matches_by_client_id_else_by_time(db_session: As
 
     # Entries are read with the viewer's AI usage visibility: the member reads none of the agent's.
     assert await usage_by_session(db_session, w.member, [w.live.id]) == {}
+
+
+# ---------------------------------------------------------------------------
+# Several client sessions on one connection
+# ---------------------------------------------------------------------------
+
+
+async def test_select_for_client_claims_a_row_without_an_id(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+
+    row, created = await _svc.select_for_client(db_session, s.id, world.agent, "sess_a")
+
+    assert (row.id, created) == (s.id, False)
+
+
+async def test_select_for_client_adds_a_row_and_the_newest_is_current(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+    await _svc.set_external(db_session, s.id, world.agent, "sess_a", None)
+
+    row, created = await _svc.select_for_client(db_session, s.id, world.agent, "sess_b")
+
+    assert created and row.id != s.id
+    assert (row.api_key_id, row.connection_hash, row.client_type) == (s.api_key_id, s.connection_hash, s.client_type)
+    assert row.external_session_id is None  # the caller records the id
+    await _svc.set_external(db_session, row.id, world.agent, "sess_b", None)
+    assert (await _conn(db_session, world, "conn-a")).id == row.id
+    again, created = await _svc.select_for_client(db_session, row.id, world.agent, "sess_a")
+    assert (again.id, created) == (s.id, False)
+    assert (await _conn(db_session, world, "conn-a")).id == s.id
+
+
+async def test_select_for_client_skips_a_timed_out_or_ended_row(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+    await _svc.set_external(db_session, s.id, world.agent, "sess_a", None)
+    b, _ = await _svc.select_for_client(db_session, s.id, world.agent, "sess_b")
+    await _svc.set_external(db_session, b.id, world.agent, "sess_b", None)
+    s.last_activity_at = s.last_activity_at - timedelta(days=1)
+    await db_session.flush()
+
+    fresh, created = await _svc.select_for_client(db_session, b.id, world.agent, "sess_a")
+    assert created and fresh.id not in (s.id, b.id)
+
+    await _svc.end_session(db_session, b)
+    await _svc.set_external(db_session, fresh.id, world.agent, "sess_a", None)
+    other, created = await _svc.select_for_client(db_session, fresh.id, world.agent, "sess_b")
+    assert created and other.id != b.id
+
+
+async def test_clear_issue(db_session: AsyncSession, world: World) -> None:
+    s = await _conn(db_session, world, "conn-a")
+    assert await _svc.clear_issue(db_session, s.id, world.agent) is None
+    await _svc.record_issue(db_session, s.id, world.agent, world.issue)
+
+    assert await _svc.clear_issue(db_session, s.id, world.agent) == world.issue.id
+    assert s.issue_id is None
