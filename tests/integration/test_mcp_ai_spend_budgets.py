@@ -124,7 +124,9 @@ async def test_a_person_manages_the_budget_of_their_own_account(
     assert removed.startswith("Removed #")
 
     rows = await db_session.execute(
-        select(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AI_SPEND_BUDGETS_CHANGED.value)
+        select(SecurityAuditLog)
+        .where(SecurityAuditLog.event_type == AuditEvent.AI_SPEND_BUDGETS_CHANGED.value)
+        .order_by(SecurityAuditLog.created_at, SecurityAuditLog.id)
     )
     ops = [r.details["op"] for r in rows.scalars().all()]
     assert ops == ["create", "update", "delete"]
