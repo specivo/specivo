@@ -161,7 +161,9 @@ class AgentSessionService:
         a connection's session.
 
         A session is "active" while its last_activity_at is within the
-        timeout window; after that a new session is started.
+        timeout window; after that a new session is started. A connection
+        that several client sessions share (``select_for_client``) has one
+        row per client session; the most recently active one is current.
 
         *client* (the MCP ``clientInfo``) names the client; without it the
         first product of *user_agent* does. A session that has no client yet
@@ -184,7 +186,7 @@ class AgentSessionService:
                 if conn_hash is not None
                 else AgentSession.connection_hash.is_(None),
             )
-            .order_by(AgentSession.last_activity_at.desc())
+            .order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc())
             .limit(1)
         )
         result = await session.execute(stmt)
@@ -244,6 +246,102 @@ class AgentSessionService:
             agent_session.issue_id = issue.id
             await session.flush()
         return True
+
+    async def clear_issue(self, session: AsyncSession, agent_session_id: int, user: User) -> int | None:
+        """Forget the issue agent session *agent_session_id* works on; return the issue it named.
+
+        ``None`` (and nothing written) when the session names no issue.
+        Raises ``NotFoundError`` when the session is not *user*'s.
+        """
+        agent_session = await session.get(AgentSession, agent_session_id)
+        if agent_session is None or agent_session.user_id != user.id:
+            raise NotFoundError("Agent session not found")
+        old = agent_session.issue_id
+        if old is not None:
+            agent_session.issue_id = None
+            await session.flush()
+        return old
+
+    # ------------------------------------------------------------------
+    # Several client sessions on one connection
+    # ------------------------------------------------------------------
+
+    def _same_connection(self, current: AgentSession) -> list[ColumnElement[bool]]:
+        """The conditions of the rows that share *current*'s connection (or plain REST key) and account."""
+        return [
+            AgentSession.user_id == current.user_id,
+            AgentSession.api_key_id.is_not_distinct_from(current.api_key_id),
+            AgentSession.connection_hash.is_not_distinct_from(current.connection_hash),
+            AgentSession.client_type.is_not_distinct_from(current.client_type),
+        ]
+
+    async def find_on_connection(
+        self, session: AsyncSession, current: AgentSession, external_id: str, *, open_only: bool = False
+    ) -> AgentSession | None:
+        """The newest row of *current*'s connection and account with client session id *external_id*.
+
+        With *open_only*, only a row that is not ended and was active within
+        the session timeout counts. Rows of other connections, other API keys
+        and other accounts are never returned, whatever ids they carry.
+        """
+        stmt = select(AgentSession).where(
+            *self._same_connection(current), AgentSession.external_session_id == external_id
+        )
+        if open_only:
+            since = utcnow() - timedelta(seconds=_get_session_timeout())
+            stmt = stmt.where(AgentSession.ended_at.is_(None), AgentSession.last_activity_at >= since)
+        stmt = stmt.order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc()).limit(1)
+        return (await session.execute(stmt)).scalar_one_or_none()
+
+    async def select_for_client(
+        self, session: AsyncSession, agent_session_id: int, user: User, external_id: str
+    ) -> tuple[AgentSession, bool]:
+        """Make the row of client session *external_id* current on the connection of *agent_session_id*.
+
+        One MCP connection can carry several client sessions (a client that
+        runs subagents or chats over one connection). Each gets its own row,
+        sharing the connection's API key and ``connection_hash``;
+        ``get_or_create_session`` picks the most recently active row of a
+        connection, so the row returned here, made active now, is the one
+        later tool calls on the connection run in until another is selected.
+
+        The row is, in order: *agent_session_id* itself when it carries
+        *external_id*; the connection's open row that does; *agent_session_id*
+        when it carries no client id yet (the caller then records the id on
+        it); else a new row of the connection. Only *user*'s rows are read or
+        written. Returns ``(row, created)``; the caller records the ids
+        (``set_external``) on it.
+
+        Raises ``ValidationError`` for an id of the wrong shape and
+        ``NotFoundError`` when *agent_session_id* is not *user*'s.
+        """
+        check_external_session_id(external_id)
+        current = await session.get(AgentSession, agent_session_id)
+        if current is None or current.user_id != user.id:
+            raise NotFoundError("Agent session not found")
+        if current.external_session_id == external_id:
+            return current, False
+        now = utcnow()
+        found = await self.find_on_connection(session, current, external_id, open_only=True)
+        if found is not None:
+            found.last_activity_at = now
+            await session.flush()
+            return found, False
+        if current.external_session_id is None:
+            return current, False
+        row = AgentSession(
+            api_key_id=current.api_key_id,
+            user_id=user.id,
+            connection_hash=current.connection_hash,
+            client_type=current.client_type,
+            client_name=current.client_name,
+            client_version=current.client_version,
+            started_at=now,
+            last_activity_at=now,
+        )
+        session.add(row)
+        await session.flush()
+        return row, True
 
     async def issue_for(
         self,

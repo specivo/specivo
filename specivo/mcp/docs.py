@@ -67,7 +67,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_log_time": "Log time against a project or issue",
     "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
     "specivo_agent_session": (
-        "This connection's agent session: op='set' (your client's session id, parent id, issue_ref) or 'get'"
+        "This connection's agent session: op='set' (your client's session id, which selects its own session on "
+        "a shared connection, parent id, issue_ref; '' clears it) or 'get'"
     ),
     "specivo_log_ai_usage": (
         "Log AI tokens an AI tool used (from a hook, the reporter or /cost output -- never estimated)"
@@ -264,6 +265,21 @@ and corrections.
    e.g. for the spend line of a closing note; `release="1.0"` or `sprint="Sprint 4"` totals one release or
    sprint (an issue counts towards its own, else its nearest parent's), and `group_by="version"` or
    `"sprint"` compares them
+
+### Link your client's sessions
+A client with its own session ids (Hermes, for example) names them, so AI usage the reporter sends with
+the same `session_id` and events from its webhook join the right agent session by id:
+1. `specivo_agent_session(op="set", external_session_id="sess_abc", parent_session_id="sess_root")`
+   -- once per session, with `issue_ref="ACME-12"` when the issue is already known
+2. Several sessions over one MCP connection (subagents, gateway chats): call `set` with the session's
+   own `external_session_id` before the work of each turn. Each id gets an agent session of its own on
+   the connection; the one named by the last `set` is current, so the connection's later tool calls,
+   issue changes and audit rows count towards it. Calls that run at the same time on one connection
+   cannot be told apart: give such sessions a connection each
+3. `specivo_agent_session(op="set", external_session_id="sess_abc", issue_ref="")` -- forget the issue
+   when the session stops working on it (done, or switched by hand); a change is audited
+4. `specivo_agent_session(op="get", external_session_id="sess_abc")` -- that session's issue and ids
+   (without `external_session_id`: the current one)
 
 ### Register AI subscriptions from invoices
 When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):

@@ -1319,8 +1319,10 @@ async def specivo_agent_session(
         str | None,
         Field(
             description=(
-                "For 'set': your client's own id for this session (for example the Hermes session_id), "
-                "1-200 characters of letters, digits and . _ : -. Omit to keep the current value."
+                "Your client's own id for this session (for example the Hermes session_id), 1-200 characters "
+                "of letters, digits and . _ : -. For 'set': selects this connection's agent session of that "
+                "client session (created when there is none) and makes it current for your later calls on "
+                "this connection. For 'get': shows that session instead of the current one."
             ),
         ),
     ] = None,
@@ -1335,7 +1337,12 @@ async def specivo_agent_session(
     ] = None,
     issue_ref: Annotated[
         str | None,
-        Field(description="For 'set': the issue this session works on, e.g. ACME-12. Must be visible to you."),
+        Field(
+            description=(
+                "For 'set': the issue this session works on, e.g. ACME-12. Must be visible to you. "
+                "An empty string clears it."
+            ),
+        ),
     ] = None,
 ) -> str:
     """Read or set this connection's own agent session: your client's session id, its parent and its issue.
@@ -1344,9 +1351,13 @@ async def specivo_agent_session(
     issue, start and last activity); set (records your client's session id
     and its parent's, and with issue_ref the issue you work on, so AI usage
     the reporter sends with the same session_id is attributed by id instead
-    of by time). Only the session of the connection you call on is changed;
-    a parent is linked only to a session of your own account. Setting the
-    same values again changes nothing. A change is audited.
+    of by time; issue_ref="" clears the issue). Several client sessions can
+    share one connection: each external_session_id gets its own agent
+    session, and the one named by the last set is the one your later tool
+    calls on this connection count towards, so call set before each turn's
+    work when your client switches sessions. Only sessions of the connection
+    you call on are changed; a parent is linked only to a session of your own
+    account. Setting the same values again changes nothing. A change is audited.
     """
     async with _get_session_and_user() as (session, user):
         return await _agent_session(session, user, op, external_session_id, parent_session_id, issue_ref)
