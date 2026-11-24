@@ -115,6 +115,8 @@ class AuditEvent(StrEnum):
     RELATION_LISTED = "relation_listed"
     RELATION_ADDED = "relation_added"
     RELATION_REMOVED = "relation_removed"
+    LINK_SUGGESTION_ACCEPTED = "link_suggestion_accepted"
+    LINK_SUGGESTION_DISMISSED = "link_suggestion_dismissed"
     PASSWORD_RESET_REQUESTED = "password_reset_requested"  # noqa: S105
     PASSWORD_RESET_COMPLETED = "password_reset_completed"  # noqa: S105
     PASSWORD_RESET_FAILED = "password_reset_failed"  # noqa: S105
@@ -496,6 +498,8 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.RELATION_LISTED,
             AuditEvent.RELATION_ADDED,
             AuditEvent.RELATION_REMOVED,
+            AuditEvent.LINK_SUGGESTION_ACCEPTED,
+            AuditEvent.LINK_SUGGESTION_DISMISSED,
             AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
             AuditEvent.AI_BILLING_ACCOUNTS_CHANGED,
             AuditEvent.AI_REIMBURSEMENT_CLAIMS_CHANGED,

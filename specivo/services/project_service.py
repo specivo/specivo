@@ -157,6 +157,10 @@ def _settings_changes(data: ProjectUpdate) -> dict[str, Any]:
         changes[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
     if data.graph_metadata_keys is not None:
         changes[GRAPH_METADATA_KEYS_SETTING] = data.graph_metadata_keys
+    if data.similar_links_threshold is not None:
+        from specivo.services.link_suggestion_service import THRESHOLD_SETTING
+
+        changes[THRESHOLD_SETTING] = data.similar_links_threshold
     return changes
 
 

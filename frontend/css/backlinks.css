@@ -84,3 +84,24 @@
   .sp-link-graph-stats { grid-template-columns: 1fr; }
   .sp-link-graph-stats dd { margin-bottom: var(--sp-space-xs); }
 }
+
+/* Possibly related: suggested links with Accept / Dismiss (issue Relations tab, wiki page) */
+.sp-suggestions { display: flex; flex-direction: column; gap: var(--sp-space-sm); }
+.sp-suggestions-hint { margin: 0; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-suggestions-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-space-sm);
+  padding: var(--sp-space-sm) var(--sp-space-md);
+  background: var(--sp-bg-surface);
+  border: 1px dashed var(--sp-border);
+  border-radius: var(--sp-border-radius);
+}
+.sp-suggestions-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-space-xs) var(--sp-space-md); }
+.sp-suggestions-score { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-left: auto; }
+.sp-suggestions-message { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); }
+.sp-suggestions-error { color: var(--sp-danger); }
+@media (max-width: 768px) {
+  .sp-suggestions-row { padding: var(--sp-space-sm); }
+  .sp-suggestions-score { margin-left: 0; }
+}
