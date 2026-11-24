@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core import secret_box
 from specivo.core.app_url import base_path, public_url
 from specivo.core.exceptions import NotFoundError, ValidationError
+from specivo.core.i18n import gettext as _
 from specivo.models.hermes_receiver import HermesReceiver
 from specivo.models.user import User
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
@@ -88,9 +89,9 @@ def hooks_config(token: str) -> str:
 def _clean_name(name: str) -> str:
     cleaned = (name or "").strip()
     if not cleaned:
-        raise ValidationError("Name must not be empty", field="name")
+        raise ValidationError(_("Name must not be empty"), field="name")
     if len(cleaned) > _NAME_MAX:
-        raise ValidationError(f"Name must be at most {_NAME_MAX} characters", field="name")
+        raise ValidationError(_("Name must be at most %(count)d characters") % {"count": _NAME_MAX}, field="name")
     return cleaned
 
 
@@ -115,7 +116,7 @@ class HermesReceiverService:
         """Receiver *receiver_id* of *user_id*, else ``NotFoundError`` (another account's looks missing)."""
         receiver = await session.get(HermesReceiver, receiver_id)
         if receiver is None or receiver.user_id != user_id:
-            raise NotFoundError("Hermes receiver not found")
+            raise NotFoundError(_("Hermes receiver not found"))
         return receiver
 
     async def find_by_token(self, session: AsyncSession, token: str) -> HermesReceiver | None:

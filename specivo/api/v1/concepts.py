@@ -13,6 +13,7 @@ from specivo.api.v1.admin import require_admin_api, require_admin_session_api
 from specivo.core.constants import CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
+from specivo.core.i18n import gettext as _
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
@@ -118,9 +119,9 @@ async def run_concept_extraction(
     project = await _project(db, key, current_user)
     await _require_manage(db, project, current_user)
     if not extraction_enabled(project.settings):
-        raise ValidationError("Concept extraction is off for this project", field="concept_extraction")
+        raise ValidationError(_("Concept extraction is off for this project"), field="concept_extraction")
     if await _providers.get(db, project.id) is None:
-        raise ValidationError("This project has no AI provider", field="provider")
+        raise ValidationError(_("This project has no AI provider"), field="provider")
     await _claim_cooldown(project.id)
     return ConceptRunOut(queued=dispatch_extract(project.id, current_user.id))
 
@@ -146,7 +147,7 @@ async def _claim_cooldown(project_id: int) -> None:
     retry = retry if isinstance(retry, int) and retry > 0 else CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS
     raise AppError(
         code="rate_limited",
-        message="A run of this project was queued a short while ago; try again later",
+        message=_("A run of this project was queued a short while ago; try again later"),
         status_code=429,
         headers={"Retry-After": str(retry)},
     )
@@ -210,7 +211,7 @@ async def delete_ai_provider(
     """
     project = await _project(db, key, current_user)
     if not await _providers.delete(db, project):
-        raise NotFoundError("This project has no AI provider")
+        raise NotFoundError(_("This project has no AI provider"))
     await _audit.log_event(
         db,
         AuditEvent.PROJECT_AI_PROVIDER_CHANGED,

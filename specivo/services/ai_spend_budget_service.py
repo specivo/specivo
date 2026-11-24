@@ -93,7 +93,7 @@ _PERCENT = Decimal("0.1")
 _MAX_ADMIN_MAILS = 50
 
 # Mail text, formatted per recipient inside ``recipient_locale``.
-_ALERT_SUBJECT = _l("AI spend budget: {name} reached {threshold}% of its budget for {month}")
+_ALERT_SUBJECT = _l("AI spend budget: {name} reached {threshold} percent of its budget for {month}")
 _ALERT_BODY = _l("{name} has spent {spend} of its monthly budget of {amount} in {month} ({percent}%).")
 _ALERT_UNCONVERTED = _l("Some of the spend has no exchange rate into {currency} yet and is not counted.")
 _VIEW_BUDGET = _l("View the budget")
