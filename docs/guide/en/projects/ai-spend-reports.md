@@ -205,6 +205,13 @@ the report is narrowed to your own usage (choose yourself under **User**). It ap
 in the **Who paid** table, under **All amount columns** and in the CSV. It is left out when no usage
 in the report was paid by an employee.
 
+### Budgets
+
+Below the report, **Admin → AI spend** lists the active monthly budgets under **Budgets this
+month**: each budget's spend in the calendar month so far against its amount, whatever period and
+filters the report above uses. Budgets are set on billing accounts and for each payer; see
+[Budgets and alerts](../install/ai-billing-accounts.md#budgets-and-alerts).
+
 ## Charts
 
 Below the drill-down, **Charts** show the usage the report counts, with the same filters,

@@ -2,6 +2,7 @@
 {% from "components/macros.html" import breadcrumbs, pagination %}
 {% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts, person_filter_field with context %}
 {% from "components/filter_combobox.html" import filter_combobox %}
+{% from "pages/auth/_ai_spend_budget_macros.html" import budget_meter with context %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
@@ -641,6 +642,35 @@
 {{ usage_charts(charts, has_rows=drill.rows | length > 0, bucket_links=bucket_links, show_links=show_links) }}
 {% endif %}
 </div>
+
+{#
+  The budgets of the running month (admin report only), outside the drill-down's swap target:
+  they do not change with the report's filters, so a drill step neither reloads nor removes them.
+#}
+{% if budgets %}
+<section class="card sp-card-pad sp-mt-md sp-budget-panel" aria-labelledby="sp-budgets-title" data-testid="spend-budgets">
+  <h2 id="sp-budgets-title" class="sp-card-h3">{% trans %}Budgets this month{% endtrans %}</h2>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}Spend of the calendar month so far (UTC) against each monthly budget, whatever the report above shows.{% endtrans %} <a href="{{ base }}/admin/ai-billing-accounts/#payer-budgets">{% trans %}Budgets{% endtrans %} &rarr;</a></p>
+  <div class="sp-table-scroll">
+    <table class="sp-table" data-testid="spend-budgets-table">
+      <thead>
+        <tr>
+          <th scope="col">{% trans %}Budget{% endtrans %}</th>
+          <th scope="col">{% trans %}Spent this month{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in budgets %}
+        <tr data-testid="spend-budget-row" data-budget-id="{{ b.id }}">
+          <th scope="row">{% if b.account_id %}<a href="{{ base }}/admin/ai-billing-accounts/{{ b.account_id }}/">{{ b.name }}</a>{% if b.personal %} <span class="sp-text-muted-xs">{% trans %}personal{% endtrans %}</span>{% endif %}{% else %}{{ b.name }}{% endif %}</th>
+          <td>{{ budget_meter(b) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}

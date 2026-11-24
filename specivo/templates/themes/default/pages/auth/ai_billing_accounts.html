@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "pages/auth/_ai_billing_account_macros.html" import error_text, kind_label, payer_label, state_badge, routes_cell, tools_cell with context %}
+{% from "pages/auth/_ai_spend_budget_macros.html" import budget_cell with context %}
 
 {% block title %}{% trans %}My AI billing accounts{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -13,11 +14,13 @@
 </div>
 
 <h1 class="sp-page-h1">{% trans %}My AI billing accounts{% endtrans %}</h1>
-<p class="sp-text-muted sp-mb-md">{% trans %}What your AI usage is paid through, and who pays: the company's gateways and plans, and your own subscriptions and API keys. Set the share your employer pays back on an account you pay for. Only you and administrators see your own accounts.{% endtrans %} <a href="{{ base }}/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %} &rarr;</a> <a href="{{ base }}/my/ai-reimbursement-claims/">{% trans %}My AI reimbursement claims{% endtrans %} &rarr;</a></p>
+<p class="sp-text-muted sp-mb-md">{% trans %}What your AI usage is paid through, and who pays: the company's gateways and plans, and your own subscriptions and API keys. Set the share your employer pays back on an account you pay for. Only you and administrators see your own accounts. Give an account a monthly budget on its page to be mailed when its spend reaches it.{% endtrans %} <a href="{{ base }}/my/ai-subscriptions/">{% trans %}My AI subscriptions{% endtrans %} &rarr;</a> <a href="{{ base }}/my/ai-reimbursement-claims/">{% trans %}My AI reimbursement claims{% endtrans %} &rarr;</a></p>
 
 {% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account added.{% endtrans %}</div>
 {% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account saved.{% endtrans %}</div>
 {% elif notice == "deactivated" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account switched off.{% endtrans %}</div>
+{% elif notice == "budget_saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Budget saved.{% endtrans %}</div>
+{% elif notice == "budget_removed" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Budget removed.{% endtrans %}</div>
 {% endif %}
 {% if error.code %}<div class="flash flash-error" role="alert" data-testid="billing-account-error">{{ error_text(error) }}</div>{% endif %}
 
@@ -36,6 +39,7 @@
           <th class="sp-sub-num">{% trans %}Reimbursed{% endtrans %}</th>
           <th>{% trans %}Routes{% endtrans %}</th>
           <th>{% trans %}Tools{% endtrans %}</th>
+          <th>{% trans %}Budget this month{% endtrans %}</th>
           <th>{% trans %}Status{% endtrans %}</th>
           {% if can_edit %}<th></th>{% endif %}
         </tr>
@@ -49,11 +53,12 @@
           <td class="sp-sub-num">{% if a.reimburse_percent %}{{ a.reimburse_percent }}%{% endif %}</td>
           <td>{{ routes_cell(a) }}</td>
           <td>{{ tools_cell(a) }}</td>
+          <td>{{ budget_cell(budgets.get(a.id)) }}</td>
           <td>{{ state_badge(a) }}</td>
           {% if can_edit %}<td><a class="sp-btn-sm" href="{{ base }}/my/ai-billing-accounts/{{ a.id }}/">{% trans %}Edit{% endtrans %}</a></td>{% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="8" class="sp-text-muted">{% trans %}You have no AI billing accounts. Each subscription you add gets one.{% endtrans %}</td></tr>
+        <tr><td colspan="9" class="sp-text-muted">{% trans %}You have no AI billing accounts. Each subscription you add gets one.{% endtrans %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

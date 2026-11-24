@@ -25,6 +25,7 @@ from specivo.core.database import get_session_factory
 from specivo.core.exceptions import AppError
 from specivo.mcp.ai_billing_account_tools import _ai_billing_accounts
 from specivo.mcp.ai_reimbursement_claim_tools import _ai_reimbursement_claims
+from specivo.mcp.ai_spend_budget_tools import _ai_spend_budgets
 from specivo.mcp.ai_subscription_tools import SubscriptionPeriod, _ai_subscriptions
 from specivo.mcp.ai_usage_tools import _ai_usage, _ai_usage_report, _log_ai_usage
 from specivo.mcp.annotations import TOOL_ANNOTATIONS
@@ -1925,6 +1926,58 @@ async def specivo_ai_reimbursement_claims(
             reason=reason,
             user=user,
             status=status,
+        )
+
+
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_ai_spend_budgets"],
+    description=(
+        "AI spend budgets: a monthly budget on a billing account (a company gateway or plan, or your own "
+        "account) or on everything one payer pays (employer or employee), with alerts mailed to administrators "
+        "and the account holder when spend reaches a threshold, once per threshold and month. Spend is the "
+        "instance spend report's (marginal spend plus seat cost) for the calendar month so far, in the budget's "
+        "currency. Ops: list (administrators see every budget, anyone else the budgets on their own accounts, "
+        "each with this month's spend and percent); create (billing_account as an id or slug, or payer "
+        "(administrators only), plus amount and currency, optional thresholds); update (budget_id plus amount, "
+        "currency, thresholds or is_active); delete (budget_id). amount is a decimal string such as '500'. "
+        "thresholds: whole percents from 1 to 1000, at most 5, default [80, 100]. Budgets on company accounts "
+        "and payers are for administrators; your own needs AI subscription self-service on. Needs an unlimited "
+        "API key."
+    ),
+)
+async def specivo_ai_spend_budgets(
+    op: Annotated[str, Field(description="One of: list, create, update, delete.")],
+    budget_id: Annotated[int | None, Field(description="update, delete: the budget ID.")] = None,
+    billing_account: Annotated[
+        str | int | None, Field(description="create: the billing account, an id or slug (yours first).")
+    ] = None,
+    payer: Annotated[
+        str | None, Field(description="create: employer or employee, for a budget on that payer's whole spend.")
+    ] = None,
+    amount: Annotated[
+        str | int | None, Field(description="create, update: the monthly budget as a string, e.g. '500'.")
+    ] = None,
+    currency: Annotated[str | None, Field(description="create, update: ISO currency code, e.g. USD.")] = None,
+    thresholds: Annotated[
+        list[int] | None, Field(description="create, update: alert percents, e.g. [50, 80, 100].")
+    ] = None,
+    is_active: Annotated[bool | None, Field(description="create, update: false pauses the alerts.")] = None,
+) -> str:
+    values = {
+        "amount": str(amount) if isinstance(amount, int) and not isinstance(amount, bool) else amount,
+        "currency": currency,
+        "thresholds": thresholds,
+        "is_active": is_active,
+    }
+    async with _get_session_and_user() as (session, caller):
+        return await _ai_spend_budgets(
+            session,
+            caller,
+            op,
+            budget_id=budget_id,
+            billing_account=billing_account,
+            payer=payer,
+            values=values,
         )
 
 

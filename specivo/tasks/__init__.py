@@ -64,6 +64,12 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.cleanup.purge_wiki_trash",
                 "schedule": 86400,  # daily
             },
+            # Budget thresholds alert once per month; hourly keeps an overnight agent run from
+            # going unnoticed until the next day.
+            "check-ai-spend-budgets": {
+                "task": "specivo.tasks.ai_usage.check_ai_spend_budgets",
+                "schedule": 3600,  # hourly
+            },
             "sweep-webhook-deliveries": {
                 "task": "specivo.tasks.webhooks.sweep_webhook_deliveries",
                 "schedule": _WEBHOOK_SWEEP_INTERVAL_SECONDS,

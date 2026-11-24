@@ -118,6 +118,41 @@ month again. Usage reported for the month after you submitted is not added to th
 Submitting, withdrawing, approving, rejecting, paying and exporting a claim are written to the
 [audit log](audit-log.md#ai-reimbursement-claims).
 
+## Budgets and alerts
+
+A **monthly budget** caps what AI usage may cost in a calendar month (UTC) and sends an email when the
+month's spend reaches a share of it. A budget covers one of:
+
+- **a company account**, for example a corporate gateway or a company plan. Administrators set it on
+  the account's page under **Admin → AI billing accounts**.
+- **everything one payer pays**: *Employer total* is all the AI spend the company carries, every
+  account and project together; *Employee total* is everything people pay themselves. Administrators
+  set these under **Payer budgets** on the same page.
+- **one of your own accounts**. You set it on the account's page under **My AI billing accounts**
+  (while AI subscription self-service is on), and administrators can set it for you.
+
+Each budget has an amount and a currency, and **alert thresholds**: the percents of the budget that
+send an email, *80, 100* unless you change them (up to five, from 1 to 1000, so *150* warns when
+spend is half again over). **Send alerts** off keeps the budget and its progress without emails.
+
+Spend is what the [spend report](../projects/ai-spend-reports.md) counts for the month so far:
+pay-per-token spend plus seat cost, the share of subscription fees carried by the usage (and, for a
+company plan, the fee of seats nobody holds). It is converted into the budget's currency at each
+amount's own day; spend without an exchange rate yet is not counted, and the budget says so.
+
+Specivo checks the budgets every hour. When the month's spend reaches a threshold, the active
+administrators get an email, and for a personal account its owner too, each in their own language.
+**Each threshold sends one email a month**: later checks, and raising the amount, do not send it
+again; the next month starts over. On the first day of a month the check also looks at the month
+that just ended, so usage reported late still alerts.
+
+Progress is shown as a bar with the spend and percent in the **Budget this month** column of the
+account lists, on each account's page with the alerts already sent, under **Payer budgets**, and
+under **Budgets this month** below the instance report in **Admin → AI spend**. Only administrators
+see budgets on company accounts and payers; a personal account's budget is seen only by its owner and
+administrators. Setting, changing and removing a budget on a company account or a payer, or somebody
+else's, and every alert sent, are written to the [audit log](audit-log.md#ai-spend-budgets).
+
 ## With your AI agent
 
 The `specivo_ai_billing_accounts` tool works like the pages, for the person whose API key the agent
@@ -138,6 +173,13 @@ The `specivo_ai_reimbursement_claims` tool handles claims: `list` (yours; admini
 `user="all"` or a login, and `status`), `get`, `create` (`month` as `YYYY-MM`, optional `currency`
 and `note`), `refresh`, `submit`, `withdraw`, `delete` and `export` (the CSV); administrators
 `approve`, `reject` (optional `reason`) and `paid`. It needs an unlimited key.
+
+The `specivo_ai_spend_budgets` tool handles budgets: `list` (every budget for administrators, your
+own for anyone else, each with this month's spend, percent and the alerts sent), `create`
+(`billing_account` as an id or slug, or `payer` for administrators, with `amount` as a string such as
+`"500"`, `currency` and optional `thresholds` such as `[50, 80, 100]`), `update` (`budget_id` plus
+`amount`, `currency`, `thresholds` or `is_active`) and `delete` (`budget_id`). It needs an unlimited
+key, and every change it makes is written to the audit log as `ai_spend_budgets_changed`.
 
 ## Through the API
 
@@ -181,6 +223,27 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 |---|---|
 | `GET`, `POST /api/v1/my/ai-reimbursement-claims/`; `GET`, `DELETE /api/v1/my/ai-reimbursement-claims/{id}/`; `POST .../{id}/refresh/`, `.../submit/`, `.../withdraw/`; `GET .../{id}/export/` (CSV) | the person, for their own claims |
 | `GET /api/v1/admin/ai-reimbursement-claims/` (`?status=`, `?user_id=`); `GET .../{id}/`; `POST .../{id}/approve/`, `.../reject/` (`{"reason": "..."}`), `.../paid/`; `GET .../{id}/export/` | administrators, never on their own claim |
+
+Budgets have their own endpoints. Amounts are strings; each budget in a response carries this
+month's `spend`, `percent`, the thresholds `reached` and those `alerted`, and `unconverted` when some
+spend has no exchange rate:
+
+```bash
+# The company's whole AI spend (administrators)
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  https://specivo.example.com/api/v1/admin/ai-spend-budgets/ \
+  -d '{"payer": "employer", "amount": "5000", "currency": "USD", "thresholds": [80, 100]}'
+
+# Your own API key
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  https://specivo.example.com/api/v1/my/ai-spend-budgets/ \
+  -d '{"billing_account_id": 12, "amount": "200", "currency": "USD"}'
+```
+
+| Endpoint | Who |
+|---|---|
+| `GET`, `POST /api/v1/my/ai-spend-budgets/`; `GET`, `PATCH`, `DELETE /api/v1/my/ai-spend-budgets/{id}/` | the person, for budgets on their own accounts; changes need self-service |
+| `GET /api/v1/admin/ai-spend-budgets/`; `POST` (`billing_account_id` or `payer`); `GET`, `PATCH`, `DELETE /api/v1/admin/ai-spend-budgets/{id}/` | administrators |
 
 Each claim lists `changed_entries`, and each of its entries `changed` (`deleted`, `excluded`,
 `billing` or `share`) when it is no longer what the claim froze.

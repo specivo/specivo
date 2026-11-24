@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "pages/auth/_ai_billing_account_macros.html" import error_text, kind_label, payer_label, cost_type_label, state_badge, routes_cell, tools_cell with context %}
+{% from "pages/auth/_ai_spend_budget_macros.html" import budget_cell, budget_meter, budget_error_text, budget_form with context %}
 
 {% block title %}{% trans %}AI billing accounts{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -18,6 +19,8 @@
 {% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account added.{% endtrans %}</div>
 {% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account saved.{% endtrans %}</div>
 {% elif notice == "deactivated" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Account switched off.{% endtrans %}</div>
+{% elif notice == "budget_saved" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Budget saved.{% endtrans %}</div>
+{% elif notice == "budget_removed" %}<div class="flash flash-success" role="status" data-testid="billing-account-notice">{% trans %}Budget removed.{% endtrans %}</div>
 {% endif %}
 {% if error.code %}<div class="flash flash-error" role="alert" data-testid="billing-account-error">{{ error_text(error) }}</div>{% endif %}
 
@@ -32,6 +35,7 @@
           <th>{% trans %}Routes{% endtrans %}</th>
           <th>{% trans %}Tools{% endtrans %}</th>
           <th>{% trans %}Default cost type{% endtrans %}</th>
+          <th>{% trans %}Budget this month{% endtrans %}</th>
           <th>{% trans %}Status{% endtrans %}</th>
           <th></th>
         </tr>
@@ -45,15 +49,29 @@
           <td>{{ routes_cell(a) }}</td>
           <td>{{ tools_cell(a) }}</td>
           <td>{% if a.default_cost_type %}{{ cost_type_label(a.default_cost_type) }}{% endif %}</td>
+          <td>{{ budget_cell(budgets.get(a.id)) }}</td>
           <td>{{ state_badge(a) }}</td>
           <td><a class="sp-btn-sm" href="{{ base }}/admin/ai-billing-accounts/{{ a.id }}/">{% trans %}Edit{% endtrans %}</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="sp-text-muted">{% trans %}There are no company accounts yet.{% endtrans %}</td></tr>
+        <tr><td colspan="9" class="sp-text-muted">{% trans %}There are no company accounts yet.{% endtrans %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="card sp-card-pad sp-mb-md" id="payer-budgets" data-testid="payer-budgets-card">
+  <h3 class="sp-card-h3">{% trans %}Payer budgets{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}A monthly budget on everything the company pays for AI (marginal spend plus seat cost, every account and project), or on everything people pay themselves. Administrators are mailed when the month's spend reaches each threshold, once per month. A single account's budget is set on its page.{% endtrans %}</p>
+  {% for p in payer_budgets %}
+  <section class="sp-budget-payer" data-testid="payer-budget" data-payer="{{ p.payer }}">
+    <h4 class="sp-budget-payer-title">{{ p.name }}</h4>
+    {% if p.budget %}{{ budget_meter(p.budget) }}{% endif %}
+    {% if p.error.code %}<div class="flash flash-error" role="alert" data-testid="budget-error">{{ budget_error_text(p.error) }}</div>{% endif %}
+    {{ budget_form(p.form, p.action, currencies, "payer-budget-" ~ p.payer, p.budget, p.delete_action) }}
+  </section>
+  {% endfor %}
 </div>
 
 <div class="card sp-card-pad" id="new-billing-account" data-testid="new-billing-account-card">

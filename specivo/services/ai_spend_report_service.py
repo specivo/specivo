@@ -261,6 +261,21 @@ def _check_report_args(date_from: date, date_to: date, period: str | None, sort:
         raise _invalid(f"cost_type must be one of {', '.join(AI_USAGE_COST_TYPES)}", "cost_type")
 
 
+def system_conditions(date_from: date, date_to: date, filters: ReportFilters) -> list[Any]:
+    """The WHERE conditions of the counted entries of the whole instance (no viewer: the budget check).
+
+    Only the date range, the excluded flag and the filters of
+    :meth:`ReportFilters.conditions` (billing, profile, run kind); the filters
+    ``AiUsageService._list_conditions`` takes are not supported here.
+    """
+    return [
+        AiUsageEntry.usage_date >= date_from,
+        AiUsageEntry.usage_date <= date_to,
+        AiUsageEntry.excluded_at.is_(None),
+        *filters.conditions(),
+    ]
+
+
 def period_start(day: date, period: str | None) -> date | None:
     """The first day of the *period* bucket holding *day* (None without a period)."""
     if period is None:
@@ -659,7 +674,7 @@ class AiSpendReportService:
     async def _report(  # noqa: PLR0913
         self,
         session: AsyncSession,
-        viewer: User,
+        viewer: User | None,
         *,
         project: Project | None,
         date_from: date,
@@ -680,7 +695,10 @@ class AiSpendReportService:
         _check_report_args(date_from, date_to, period, sort, filters)
         requested_period = period
         period = coarsen_period(date_from, date_to, period)
-        if holder:
+        # No viewer: the budget check (``budget_spend``), every counted entry of the instance.
+        if viewer is None:
+            project_set = None
+        elif holder:
             # A person's own usage across every project (reimbursement claims): no admin check, since the
             # conditions keep the viewer's own entries only, all of which they may read.
             if project is not None or projects is not None or filters.user_id != viewer.id:
@@ -690,16 +708,25 @@ class AiSpendReportService:
             project_set = await self._resolve_scope(session, viewer, project, projects)
 
         rates = ExchangeRateService()
-        policy, target = await self._policy_and_currency(session, rates, project, rate_policy, currency)
+        # The budget check (no viewer) measures in a budget's stored currency, even one switched off since.
+        chosen = currency if viewer is not None else None
+        policy, target = await self._policy_and_currency(session, rates, project, rate_policy, chosen)
+        if viewer is None and currency:
+            target = currency
 
-        seats_allowed = await self._seats_allowed(session, viewer, project, project_set, date_from, date_to)
+        if viewer is None:
+            seats_allowed, reimbursable_shown = True, False
+        else:
+            seats_allowed = await self._seats_allowed(session, viewer, project, project_set, date_from, date_to)
         seat_shown = include_seat_cost and seats_allowed
         unallocated_shown = seat_shown and project is None and project_set is None and not filters.excludes_seats
-        reimbursable_shown = reimbursable_allowed(viewer, filters.user_id, seat_shown)
-
-        conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
-        if project_set is not None:
-            conditions.append(await self._set_clause(session, viewer, project_set))
+        if viewer is None:
+            conditions = system_conditions(date_from, date_to, filters)
+        else:
+            reimbursable_shown = reimbursable_allowed(viewer, filters.user_id, seat_shown)
+            conditions = await self.conditions(session, viewer, project, date_from, date_to, filters)
+            if project_set is not None:
+                conditions.append(await self._set_clause(session, viewer, project_set))
         raw = await self._grouped_rows(
             session,
             conditions,
@@ -733,7 +760,8 @@ class AiSpendReportService:
         reimbursable_shown = reimbursable_shown and any(r.key["payer"] == PAYER_EMPLOYEE for r in payer_totals)
         for row in [*rows, totals, *payer_totals]:
             _finish(row, target, seat_shown, reimbursable_shown)
-        await self._label(session, viewer, project, rows, dims)
+        if viewer is not None:
+            await self._label(session, viewer, project, rows, dims)
         rows.sort(key=_sort_key(dims, period, sort))
         missing = await unpriced_models(session, conditions) if totals.unpriced_entries else []
         return SpendReport(
@@ -827,18 +855,23 @@ class AiSpendReportService:
     async def _usage_rows(
         self,
         session: AsyncSession,
-        viewer: User,
+        viewer: User | None,
         raw: list[dict[str, Any]],
         dims: tuple[str, ...],
         period: str | None,
     ) -> _RowBuilder:
         """A row builder holding the usage of *raw*, issues and billing accounts *viewer* cannot see folded
-        into one hidden key each (an issue you cannot see, "Personal account")."""
+        into one hidden key each (an issue you cannot see, "Personal account"). Nothing is folded without a
+        viewer (the budget check)."""
+        builder = _RowBuilder(dims, period)
+        if viewer is None:
+            for r in raw:
+                builder.add_usage(r)
+            return builder
         visible_issues = await self._visible_issues(session, viewer, {r["issue"] for r in raw if r["issue"]})
         names: dict[int, str | None] = {}
         if "billing_account" in dims:
             names = await account_names(session, viewer, {r["billing_account"] for r in raw})
-        builder = _RowBuilder(dims, period)
         for r in raw:
             if "issue" in dims and r["issue"] is not None and r["issue"] not in visible_issues:
                 r["issue"] = HIDDEN_ISSUE
@@ -891,7 +924,7 @@ class AiSpendReportService:
 
     @staticmethod
     async def _dimension_columns(
-        session: AsyncSession, viewer: User, dims: Collection[str]
+        session: AsyncSession, viewer: User | None, dims: Collection[str]
     ) -> tuple[dict[str, Any], list[Any]]:
         """The SQL expression of each of *dims*, and the laterals they need joined (``outerjoin(l, true())``).
 
@@ -903,6 +936,8 @@ class AiSpendReportService:
         planned = [d for d in dims if d in PLANNING_DIMENSIONS]
         if not planned:
             return columns, []
+        if viewer is None:
+            raise _invalid("Releases and sprints are grouped for a viewer only", "group_by")
         visibility = await planning_visibility(session, viewer)
         joined, laterals = planning_joins(planned, AiUsageEntry.issue_id, visibility)
         return {**columns, **joined}, laterals
@@ -979,6 +1014,40 @@ class AiSpendReportService:
             filters=filters,
             sort="key",
             holder=True,
+        )
+
+    async def budget_spend(
+        self,
+        session: AsyncSession,
+        *,
+        date_from: date,
+        date_to: date,
+        currency: str,
+    ) -> SpendReport:
+        """Spend per billing account (rows keyed by ``billing_account``) and per payer (``payer_totals``) over
+        every counted entry, whoever may read it: what the AI spend budgets measure.
+
+        The instance report's own rules (seat cost allocated and unallocated,
+        conversion at each amount's day under the default ``entry_date``
+        policy), without a viewer: no visibility narrowing and no hidden
+        accounts, because budgets and their alerts are about the account or
+        payer as a whole. Callers decide who may see the numbers
+        (:mod:`specivo.services.ai_spend_budget_service`). One report whatever
+        the number of budgets in *currency*.
+        """
+        return await self._report(
+            session,
+            None,
+            project=None,
+            date_from=date_from,
+            date_to=date_to,
+            dims=("billing_account",),
+            period=None,
+            currency=currency,
+            rate_policy=None,
+            include_seat_cost=True,
+            filters=ReportFilters(),
+            sort="key",
         )
 
     async def drill_facts(
