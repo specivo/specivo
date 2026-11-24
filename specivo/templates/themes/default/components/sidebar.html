@@ -58,6 +58,10 @@
     </a>
     {% endif %}
     {% if not anonymous %}
+    <a class="sidebar-item{% if active_page == 'graph' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/graph/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M6.3 8.2l4.4 7.6M17.7 8.2l-4.4 7.6"/></svg>
+      {% trans %}Graph{% endtrans %}
+    </a>
     <a class="sidebar-item{% if active_page == 'roadmap' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/roadmap/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       {% trans %}Roadmap{% endtrans %}

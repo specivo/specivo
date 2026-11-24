@@ -133,6 +133,33 @@ background with a progress count, and only one runs per project at a time. From 
 Tags, versions, sprints, assignees and the values of some metadata keys are part of the graph too,
 for AI agents: see [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph).
 
+## Seeing the graph
+
+The links can also be seen as a picture:
+
+- an issue has a **Graph** tab, next to **Relations**;
+- a wiki page has a **Graph** section at the bottom, under **Linked from**;
+- a project has a **Graph** page in its menu, with the project's most linked issues and wiki pages
+  and the links between them.
+
+On an issue or a page, the graph shows the item (drawn larger), what it links to and what links to it,
+and one step further. Issues, wiki pages, commits and pull requests, attachments and missing targets
+(a `[[page]]` or issue key that does not exist) each have their own colour; the legend under the graph
+names them. Under **Show links**, tick or untick kinds of link: wiki links, mentions, relations, parent
+and children, links to files, attachments, commits and pull requests are shown at first. Ticking
+**Tags**, **Components**, **Versions**, **Sprints** or **Assignees** adds them as small diamonds with
+the number of items they hold.
+
+Click an issue, page, commit or pull request to open it. Click a diamond (a tag, version and so on) to
+add its items to the graph. Drag to move the picture, scroll or pinch to zoom, and hover over an item or
+a line to see what it is. **Items in this graph**, under the picture, lists the same items as links, for
+the keyboard and screen readers, with a **Show its items** button for each tag, version and so on.
+
+The graph shows only what you can open yourself, like the lists above. It stops at a few hundred
+items; when it leaves some out, the line above the picture says so. **Show suggestions** adds
+suggested links, drawn as dashed lines, once your Specivo suggests links between similar issues and
+pages. The graph needs you to be signed in.
+
 ## What's next
 
 - [Wiki overview](index.md) — pages, slugs, nesting, and protected pages.

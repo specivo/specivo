@@ -280,6 +280,35 @@ async def project_roadmap(
     )
 
 
+@router.get("/projects/{key}/graph/", response_class=HTMLResponse)
+async def project_graph(
+    request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Render the project's link graph page: its most linked issues and wiki pages, drawn client-side.
+
+    The graph is read from ``/api/v1/projects/{key}/links/``, which filters it for the reader. A reader who
+    may see neither the project's issues nor its wiki gets the same 404 as that endpoint.
+    """
+    from specivo.services.entity_link_nodes import HubReader
+
+    hubs = HubReader(db, user)
+    if not (await hubs.issues_readable(project.id) or await hubs.wiki_readable(project.id)):
+        raise HTTPException(status_code=404, detail="Not found")
+    return get_templates().TemplateResponse(
+        request,
+        "pages/projects/graph.html",
+        context={
+            "user": user,
+            "active_page": "graph",
+            "active_project": project,
+            "project": project,
+        },
+    )
+
+
 async def _settings_members(db: AsyncSession, project: Project) -> dict[str, Any]:
     """The members tab: membership rows of users then groups, every group for the picker, and the people count."""
     from specivo.services.user_group_service import UserGroupService

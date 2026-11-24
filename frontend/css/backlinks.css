@@ -41,7 +41,8 @@
 .sp-backlinks-empty,
 .sp-backlinks-more { padding: var(--sp-space-md); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); text-align: center; }
 
-.sp-linked-from {
+.sp-linked-from,
+.sp-graph-block {
   margin-top: var(--sp-space-xl);
   border: 1px solid var(--sp-border);
   border-radius: var(--sp-border-radius);
@@ -54,7 +55,8 @@
   font-weight: 600;
   color: var(--sp-text-secondary);
 }
-.sp-linked-from[open] .sp-linked-from-summary { margin-bottom: var(--sp-space-sm); }
+.sp-linked-from[open] .sp-linked-from-summary,
+.sp-graph-block[open] .sp-linked-from-summary { margin-bottom: var(--sp-space-sm); }
 
 @media (max-width: 768px) {
   .sp-backlinks-row { padding: var(--sp-space-sm); }

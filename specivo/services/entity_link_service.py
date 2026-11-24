@@ -712,6 +712,120 @@ class EntityLinkService:
         await reader.describe(walk.graph, root, walk.order, count_attachments=count_attachments)
         return walk.graph
 
+    async def get_project_graph(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: int,
+        *,
+        kinds: Iterable[str] | None = None,
+        limit: int = ENTITY_LINKS_DEFAULT_LIMIT,
+        default_kinds: frozenset[str] = ALL_KINDS,
+    ) -> LinkGraph:
+        """Return the links between the most linked issues and wiki pages of a project that *user* may see.
+
+        The caller has already checked that *user* may reach the project. The
+        graph has no root: it starts from at most ``ENTITY_LINKS_MAX_EXPANDED``
+        seeds, the visible issues and live pages of the project with the most
+        text links, relations and parent/child links, and reads each seed's
+        outgoing edges (``direction="out"`` of :meth:`get_links`: its text
+        links, all its relations, parent, children, attachments, commits,
+        pull requests and hubs, as *kinds* asks). When *kinds* asks for edges
+        that the ranking does not count (attachments, commits, pull requests,
+        hubs), the most recently updated items fill the free seed places.
+
+        Every edge goes through the same reader filter as :meth:`get_links`:
+        a hidden neighbour is left out with its edge, and hub neighbours are
+        leaves with their ``degree`` (they are never expanded here). Edges have
+        no ``direction``. ``limit`` caps the nodes, seeds included;
+        ``truncated`` says when more were left out.
+        """
+        wanted, _explicit = _check_read("out", 1, kinds, default_kinds)
+        limit = max(1, min(limit, ENTITY_LINKS_MAX_LIMIT))
+        reader = _Reader(session, user)
+        seeds = await self._project_seeds(session, reader, project_id, wanted, min(limit, ENTITY_LINKS_MAX_EXPANDED))
+
+        # A root that is never a node: every seed and neighbour is listed in ``nodes``.
+        no_root: NodeKey = ("project", project_id)
+        walk = _Walk(no_root, limit)
+        walk.seen_nodes.update(seeds)
+        walk.order.extend(seeds)
+        raw: list[_RawEdge] = []
+        for seed in seeds:
+            raw.extend(await self._raw_edges(session, seed, "out", wanted, hubs=reader.hubs, cap=limit + 1))
+        walk.take(await reader.filter(raw), 1, frozenset())
+        # A seed none of whose links the reader may see is left out: the graph shows links, not a list.
+        linked = {end for edge, _adjacent in walk.graph.raw_edges for end in (edge.source, edge.target)}
+        await reader.describe(walk.graph, no_root, [node for node in walk.order if node in linked])
+        return walk.graph
+
+    async def _project_seeds(
+        self, session: AsyncSession, reader: _Reader, project_id: int, wanted: frozenset[str], count: int
+    ) -> list[NodeKey]:
+        """The *count* most linked issues and live wiki pages of the project that the reader may see."""
+        issue_ids = select(Issue.id).where(Issue.project_id == project_id).scalar_subquery()
+        page_ids = (
+            select(WikiPage.id)
+            .join(Wiki, Wiki.id == WikiPage.wiki_id)
+            .where(Wiki.project_id == project_id, WikiPage.deleted_at.is_(None))
+            .scalar_subquery()
+        )
+        issue_parts: list[Any] = []
+        page_parts: list[Any] = []
+        text_kinds = wanted & TEXT_LINK_KINDS
+        if text_kinds:
+            for column, ids, parts in (
+                (EntityLink.source_issue_id, issue_ids, issue_parts),
+                (EntityLink.target_issue_id, issue_ids, issue_parts),
+                (EntityLink.source_wiki_page_id, page_ids, page_parts),
+                (EntityLink.target_wiki_page_id, page_ids, page_parts),
+            ):
+                parts.append(select(column.label("id")).where(column.in_(ids), EntityLink.kind.in_(text_kinds)))
+        if KIND_RELATION in wanted:
+            for column in (IssueRelation.issue_from_id, IssueRelation.issue_to_id):
+                issue_parts.append(select(column.label("id")).where(column.in_(issue_ids)))  # noqa: PERF401
+        if wanted & {KIND_PARENT, KIND_CHILD}:
+            for model, ids, parts in ((Issue, issue_ids, issue_parts), (WikiPage, page_ids, page_parts)):
+                parts.append(select(model.parent_id.label("id")).where(model.id.in_(ids), model.parent_id.in_(ids)))
+                parts.append(select(model.id.label("id")).where(model.id.in_(ids), model.parent_id.in_(ids)))
+
+        # Read more candidates than needed: some may be hidden from the reader.
+        candidates = count * 3
+        ranked: list[tuple[int, NodeKey]] = []
+        for node_type, parts in (("issue", issue_parts), ("wiki_page", page_parts)):
+            if not parts:
+                continue
+            union = parts[0].union_all(*parts[1:]).subquery()
+            rows = await session.execute(
+                select(union.c.id, func.count().label("score"))
+                .group_by(union.c.id)
+                .order_by(func.count().desc(), union.c.id)
+                .limit(candidates)
+            )
+            ranked.extend((score, (node_type, item_id)) for item_id, score in rows)
+        ranked.sort(key=lambda pair: (-pair[0], pair[1][0], pair[1][1]))
+        nodes = [node for _score, node in ranked]
+
+        if len(nodes) < candidates and wanted - TEXT_LINK_KINDS - {KIND_RELATION, KIND_PARENT, KIND_CHILD}:
+            room = candidates - len(nodes)
+            taken = set(nodes)
+            recent_issues = await session.execute(
+                select(Issue.id).where(Issue.project_id == project_id).order_by(Issue.updated_at.desc()).limit(room)
+            )
+            recent_pages = await session.execute(
+                select(WikiPage.id).where(WikiPage.id.in_(page_ids)).order_by(WikiPage.id.desc()).limit(room)
+            )
+            recent: list[NodeKey] = [("issue", i) for i in recent_issues.scalars()]
+            recent += [("wiki_page", p) for p in recent_pages.scalars()]
+            for node in recent:
+                if node not in taken:
+                    nodes.append(node)
+                    taken.add(node)
+
+        await reader._load_issues({i for t, i in nodes if t == "issue"})
+        await reader._load_pages({i for t, i in nodes if t == "wiki_page"})
+        return [node for node in nodes if reader.visible(node)][:count]
+
     async def _raw_edges(
         self,
         session: AsyncSession,

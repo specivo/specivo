@@ -59,6 +59,7 @@
 @import "./versions.css";
 @import "./attachments.css";
 @import "./backlinks.css";
+@import "./link-graph.css";
 @import "./sprints.css";
 @import "./metadata.css";
 @import "./sprint-detail.css";

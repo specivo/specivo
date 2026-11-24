@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+{% from "pages/_link_graph.html" import link_graph %}
+
+{% block title %}{% trans %}Graph{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key},
+  {"label": _("Graph")}
+]) }}
+
+<div class="page-header">
+  <h1>{% trans %}Graph{% endtrans %}</h1>
+</div>
+<p class="sp-graph-page-intro">{% trans %}The project's most linked issues and wiki pages, with the links between them: links written in text, relations, parents and children. Click an item to open it, or a tag, version or other group to show its items.{% endtrans %}</p>
+
+{{ link_graph(base ~ "/api/v1/projects/" ~ project.key ~ "/links/", "project", "project-graph", true) }}
+{% endblock %}
+
+{% block chart_js %}<script src="{{ base }}/static/dist/js/{{ versioned['link-graph.min.js'] }}" defer></script>{% endblock %}

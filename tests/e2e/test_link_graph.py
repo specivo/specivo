@@ -85,3 +85,40 @@ def test_settings_search_tab_shows_the_link_graph(admin_page: Page, linked: dict
     # The rebuild command stamped the project.
     expect(card.get_by_test_id("link-graph-rebuilt-at")).to_contain_text("Last rebuilt:")
     tracker.assert_no_errors()
+
+
+def test_project_graph_draws_and_filters(admin_page: Page, linked: dict) -> None:
+    """The project's Graph page draws its links; unticking a kind reloads the graph without it."""
+    tracker = ConsoleErrorTracker().attach(admin_page)
+    admin_page.goto(f"/projects/{linked['key']}/graph/")
+    graph = admin_page.get_by_test_id("project-graph")
+    items = graph.get_by_test_id("project-graph-items")
+    # Plan the release -> Key Rotation -> the target issue, and the missing runbook.
+    expect(items.locator("li")).to_have_count(4)
+    expect(graph.locator("[data-graph-canvas] svg")).to_be_visible()
+    expect(graph.locator("[data-graph-status]")).to_contain_text("4 items, 3 links")
+
+    graph.locator("label", has_text="Wiki links").locator("input").uncheck()
+    # Only the mention of the target issue on the wiki page is left.
+    expect(items.locator("li")).to_have_count(2)
+    expect(items).to_contain_text(linked["target"]["key"])
+    expect(items).not_to_contain_text("Plan the release")
+
+    # A server that does not know suggestions yet ignores the switch.
+    graph.get_by_test_id("project-graph-suggestions").check()
+    expect(items.locator("li")).to_have_count(2)
+    tracker.assert_no_errors()
+
+
+def test_issue_graph_tab_loads_on_first_opening(admin_page: Page, linked: dict) -> None:
+    tracker = ConsoleErrorTracker().attach(admin_page)
+    admin_page.goto(f"/issue/{linked['source']['key']}/")
+    graph = admin_page.get_by_test_id("issue-graph")
+    expect(graph).to_be_hidden()
+    assert admin_page.locator('script[src*="link-graph.min"]').count() == 0
+    admin_page.get_by_test_id("graph-tab").click()
+    expect(graph.locator("[data-graph-canvas] svg")).to_be_visible()
+    # Two hops: the wiki page, then the issue it mentions and the missing runbook.
+    expect(graph.get_by_test_id("issue-graph-items").locator("li")).to_have_count(4)
+    expect(graph.get_by_test_id("issue-graph-items")).to_contain_text("Key Rotation")
+    tracker.assert_no_errors()

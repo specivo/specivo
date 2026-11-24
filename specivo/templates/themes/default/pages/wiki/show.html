@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, tag_badge, tag_field_input %}
+{% from "pages/_link_graph.html" import link_graph %}
 
 {% block title %}{{ wiki_page.title }} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -297,6 +298,12 @@
            hx-swap="innerHTML">
         <div class="sp-backlinks-empty">{% trans %}Loading links…{% endtrans %}</div>
       </div>
+    </details>
+    {# Graph: the page's link graph, drawn client-side from the links JSON on
+       first opening (modules/link-graph-loader.js loads the bundle). #}
+    <details class="sp-graph-block" data-sp-graph-block data-testid="wiki-graph-block">
+      <summary class="sp-linked-from-summary">{% trans %}Graph{% endtrans %}</summary>
+      {{ link_graph(base ~ "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ (wiki_page.slug | urlencode) ~ "/links/", "item", "wiki-graph") }}
     </details>
     {% endif %}
   </div>

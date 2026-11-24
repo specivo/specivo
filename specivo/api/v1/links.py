@@ -1,4 +1,4 @@
-"""Link graph API: what an issue or wiki page links to, and what links to it."""
+"""Link graph API: what an issue, wiki page or hub links to, what links to it, and a project's graph."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import ENTITY_LINKS_DEFAULT_LIMIT, ENTITY_LINKS_MAX_LIMIT
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import ValidationError
+from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.links import LinkGraphOut
+from specivo.services.entity_link_nodes import HubReader
 from specivo.services.entity_link_service import ALL_KINDS, ITEM_KINDS, EntityLinkService, NodeKey, resolve_root
+from specivo.services.project_service import ProjectService
 
 router = APIRouter(tags=["links"])
 _service = EntityLinkService()
@@ -94,3 +96,59 @@ async def get_wiki_page_links(
     """Links of a wiki page: what it links to and what links to it (backlinks), filtered for the caller."""
     root = await resolve_root(db, current_user, f"wiki:{project_key}/{slug}")
     return await _graph(db, current_user, root, direction, depth, kinds, limit)
+
+
+@router.get("/links/", response_model=LinkGraphOut)
+async def get_links(
+    ref: str = Query(
+        ...,
+        min_length=1,
+        max_length=600,
+        description=(
+            "The root: ACME-12, wiki:ACME/slug, tag:ACME/<name>, component:ACME/<value>, "
+            "metadata:ACME/<key>/<value>, version:ACME/<name>, sprint:ACME/<name> or user:<login>"
+        ),
+    ),
+    direction: str = _DIRECTION,
+    depth: int = _DEPTH,
+    kinds: str | None = _KINDS,
+    limit: int = _LIMIT,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> LinkGraphOut:
+    """Links of any node the link graph can start from: an issue, a wiki page, or a tag, component, metadata
+    value, version, sprint or user (whose members are listed). The graph view uses it to expand a hub node.
+
+    A root the caller may not see is not found, as on the issue and wiki page routes.
+    """
+    try:
+        root = await resolve_root(db, current_user, ref, hubs=True)
+    except ValueError as exc:
+        raise ValidationError(str(exc), field="ref") from None
+    return await _graph(db, current_user, root, direction, depth, kinds, limit)
+
+
+@router.get("/projects/{project_key}/links/", response_model=LinkGraphOut)
+async def get_project_links(
+    project_key: str,
+    kinds: str | None = _KINDS,
+    limit: int = _LIMIT,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> LinkGraphOut:
+    """The project's link graph: its most linked issues and wiki pages with their links, filtered for the caller.
+
+    ``root`` is null and edges have no direction. A project the caller cannot reach, or whose issues and wiki
+    they may not read, is not found.
+    """
+    try:
+        project = await ProjectService().get_readable_by_key(db, project_key.upper(), current_user)
+    except NotFoundError:
+        raise NotFoundError("Project not found") from None
+    hubs = HubReader(db, current_user)
+    if not (await hubs.issues_readable(project.id) or await hubs.wiki_readable(project.id)):
+        raise NotFoundError("Project not found")
+    graph = await _service.get_project_graph(
+        db, current_user, project.id, kinds=_parse_kinds(kinds), limit=limit, default_kinds=ITEM_KINDS
+    )
+    return LinkGraphOut.model_validate(graph.as_dict())
