@@ -11,7 +11,14 @@ from specivo.core.exceptions import ValidationError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.links import LinkGraphOut
-from specivo.services.entity_link_service import ALL_KINDS, ITEM_KINDS, EntityLinkService, NodeKey, resolve_root
+from specivo.services.entity_link_service import (
+    ALL_KINDS,
+    ITEM_KINDS,
+    KIND_SIMILAR,
+    EntityLinkService,
+    NodeKey,
+    resolve_root,
+)
 
 router = APIRouter(tags=["links"])
 _service = EntityLinkService()
@@ -29,7 +36,15 @@ _KINDS = Query(
         + ", ".join(sorted(ALL_KINDS))
         + ". When omitted, every kind except the structured-node ones (tagged, in_component, in_metadata, "
         "targets_version, in_sprint, assigned_to), which add tag, component, metadata, version, sprint and "
-        "user nodes with their degree"
+        "user nodes with their degree, and except similar (suggested links), which comes only when named "
+        "or with include_suggestions=true"
+    ),
+)
+_INCLUDE_SUGGESTIONS = Query(
+    False,
+    description=(
+        "Add suggested links (kind similar, suggested: true, the cosine score in label) to the kinds read: "
+        "issues and wiki pages with similar content that are not linked yet"
     ),
 )
 _LIMIT = Query(ENTITY_LINKS_DEFAULT_LIMIT, ge=1, le=ENTITY_LINKS_MAX_LIMIT, description="Neighbour nodes at most")
@@ -46,15 +61,25 @@ def _parse_kinds(kinds: str | None) -> list[str] | None:
 
 
 async def _graph(
-    db: AsyncSession, user: User, root: NodeKey, direction: str, depth: int, kinds: str | None, limit: int
+    db: AsyncSession,
+    user: User,
+    root: NodeKey,
+    direction: str,
+    depth: int,
+    kinds: str | None,
+    limit: int,
+    include_suggestions: bool = False,
 ) -> LinkGraphOut:
+    parsed = _parse_kinds(kinds)
+    if include_suggestions:
+        parsed = sorted(set(parsed or ITEM_KINDS) | {KIND_SIMILAR})
     graph = await _service.get_links(
         db,
         user,
         root,
         direction=direction,
         depth=depth,
-        kinds=_parse_kinds(kinds),
+        kinds=parsed,
         limit=limit,
         default_kinds=ITEM_KINDS,
     )
@@ -68,6 +93,7 @@ async def get_issue_links(
     depth: int = _DEPTH,
     kinds: str | None = _KINDS,
     limit: int = _LIMIT,
+    include_suggestions: bool = _INCLUDE_SUGGESTIONS,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> LinkGraphOut:
@@ -77,7 +103,7 @@ async def get_issue_links(
     Only what the caller may see is returned; a link to or from a hidden item is left out entirely.
     """
     root = await resolve_root(db, current_user, issue_ref)
-    return await _graph(db, current_user, root, direction, depth, kinds, limit)
+    return await _graph(db, current_user, root, direction, depth, kinds, limit, include_suggestions)
 
 
 @router.get("/projects/{project_key}/wiki/{slug}/links/", response_model=LinkGraphOut)
@@ -88,9 +114,10 @@ async def get_wiki_page_links(
     depth: int = _DEPTH,
     kinds: str | None = _KINDS,
     limit: int = _LIMIT,
+    include_suggestions: bool = _INCLUDE_SUGGESTIONS,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> LinkGraphOut:
     """Links of a wiki page: what it links to and what links to it (backlinks), filtered for the caller."""
     root = await resolve_root(db, current_user, f"wiki:{project_key}/{slug}")
-    return await _graph(db, current_user, root, direction, depth, kinds, limit)
+    return await _graph(db, current_user, root, direction, depth, kinds, limit, include_suggestions)

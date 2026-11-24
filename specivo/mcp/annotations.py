@@ -99,6 +99,8 @@ _IDEMPOTENT = (
     "specivo_update_recurring_pattern",
     "specivo_update_metadata_schema",
     "specivo_add_relation",
+    # Ops accept, dismiss: a decided suggestion is refused when decided again.
+    "specivo_link_suggestion",
     # Ops get, add, remove, set: adding a tag twice or removing it twice changes nothing.
     "specivo_tag",
     # Ops list, get, update, exclude, include: none of them adds or deletes entries.

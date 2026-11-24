@@ -46,6 +46,7 @@ from specivo.models.attachment import Attachment
 from specivo.models.entity_link import (
     KIND_ATTACHMENT_LINK,
     KIND_MENTION,
+    KIND_TYPED_LINK,
     KIND_WIKI_LINK,
     SOURCE_ISSUE,
     SOURCE_JOURNAL,
@@ -53,6 +54,7 @@ from specivo.models.entity_link import (
     TARGET_ATTACHMENT,
     TARGET_ISSUE,
     TARGET_WIKI_PAGE,
+    TEXT_KINDS,
     EntityLink,
 )
 from specivo.models.issue import Issue, IssueRefAlias
@@ -91,14 +93,21 @@ KIND_CHILD = "child"
 KIND_ATTACHMENT = "attachment"
 KIND_COMMIT = "commit"
 KIND_PULL_REQUEST = "pull_request"
+# A suggested link between two similar items (``link_suggestion_service``): never read unless asked for.
+KIND_SIMILAR = "similar"
 TEXT_LINK_KINDS = frozenset({KIND_WIKI_LINK, KIND_MENTION, KIND_ATTACHMENT_LINK})
+# Kinds stored in ``entity_links``: the text links, and the typed links made by accepting a suggestion.
+STORED_LINK_KINDS = TEXT_LINK_KINDS | {KIND_TYPED_LINK}
 STRUCTURED_KINDS = frozenset({KIND_RELATION, KIND_PARENT, KIND_CHILD, KIND_ATTACHMENT, KIND_COMMIT, KIND_PULL_REQUEST})
 # What the REST API and the web pages read when no kinds are given: links between items, no hubs.
-ITEM_KINDS = TEXT_LINK_KINDS | STRUCTURED_KINDS
-# Edges from an issue or page to a tag, metadata value, version, sprint or assignee (``entity_link_nodes``).
-ALL_KINDS = ITEM_KINDS | HUB_KINDS
+ITEM_KINDS = STORED_LINK_KINDS | STRUCTURED_KINDS
+# Every kind a read may name: items, the edges from an issue or page to a tag, metadata value,
+# version, sprint or assignee (``entity_link_nodes``), and suggested links.
+ALL_KINDS = ITEM_KINDS | HUB_KINDS | {KIND_SIMILAR}
+# What a read without kinds may return at most: suggestions only ever come when asked for.
+DEFAULT_KINDS = ALL_KINDS - {KIND_SIMILAR}
 # What ``specivo_get_links`` reads when no types are given: files are counted on the nodes instead.
-AGENT_DEFAULT_KINDS = ALL_KINDS - {KIND_ATTACHMENT}
+AGENT_DEFAULT_KINDS = DEFAULT_KINDS - {KIND_ATTACHMENT}
 
 DIRECTIONS = ("in", "out", "both")
 
@@ -384,6 +393,7 @@ class EntityLinkService:
             await self.resolve_incoming(session, TARGET_WIKI_PAGE, source_id)
 
     async def _delete_source_links(self, session: AsyncSession, source_type: str, source_id: int) -> None:
+        """Delete the text links of one source; typed links (made by accepting a suggestion) stay."""
         column = {
             SOURCE_ISSUE: EntityLink.source_issue_id,
             SOURCE_JOURNAL: EntityLink.source_journal_id,
@@ -392,7 +402,9 @@ class EntityLinkService:
         if column is None:
             raise ValueError(f"Unknown link source type: {source_type!r}")
         await session.execute(
-            delete(EntityLink).where(column == source_id).execution_options(synchronize_session=False)
+            delete(EntityLink)
+            .where(column == source_id, EntityLink.kind.in_(TEXT_KINDS))
+            .execution_options(synchronize_session=False)
         )
 
     async def _load_source(self, session: AsyncSession, source_type: str, source_id: int) -> _Source | None:
@@ -659,7 +671,7 @@ class EntityLinkService:
         depth: int = 1,
         kinds: Iterable[str] | None = None,
         limit: int = ENTITY_LINKS_DEFAULT_LIMIT,
-        default_kinds: frozenset[str] = ALL_KINDS,
+        default_kinds: frozenset[str] = DEFAULT_KINDS,
         count_attachments: bool = False,
         reader: _Reader | None = None,
     ) -> LinkGraph:
@@ -683,6 +695,8 @@ class EntityLinkService:
           leaf with its ``degree``.
         - ``kinds``: only these edge kinds (``ALL_KINDS``); *default_kinds*
           when None. A hub root always lists its members, whatever *kinds*.
+          ``similar`` (suggested links of the default embedding model) is
+          read only when named here or in *default_kinds*.
         - ``limit``: at most this many neighbour nodes besides *root*
           (capped at ``ENTITY_LINKS_MAX_LIMIT``); ``truncated`` says when
           more were left out.
@@ -697,12 +711,21 @@ class EntityLinkService:
         limit = max(1, min(limit, ENTITY_LINKS_MAX_LIMIT))
 
         reader = reader or _Reader(session, user)
+        model_id = None
+        if KIND_SIMILAR in wanted:
+            from specivo.services.link_suggestion_service import default_model_id
+
+            model_id = await default_model_id(session)
         walk = _Walk(root, limit)
         frontier: list[NodeKey] = [root]
         for hop in range(depth):
             raw: list[_RawEdge] = []
             for node in frontier:
-                raw.extend(await self._raw_edges(session, node, direction, wanted, hubs=reader.hubs, cap=limit + 1))
+                raw.extend(
+                    await self._raw_edges(
+                        session, node, direction, wanted, hubs=reader.hubs, cap=limit + 1, model_id=model_id
+                    )
+                )
             next_frontier = walk.take(await reader.filter(raw), hop, explicit)
             # The last frontier is never expanded, so capping it would leave nothing out.
             if hop < depth - 1 and len(next_frontier) > ENTITY_LINKS_MAX_EXPANDED:
@@ -721,6 +744,7 @@ class EntityLinkService:
         *,
         hubs: HubReader | None = None,
         cap: int = ENTITY_LINKS_MAX_LIMIT + 1,
+        model_id: int | None = None,
     ) -> list[_RawEdge]:
         if node[0] in HUB_TYPES:
             # A hub's members point at it; *hubs* lists only those the reader may see.
@@ -728,7 +752,10 @@ class EntityLinkService:
                 return []
             return await hubs.member_edges(node, kinds, cap)
         edges: list[_RawEdge] = []
-        text_kinds = kinds & TEXT_LINK_KINDS
+        if KIND_SIMILAR in kinds and model_id is not None:
+            # A suggestion has no direction: it is read from either end, whatever *direction*.
+            edges.extend(await _similar_edges(session, node, model_id))
+        text_kinds = kinds & STORED_LINK_KINDS
         if text_kinds and direction in ("out", "both"):
             edges.extend(await self._text_edges_out(session, node, text_kinds))
         if text_kinds and direction in ("in", "both"):
@@ -843,7 +870,7 @@ class EntityLinkService:
                     node,
                     target,
                     link.kind,
-                    label=link.display_text,
+                    label=link_label(link),
                     via_journal_id=link.source_journal_id,
                     broken_ref=None if target is not None else _broken_ref(link),
                     broken_project_id=link.target_project_id,
@@ -884,7 +911,7 @@ class EntityLinkService:
                     source,
                     node,
                     link.kind,
-                    label=link.display_text,
+                    label=link_label(link),
                     via_journal_id=link.source_journal_id,
                     identity=("text", link.id),
                 )
@@ -1039,6 +1066,29 @@ def _first_sighting(seen: set[tuple[Any, ...]], edge: _RawEdge) -> bool:
     return True
 
 
+def link_label(link: EntityLink) -> str | None:
+    """The label of a stored link's edge: the text as written, or a typed link's type."""
+    return link.link_type if link.kind == KIND_TYPED_LINK else link.display_text
+
+
+async def _similar_edges(session: AsyncSession, node: NodeKey, model_id: int) -> list[_RawEdge]:
+    """The open suggested links of an issue or page, labelled with their score; the reader filters them."""
+    if node[0] not in ("issue", "wiki_page"):
+        return []
+    from specivo.services.link_suggestion_service import pending_suggestions
+
+    return [
+        _RawEdge(
+            node,
+            suggestion.other,
+            KIND_SIMILAR,
+            label=f"{suggestion.score:.3f}",
+            identity=(KIND_SIMILAR, suggestion.id),
+        )
+        for suggestion in await pending_suggestions(session, (node[0], int(node[1])), model_id)
+    ]
+
+
 async def _relation_edges(session: AsyncSession, node: NodeKey) -> list[_RawEdge]:
     """The issue's relations, each labelled as seen from the issue."""
     from specivo.services.relation_service import RELATION_TYPES
@@ -1124,6 +1174,8 @@ class LinkEdge:
     broken: bool = False
     # Where the comment a link is written in is shown; for the web page, not the JSON.
     via_url: str | None = None
+    # A suggested link (kind ``similar``), not a link anyone made.
+    suggested: bool = False
 
 
 @dataclass(slots=True)
@@ -1174,6 +1226,8 @@ def _edge_dict(edge: LinkEdge) -> dict[str, Any]:
             out[name] = value
     if edge.broken:
         out["broken"] = True
+    if edge.suggested:
+        out["suggested"] = True
     return out
 
 
@@ -1488,6 +1542,7 @@ class _Reader:
                     via=journal_refs[raw.via_journal_id][0] if raw.via_journal_id in journal_refs else None,
                     via_url=journal_refs[raw.via_journal_id][1] if raw.via_journal_id in journal_refs else None,
                     broken=raw.target is None,
+                    suggested=raw.kind == KIND_SIMILAR,
                 )
             )
         graph.raw_edges = []

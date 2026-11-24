@@ -174,6 +174,16 @@ SEARCH_EXPAND_NEIGHBOURS = 10
 # Project settings graph_metadata_keys: how many keys at most, and how long each may be.
 GRAPH_METADATA_KEYS_MAX = 10
 GRAPH_METADATA_KEY_MAX_LENGTH = 64
+# Suggested links (``similar`` edges) from document vectors: the nearest neighbours kept per
+# item, the default cosine similarity they need (per project: settings["similar_links_threshold"],
+# within the bounds below), the extra candidates read so that linked and dismissed pairs do not
+# leave an item short, and how many are listed inline by show_issue / read_wiki and the web pages.
+SIMILAR_LINKS_TOP_K = 5
+SIMILAR_LINKS_DEFAULT_THRESHOLD = 0.80
+SIMILAR_LINKS_MIN_THRESHOLD = 0.5
+SIMILAR_LINKS_MAX_THRESHOLD = 0.99
+SIMILAR_LINKS_CANDIDATE_MARGIN = 20
+SIMILAR_LINKS_INLINE_LIMIT = 5
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3

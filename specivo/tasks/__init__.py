@@ -78,6 +78,12 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.repositories.sweep_repository_deliveries",
                 "schedule": _REPOSITORY_SWEEP_INTERVAL_SECONDS,
             },
+            # Suggested links from the embeddings: recomputed per project once a day, on top of the
+            # incremental updates queued whenever an issue or page is embedded again.
+            "sweep-similar-links": {
+                "task": "specivo.tasks.link_suggestions.sweep_similar_links",
+                "schedule": crontab(minute=40, hour=3),
+            },
             "queue-link-graph-backfill": {
                 "task": "specivo.tasks.entity_links.queue_link_graph_backfill",
                 "schedule": 3600,  # every hour
@@ -143,6 +149,7 @@ from specivo.tasks import (  # noqa: E402, F401
     embeddings,
     entity_links,
     exchange_rates,
+    link_suggestions,
     notifications,
     recurring,
     repositories,

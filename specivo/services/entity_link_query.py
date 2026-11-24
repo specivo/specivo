@@ -94,7 +94,7 @@ from specivo.services.entity_link_service import (
     KIND_CHILD,
     KIND_PARENT,
     KIND_RELATION,
-    TEXT_LINK_KINDS,
+    STORED_LINK_KINDS,
     EntityLinkService,
     LinkEdge,
     LinkGraph,
@@ -104,10 +104,11 @@ from specivo.services.entity_link_service import (
     _RawEdge,
     _Reader,
     _target_node,
+    link_label,
 )
 
 # What a path follows when ``types`` is not given: links between items, no hubs.
-PATH_KINDS = TEXT_LINK_KINDS | {KIND_RELATION, KIND_PARENT, KIND_CHILD}
+PATH_KINDS = STORED_LINK_KINDS | {KIND_RELATION, KIND_PARENT, KIND_CHILD}
 NO_PATH = "no_path_within_4_hops"
 BUDGET_EXHAUSTED = "budget_exhausted"
 _ITEM_TYPES = ("issue", "wiki_page")
@@ -335,8 +336,8 @@ async def item_edges(
     through them.
     """
     edges: list[_RawEdge] = []
-    if kinds & TEXT_LINK_KINDS and (issues or pages):
-        edges.extend(await _text_edges(session, issues, pages, kinds & TEXT_LINK_KINDS, cap))
+    if kinds & STORED_LINK_KINDS and (issues or pages):
+        edges.extend(await _text_edges(session, issues, pages, kinds & STORED_LINK_KINDS, cap))
     if issues and KIND_RELATION in kinds:
         edges.extend(await _relations_of(session, issues, cap))
     if kinds & {KIND_PARENT, KIND_CHILD}:
@@ -422,7 +423,7 @@ async def _text_edges(
                 source,
                 target,
                 link.kind,
-                label=link.display_text,
+                label=link_label(link),
                 via_journal_id=link.source_journal_id,
                 identity=("text", link.id),
             )
@@ -676,11 +677,16 @@ class _Writer:
 
     def edge(self, edge: LinkEdge) -> str:
         kind = f"{edge.kind}:{edge.relation_type}" if edge.relation_type else edge.kind
+        if edge.suggested or edge.kind == "typed_link":
+            # The score of a suggestion, the type of a typed link.
+            kind = f"{edge.kind}:{edge.label}"
         source = self.node(edge.source)
         target = f"{edge.target} (broken)" if edge.broken else self.node(edge.target)
         line = f"{source} -{kind}-> {target}"
         if edge.via:
             line += f" (in {edge.via})"
+        if edge.suggested:
+            line += " (suggested)"
         return line
 
 

@@ -41,6 +41,7 @@ from specivo.api.v1.hermes_events import router as hermes_events_router
 from specivo.api.v1.hermes_receivers import router as hermes_receivers_router
 from specivo.api.v1.issues import router as issues_router
 from specivo.api.v1.link_graph_admin import router as link_graph_admin_router
+from specivo.api.v1.link_suggestions import router as link_suggestions_router
 from specivo.api.v1.links import router as links_router
 from specivo.api.v1.markdown import router as markdown_router
 from specivo.api.v1.metadata import router as metadata_router
@@ -69,6 +70,7 @@ api_router.include_router(projects_router)
 api_router.include_router(issues_router)
 api_router.include_router(relations_router)
 api_router.include_router(links_router)
+api_router.include_router(link_suggestions_router)
 api_router.include_router(link_graph_admin_router)
 api_router.include_router(versions_router)
 api_router.include_router(recurring_patterns_router)

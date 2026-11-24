@@ -298,6 +298,16 @@
         <div class="sp-backlinks-empty">{% trans %}Loading links…{% endtrans %}</div>
       </div>
     </details>
+    {# Possibly related: suggested links (similar content, not linked yet), loaded on first opening. #}
+    <details class="sp-linked-from">
+      <summary class="sp-linked-from-summary">{% trans %}Possibly related{% endtrans %}</summary>
+      <div id="wiki-suggestions"
+           hx-get="{{ base }}/partials/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/suggestions/"
+           hx-trigger="toggle from:closest details once"
+           hx-swap="innerHTML">
+        <div class="sp-backlinks-empty">{% trans %}Loading suggestions…{% endtrans %}</div>
+      </div>
+    </details>
     {% endif %}
   </div>
 

@@ -66,7 +66,8 @@ The options:
 |---|---|
 | `direction` | `in` (what points here, or a node's members), `out` or `both` (default). |
 | `depth` | `1` (default) or `2`, which expands the linked issues and pages once more. From a tag, version, sprint, component, metadata value or person, `3` is allowed, for example a version, its issues, their tags and the pages with those tags. |
-| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`. Naming a node kind also expands those nodes at depth 2. |
+| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Typed links (accepted suggestions): `typed_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`. Suggested links: `similar` (never returned unless named). Naming a node kind also expands those nodes at depth 2. |
+| `include_suggestions` | `true` adds suggested links (kind `similar`) to the kinds read. Off by default. |
 | `limit` | Neighbours at most, 1 to 200 (default 50). `truncated` says when more were left out. |
 | `to` | Another ref. Returns the shortest path between the two instead of the neighbours (see below). |
 | `filter` | Keeps only the issues that match, for example `{"status": "open", "component": "importer"}` (see below). |
@@ -94,6 +95,17 @@ kept issue.
 `root: ACME-12 "Import fails" [In Progress] (14 nodes, 17 edges)` (plus `, truncated` when
 applicable), then one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook "Runbook"`. A node's
 title is written once, after its ref.
+
+**Suggested links.** `specivo_show_issue` and `specivo_read_wiki` end with a line `Possibly related
+(suggested, not linked):` listing up to five issues or pages of the same project whose content is
+close (with a score from 0 to 1) and that nothing links yet. `specivo_get_links` returns them only
+when asked: `include_suggestions=true` or `types=["similar"]` adds edges of kind `similar`, with
+`suggested: true` and the score in `label`. They are hints from the embeddings, not links.
+`specivo_link_suggestion(op="accept", ref, other_ref, link_type)` makes one a real link: a relation
+between two issues (`link_type` is the relation type, `relates` by default), or a typed link from
+`ref` to `other_ref` for an issue and a page or two pages (`documents`, `implements`, `decided_in`,
+`supersedes` or `see_also`, the default), listed as kind `typed_link`. `op="dismiss"` hides the pair
+for good. Both need the permission that makes the link, and both are in the audit log.
 
 ??? note "Which metadata keys become nodes"
     Project managers choose the keys in **Project settings → General → Metadata keys in the link
