@@ -9,9 +9,10 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.admin import require_admin_api
+from specivo.api.v1.admin import require_admin_api, require_admin_session_api
+from specivo.core.constants import CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
+from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
@@ -100,7 +101,7 @@ async def get_concept_extraction(
     """
     project = await _project(db, key, current_user)
     await _require_manage(db, project, current_user)
-    return ConceptExtractionOut.model_validate(await project_status(db, project))
+    return ConceptExtractionOut.model_validate(await project_status(db, project, full_url=current_user.is_admin))
 
 
 @router.post("/{key}/concept-extraction/run/", response_model=ConceptRunOut, status_code=status.HTTP_202_ACCEPTED)
@@ -109,14 +110,46 @@ async def run_concept_extraction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> ConceptRunOut:
-    """Queue an extraction run now (changed issues and pages only, up to the run limit). Needs ``manage_project``."""
+    """Queue an extraction run now (changed issues and pages only, up to the run limit). Needs ``manage_project``.
+
+    The run's AI usage is logged in the caller's name. One manual run per project
+    every ``CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS`` (429 with ``Retry-After``).
+    """
     project = await _project(db, key, current_user)
     await _require_manage(db, project, current_user)
     if not extraction_enabled(project.settings):
         raise ValidationError("Concept extraction is off for this project", field="concept_extraction")
     if await _providers.get(db, project.id) is None:
         raise ValidationError("This project has no AI provider", field="provider")
-    return ConceptRunOut(queued=dispatch_extract(project.id))
+    await _claim_cooldown(project.id)
+    return ConceptRunOut(queued=dispatch_extract(project.id, current_user.id))
+
+
+async def _claim_cooldown(project_id: int) -> None:
+    """Allow one manual run per project per cooldown; refuse (429) the ones in between.
+
+    Without Redis the run is allowed: the run lock still keeps runs one at a time.
+    """
+    from redis.exceptions import RedisError
+
+    from specivo.core.redis import get_redis
+
+    key = f"specivo:concept_extraction_requested:{project_id}"
+    try:
+        redis = await get_redis()
+        claimed = await redis.set(key, "1", nx=True, ex=CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS)
+        if claimed:
+            return
+        retry = await redis.ttl(key)
+    except RedisError:
+        return
+    retry = retry if isinstance(retry, int) and retry > 0 else CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS
+    raise AppError(
+        code="rate_limited",
+        message="A run of this project was queued a short while ago; try again later",
+        status_code=429,
+        headers={"Retry-After": str(retry)},
+    )
 
 
 @router.put("/{key}/ai-provider/", response_model=AiProviderOut)
@@ -124,10 +157,15 @@ async def set_ai_provider(
     key: str,
     data: AiProviderIn,
     request: Request,
-    current_user: User = Depends(require_admin_api),
+    current_user: User = Depends(require_admin_session_api),
     db: AsyncSession = DB_SESSION,
 ) -> AiProviderOut:
-    """Set the AI provider the project's content is sent to (instance administrators only). Audited."""
+    """Set the AI provider the project's content is sent to (instance administrators, signed in). Audited.
+
+    It decides where a project's content, private issues included, is sent, so an
+    API key cannot change it (403 ``api_key_not_allowed``). Pointing it at another
+    scheme, host or port drops the stored API key unless a new one is sent.
+    """
     project = await _project(db, key, current_user)
     row = await _providers.set(
         db,

@@ -11,12 +11,13 @@ and what each reader sees of the concepts in the link graph.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import NotFoundError
+from specivo.core.exceptions import AppError, NotFoundError
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.concept import ConceptExtractionSource, ConceptMention, EntityConcept
+from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
 from specivo.services.concept_extraction import (
     ENABLED_SETTING,
     STATUS_DISABLED,
@@ -37,6 +38,7 @@ from tests.integration.concept_helpers import (
     give_provider,
 )
 from tests.integration.link_graph_helpers import World, build_world, issue, links, page
+from tests.integration.link_suggestion_helpers import add_permission
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -178,6 +180,7 @@ async def test_a_hostile_document_cannot_plant_concepts_the_text_does_not_hold(d
 
 
 async def test_every_call_is_recorded_as_ai_usage_of_the_owner(db_session, world):
+    await add_permission(db_session, world.reader, world.home, "manage_project")
     await enable(db_session, world.home, world.reader)
     await issue(db_session, world, world.home, "One")
     await issue(db_session, world, world.home, "Two")
@@ -194,7 +197,52 @@ async def test_every_call_is_recorded_as_ai_usage_of_the_owner(db_session, world
     assert entry.user_id == world.reader.id and entry.reporter_user_id == world.reader.id
     assert (entry.input, entry.output, entry.request_count) == (200, 40, 2)
     assert entry.source == "reporter" and entry.unattended is True
-    assert entry.idempotency_key and entry.idempotency_key.startswith(f"concept-extraction:{world.home.id}:")
+    assert entry.idempotency_key and entry.idempotency_key.startswith(
+        f"specivo-system:concept-extraction:{world.home.id}:"
+    )
+
+    # Nobody can rewrite (or pre-create) that bucket through the ordinary paths.
+    rewrite = AiUsageInput(
+        tool=USAGE_TOOL,
+        model="small-model",
+        usage_date=entry.usage_date,
+        tokens={"input": 0, "output": 0},
+        project_id=world.home.id,
+        idempotency_key=entry.idempotency_key,
+    )
+    for call in (AiUsageService().upsert, AiUsageService().log_with_status):
+        with pytest.raises(AppError) as refused:
+            await call(db_session, world.reader, rewrite, source="api" if call.__name__ != "upsert" else "reporter")
+        assert refused.value.field == "idempotency_key"
+    await db_session.refresh(entry)
+    assert (entry.input, entry.output) == (200, 40)
+
+
+async def test_a_manual_run_is_logged_for_who_asked_and_only_managers_pay(db_session, world):
+    await enable(db_session, world.home, world.admin)
+    await issue(db_session, world, world.home, "Asked")
+    model = FakeModel()
+
+    # A reader who may not manage the project is nobody to log usage for.
+    refused = await extract_project(db_session, world.home.id, client=model, owner_id=world.reader.id)
+    assert refused.status == STATUS_NO_OWNER and model.sent == []
+
+    await add_permission(db_session, world.reader, world.home, "manage_project")
+    await extract_project(db_session, world.home.id, client=model, owner_id=world.reader.id)
+    entry = await db_session.scalar(select(AiUsageEntry).where(AiUsageEntry.project_id == world.home.id))
+    assert entry is not None and entry.user_id == world.reader.id
+
+
+async def test_an_owner_who_left_or_was_deactivated_pays_for_nothing(db_session, world):
+    await add_permission(db_session, world.reader, world.home, "manage_project")
+    await enable(db_session, world.home, world.reader)
+    await issue(db_session, world, world.home, "Orphan")
+    world.reader.status = "deactivated"
+    await db_session.commit()
+    model = FakeModel()
+
+    assert (await extract_project(db_session, world.home.id, client=model)).status == STATUS_NO_OWNER
+    assert model.sent == []
 
 
 async def test_provider_failures_stop_the_run_and_keep_the_sources_for_later(db_session, world):
@@ -207,9 +255,28 @@ async def test_provider_failures_stop_the_run_and_keep_the_sources_for_later(db_
 
     assert result.status == STATUS_STOPPED and result.failed == 3 and len(model.sent) == 3
     assert result.waiting == 2
-    assert await db_session.scalar(select(func.count()).select_from(ConceptExtractionSource)) == 0
+    rows = (await db_session.execute(select(ConceptExtractionSource))).scalars().all()
+    assert [(r.status, r.failures) for r in rows] == [("failed", 1)] * 3
     entry = await db_session.scalar(select(AiUsageEntry).where(AiUsageEntry.project_id == world.home.id))
     assert entry is not None and (entry.input, entry.request_count) == (15, 3)
+
+
+async def test_a_source_that_keeps_failing_waits_until_it_changes(db_session, world):
+    await enable(db_session, world.home, world.admin)
+    trap = await issue(db_session, world, world.home, "Refused", "Text the provider always refuses.")
+    model = FakeModel(fail=True)
+
+    for _ in range(5):
+        await extract_project(db_session, world.home.id, client=model)
+    assert len(model.sent) == 3  # tried three times, then left alone
+
+    trap.description = "Edited text."
+    await db_session.commit()
+    model.fail = False
+    result = await extract_project(db_session, world.home.id, client=model)
+    assert len(model.sent) == 4 and result.extracted == 1
+    row = await db_session.scalar(select(ConceptExtractionSource))
+    assert row is not None and (row.status, row.failures) == ("done", 0)
 
 
 async def test_nothing_runs_while_off_without_a_provider_or_without_an_owner(db_session, world):

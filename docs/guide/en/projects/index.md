@@ -151,18 +151,24 @@ The **Concept extraction (AI)** card on the **General** tab has:
   server such as Ollama, vLLM or LM Studio works too (for example `http://ollama:11434/v1`), so an
   air-gapped install keeps everything on its own network. The project's content, private issues
   included, is sent to this provider and to no other. The key is stored encrypted and is never
-  shown again; leave the field empty to keep it. **Remove AI provider** also switches the
-  extraction off. Setting or removing a provider is recorded in the audit log.
+  shown again; leave the field empty to keep it (it is dropped when the URL moves to another
+  server). Setting the provider needs an administrator signed in; an API key cannot change it.
+  **Remove AI provider** also switches the extraction off. Setting or removing a provider is
+  recorded in the audit log. Project managers see only the provider's server, not the full URL.
 - **Extract concepts with this AI provider**: the switch. It needs a provider and the *Manage
-  project* permission. The AI usage is logged in the name of whoever switches it on.
+  project* permission. The nightly runs are logged as AI usage of whoever switched it on, as long
+  as they are active and may still manage the project; otherwise nothing runs until someone
+  switches it on again.
 - **Confidence threshold** (0.6 by default): the model says how sure it is of each mention. Mentions
   below the threshold are shown only as suggestions.
 - **Issues and pages per run** (50 by default, at most 500).
-- **Run now** queues a run at once; otherwise a run happens every night.
+- **Run now** queues a run at once (at most once every 10 minutes per project); its usage is logged
+  in the name of whoever clicked it. Otherwise a run happens every night.
 
 Each run sends only the issues (subject and description, not comments) and wiki pages whose text
 changed since they were last sent, at most the first 12,000 characters of each, and at most the
-number per run you set; the rest waits for the next run. Every call is recorded as
+number per run you set; the rest waits for the next run. An issue or page whose calls failed three
+times is not sent again until its text changes. Every call is recorded as
 [AI usage](ai-usage.md) of the tool `specivo-concepts` on the project, so its cost shows in the
 [AI spend reports](ai-spend-reports.md). A concept keeps, for every mention, the passage of the text
 it was found in and the model's confidence.

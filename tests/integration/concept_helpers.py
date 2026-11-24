@@ -24,13 +24,13 @@ from specivo.services.llm_client import ChatResult, LLMError
 def _no_queued_extraction(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """Keep the extraction task from being queued; record the projects it would have run for."""
     queued: list[int] = []
-    monkeypatch.setattr(
-        "specivo.services.concept_extraction.dispatch_extract",
-        lambda project_id: queued.append(project_id) or True,
-    )
-    monkeypatch.setattr(
-        "specivo.api.v1.concepts.dispatch_extract", lambda project_id: queued.append(project_id) or True
-    )
+
+    def record(project_id: int, user_id: int | None = None) -> bool:
+        queued.append(project_id)
+        return True
+
+    monkeypatch.setattr("specivo.services.concept_extraction.dispatch_extract", record)
+    monkeypatch.setattr("specivo.api.v1.concepts.dispatch_extract", record)
     return queued
 
 

@@ -97,6 +97,7 @@ async def test_concept_schema_is_added_and_the_downgrade_round_trips() -> None:
             "ck_concept_mentions_span",
             "ck_concept_extraction_sources_one_source",
             "ck_concept_extraction_sources_status",
+            "ck_concept_extraction_sources_failures",
         }
         unique = {
             r[0]: r[1]

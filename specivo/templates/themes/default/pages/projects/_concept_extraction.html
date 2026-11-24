@@ -62,7 +62,7 @@
       <input type="checkbox" id="concept-extraction-enabled" x-model="enabled" :disabled="!provider" class="sp-checkbox-accent-pointer" data-testid="concept-extraction-enabled">
       {% trans %}Extract concepts with this AI provider{% endtrans %}
     </label>
-    <div class="form-hint">{% trans %}The AI usage is logged in the name of whoever switches this on.{% endtrans %}</div>
+    <div class="form-hint">{% trans %}Nightly runs are logged as AI usage of whoever switches this on; Run now is logged for whoever clicks it.{% endtrans %}</div>
   </div>
   <div class="form-group sp-form-group-mb-md">
     <label class="form-label" for="concept-extraction-threshold">{% trans %}Confidence threshold{% endtrans %}</label>

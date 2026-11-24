@@ -75,6 +75,11 @@ def _check_text(value: str, field: str, max_length: int, message: str) -> str:
     return text
 
 
+def _origin(url: str) -> tuple[str, str | None, int | None]:
+    parts = urlsplit(url)
+    return parts.scheme, parts.hostname, parts.port
+
+
 class AiProviderService:
     async def get(self, session: AsyncSession, project_id: int) -> ProjectAiProvider | None:
         return await session.scalar(select(ProjectAiProvider).where(ProjectAiProvider.project_id == project_id))
@@ -89,6 +94,9 @@ class AiProviderService:
             )
         )
         row = await self.get(session, project.id)
+        if row is not None and data.api_key is None and _origin(row.base_url) != _origin(base_url):
+            # A key is never sent to another server than the one it was entered for.
+            row.api_key_encrypted = None
         if row is None:
             row = ProjectAiProvider(
                 project_id=project.id, provider=provider or "openai", base_url=base_url, model=model
@@ -120,14 +128,18 @@ class AiProviderService:
         return True
 
     @staticmethod
-    def describe(row: ProjectAiProvider | None) -> dict[str, Any] | None:
-        """The provider as the API shows it: never the key, only whether there is one."""
+    def describe(row: ProjectAiProvider | None, *, full_url: bool = True) -> dict[str, Any] | None:
+        """The provider as the API shows it: never the key, only whether there is one.
+
+        Without *full_url* the base URL is cut to its scheme and host (no path, which may hold a token).
+        """
         if row is None:
             return None
         updated: datetime | None = row.updated_at
+        parts = urlsplit(row.base_url)
         return {
             "provider": row.provider,
-            "base_url": row.base_url,
+            "base_url": row.base_url if full_url else f"{parts.scheme}://{parts.hostname}",
             "model": row.model,
             "has_api_key": row.api_key_encrypted is not None,
             "updated_at": updated,

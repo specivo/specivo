@@ -226,6 +226,8 @@ SESSION_ONLY_ROUTES: list[tuple[str, str, str]] = [
     ("specivo.api.v1.admin.sso", "PATCH", "/admin/settings/authentication/"),
     ("specivo.api.v1.admin.sso", "PATCH", "/admin/sso/providers/{provider_id}/scim/"),
     ("specivo.api.v1.admin.sso", "POST", "/admin/sso/providers/{provider_id}/scim/token/"),
+    # Where a project's content (private issues included) is sent, and with which key.
+    ("specivo.api.v1.concepts", "PUT", "/projects/{key}/ai-provider/"),
 ]
 
 

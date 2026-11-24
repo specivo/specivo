@@ -36,23 +36,23 @@ export function projectConceptExtraction(initial) {
         message: '',
         providerMessage: '',
 
-        async request(url, method, payload) {
+        options(method, payload) {
             var options = {method: method, headers: {'Content-Type': 'application/json'}};
             if (payload !== undefined) {
                 options.body = JSON.stringify(payload);
             }
-            return spFetch(url, options);
+            return options;
         },
 
         async save() {
             this.saving = true;
             this.message = '';
             try {
-                var res = await this.request('/api/v1/projects/' + this.projectKey + '/', 'PATCH', {
+                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/', this.options('PATCH', {
                     concept_extraction: this.enabled,
                     concept_confidence_threshold: Number(this.threshold),
                     concept_extraction_run_limit: parseInt(this.runLimit, 10)
-                });
+                }));
                 this.message = res.ok ? i18n.saved : errorText(await res.json());
                 if (!res.ok) {
                     this.enabled = false;
@@ -67,8 +67,8 @@ export function projectConceptExtraction(initial) {
             this.saving = true;
             this.message = '';
             try {
-                var res = await this.request(
-                    '/api/v1/projects/' + this.projectKey + '/concept-extraction/run/', 'POST'
+                var res = await spFetch(
+                    '/api/v1/projects/' + this.projectKey + '/concept-extraction/run/', this.options('POST')
                 );
                 if (res.ok) {
                     var data = await res.json();
@@ -92,8 +92,8 @@ export function projectConceptExtraction(initial) {
                 payload.api_key = this.apiKey;
             }
             try {
-                var res = await this.request(
-                    '/api/v1/projects/' + this.projectKey + '/ai-provider/', 'PUT', payload
+                var res = await spFetch(
+                    '/api/v1/projects/' + this.projectKey + '/ai-provider/', this.options('PUT', payload)
                 );
                 var data = await res.json();
                 if (res.ok) {
@@ -117,7 +117,7 @@ export function projectConceptExtraction(initial) {
             this.saving = true;
             this.providerMessage = '';
             try {
-                var res = await this.request('/api/v1/projects/' + this.projectKey + '/ai-provider/', 'DELETE');
+                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/ai-provider/', this.options('DELETE'));
                 if (res.ok) {
                     this.provider = null;
                     this.enabled = false;

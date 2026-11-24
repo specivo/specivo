@@ -209,6 +209,16 @@ _COST_FIELDS: frozenset[str] = frozenset(
 )
 
 _KEY_RE = re.compile(r"^[\x21-\x7e]+$")
+#: Idempotency keys of the usage Specivo itself records (``record_system_usage``); refused on every other path,
+#: so nobody can overwrite or pre-create such a bucket.
+SYSTEM_KEY_PREFIX = "specivo-system:"
+
+
+def _refuse_system_key(key: str | None) -> None:
+    if (key or "").strip().lower().startswith(SYSTEM_KEY_PREFIX):
+        raise _invalid(f"Idempotency keys starting with {SYSTEM_KEY_PREFIX!r} are reserved", "idempotency_key")
+
+
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 #: Computed amounts are stored with 8 decimal places (``NUMERIC(20, 8)``); totals are stated the same way.
@@ -1406,6 +1416,7 @@ class AiUsageService:
         """
         if source in LOCKED_SOURCES:
             raise _invalid("Reporter and import entries are written with upsert", "source")
+        _refuse_system_key(data.idempotency_key)
         target = target or actor
         if (data.idempotency_key or "").strip():
             return await self.upsert(
@@ -1448,6 +1459,7 @@ class AiUsageService:
         target = target or actor
         if not (data.idempotency_key or "").strip():
             raise _invalid("An idempotency key is required", "idempotency_key")
+        _refuse_system_key(data.idempotency_key)
         values = await self._validated(session, data, source=source)
         project = await self._project(session, data.project_id)
         existing = await self._by_key(session, target.id, values["idempotency_key"])
@@ -1480,11 +1492,20 @@ class AiUsageService:
         reporter's. A new bucket is inserted; an existing one gets the tokens
         and requests of *data* added and is priced again.
         """
-        if not (data.idempotency_key or "").strip():
-            raise _invalid("An idempotency key is required", "idempotency_key")
+        if not (data.idempotency_key or "").strip().startswith(SYSTEM_KEY_PREFIX):
+            raise _invalid(f"A system usage key starts with {SYSTEM_KEY_PREFIX!r}", "idempotency_key")
         values = await self._validated(session, data, source="reporter")
         project = await self._project(session, data.project_id)
         existing = await self._by_key(session, user.id, values["idempotency_key"])
+        if existing is not None and (
+            existing.source != "reporter"
+            or existing.reporter_api_key_id is not None
+            or existing.tool_slug != values["tool_slug"]
+            or existing.model != values["model"]
+            or existing.project_id != data.project_id
+        ):
+            # Only an entry this method wrote is ever added to; anything else is refused, never merged.
+            raise _invalid("The system usage bucket holds another entry", "idempotency_key")
         if existing is None:
             entry, _billing = await self._insert(session, user, user, data, values, "reporter", None, None, project)
             return entry

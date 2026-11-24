@@ -16,10 +16,15 @@ Cost control
   (``settings["concept_extraction_run_limit"]``, default
   ``CONCEPT_EXTRACTION_DEFAULT_RUN_LIMIT``); the rest waits for the next run.
 - A run stops after ``CONCEPT_EXTRACTION_MAX_CONSECUTIVE_FAILURES`` failed
-  calls in a row.
+  calls in a row, and after ``CONCEPT_EXTRACTION_MAX_RUN_SECONDS``. A source
+  whose calls failed ``CONCEPT_EXTRACTION_MAX_SOURCE_FAILURES`` times waits
+  until its content changes.
 - Every call's tokens are added to one AI usage entry per project, model and
-  day (tool ``specivo-concepts``), in the name of the person who enabled the
-  extraction, so they show in the AI spend reports like any other usage.
+  day (tool ``specivo-concepts``), in the name of the person who asked for a
+  manual run, or else who switched the extraction on (only while they are
+  active and may manage the project), so they show in the AI spend reports
+  like any other usage. Its idempotency key is reserved
+  (``ai_usage_service.SYSTEM_KEY_PREFIX``): nobody can rewrite that entry.
 
 The answer is untrusted
 -----------------------
@@ -47,13 +52,14 @@ import json
 import logging
 import re
 import secrets
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from sqlalchemy import and_, delete, exists, func, or_, select
+from sqlalchemy import and_, case, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +73,8 @@ from specivo.core.constants import (
     CONCEPT_EXTRACTION_MAX_PER_PROJECT,
     CONCEPT_EXTRACTION_MAX_PER_SOURCE,
     CONCEPT_EXTRACTION_MAX_RUN_LIMIT,
+    CONCEPT_EXTRACTION_MAX_RUN_SECONDS,
+    CONCEPT_EXTRACTION_MAX_SOURCE_FAILURES,
     CONCEPT_MAX_CONFIDENCE_THRESHOLD,
     CONCEPT_MIN_CONFIDENCE_THRESHOLD,
 )
@@ -74,6 +82,7 @@ from specivo.models.ai_provider import ProjectAiProvider
 from specivo.models.concept import (
     CONCEPT_KINDS,
     SOURCE_STATUS_DONE,
+    SOURCE_STATUS_FAILED,
     SOURCE_STATUS_REJECTED,
     ConceptExtractionSource,
     ConceptMention,
@@ -324,13 +333,25 @@ async def _wiki_enabled(session: AsyncSession, project_id: int) -> bool:
     return found is not None
 
 
-async def _stored_hashes(session: AsyncSession, project_id: int) -> dict[Item, str]:
+async def _settled_hashes(session: AsyncSession, project_id: int) -> dict[Item, str]:
+    """The hash of each source that needs no call while it stays unchanged.
+
+    That is a source whose answer was stored (``done``), was unusable
+    (``rejected``), or whose calls failed ``CONCEPT_EXTRACTION_MAX_SOURCE_FAILURES``
+    times; a source that failed fewer times is tried again.
+    """
     rows = await session.execute(
         select(
             ConceptExtractionSource.source_issue_id,
             ConceptExtractionSource.source_wiki_page_id,
             ConceptExtractionSource.content_hash,
-        ).where(ConceptExtractionSource.project_id == project_id)
+        ).where(
+            ConceptExtractionSource.project_id == project_id,
+            or_(
+                ConceptExtractionSource.status != SOURCE_STATUS_FAILED,
+                ConceptExtractionSource.failures >= CONCEPT_EXTRACTION_MAX_SOURCE_FAILURES,
+            ),
+        )
     )
     return {
         (("issue", issue_id) if issue_id is not None else ("wiki_page", int(page_id or 0))): digest
@@ -342,7 +363,7 @@ async def _changed_sources(
     session: AsyncSession, project_id: int, model: str, limit: int
 ) -> tuple[list[_Source], int, int]:
     """Up to *limit* sources of the project whose content changed, how many more are waiting, and how many did not."""
-    stored = await _stored_hashes(session, project_id)
+    stored = await _settled_hashes(session, project_id)
     changed: list[_Source] = []
     waiting = unchanged = 0
 
@@ -533,11 +554,37 @@ async def _store_source(
                 "project_id": project_id,
                 "content_hash": source.hash,
                 "status": status,
+                "failures": 0,
                 "extracted_at": func.now(),
             },
         )
     )
     return stored
+
+
+async def _record_failure(session: AsyncSession, project_id: int, source: _Source) -> None:
+    """Count a failed call for this content; after a few, the source waits until its content changes."""
+    insert = pg_insert(ConceptExtractionSource).values(
+        project_id=project_id,
+        **_source_columns(source.item),
+        content_hash=source.hash,
+        status=SOURCE_STATUS_FAILED,
+        failures=1,
+    )
+    same_content = ConceptExtractionSource.content_hash == insert.excluded.content_hash
+    earlier = case((ConceptExtractionSource.status == SOURCE_STATUS_FAILED, ConceptExtractionSource.failures), else_=0)
+    await session.execute(
+        insert.on_conflict_do_update(
+            index_elements=["source_issue_id", "source_wiki_page_id"],
+            set_={
+                "project_id": project_id,
+                "content_hash": source.hash,
+                "status": SOURCE_STATUS_FAILED,
+                "failures": case((same_content, earlier + 1), else_=1),
+                "extracted_at": func.now(),
+            },
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +601,7 @@ async def _record_usage(
     output_tokens: int,
 ) -> None:
     """Add one call to the project's concept extraction usage of today (one entry per model and UTC day)."""
-    from specivo.services.ai_usage_service import AiUsageInput, AiUsageService
+    from specivo.services.ai_usage_service import SYSTEM_KEY_PREFIX, AiUsageInput, AiUsageService
 
     now = datetime.now(UTC)
     model_tag = hashlib.sha256(f"{provider.provider}/{provider.model}".encode()).hexdigest()[:16]
@@ -569,7 +616,7 @@ async def _record_usage(
         project_id=project_id,
         attribution_method="explicit",
         client_name=USAGE_CLIENT,
-        idempotency_key=f"concept-extraction:{project_id}:{model_tag}:{now.date().isoformat()}",
+        idempotency_key=f"{SYSTEM_KEY_PREFIX}concept-extraction:{project_id}:{model_tag}:{now.date().isoformat()}",
         unattended=True,
     )
     await AiUsageService().record_system_usage(session, user, data)
@@ -615,21 +662,40 @@ class RunResult:
         }
 
 
-async def _owner(session: AsyncSession, project: Project) -> User | None:
-    """Who enabled the extraction: the usage is theirs."""
-    raw = (project.settings or {}).get(ENABLED_BY_SETTING)
+async def _owner(session: AsyncSession, project: Project, owner_id: int | None) -> User | None:
+    """Whose AI usage the run is: *owner_id* (who asked for this run), else who switched the extraction on.
+
+    Only an active person who may still manage the project (or an
+    administrator) pays for a run; anyone else means no run.
+    """
+    from specivo.services.permission_service import Permission, check_permission
+
+    raw: Any = owner_id if owner_id is not None else (project.settings or {}).get(ENABLED_BY_SETTING)
     if isinstance(raw, bool) or not isinstance(raw, int):
         return None
-    return await session.get(User, raw)
+    user = await session.get(User, raw)
+    if user is None or user.status != "active" or user.is_anonymous:
+        return None
+    if not (user.is_admin or await check_permission(user, project.id, Permission.MANAGE_PROJECT, session)):
+        return None
+    return user
 
 
 async def extract_project(
-    session: AsyncSession, project_id: int, *, client: ChatClient | None = None, limit: int | None = None
+    session: AsyncSession,
+    project_id: int,
+    *,
+    client: ChatClient | None = None,
+    limit: int | None = None,
+    owner_id: int | None = None,
 ) -> RunResult:
     """Extract the concepts of the project's changed sources with its own provider; commit after each source.
 
     *client* replaces the provider's client (tests); *limit* the project's run
-    limit (the CLI). Network calls are made with no transaction open.
+    limit (the CLI); *owner_id* the person the usage is logged for (a manual
+    run: who asked for it; otherwise who switched the extraction on). Network
+    calls are made with no transaction open, and a run stops after
+    ``CONCEPT_EXTRACTION_MAX_RUN_SECONDS``, well within its lock.
     """
     from specivo.services.ai_provider_service import AiProviderService
 
@@ -639,39 +705,63 @@ async def extract_project(
     provider = await AiProviderService().get(session, project_id)
     if provider is None:
         return RunResult(STATUS_NO_PROVIDER)
-    owner = await _owner(session, project)
+    owner = await _owner(session, project, owner_id)
     if owner is None:
-        logger.warning("Concept extraction of project %d has no owner for its AI usage; skipped", project_id)
+        logger.warning("Concept extraction of project %d has nobody to log its AI usage for; skipped", project_id)
         return RunResult(STATUS_NO_OWNER)
-    if client is None:
-        client = AiProviderService.client_for(provider)
-    model = provider.model
-    result = RunResult(STATUS_DONE)
+    run = _Run(session, project_id, owner, provider, client or AiProviderService.client_for(provider))
 
     await _forget_departed_sources(session, project_id)
-    changed, result.waiting, result.unchanged = await _changed_sources(
-        session, project_id, model, limit if limit is not None else run_limit(project.settings)
+    changed, run.result.waiting, run.result.unchanged = await _changed_sources(
+        session, project_id, provider.model, limit if limit is not None else run_limit(project.settings)
     )
     await session.commit()
+    await run.send(changed)
+    await _drop_orphan_concepts(session, project_id)
+    await session.commit()
+    logger.info("Concept extraction of project %d: %s", project_id, run.result.as_dict())
+    return run.result
 
-    consecutive_failures = 0
-    for source in changed:
-        messages = build_messages(source.item[0], source.text)
+
+@dataclass(slots=True)
+class _Run:
+    """One run's calls: each source sent, its answer checked and stored, its usage recorded."""
+
+    session: AsyncSession
+    project_id: int
+    owner: User
+    provider: ProjectAiProvider
+    client: ChatClient
+    result: RunResult = field(default_factory=lambda: RunResult(STATUS_DONE))
+
+    async def send(self, changed: list[_Source]) -> None:
+        consecutive_failures = 0
+        deadline = time.monotonic() + CONCEPT_EXTRACTION_MAX_RUN_SECONDS
+        for index, source in enumerate(changed):
+            if time.monotonic() > deadline or consecutive_failures >= CONCEPT_EXTRACTION_MAX_CONSECUTIVE_FAILURES:
+                self.result.status = STATUS_STOPPED
+                self.result.waiting += len(changed) - index
+                return
+            if await self._one(source):
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
+
+    async def _one(self, source: _Source) -> bool:
+        """Send one source and store what came back; False when the call failed."""
+        session, result = self.session, self.result
         try:
-            answer = await client.complete(messages, max_tokens=CONCEPT_EXTRACTION_MAX_OUTPUT_TOKENS)
+            answer = await self.client.complete(
+                build_messages(source.item[0], source.text), max_tokens=CONCEPT_EXTRACTION_MAX_OUTPUT_TOKENS
+            )
         except LLMError as exc:
             result.failed += 1
             result.errors.append(str(exc))
-            consecutive_failures += 1
+            await _record_failure(session, self.project_id, source)
             if exc.input_tokens or exc.output_tokens:
-                await _record_usage(session, project_id, owner, provider, exc.input_tokens, exc.output_tokens)
-                await session.commit()
-            if consecutive_failures >= CONCEPT_EXTRACTION_MAX_CONSECUTIVE_FAILURES:
-                result.status = STATUS_STOPPED
-                result.waiting += len(changed) - (result.extracted + result.rejected + result.failed)
-                break
-            continue
-        consecutive_failures = 0
+                await self._usage(exc.input_tokens, exc.output_tokens)
+            await session.commit()
+            return False
         result.input_tokens += answer.input_tokens
         result.output_tokens += answer.output_tokens
         try:
@@ -684,7 +774,7 @@ async def extract_project(
             result.extracted += 1
         savepoint = await session.begin_nested()
         try:
-            result.mentions += await _store_source(session, project_id, source, found)
+            result.mentions += await _store_source(session, self.project_id, source, found)
         except IntegrityError:
             # The source was deleted while the model was answering: nothing to store.
             await savepoint.rollback()
@@ -692,13 +782,12 @@ async def extract_project(
         else:
             if savepoint.is_active:
                 await savepoint.commit()
-        await _record_usage(session, project_id, owner, provider, answer.input_tokens, answer.output_tokens)
+        await self._usage(answer.input_tokens, answer.output_tokens)
         await session.commit()
+        return True
 
-    await _drop_orphan_concepts(session, project_id)
-    await session.commit()
-    logger.info("Concept extraction of project %d: %s", project_id, result.as_dict())
-    return result
+    async def _usage(self, input_tokens: int, output_tokens: int) -> None:
+        await _record_usage(self.session, self.project_id, self.owner, self.provider, input_tokens, output_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -717,20 +806,27 @@ async def enabled_project_ids(session: AsyncSession) -> list[int]:
     return list((await session.execute(stmt)).scalars())
 
 
-def dispatch_extract(project_id: int) -> bool:
-    """Queue ``extract_concepts`` for a project; never raises (a dead broker only delays it to the sweep)."""
+def dispatch_extract(project_id: int, user_id: int | None = None) -> bool:
+    """Queue ``extract_concepts`` for a project (its usage logged for *user_id*, or for who switched it on).
+
+    Never raises: a dead broker only delays the run to the nightly sweep.
+    """
     try:
         from specivo.tasks.concepts import extract_concepts
 
-        extract_concepts.apply_async(kwargs={"project_id": project_id}, retry=False)
+        extract_concepts.apply_async(kwargs={"project_id": project_id, "user_id": user_id}, retry=False)
     except Exception as exc:  # a dead broker must not fail the caller  # noqa: BLE001
         logger.warning("Could not queue concept extraction for project %d: %s", project_id, exc)
         return False
     return True
 
 
-async def project_status(session: AsyncSession, project: Project) -> dict[str, Any]:
-    """Settings and counts for the project's concept extraction card."""
+async def project_status(session: AsyncSession, project: Project, *, full_url: bool = False) -> dict[str, Any]:
+    """Settings and counts for the project's concept extraction card.
+
+    The provider's base URL is shown whole to administrators (*full_url*);
+    managers see only its scheme and host.
+    """
     from specivo.services.ai_provider_service import AiProviderService
 
     provider = await AiProviderService().get(session, project.id)
@@ -750,7 +846,7 @@ async def project_status(session: AsyncSession, project: Project) -> dict[str, A
         "enabled": extraction_enabled(project.settings),
         "confidence_threshold": confidence_threshold(project.settings),
         "run_limit": run_limit(project.settings),
-        "provider": AiProviderService.describe(provider),
+        "provider": AiProviderService.describe(provider, full_url=full_url),
         "concepts": int(concepts or 0),
         "sources_extracted": int(by_status.get(SOURCE_STATUS_DONE, 0)),
         "sources_rejected": int(by_status.get(SOURCE_STATUS_REJECTED, 0)),

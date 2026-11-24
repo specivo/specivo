@@ -71,11 +71,36 @@ async def test_only_an_administrator_sets_the_provider_and_the_key_never_comes_b
     assert status.json()["provider"]["has_api_key"] is True
     assert "sk-very-secret" not in status.text
 
-    # Omitting the key keeps it; an empty string removes it.
+    # A manager sees where content goes, not the full URL (its path may hold a token).
+    with_path = await client.put(
+        url, json={**PROVIDER, "base_url": "http://models.example.test/t0ken/v1", "api_key": None}, headers=admin
+    )
+    assert with_path.json()["has_api_key"] is True
+    status = await client.get(f"/api/v1/projects/{world.home.key}/concept-extraction/", headers=manager)
+    assert status.json()["provider"]["base_url"] == "http://models.example.test"
+
+    # Omitting the key keeps it on the same server; an empty string removes it.
     kept = await client.put(url, json={**PROVIDER, "api_key": None, "model": "other"}, headers=admin)
     assert kept.json()["has_api_key"] is True
+    elsewhere = await client.put(
+        url, json={**PROVIDER, "base_url": "https://other.example.test/v1", "api_key": None}, headers=admin
+    )
+    assert elsewhere.json()["has_api_key"] is False  # never sent to another server
+    await client.put(url, json=PROVIDER, headers=admin)
     removed = await client.put(url, json={**PROVIDER, "api_key": ""}, headers=admin)
     assert removed.json()["has_api_key"] is False
+
+
+async def test_an_api_key_cannot_change_where_content_is_sent(client, db_session, world):
+    from specivo.services.api_key_service import ApiKeyService
+
+    _, raw = await ApiKeyService().create_key(db_session, user_id=world.admin.id, name="automation")
+    await db_session.commit()
+    resp = await client.put(
+        f"/api/v1/projects/{world.home.key}/ai-provider/", json=PROVIDER, headers={"Authorization": f"Bearer {raw}"}
+    )
+    assert resp.status_code == 403
+    assert resp.json()["errors"][0]["code"] == "api_key_not_allowed"
 
 
 @pytest.mark.parametrize("base_url", ["file:///etc/passwd", "https://u:p@models.example.test/v1", "models"])
@@ -143,6 +168,9 @@ async def test_a_run_is_queued_for_managers_of_an_enabled_project(client, db_ses
     await enable(db_session, world.home, world.admin)
     resp = await client.post(url, headers=reader)
     assert resp.status_code == 202 and resp.json() == {"queued": True}
+    assert _no_queued_extraction == [world.home.id]
+    again = await client.post(url, headers=reader)
+    assert again.status_code == 429 and int(again.headers["retry-after"]) > 0
     assert _no_queued_extraction == [world.home.id]
 
     hidden = await client.post(f"/api/v1/projects/{world.hidden.key}/concept-extraction/run/", headers=reader)

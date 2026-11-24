@@ -31,7 +31,8 @@ CONCEPT_KINDS: tuple[str, ...] = (KIND_FEATURE, KIND_EXTERNAL_SYSTEM, KIND_DECIS
 
 SOURCE_STATUS_DONE = "done"
 SOURCE_STATUS_REJECTED = "rejected"
-SOURCE_STATUSES: tuple[str, ...] = (SOURCE_STATUS_DONE, SOURCE_STATUS_REJECTED)
+SOURCE_STATUS_FAILED = "failed"
+SOURCE_STATUSES: tuple[str, ...] = (SOURCE_STATUS_DONE, SOURCE_STATUS_REJECTED, SOURCE_STATUS_FAILED)
 
 _ONE_SOURCE = "(source_issue_id IS NOT NULL)::int + (source_wiki_page_id IS NOT NULL)::int = 1"
 
@@ -99,12 +100,13 @@ class ConceptMention(Base):
 
 
 class ConceptExtractionSource(Base):
-    """What was last sent to the model for one source: its hash, when, and whether the answer was usable."""
+    """What was last sent to the model for one source: its hash, when, and what came of it."""
 
     __tablename__ = "concept_extraction_sources"
     __table_args__ = (
         CheckConstraint(_ONE_SOURCE, name="ck_concept_extraction_sources_one_source"),
-        CheckConstraint("status IN ('done', 'rejected')", name="ck_concept_extraction_sources_status"),
+        CheckConstraint("status IN ('done', 'rejected', 'failed')", name="ck_concept_extraction_sources_status"),
+        CheckConstraint("failures >= 0", name="ck_concept_extraction_sources_failures"),
         Index(
             "uq_concept_extraction_sources_source",
             "source_issue_id",
@@ -124,6 +126,8 @@ class ConceptExtractionSource(Base):
     )
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Failed calls for this content (status ``failed``); reset by a usable or rejected answer.
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:

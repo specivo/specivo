@@ -202,6 +202,11 @@ CONCEPT_EXTRACTION_MAX_PER_PROJECT = 5_000
 CONCEPT_EXTRACTION_TIMEOUT_SECONDS = 120
 # Consecutive failed provider calls after which a run stops (the provider is down or refusing).
 CONCEPT_EXTRACTION_MAX_CONSECUTIVE_FAILURES = 3
+# Failed calls for the same content after which a source waits until its content changes.
+CONCEPT_EXTRACTION_MAX_SOURCE_FAILURES = 3
+# Wall-clock limit of one run (its lock lasts longer), and the pause between two manual runs of a project.
+CONCEPT_EXTRACTION_MAX_RUN_SECONDS = 5 * 3600
+CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS = 600
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3

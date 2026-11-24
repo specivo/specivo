@@ -34,13 +34,13 @@ def run_lock_key(project_id: int) -> str:
 
 
 @celery_app.task
-def extract_concepts(project_id: int) -> dict[str, Any]:
-    """Run concept extraction for one project; returns what the run did."""
-    result: dict[str, Any] = run_async(_extract_async(project_id))
+def extract_concepts(project_id: int, user_id: int | None = None) -> dict[str, Any]:
+    """Run concept extraction for one project, its usage logged for *user_id* (else who switched it on)."""
+    result: dict[str, Any] = run_async(_extract_async(project_id, user_id))
     return result
 
 
-async def _extract_async(project_id: int) -> dict[str, Any]:
+async def _extract_async(project_id: int, user_id: int | None = None) -> dict[str, Any]:
     from specivo.services.concept_extraction import extract_project
 
     async with beat_lock(run_lock_key(project_id), _RUN_LOCK_TIMEOUT) as acquired:
@@ -49,7 +49,7 @@ async def _extract_async(project_id: int) -> dict[str, Any]:
             return {"status": "busy"}
         async with task_session() as session:
             try:
-                result = await extract_project(session, project_id)
+                result = await extract_project(session, project_id, owner_id=user_id)
             except Exception:
                 await session.rollback()
                 logger.exception("Concept extraction of project %d failed", project_id)

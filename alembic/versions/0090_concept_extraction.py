@@ -16,7 +16,8 @@ Revises: 0089
   the passage, its span and the confidence (0 to 1, CHECKed). Unique on the
   concept and both source columns with ``NULLS NOT DISTINCT``.
 - ``concept_extraction_sources``: per source, the hash of the content last
-  sent to the model and whether its answer was usable (``done``/``rejected``).
+  sent to the model and what came of it: ``done``, ``rejected`` (an unusable
+  answer) or ``failed`` (calls that failed, counted in ``failures``).
 
 Project settings (JSONB, no migration): ``concept_extraction`` (off unless
 true), ``concept_extraction_enabled_by``, ``concept_confidence_threshold``,
@@ -111,9 +112,13 @@ def upgrade() -> None:
         *_source_columns(),
         sa.Column("content_hash", sa.String(64), nullable=False),
         sa.Column("status", sa.String(10), nullable=False),
+        sa.Column("failures", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("extracted_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.CheckConstraint(_ONE_SOURCE, name="ck_concept_extraction_sources_one_source"),
-        sa.CheckConstraint("status IN ('done', 'rejected')", name="ck_concept_extraction_sources_status"),
+        sa.CheckConstraint(
+            "status IN ('done', 'rejected', 'failed')", name="ck_concept_extraction_sources_status"
+        ),
+        sa.CheckConstraint("failures >= 0", name="ck_concept_extraction_sources_failures"),
     )
     op.create_index(
         "uq_concept_extraction_sources_source",
