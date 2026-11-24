@@ -183,7 +183,7 @@ async def test_tab_label_counts_pull_requests_and_commits(client, db_session, se
 async def test_tabs_keep_their_order(client, db_session, seeded):
     page = await _page(client, db_session, seeded["project"], "DEVA-1", "dev_page_order")
     order = re.findall(r'data-tab="(\w+)"', page)
-    assert order == ["activity", "development", "relations", "attachments"]  # no time permission here
+    assert order == ["activity", "development", "relations", "graph", "attachments"]  # no time permission here
 
 
 async def test_branches_section_is_gone_but_commit_branches_link_to_the_forge(client, db_session, seeded):
