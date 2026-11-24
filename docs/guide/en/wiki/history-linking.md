@@ -133,6 +133,40 @@ background with a progress count, and only one runs per project at a time. From 
 Tags, versions, sprints, assignees and the values of some metadata keys are part of the graph too,
 for AI agents: see [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph).
 
+## Possibly related: suggested links
+
+When semantic search is on (the bundled embedding model is installed), Specivo also suggests links
+that nobody wrote: issues and wiki pages of the same project whose content is close to each other
+and that are not linked in any way yet. They are hints, not links. You find them in two places:
+
+- on an issue, in the **Relations** tab, under **Possibly related**;
+- on a wiki page, in the **Possibly related** section at the bottom (open it to load the list).
+
+Each suggestion shows the other item and a score from 0 to 1, how close the two texts are. At most
+five are listed, best first, and only items you can open yourself. A pair is suggested when its score
+reaches the project's threshold (0.80 unless changed, see below), at most five per item.
+
+If you may link the two items, each suggestion has a **Link as** choice and two buttons:
+
+- **Accept** turns the suggestion into a real link. Two issues get a normal relation (choose the type:
+  **Relates to**, **Blocks**, **Duplicates**, ...), which needs the permission to manage issue
+  relations. An issue and a page, or two pages, get a *typed link* from the item you are on to the
+  other one: **See also**, **Documents**, **Implements**, **Decided in** or **Supersedes**. That
+  needs the permission to edit the issue, or to manage the wiki for a page. A typed link is listed
+  like a written link (in **Mentioned in** and **Linked from**) with its type, and is kept when the
+  text is edited, because it is not written in the text.
+- **Dismiss** hides the suggestion for good; it is not suggested again. It needs the same permission.
+
+Suggestions are recomputed when an issue or page is saved (once its text has been embedded) and for
+every project each night. Pairs that are already linked (a written link, a typed link, a relation,
+parent and child) are never suggested.
+
+Project managers can change how close two items must be with the project setting
+`similar_links_threshold` (between 0.5 and 0.99) through the REST API
+(`PATCH /api/v1/projects/<KEY>/`); the next computation uses it. To
+compute the suggestions at once instead of waiting for the night, an administrator runs
+`python -m specivo.cli.similar_links` (or `--project ACME`) in the API container.
+
 ## What's next
 
 - [Wiki overview](index.md) — pages, slugs, nesting, and protected pages.
