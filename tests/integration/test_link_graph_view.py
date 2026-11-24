@@ -170,6 +170,42 @@ async def test_project_graph_hides_private_issues_of_others(client, db_session, 
     assert "Private plan" not in resp.text and hidden.display_key not in resp.text
 
 
+async def test_project_graph_seeds_ignore_links_the_reader_may_not_see(client, db_session, world):
+    """An item linked only to hidden items never outranks items linked to each other."""
+    a = await issue(db_session, world, world.home, "Seed A")
+    b = await issue(db_session, world, world.home, "Seed B")
+    await _relate(db_session, a, b)
+    noisy = await issue(db_session, world, world.home, "Noisy")
+    for n in range(3):
+        await _relate(db_session, noisy, await issue(db_session, world, world.home, f"Private {n}", private=True))
+        await _relate(db_session, noisy, await issue(db_session, world, world.hidden, f"Elsewhere {n}"))
+    resp = await client.get(
+        f"/api/v1/projects/{world.home.key}/links/?limit=2&kinds=relation",
+        headers=await _token(client, world.reader.login),
+    )
+    assert resp.status_code == 200, resp.text
+    assert [n["ref"] for n in resp.json()["nodes"]] == [a.display_key, b.display_key]
+
+
+async def test_api_key_limited_to_another_project_finds_nothing(client, db_session, world):
+    from specivo.services.api_key_service import ApiKeyService
+
+    a = await issue(db_session, world, world.home, "Scoped A")
+    b = await issue(db_session, world, world.home, "Scoped B")
+    await _relate(db_session, a, b)
+    await _tag(db_session, world, "scoped", a)
+    key, raw = await ApiKeyService().create_key(session=db_session, user_id=world.reader.id, name="lgv-limited")
+    key.scopes = {"projects": [world.hidden.key]}
+    await db_session.commit()
+    headers = {"Authorization": f"Bearer {raw}"}
+    resp = await client.get(f"/api/v1/projects/{world.home.key}/links/", headers=headers)
+    assert resp.status_code == 404
+    resp = await client.get("/api/v1/links/", params={"ref": f"tag:{world.home.key}/scoped"}, headers=headers)
+    assert resp.status_code == 404
+    resp = await client.get("/api/v1/links/", params={"ref": a.display_key}, headers=headers)
+    assert resp.status_code == 404
+
+
 async def test_suggestion_flag_is_accepted_by_every_graph_route(client, db_session, world):
     a = await issue(db_session, world, world.home, "Flag A")
     b = await issue(db_session, world, world.home, "Flag B")
