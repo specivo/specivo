@@ -615,7 +615,7 @@ async def world(db_session: AsyncSession):
 async def test_events_of_a_session_on_an_issue_show_on_its_project_page(
     client: AsyncClient, db_session: AsyncSession, world: SessionWorld
 ) -> None:
-    """The MCP connection named the issue under Hermes' session id; the webhook session takes it."""
+    """The MCP connection named the issue under Hermes' session id; its events join that session."""
     minted = await _receiver(db_session, world.agent, name="agent host")
     body = payload("post_tool_call", "hev-live", tool_name="terminal_hev", extra={"status": "ok"})
     resp = await post_event(client, minted.token, body, minted.secret)
@@ -623,7 +623,7 @@ async def test_events_of_a_session_on_an_issue_show_on_its_project_page(
 
     session = await db_session.get(AgentSession, agent_session_id)
     await db_session.refresh(session)
-    assert session.id != world.live.id
+    assert session.id == world.live.id  # one conversation, one session
     assert session.issue_id == world.pub.id
     [row] = await _audit(db_session, "agent_tool_called")
     assert row.project_id == world.p.id
@@ -655,6 +655,28 @@ async def test_events_of_a_session_on_no_issue_stay_off_project_timelines(
     assert "terminal_nowhere" not in page.text
 
 
+async def test_events_joining_an_mcp_session_stop_naming_a_project_the_account_left(
+    client: AsyncClient, db_session: AsyncSession, world: SessionWorld
+) -> None:
+    from sqlalchemy import delete
+
+    from specivo.models.member import Member
+
+    minted = await _receiver(db_session, world.agent, name="agent host")
+    await db_session.execute(delete(Member).where(Member.user_id == world.agent.id, Member.project_id == world.p.id))
+    await db_session.commit()
+    clear_role_cache(db_session)
+
+    resp = await post_event(client, minted.token, payload("post_tool_call", "hev-live", tool_name="x"), minted.secret)
+    assert resp.json()["agent_session_id"] == world.live.id
+    [row] = await _audit(db_session, "agent_tool_called")
+    assert row.project_id is None
+    # The run ending does not end the MCP session: the conversation goes on over it.
+    await post_event(client, minted.token, payload("on_session_end", "hev-live"), minted.secret)
+    await db_session.refresh(world.live)
+    assert world.live.ended_at is None
+
+
 async def test_a_session_does_not_attach_to_an_issue_its_account_can_no_longer_log_on(
     client: AsyncClient, db_session: AsyncSession, world: SessionWorld
 ) -> None:
@@ -663,6 +685,9 @@ async def test_a_session_does_not_attach_to_an_issue_its_account_can_no_longer_l
 
     from specivo.models.member import Member
 
+    # The MCP session that named the issue has ended: the events open a webhook session of their own.
+    world.live.ended_at = utcnow()
+    await db_session.commit()
     minted = await _receiver(db_session, world.agent, name="agent host")
     first = await post_event(client, minted.token, payload("on_session_start", "hev-live"), minted.secret)
     attached = await db_session.get(AgentSession, first.json()["agent_session_id"])

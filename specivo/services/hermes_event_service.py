@@ -321,10 +321,10 @@ class HermesEventService:
             child = await self._latest_webhook_row(session, user, mapped.child_session_id) or await self._open(
                 session, receiver, user, mapped.child_session_id, parent=mapped.session_id
             )
-            await self._sessions.end_session(session, child)
+            await self._end_run(session, child)
             details["child_agent_session_id"] = child.id
         elif mapped.kind == KIND_SESSION_END:
-            await self._sessions.end_session(session, agent_session)
+            await self._end_run(session, agent_session)
         elif mapped.kind == KIND_TOOL_CALL:
             await session.execute(
                 update(AgentSession)
@@ -340,10 +340,18 @@ class HermesEventService:
             mapped.audit_event,
             user_id=user.id,
             agent_session_id=agent_session.id,
-            project_id=await self._project_of(session, agent_session),
+            project_id=await self._project_of(session, agent_session, user),
             details=details,
         )
         return ApplyResult(STATUS_ACCEPTED, agent_session.id)
+
+    async def _end_run(self, session: AsyncSession, agent_session: AgentSession) -> None:
+        """A Hermes run ended: end a session only the events opened; one the client opened over
+        MCP or REST goes on (the next turn of the conversation uses it), so it is only touched."""
+        if agent_session.client_type == CLIENT_TYPE_WEBHOOK:
+            await self._sessions.end_session(session, agent_session)
+        else:
+            await self._sessions.update_activity(session, agent_session.id)
 
     async def _open(
         self,
@@ -358,14 +366,22 @@ class HermesEventService:
         )
 
     async def _latest_webhook_row(self, session: AsyncSession, user: User, external_id: str) -> AgentSession | None:
-        """*user*'s newest webhook session with client session id *external_id*, ended or not."""
+        """*user*'s newest session with client session id *external_id*, ended or not, however it was opened."""
         check_external_session_id(external_id)
         rows = await self._sessions.find_by_external(session, user.id, external_id)
-        return next((row for row in rows if row.client_type == CLIENT_TYPE_WEBHOOK), None)
+        return rows[0] if rows else None
 
-    @staticmethod
-    async def _project_of(session: AsyncSession, agent_session: AgentSession) -> int | None:
+    async def _project_of(self, session: AsyncSession, agent_session: AgentSession, user: User) -> int | None:
+        """The project an event's audit row names: its session's issue's, while *user* may still log there.
+
+        A session the client opened over MCP keeps the issue it named; its events name that
+        project only while the account may log usage on the issue (``can_log_on``).
+        """
         if agent_session.issue_id is None:
+            return None
+        if agent_session.client_type != CLIENT_TYPE_WEBHOOK and not await self._sessions.can_log_on(
+            session, user, agent_session.issue_id
+        ):
             return None
         issue = await session.get(Issue, agent_session.issue_id)
         return issue.project_id if issue is not None else None

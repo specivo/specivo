@@ -472,6 +472,14 @@ async def try_silent_refresh(request: Request, db: AsyncSession) -> User | None:
 # ---------------------------------------------------------------------------
 
 
+def _client_session_header(request: Request) -> str | None:
+    """The client's own session id a REST call names (``X-Agent-Session-Id``), when well formed."""
+    from specivo.services.agent_session_service import EXTERNAL_SESSION_ID_RE
+
+    value = (request.headers.get("X-Agent-Session-Id") or "").strip()
+    return value if value and EXTERNAL_SESSION_ID_RE.fullmatch(value) else None
+
+
 async def get_current_user(
     request: Request,
     db: AsyncSession = DB_SESSION,
@@ -589,6 +597,7 @@ async def authenticate_request(
                 api_key_id=api_key.id,
                 user_id=user.id,
                 user_agent=user_agent,
+                external_id=_client_session_header(request),
             )
         except Exception as exc:  # noqa: BLE001
             # Agent session tracking is non-critical — never block auth
