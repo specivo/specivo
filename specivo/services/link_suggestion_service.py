@@ -12,7 +12,7 @@ Suggestions
 -----------
 :func:`compute_for_project` (the sweep) and :func:`compute_for_items` (after a
 source was embedded again) store, per item, its ``SIMILAR_LINKS_TOP_K``
-nearest neighbours in the same project with the same model whose cosine
+nearest issues and as many nearest pages in the same project with the same model whose cosine
 similarity reaches the project's threshold. Pairs already linked by any stored
 or structured edge (a text link, a typed link, a relation, parent and child)
 and pairs someone accepted or dismissed are skipped, so a dismissed pair never
@@ -39,6 +39,7 @@ asks for the same permission as accepting would.
 from __future__ import annotations
 
 import logging
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -46,6 +47,7 @@ from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Integer, and_, delete, exists, false, func, literal, or_, select, text, tuple_
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,7 +77,8 @@ from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.models.user import User
-from specivo.models.wiki import Wiki, WikiPage
+from specivo.models.wiki import Wiki, WikiContent, WikiPage
+from specivo.services.wiki_utils import WIKI_LINK_RE
 
 logger = logging.getLogger(__name__)
 
@@ -343,13 +346,14 @@ async def _decided_pairs(
 # Computing suggestions
 # ---------------------------------------------------------------------------
 
-# For each item of the scope, its nearest neighbours among the issues and pages
-# of its own (current) project, with the same model. Exact: no vector index.
+# For each item of the scope, its nearest issues and, apart, its nearest pages
+# in its own (current) project, with the same model. Exact: no vector index.
 _NEIGHBOURS_SQL = """
 SELECT ss1.source_type AS item_type, ss1.entity_id AS item_id, ss1.project_id AS project_id,
        nb.source_type AS other_type, nb.entity_id AS other_id, nb.score AS score
 FROM entity_vectors ev1
 JOIN search_sources ss1 ON ss1.id = ev1.search_source_id
+CROSS JOIN (VALUES ('issue'), ('wiki_page')) AS kind(other_type)
 CROSS JOIN LATERAL (
     SELECT ss2.source_type, ss2.entity_id, 1 - (ev2.vector <=> ev1.vector) AS score
     FROM entity_vectors ev2
@@ -357,7 +361,7 @@ CROSS JOIN LATERAL (
     WHERE ev2.model_id = ev1.model_id
       AND ev2.id <> ev1.id
       AND ss2.project_id = ss1.project_id
-      AND ss2.source_type IN ('issue', 'wiki_page')
+      AND ss2.source_type = kind.other_type
     ORDER BY ev2.vector <=> ev1.vector
     LIMIT :candidates
 ) nb
@@ -416,18 +420,18 @@ async def _lock_project(session: AsyncSession, project_id: int) -> None:
 
 
 def _pick(neighbours: list[_Neighbour], thresholds: dict[int, float], skip: set[Pair]) -> dict[Pair, tuple[float, int]]:
-    """The top-k admissible neighbours of each item, as ``pair -> (score, project id)``."""
+    """The top-k admissible issues and top-k pages of each item, as ``pair -> (score, project id)``."""
     chosen: dict[Pair, tuple[float, int]] = {}
-    taken: dict[Item, int] = defaultdict(int)
+    taken: dict[tuple[Item, str], int] = defaultdict(int)
     for nb in neighbours:
-        if taken[nb.item] >= SIMILAR_LINKS_TOP_K:
+        if taken[(nb.item, nb.other[0])] >= SIMILAR_LINKS_TOP_K:
             continue
         if nb.score < thresholds.get(nb.project_id, SIMILAR_LINKS_DEFAULT_THRESHOLD):
             continue
         pair = pair_key(nb.item, nb.other)
         if pair in skip:
             continue
-        taken[nb.item] += 1
+        taken[(nb.item, nb.other[0])] += 1
         if pair not in chosen or chosen[pair][0] < nb.score:
             chosen[pair] = (nb.score, nb.project_id)
     return chosen
@@ -578,6 +582,60 @@ async def pending_suggestions(session: AsyncSession, item: Item, model_id: int) 
             continue
         other = row.target if row.source == item else row.source
         out.append(PendingSuggestion(row.id, other, row.score))
+    return out
+
+
+# Markdown that a one-paragraph preview drops or flattens, applied in this order.
+_FENCE_RE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.MULTILINE | re.DOTALL)
+_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_HTML_TAG_RE = re.compile(r"<[^>\n]+>")
+_LINE_MARK_RE = re.compile(r"^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+|\|)", re.MULTILINE)
+_RULE_RE = re.compile(r"^\s*(?:[-*_]\s*){3,}$|^\s*\|?\s*:?-{3,}.*$", re.MULTILINE)
+_EMPHASIS_RE = re.compile(r"(\*{1,3}|_{2,3}|~~|`+)")
+
+
+def plain_preview(text: str | None, limit: int) -> str:
+    """The start of a Markdown text as one line of plain text, at most *limit* characters.
+
+    Code blocks and images are dropped; links, wiki links, headings, list and
+    quote marks and emphasis are reduced to their words. A cut ends at a word
+    boundary with an ellipsis.
+    """
+    if not text:
+        return ""
+    clean = _FENCE_RE.sub(" ", text)
+    clean = _IMAGE_RE.sub(" ", clean)
+    clean = WIKI_LINK_RE.sub(lambda m: m.group(2) or m.group(1), clean)
+    clean = _MD_LINK_RE.sub(r"\1", clean)
+    clean = _HTML_TAG_RE.sub(" ", clean)
+    clean = _RULE_RE.sub(" ", clean)
+    clean = _LINE_MARK_RE.sub("", clean)
+    clean = clean.replace("|", " ")
+    clean = _EMPHASIS_RE.sub("", clean)
+    clean = " ".join(clean.split())
+    if len(clean) <= limit:
+        return clean
+    cut = clean[:limit].rsplit(" ", 1)[0] if " " in clean[:limit] else clean[:limit]
+    return cut.rstrip(" ,.;:-") + "…"
+
+
+async def item_previews(session: AsyncSession, items: Iterable[Item], limit: int) -> dict[Item, str]:
+    """A plain-text preview of each issue (its description) and page (its current text)."""
+    wanted = set(items)
+    issue_ids, page_ids = _ids(wanted, ITEM_ISSUE), _ids(wanted, ITEM_WIKI_PAGE)
+    out: dict[Item, str] = {}
+    if issue_ids:
+        rows = await session.execute(select(Issue.id, Issue.description).where(Issue.id.in_(issue_ids)))
+        out.update({(ITEM_ISSUE, rid): plain_preview(body, limit) for rid, body in rows})
+    if page_ids:
+        rows = await session.execute(
+            select(WikiContent.page_id, WikiContent.text)
+            .where(WikiContent.page_id.in_(page_ids))
+            .ext(distinct_on(WikiContent.page_id))
+            .order_by(WikiContent.page_id, WikiContent.version.desc())
+        )
+        out.update({(ITEM_WIKI_PAGE, pid): plain_preview(body, limit) for pid, body in rows})
     return out
 
 

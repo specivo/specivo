@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-24 18:36+0100\n"
+"POT-Creation-Date: 2026-11-25 15:53+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -714,30 +714,30 @@ msgstr "รายการประวัตินี้ไม่ได้อย
 msgid "Cannot reply to a journal on a different issue"
 msgstr "ไม่สามารถตอบกลับความคิดเห็นในงานอื่นได้"
 
-#: specivo/services/link_suggestion_service.py:715
+#: specivo/services/link_suggestion_service.py:773
 msgid "An item cannot be linked to itself"
 msgstr "ไม่สามารถลิงก์รายการกับตัวเองได้"
 
-#: specivo/services/link_suggestion_service.py:717
+#: specivo/services/link_suggestion_service.py:775
 msgid "Suggested links join issues and wiki pages only"
 msgstr "ลิงก์ที่แนะนำใช้เชื่อมงานกับหน้าวิกิเท่านั้น"
 
-#: specivo/services/link_suggestion_service.py:745
+#: specivo/services/link_suggestion_service.py:803
 #, python-format
 msgid "The suggested link between %(source)s and %(target)s was already accepted"
 msgstr "ลิงก์ที่แนะนำระหว่าง %(source)s และ %(target)s ได้รับการยอมรับไปแล้ว"
 
-#: specivo/services/link_suggestion_service.py:747
+#: specivo/services/link_suggestion_service.py:805
 #, python-format
 msgid "The suggested link between %(source)s and %(target)s was already dismissed"
 msgstr "ลิงก์ที่แนะนำระหว่าง %(source)s และ %(target)s ถูกปิดไปแล้ว"
 
-#: specivo/services/link_suggestion_service.py:750
+#: specivo/services/link_suggestion_service.py:808
 #, python-format
 msgid "No suggested link between %(source)s and %(target)s"
 msgstr "ไม่มีลิงก์ที่แนะนำระหว่าง %(source)s และ %(target)s"
 
-#: specivo/services/link_suggestion_service.py:796
+#: specivo/services/link_suggestion_service.py:854
 msgid "A typed link between these items already exists"
 msgstr "มีลิงก์แบบมีประเภทระหว่างรายการเหล่านี้อยู่แล้ว"
 
@@ -779,6 +779,7 @@ msgstr ""
 #: specivo/services/permission_catalogue.py:79
 #: specivo/templates/themes/default/components/sidebar.html:38
 #: specivo/templates/themes/default/pages/_backlinks.html:7
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:40
 #: specivo/templates/themes/default/pages/admin/projects.html:163
@@ -1778,6 +1779,7 @@ msgid "Admin"
 msgstr "จัดการระบบ"
 
 #: specivo/templates/themes/default/pages/_backlinks.html:7
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/projects/settings.html:975
 msgid "Wiki pages"
 msgstr "หน้าวิกิ"
@@ -2049,6 +2051,7 @@ msgstr "แนวคิด (AI)"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:33
 #: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:164
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:178
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:413
@@ -2067,6 +2070,7 @@ msgstr "งาน"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:34
 #: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 msgid "Wiki page"
 msgstr "หน้าวิกิ"
 
@@ -2516,97 +2520,97 @@ msgstr ""
 "รายการเหล่านี้เป็นคำแนะนำ ไม่ใช่ลิงก์: ยอมรับรายการที่ถูกต้อง "
 "และปิดรายการที่เหลือ"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:18
+#: specivo/templates/themes/default/pages/_link_suggestions.html:25
 msgid "Similarity of the content, from 0 to 1"
 msgstr "ความคล้ายของเนื้อหา ตั้งแต่ 0 ถึง 1"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:28
+#: specivo/templates/themes/default/pages/_link_suggestions.html:36
 msgid "Link as"
 msgstr "ลิงก์เป็น"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:31
+#: specivo/templates/themes/default/pages/_link_suggestions.html:39
 #: specivo/templates/themes/default/pages/issues/detail.html:608
 #: specivo/templates/themes/default/pages/issues/form.html:53
 #: specivo/templates/themes/default/pages/issues/form.html:394
 msgid "Relates to"
 msgstr "เกี่ยวข้องกับ"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:32
+#: specivo/templates/themes/default/pages/_link_suggestions.html:40
 #: specivo/templates/themes/default/pages/issues/detail.html:609
 #: specivo/templates/themes/default/pages/issues/form.html:54
 #: specivo/templates/themes/default/pages/issues/form.html:395
 msgid "Blocks"
 msgstr "ขัดขวาง"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:33
+#: specivo/templates/themes/default/pages/_link_suggestions.html:41
 #: specivo/templates/themes/default/pages/issues/detail.html:610
 #: specivo/templates/themes/default/pages/issues/form.html:55
 #: specivo/templates/themes/default/pages/issues/form.html:396
 msgid "Blocked by"
 msgstr "ถูกขัดขวางโดย"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:34
+#: specivo/templates/themes/default/pages/_link_suggestions.html:42
 #: specivo/templates/themes/default/pages/issues/detail.html:611
 #: specivo/templates/themes/default/pages/issues/form.html:56
 #: specivo/templates/themes/default/pages/issues/form.html:397
 msgid "Duplicates"
 msgstr "ซ้ำกับ"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:35
+#: specivo/templates/themes/default/pages/_link_suggestions.html:43
 #: specivo/templates/themes/default/pages/issues/form.html:57
 #: specivo/templates/themes/default/pages/issues/form.html:398
 msgid "Duplicated by"
 msgstr "ถูกทำซ้ำโดย"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:36
+#: specivo/templates/themes/default/pages/_link_suggestions.html:44
 #: specivo/templates/themes/default/pages/issues/detail.html:612
 #: specivo/templates/themes/default/pages/issues/form.html:58
 #: specivo/templates/themes/default/pages/issues/form.html:399
 msgid "Precedes"
 msgstr "นำหน้า"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:37
+#: specivo/templates/themes/default/pages/_link_suggestions.html:45
 #: specivo/templates/themes/default/pages/issues/detail.html:613
 #: specivo/templates/themes/default/pages/issues/form.html:59
 #: specivo/templates/themes/default/pages/issues/form.html:400
 msgid "Follows"
 msgstr "ตามหลัง"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:38
+#: specivo/templates/themes/default/pages/_link_suggestions.html:46
 #: specivo/templates/themes/default/pages/issues/detail.html:614
 msgid "Copied to"
 msgstr "คัดลอกไปยัง"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:39
+#: specivo/templates/themes/default/pages/_link_suggestions.html:47
 #: specivo/templates/themes/default/pages/issues/detail.html:615
 msgid "Copied from"
 msgstr "คัดลอกจาก"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:41
+#: specivo/templates/themes/default/pages/_link_suggestions.html:49
 msgid "See also"
 msgstr "ดูเพิ่มเติม"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:42
+#: specivo/templates/themes/default/pages/_link_suggestions.html:50
 msgid "Documents"
 msgstr "จัดทำเอกสารให้"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:43
+#: specivo/templates/themes/default/pages/_link_suggestions.html:51
 msgid "Implements"
 msgstr "ทำให้เกิดผล"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:44
+#: specivo/templates/themes/default/pages/_link_suggestions.html:52
 msgid "Decided in"
 msgstr "ตัดสินใจใน"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:45
+#: specivo/templates/themes/default/pages/_link_suggestions.html:53
 msgid "Supersedes"
 msgstr "ใช้แทน"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:49
+#: specivo/templates/themes/default/pages/_link_suggestions.html:57
 msgid "Accept"
 msgstr "ยอมรับ"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:50
+#: specivo/templates/themes/default/pages/_link_suggestions.html:58
 #: specivo/templates/themes/default/pages/auth/api_keys.html:64
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:39
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:60
@@ -2614,6 +2618,12 @@ msgstr "ยอมรับ"
 #: specivo/templates/themes/default/pages/projects/settings.html:1409
 msgid "Dismiss"
 msgstr "ปิด"
+
+#: specivo/templates/themes/default/pages/_link_suggestions.html:65
+#, python-format
+msgid "%(count)s less similar suggestion not shown."
+msgid_plural "%(count)s less similar suggestions not shown."
+msgstr[0] "ไม่ได้แสดงคำแนะนำที่คล้ายน้อยกว่าอีก %(count)s รายการ"
 
 #: specivo/templates/themes/default/pages/_markdown_editor_i18n.html:8
 #: specivo/templates/themes/default/pages/wiki/edit.html:68
@@ -16247,19 +16257,19 @@ msgstr "ยังไม่มีหน้าวิกิ งาน หรือ�
 msgid "No wiki page, issue or comment links here yet."
 msgstr "ยังไม่มีหน้าวิกิ งาน หรือความคิดเห็นใดลิงก์มาที่นี่"
 
-#: specivo/web/partials/links.py:225
+#: specivo/web/partials/links.py:244
 msgid "Linked."
 msgstr "ลิงก์แล้ว"
 
-#: specivo/web/partials/links.py:225
+#: specivo/web/partials/links.py:244
 msgid "Dismissed. It will not be suggested again."
 msgstr "ปิดแล้ว จะไม่แนะนำอีก"
 
-#: specivo/web/partials/links.py:234
+#: specivo/web/partials/links.py:253
 msgid "That suggestion is no longer available."
 msgstr "คำแนะนำนั้นไม่มีอยู่แล้ว"
 
-#: specivo/web/partials/links.py:236
+#: specivo/web/partials/links.py:255
 msgid "You do not have permission to link these items."
 msgstr "คุณไม่มีสิทธิ์ลิงก์รายการเหล่านี้"
 

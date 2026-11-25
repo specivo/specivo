@@ -123,42 +123,61 @@ async def _decide_permissions(db: AsyncSession, user: User, root: tuple[str, Any
 async def _render_suggestions(
     request: Request, db: AsyncSession, user: User, ref: str, *, error: str | None = None, done: str | None = None
 ) -> Response:
-    from specivo.core.constants import SIMILAR_LINKS_INLINE_LIMIT
+    """The "Possibly related" list: issues and wiki pages apart, at most ``SIMILAR_LINKS_WEB_LIMIT_PER_TYPE``
+    of each, best score first, each with a plain-text preview of its content."""
+    from specivo.core.constants import SIMILAR_LINKS_PREVIEW_CHARS, SIMILAR_LINKS_WEB_LIMIT_PER_TYPE
     from specivo.services.entity_link_service import KIND_SIMILAR
+    from specivo.services.link_suggestion_service import item_previews
 
     try:
         root = await resolve_root(db, user, ref)
     except (NotFoundError, PermissionDeniedError, ValueError):
         return HTMLResponse("<p>Not found</p>", status_code=404)
     graph = await _service.get_links(
-        db, user, root, direction="both", kinds=[KIND_SIMILAR], limit=SIMILAR_LINKS_INLINE_LIMIT
+        db, user, root, direction="both", kinds=[KIND_SIMILAR], limit=ENTITY_LINKS_MAX_LIMIT
     )
     nodes = {n.ref: n for n in graph.nodes}
     allowed = await _decide_permissions(db, user, root)
-    rows = []
+    found: dict[str, list[tuple[float, Any]]] = {"issue": [], "wiki_page": []}
     for edge in graph.edges:
         node = nodes.get(edge.target)
-        if not edge.suggested or node is None:
+        if not edge.suggested or node is None or node.type not in found:
             continue
-        rows.append(
+        found[node.type].append((float(edge.label or 0), node))
+    groups: dict[str, list[dict[str, Any]]] = {}
+    hidden: dict[str, int] = {}
+    for node_type, scored in found.items():
+        scored.sort(key=lambda pair: -pair[0])
+        groups[node_type] = [
             {
                 "ref": node.ref,
+                "key": graph.keys.get(node.ref),
                 "shown_ref": node.ref.removeprefix("wiki:"),
                 "title": node.title,
                 "url": node.url,
                 "status": node.status,
-                "score": edge.label,
+                "score": f"{score:.3f}",
                 # Two issues are linked by a relation; anything else by a typed link.
                 "both_issues": root[0] == "issue" and node.type == "issue",
                 "can_decide": allowed.get(node.type, False),
             }
-        )
+            for score, node in scored[:SIMILAR_LINKS_WEB_LIMIT_PER_TYPE]
+        ]
+        hidden[node_type] = max(0, len(scored) - SIMILAR_LINKS_WEB_LIMIT_PER_TYPE)
+    shown = [row for rows in groups.values() for row in rows]
+    keys = [(str(row["key"][0]), int(row["key"][1])) for row in shown if row["key"]]
+    previews = await item_previews(db, keys, SIMILAR_LINKS_PREVIEW_CHARS)
+    for row in shown:
+        key = row.pop("key")
+        row["preview"] = previews.get((str(key[0]), int(key[1])), "") if key else ""
     return get_templates().TemplateResponse(
         request,
         "pages/_link_suggestions.html",
         context={
             "root_ref": graph.root.ref if graph.root else ref,
-            "rows": rows,
+            "groups": groups,
+            "hidden": hidden,
+            "total": len(shown),
             "error": error,
             "done": done,
         },

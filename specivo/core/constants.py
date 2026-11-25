@@ -174,16 +174,20 @@ SEARCH_EXPAND_NEIGHBOURS = 10
 # Project settings graph_metadata_keys: how many keys at most, and how long each may be.
 GRAPH_METADATA_KEYS_MAX = 10
 GRAPH_METADATA_KEY_MAX_LENGTH = 64
-# Suggested links (``similar`` edges) from document vectors: the nearest neighbours kept per
-# item, the default cosine similarity they need (per project: settings["similar_links_threshold"],
-# within the bounds below), the extra candidates read so that linked and dismissed pairs do not
-# leave an item short, and how many are listed inline by show_issue / read_wiki and the web pages.
-SIMILAR_LINKS_TOP_K = 5
+# Suggested links (``similar`` edges) from document vectors: the nearest issues, and as many
+# nearest pages, kept per item, the default cosine similarity they need (per project:
+# settings["similar_links_threshold"], within the bounds below), the extra candidates read so that
+# linked and dismissed pairs do not leave an item short, how many are listed inline by show_issue /
+# read_wiki, how many of each type ("Issues", "Wiki pages") the web pages list, and the length of
+# the plain-text preview each web row shows.
+SIMILAR_LINKS_TOP_K = 10
 SIMILAR_LINKS_DEFAULT_THRESHOLD = 0.80
 SIMILAR_LINKS_MIN_THRESHOLD = 0.5
 SIMILAR_LINKS_MAX_THRESHOLD = 0.99
 SIMILAR_LINKS_CANDIDATE_MARGIN = 20
 SIMILAR_LINKS_INLINE_LIMIT = 5
+SIMILAR_LINKS_WEB_LIMIT_PER_TYPE = 10
+SIMILAR_LINKS_PREVIEW_CHARS = 220
 # Concept extraction (``concept`` nodes, ``mentions`` edges) with the project's own AI provider:
 # the confidence a mention needs to be shown by default (below it, it is a suggestion; per project:
 # settings["concept_confidence_threshold"] within the bounds below), how many changed sources one run
