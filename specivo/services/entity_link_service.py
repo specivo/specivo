@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.constants import (
     ENTITY_LINKS_DEFAULT_LIMIT,
     ENTITY_LINKS_HUB_MAX_DEPTH,
+    ENTITY_LINKS_MAX_EDGES,
     ENTITY_LINKS_MAX_EXPANDED,
     ENTITY_LINKS_MAX_LIMIT,
     ENTITY_LINKS_MAX_PER_SOURCE,
@@ -1674,6 +1675,10 @@ class _Reader:
         graph.root = refs.get(root)
         graph.nodes = [refs[n] for n in nodes if n != root and n in refs]
         graph.keys = {node.ref: key for key, node in refs.items()}
+        if len(graph.raw_edges) > ENTITY_LINKS_MAX_EDGES:
+            # The nearest edges come first (the walk's order): the cut drops the farthest.
+            graph.raw_edges = graph.raw_edges[:ENTITY_LINKS_MAX_EDGES]
+            graph.truncated = True
         journal_refs = await self._journal_refs({e.via_journal_id for e, _ in graph.raw_edges if e.via_journal_id})
         broken_projects = await self._project_keys({e.broken_project_id for e, _ in graph.raw_edges if e.broken_ref})
         root_ref = graph.root.ref if graph.root else None

@@ -157,6 +157,9 @@ ENTITY_LINKS_MAX_PER_SOURCE = 500
 # Neighbours a link graph read returns by default, and at most.
 ENTITY_LINKS_DEFAULT_LIMIT = 50
 ENTITY_LINKS_MAX_LIMIT = 200
+# Edges a link graph read returns at most (more are cut, and the read says it was truncated),
+# so a densely linked project cannot send the browser thousands of edges to lay out.
+ENTITY_LINKS_MAX_EDGES = 1000
 # Neighbours of the first hop expanded when depth=2.
 ENTITY_LINKS_MAX_EXPANDED = 50
 # Linked items listed inline by specivo_show_issue / specivo_read_wiki per direction.
