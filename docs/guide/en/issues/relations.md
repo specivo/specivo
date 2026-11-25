@@ -61,6 +61,9 @@ shows what you can open yourself: mentions in a private issue, a private note or
 are left out. Unlike relations, mentions come from the text, so to remove one, edit the text that
 contains it.
 
+To see the links of an issue as a picture, open its **Graph** tab. See
+[Seeing the graph](../wiki/history-linking.md#seeing-the-graph).
+
 ## Possibly related
 
 Under **Mentioned in**, the tab lists issues and wiki pages of the project whose content is close to

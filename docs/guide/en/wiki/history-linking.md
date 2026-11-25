@@ -133,7 +133,6 @@ background with a progress count, and only one runs per project at a time. From 
 Tags, versions, sprints, assignees and the values of some metadata keys are part of the graph too,
 for AI agents: see [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph).
 
-<<<<<<< HEAD
 ## Seeing the graph
 
 The links can also be seen as a picture:
@@ -149,18 +148,26 @@ and one step further. Issues, wiki pages, commits and pull requests, attachments
 names them. Under **Show links**, tick or untick kinds of link: wiki links, mentions, relations, parent
 and children, links to files, attachments, commits and pull requests are shown at first. Ticking
 **Tags**, **Components**, **Versions**, **Sprints** or **Assignees** adds them as small diamonds with
-the number of items they hold.
+the number of items they hold. **Concepts (AI)** is off at first too: it adds the concepts that a
+project's AI provider found in its issues and pages (see
+[Concept extraction](../projects/index.md#concept-extraction-ai)), and is empty while that is off.
+**Accepted suggestions** are the typed links made from [suggestions](#possibly-related-suggested-links).
 
 Click an issue, page, commit or pull request to open it. Click a diamond (a tag, version and so on) to
-add its items to the graph. Drag to move the picture, scroll or pinch to zoom, and hover over an item or
-a line to see what it is. **Items in this graph**, under the picture, lists the same items as links, for
+add its items to the graph. Drag anywhere on the picture to move it, scroll or pinch to zoom, or use the
+**Zoom in**, **Zoom out** and **Reset the view** buttons over the picture. Hover over an item or a line
+to see what it is. **Items in this graph**, under the picture, lists the same items as links, for
 the keyboard and screen readers, with a **Show its items** button for each tag, version and so on.
 
-The graph shows only what you can open yourself, like the lists above. It stops at a few hundred
-items; when it leaves some out, the line above the picture says so. **Show suggestions** adds
+The graph shows only what you can open yourself, like the lists above. It is capped so that a densely
+linked project stays readable: a read returns at most 1,000 links (the nearest ones first), and the
+picture holds at most 1,500 links across all the diamonds you open. When the server leaves some out,
+the line above the picture says so; when the picture is full it reads "The graph is full: open an
+item to explore from there." A graph of more than 150 items or 600 links is laid out at once instead
+of settling in an animation. **Show suggestions** adds
 suggested links, drawn as dashed lines, once your Specivo suggests links between similar issues and
 pages. The graph needs you to be signed in.
-=======
+
 ## Possibly related: suggested links
 
 When semantic search is on (the bundled embedding model is installed), Specivo also suggests links
@@ -198,7 +205,6 @@ Project managers can change how close two items must be with the project setting
 (`PATCH /api/v1/projects/<KEY>/`); the next computation uses it. To
 compute the suggestions at once instead of waiting for the night, an administrator runs
 `python -m specivo.cli.similar_links` (or `--project ACME`) in the API container.
->>>>>>> release/0.15.0
 
 ## What's next
 

@@ -253,6 +253,19 @@ Usage people log for themselves through the web or the REST API is not recorded 
 always see their own entries. Over MCP, like every agent tool call, it is (`ai_usage_logged`). Comments
 are free text and never copied into the log, and no prompt, code or file name is ever stored with
 AI usage.
+### Agent sessions and Hermes receivers
+
+| Event | Who acted | Details |
+|---|---|---|
+| `agent_session_linked` | the agent account, over MCP (`specivo_agent_session` setting the client session ids or the working issue) | the session and, in the project of the issue, the issue; when the issue was cleared (`issue_ref=""`), `issue_cleared` holds the key it had. Clearing a session that has no issue writes nothing |
+| `member_change` with `action: "agent_works_for_changed"` | the administrator | `target_user_id`, `target_login` (the agent), `works_for_id` and `previous_works_for_id` |
+| `hermes_receiver_created`, `hermes_receiver_updated`, `hermes_receiver_deleted` | whoever managed the receiver | the receiver |
+| `hermes_event_rejected` | none (the sender is not signed in) | the reason the event was refused |
+| `agent_session_started`, `agent_session_ended` | the receiver's account | the session, from Hermes events |
+| `agent_tool_called`, `agent_approval_requested`, `agent_approval_resolved`, `agent_subagent_started`, `agent_subagent_stopped` | the receiver's account | the step: the tool name, status and the keys it named, never what was sent to a tool or what it returned |
+
+See [Hermes events](../ai-agents/hermes-events.md) and [Agent sessions](../ai-agents/capabilities.md#agent-sessions).
+
 ## Personal data
 
 The audit log holds personal data, readable by every instance administrator:

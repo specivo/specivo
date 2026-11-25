@@ -194,6 +194,24 @@ to that session's issue (or, when that session names none, to the nearest one in
 instead of guessing from the time of the work. `specivo_agent_session(op="get")` shows the session.
 Setting ids is recorded in the audit log.
 
+A client that runs several conversations over one MCP connection (Hermes subagents or gateway chats,
+for example) calls `specivo_agent_session(op="set", external_session_id=...)` before the work of each
+one. Specivo selects, or creates, the session of that id on the connection, and the connection's later
+calls count toward it; `op="get"` with an `external_session_id` shows that session. Tool calls that
+run at the same time on one connection go to the session selected last, so give such sessions a
+connection each when that matters. `specivo_agent_session(op="set", issue_ref="")` clears the
+session's working issue; the change is audited.
+
+One client conversation is one session, however its calls arrive:
+
+- [Hermes events](hermes-events.md) with the same client session id join the account's open session. A
+  run's end ends only a session the events opened, not the MCP session the conversation goes on in.
+- A REST call with the header `X-Agent-Session-Id: <id>` joins the open session with that id, or
+  starts a REST session that carries it. REST calls without the header never join such a session.
+- A REST call with the header `X-Agent-Background: 1` is the client's own housekeeping, for example a
+  sync that polls for new issues. It opens or extends no session and so does not keep one looking
+  active. It is authenticated and audited as usual.
+
 ### The Agent sessions page
 
 Every project has an **Agent sessions** page in its sidebar. It lists the sessions of the project's
@@ -207,15 +225,19 @@ only, inactive only). A session working on an issue you cannot see is not listed
 Project managers (anyone with **Manage project**, and administrators) can open a session. Its page
 shows the account and client, the client's session id and its **Parent session**, when it started,
 was last active and ended, the **Related sessions** in its parent chain, and its **Tool calls**:
-the MCP tools it ran, newest first, 50 per page, with the event and what each call named (project
+the MCP tools it ran, newest first, 20 per page, with the event and what each call named (project
 keys, issue keys, page slugs). They come from the security audit log, so only that metadata is
 shown, never what was sent to a tool or what it returned. Calls the session made in other projects
 are left out, and so are calls without a project from tools that work in projects; calls of
 `specivo_whoami`, `specivo_list_projects` and `specivo_list_lookups` are shown. **Parent session** and
 **Related sessions** show only sessions you could open on this page. Below them is the AI
-usage linked to the session: the entries reported with its client session id, or, when it has none,
+usage linked to the session (the newest 20 entries): the entries reported with its client session id, or, when it has none,
 the entries of the same account whose start and end fall in the session's time. Opening a session
 is recorded in the audit log.
+
+When a section has more than 20 items, **Newer** and **Older** links and a page size (20, 50 or 100)
+appear above it and load that section in place, without reloading the page. Without JavaScript the links
+reload the page. The paging applies to **Tool calls** and to **AI usage** separately.
 
 Tool calls made before this page existed are not linked to a session, so older sessions show none.
 

@@ -99,6 +99,16 @@ may edit the issue. The **original estimate** keeps what was first planned while
 **remaining estimate** is the work left, and logging time does not lower it. The issue's **Time** tab
 totals the logged hours next to all three.
 
+## The Time Entries page
+
+**Time Entries** in the sidebar lists the time entries of every project in which you may read time
+entries, newest first, with a **Project** column. Narrow the list with the **Project**, **User** and
+**Issue** filters: each is a search field that offers only the projects, people and issues you may
+see. A project's own **Time** area has the same **User** and **Issue** filters, and an **All projects**
+button that opens this page for the project. The **Issue** column shows the issue's key and subject and
+links to it. The total at the top covers every entry that matches the filters, not only the page you
+are on, and long lists are paged.
+
 ## The project Time area
 
 Each project has a **Time** area that lists time entries and rolls them into reports — totals by

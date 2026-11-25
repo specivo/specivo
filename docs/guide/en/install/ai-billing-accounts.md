@@ -153,6 +153,29 @@ see budgets on company accounts and payers; a personal account's budget is seen 
 administrators. Setting, changing and removing a budget on a company account or a payer, or somebody
 else's, and every alert sent, are written to the [audit log](audit-log.md#ai-spend-budgets).
 
+## Agents billed through the person they work for
+
+An agent usually runs as a service account, and a service account has no subscription or billing
+account of its own. An administrator can say which person it **works for**: open **Administration →
+Users**, open the agent's account and, in the **Works for** section, search for the person and
+choose **Save**. **Remove** takes it back ("Nobody: the agent's usage is billed through its own
+accounts").
+
+From then on the agent's usage is billed as that person's: Specivo looks for the account in the
+person's personal routed accounts, a record's slug naming the person's account, the person's
+subscriptions and company seats, so the payer, the plan, the budgets and the reports follow the person.
+The entries stay listed under the agent.
+
+- Only a service account can work for someone, only for an active person, and never for itself.
+- Setting or clearing it bills the agent's existing entries again. So does a later change to the
+  person's accounts or seat.
+- If the person is deactivated or locked, new usage and usage that is billed again fall back to the
+  agent's own accounts. Entries that were already billed are not moved automatically.
+- The agent's employee-paid usage does not appear in the person's monthly
+  [reimbursement claim](#reimbursement-claims).
+- The change is recorded in the [audit log](audit-log.md#agent-sessions-and-hermes-receivers). Over the
+  API: `PUT /api/v1/admin/users/{id}/works-for/` with `{"works_for_id": 12}`, or `null` to clear it.
+
 ## With your AI agent
 
 The `specivo_ai_billing_accounts` tool works like the pages, for the person whose API key the agent

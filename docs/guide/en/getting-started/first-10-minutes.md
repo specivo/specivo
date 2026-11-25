@@ -27,8 +27,11 @@ From the top, the dashboard shows:
   API-equivalent value, leverage, tokens, and the hours logged by agents and by people. **Full spend
   report** opens the [spend report](../projects/ai-spend-reports.md). See [AI usage](../projects/ai-usage.md).
 - **Agents working now** — the active sessions of your own API keys (administrators see every session):
-  the account, the client, the issue it works on, when it started and its last activity. A session closes
-  after a period without activity.
+  the account, the client, the issue it works on, when it started and its last activity. Agent accounts
+  that are members of a project you can open are listed too, and a session's issue is shown only when you
+  can see that issue. A session closes after a period without activity, and a session that has ended is
+  no longer counted or listed. Under **Assigned to agents** the card lists the open issues assigned to
+  agent accounts, most recently updated first, each linking to the issue's **Agents** tab.
 - **My open issues**, **Release tracking**, **Sprint**, **Projects** and **Recent wiki**.
 - **Recent activity** — consecutive events by the same person or agent on the same issue are grouped into
   one row that you can expand. Filter the feed by **All**, **Agents** or **People**.

@@ -96,6 +96,18 @@ gets in any of three ways:
 
 The full help works for every tool, also one whose toolset the connection did not load.
 
+### Read, write and delete hints
+
+Every tool also tells the client what kind of call it is, with the standard MCP hints in `tools/list`:
+`readOnlyHint` (lists, shows, reads, search, `specivo_ai_usage_report`), `destructiveHint` (deletes,
+`specivo_remove_relation`, `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence`, and
+`specivo_ai_subscriptions`, whose `delete` op removes a subscription), `idempotentHint` (repeating the
+call with the same arguments changes nothing more: updates by key, `specivo_add_relation`,
+`specivo_tag`) and `openWorldHint` (always false: a tool acts on your Specivo only). A client can
+retry a read tool after a dropped session and ask for approval only on writes. Creating tools,
+`specivo_add_comment`, `specivo_log_time`, `specivo_log_ai_usage` and `specivo_timer` are not
+idempotent: a client should check before it repeats them after a timeout.
+
 ## Verify the connection
 
 Once the client reloads, it should discover the `specivo_…` tools. Ask the agent to run
