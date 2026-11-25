@@ -27,6 +27,15 @@ import { safeNextPath } from '../lib/safe-url';
 const SELECTOR = '[data-sp-link-graph]';
 /** Nodes at most, over the first read and every hub expansion. */
 export const MAX_NODES = 300;
+/** Edges drawn at most across expansions: a dense graph beyond this would stall the force layout. */
+export const MAX_EDGES = 1500;
+/** Above these the layout is computed without animating every step. */
+const STATIC_LAYOUT_NODES = 150;
+const STATIC_LAYOUT_EDGES = 600;
+/** The zoom buttons' step, and the zoom range they keep to. */
+const ZOOM_STEP = 1.25;
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 4;
 /** Neighbours asked of the server: an item reads two hops, a project one. */
 const LIMITS = { item: 100, project: 200 };
 const HUB_LIMIT = 50;
@@ -142,6 +151,10 @@ export function mergeGraph(state, data, main = false) {
         if (!state.nodes.has(edge.source) || !state.nodes.has(edge.target)) return;
         const key = edgeKey(edge);
         if (state.edges.has(key)) return;
+        if (state.edges.size >= MAX_EDGES) {
+            capped = true;
+            return;
+        }
         state.edges.set(key, {
             source: edge.source,
             target: edge.target,
@@ -328,8 +341,9 @@ export function buildOption(state, theme, width) {
             },
         });
     });
+    const big = nodes.length >= STATIC_LAYOUT_NODES || links.length >= STATIC_LAYOUT_EDGES;
     return {
-        animation: nodes.length < 150,
+        animation: !big,
         textStyle: { color: theme.text, fontFamily: theme.font },
         aria: { enabled: true, label: { description: state.description } },
         tooltip: {
@@ -355,7 +369,8 @@ export function buildOption(state, theme, width) {
             data: nodes,
             links,
             // A little zoomed out, and long labels cut, so labels at the edge of the layout stay in view.
-            zoom: narrow ? 0.8 : 0.9,
+            zoom: initialZoom(narrow),
+            scaleLimit: { min: ZOOM_MIN, max: ZOOM_MAX },
             label: {
                 position: 'right',
                 color: theme.text,
@@ -369,6 +384,8 @@ export function buildOption(state, theme, width) {
             lineStyle: { color: theme.edge, curveness: 0 },
             // Spread scales with the width, so a phone keeps the graph on screen and a desktop does not huddle.
             force: {
+                // A big graph is laid out at once rather than animated step by step.
+                layoutAnimation: !big,
                 repulsion: narrow ? 120 : Math.min(420, Math.max(220, width / 4)),
                 edgeLength: narrow ? [35, 90] : [90, 170],
                 gravity: narrow ? 0.12 : 0.06,
@@ -376,6 +393,30 @@ export function buildOption(state, theme, width) {
             },
         }],
     };
+}
+
+function initialZoom(narrow) {
+    return narrow ? 0.8 : 0.9;
+}
+
+/** The chart's zoom now (it changes when the reader scrolls or pinches), or the initial one. */
+function currentZoom(state) {
+    const series = state.chart && state.chart.getOption().series;
+    const zoom = series && series[0] && series[0].zoom;
+    return typeof zoom === 'number' ? zoom : initialZoom(state.width < 640);
+}
+
+/** The zoom buttons: in and out by a step around the view's centre, or back to the first view. */
+export function zoomGraph(state, how) {
+    if (!state.chart) return;
+    if (how === 'reset') {
+        state.chart.setOption({ series: [{ zoom: initialZoom(state.width < 640), center: null }] });
+        state.chart.dispatchAction({ type: 'restore' });
+        return;
+    }
+    const factor = how === 'in' ? ZOOM_STEP : 1 / ZOOM_STEP;
+    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, currentZoom(state) * factor));
+    state.chart.setOption({ series: [{ zoom }] });
 }
 
 function draw(state, animate) {
@@ -647,6 +688,9 @@ export function mountLinkGraph(el) {
         if (!target.hasAttribute('data-graph-kind') && !target.hasAttribute('data-graph-suggestions')) return;
         clearTimeout(state.timer);
         state.timer = setTimeout(() => load(state), 150);
+    });
+    el.querySelectorAll('[data-graph-zoom]').forEach((button) => {
+        button.addEventListener('click', () => zoomGraph(state, button.getAttribute('data-graph-zoom')));
     });
     watchSize(state);
     watchTheme();

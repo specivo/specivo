@@ -333,3 +333,30 @@ async def test_graph_labels_are_escaped_in_the_page(client, db_session, world):
     # In the JSON the title is data; the view only ever sets it as text.
     resp = await client.get(f"/api/v1/links/?ref={root.display_key}", headers=await _token(client, world.reader.login))
     assert resp.json()["root"]["title"] == "<img src=x onerror=alert(1)>"
+
+
+async def test_a_graph_read_returns_at_most_the_edge_cap(client, db_session, world, monkeypatch):
+    """A densely linked project cannot send thousands of edges: the read is cut and says so."""
+    from specivo.services import entity_link_service
+
+    a = await issue(db_session, world, world.home, "Hub issue")
+    others = [await issue(db_session, world, world.home, f"Leaf {n}") for n in range(5)]
+    for other in others:
+        await _relate(db_session, a, other)
+    await rebuild(db_session, a)
+    headers = await _token(client, world.reader.login)
+
+    whole = (await client.get(f"/api/v1/projects/{world.home.key}/links/?kinds=relation", headers=headers)).json()
+    assert len(whole["edges"]) == 5 and whole["truncated"] is False
+
+    monkeypatch.setattr(entity_link_service, "ENTITY_LINKS_MAX_EDGES", 3)
+    cut = (await client.get(f"/api/v1/projects/{world.home.key}/links/?kinds=relation", headers=headers)).json()
+    assert len(cut["edges"]) == 3 and cut["truncated"] is True
+
+
+async def test_the_graph_has_zoom_buttons(client, db_session, world):
+    resp = await client.get(f"/projects/{world.home.key}/graph/", cookies=await _cookies(client, world.reader.login))
+    html = resp.text
+    assert 'data-testid="project-graph-zoom"' in html
+    for how in ("in", "out", "reset"):
+        assert f'data-graph-zoom="{how}"' in html

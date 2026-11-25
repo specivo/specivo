@@ -111,6 +111,33 @@ def test_project_graph_draws_and_filters(admin_page: Page, linked: dict) -> None
     tracker.assert_no_errors()
 
 
+def test_project_graph_zoom_buttons(admin_page: Page, linked: dict) -> None:
+    """The zoom buttons over the chart zoom in and out and reset the view."""
+    tracker = ConsoleErrorTracker().attach(admin_page)
+    admin_page.goto(f"/projects/{linked['key']}/graph/")
+    graph = admin_page.get_by_test_id("project-graph")
+    expect(graph.locator("[data-graph-status]")).to_contain_text("4 items, 3 links")
+    zoom = graph.get_by_test_id("project-graph-zoom")
+    expect(zoom).to_be_visible()
+
+    def drawing() -> str:
+        return str(graph.locator("[data-graph-canvas] svg").inner_html())
+
+    admin_page.wait_for_timeout(1500)  # the layout settles
+    before = drawing()
+    zoom.locator('[data-graph-zoom="in"]').click()
+    admin_page.wait_for_timeout(400)
+    zoomed_in = drawing()
+    assert zoomed_in != before
+    zoom.locator('[data-graph-zoom="out"]').click()
+    zoom.locator('[data-graph-zoom="out"]').click()
+    admin_page.wait_for_timeout(400)
+    assert drawing() != zoomed_in
+    zoom.locator('[data-graph-zoom="reset"]').click()
+    expect(graph.locator("[data-graph-canvas] svg")).to_be_visible()
+    tracker.assert_no_errors()
+
+
 def test_issue_graph_tab_loads_on_first_opening(admin_page: Page, linked: dict) -> None:
     tracker = ConsoleErrorTracker().attach(admin_page)
     admin_page.goto(f"/issue/{linked['source']['key']}/")

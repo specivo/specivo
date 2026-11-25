@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 22:38+0100\n"
+"POT-Creation-Date: 2026-11-25 23:00+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -2108,7 +2108,7 @@ msgid "Concepts (AI)"
 msgstr "Понятия (ИИ)"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:33
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 #: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:164
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:178
@@ -2128,13 +2128,13 @@ msgid "Issue"
 msgstr "Задача"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:34
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 #: specivo/templates/themes/default/pages/_link_suggestions.html:11
 msgid "Wiki page"
 msgstr "Вики-страница"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:35
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 #: specivo/templates/themes/default/pages/search.html:245
 #: specivo/templates/themes/default/pages/search.html:249
 msgid "Attachment"
@@ -2205,7 +2205,7 @@ msgid "Concept"
 msgstr "Понятие"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:45
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 msgid "Missing target"
 msgstr "Цель не найдена"
 
@@ -2362,11 +2362,11 @@ msgstr "Показывать связи"
 msgid "Show suggestions"
 msgstr "Показывать предложения"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:103
+#: specivo/templates/themes/default/pages/_link_graph.html:104
 msgid "Link graph of the project. The list below the graph holds the same items."
 msgstr "Граф связей проекта. В списке под графом те же элементы."
 
-#: specivo/templates/themes/default/pages/_link_graph.html:103
+#: specivo/templates/themes/default/pages/_link_graph.html:104
 msgid ""
 "Link graph: this item and what it links to. The list below the graph "
 "holds the same items."
@@ -2375,22 +2375,38 @@ msgstr ""
 "те же элементы."
 
 #: specivo/templates/themes/default/pages/_link_graph.html:105
+msgid "Zoom"
+msgstr "Масштаб"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:106
+msgid "Zoom in"
+msgstr "Приблизить"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:109
+msgid "Zoom out"
+msgstr "Отдалить"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:112
+msgid "Reset the view"
+msgstr "Сбросить вид"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:118
 msgid "Legend"
 msgstr "Легенда"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 msgid "Commit or pull request"
 msgstr "Коммит или запрос на слияние"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 msgid "Tag, component, version, sprint or assignee"
 msgstr "Метка, компонент, версия, спринт или исполнитель"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:109
+#: specivo/templates/themes/default/pages/_link_graph.html:122
 msgid "Suggested link"
 msgstr "Предлагаемая связь"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:113
+#: specivo/templates/themes/default/pages/_link_graph.html:126
 msgid "Items in this graph"
 msgstr "Элементы на графе"
 

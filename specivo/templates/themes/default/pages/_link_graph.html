@@ -99,8 +99,21 @@
   </div>
 
   <p class="sp-graph-status" data-graph-status role="status" aria-live="polite">{% trans %}Loading the graph…{% endtrans %}</p>
-  <div class="sp-graph-canvas" data-graph-canvas role="img"
-       aria-label="{{ _('Link graph of the project. The list below the graph holds the same items.') if scope == 'project' else _('Link graph: this item and what it links to. The list below the graph holds the same items.') }}"></div>
+  <div class="sp-graph-stage">
+    <div class="sp-graph-canvas" data-graph-canvas role="img"
+         aria-label="{{ _('Link graph of the project. The list below the graph holds the same items.') if scope == 'project' else _('Link graph: this item and what it links to. The list below the graph holds the same items.') }}"></div>
+    <div class="sp-graph-zoom" role="group" aria-label="{{ _('Zoom') }}" data-testid="{{ testid }}-zoom">
+      <button type="button" class="sp-graph-zoom-btn" data-graph-zoom="in" title="{{ _('Zoom in') }}" aria-label="{{ _('Zoom in') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button type="button" class="sp-graph-zoom-btn" data-graph-zoom="out" title="{{ _('Zoom out') }}" aria-label="{{ _('Zoom out') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <button type="button" class="sp-graph-zoom-btn" data-graph-zoom="reset" title="{{ _('Reset the view') }}" aria-label="{{ _('Reset the view') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </div>
 
   <ul class="sp-graph-legend" aria-label="{{ _('Legend') }}">
     {% for type, label in [("issue", _("Issue")), ("wiki_page", _("Wiki page")), ("development", _("Commit or pull request")), ("attachment", _("Attachment")), ("hub", _("Tag, component, version, sprint or assignee")), ("broken", _("Missing target"))] %}

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 22:38+0100\n"
+"POT-Creation-Date: 2026-11-25 23:00+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -1996,7 +1996,7 @@ msgid "Concepts (AI)"
 msgstr "概念（AI）"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:33
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 #: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:164
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:178
@@ -2016,13 +2016,13 @@ msgid "Issue"
 msgstr "工作项"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:34
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 #: specivo/templates/themes/default/pages/_link_suggestions.html:11
 msgid "Wiki page"
 msgstr "维基页面"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:35
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 #: specivo/templates/themes/default/pages/search.html:245
 #: specivo/templates/themes/default/pages/search.html:249
 msgid "Attachment"
@@ -2093,7 +2093,7 @@ msgid "Concept"
 msgstr "概念"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:45
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 msgid "Missing target"
 msgstr "目标缺失"
 
@@ -2248,33 +2248,49 @@ msgstr "显示链接"
 msgid "Show suggestions"
 msgstr "显示建议"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:103
+#: specivo/templates/themes/default/pages/_link_graph.html:104
 msgid "Link graph of the project. The list below the graph holds the same items."
 msgstr "项目的链接图。图下方的列表包含相同的条目。"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:103
+#: specivo/templates/themes/default/pages/_link_graph.html:104
 msgid ""
 "Link graph: this item and what it links to. The list below the graph "
 "holds the same items."
 msgstr "链接图：此条目及其链接到的内容。图下方的列表包含相同的条目。"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:105
+msgid "Zoom"
+msgstr "缩放"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:106
+msgid "Zoom in"
+msgstr "放大"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:109
+msgid "Zoom out"
+msgstr "缩小"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:112
+msgid "Reset the view"
+msgstr "重置视图"
+
+#: specivo/templates/themes/default/pages/_link_graph.html:118
 msgid "Legend"
 msgstr "图例"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 msgid "Commit or pull request"
 msgstr "提交或拉取请求"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_graph.html:119
 msgid "Tag, component, version, sprint or assignee"
 msgstr "标签、组件、版本、冲刺或负责人"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:109
+#: specivo/templates/themes/default/pages/_link_graph.html:122
 msgid "Suggested link"
 msgstr "建议链接"
 
-#: specivo/templates/themes/default/pages/_link_graph.html:113
+#: specivo/templates/themes/default/pages/_link_graph.html:126
 msgid "Items in this graph"
 msgstr "此图中的条目"
 
