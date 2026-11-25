@@ -233,7 +233,11 @@ async def issue_flags(
         (
             await session.execute(
                 select(AgentSession.issue_id)
-                .where(AgentSession.issue_id.in_(ids), AgentSession.last_activity_at >= cutoff)
+                .where(
+                    AgentSession.issue_id.in_(ids),
+                    AgentSession.ended_at.is_(None),
+                    AgentSession.last_activity_at >= cutoff,
+                )
                 .distinct()
             )
         )
@@ -316,13 +320,15 @@ def _sessions_visible(scope: DashboardScope) -> list[ColumnElement[bool]]:
 async def active_sessions(
     session: AsyncSession, scope: DashboardScope, *, limit: int = SESSIONS_LIMIT
 ) -> tuple[list[ActiveSessionView], int]:
-    """The agent sessions active now (last activity within the session timeout) the viewer may see, and their count.
+    """The agent sessions active now that the viewer may see, and their count.
+
+    Active: not ended, and last active within the session timeout.
 
     Newest activity first. A session's running timer is its account's timer
     when it runs on the session's issue.
     """
     cutoff = utcnow() - timedelta(seconds=get_settings().agent_session_timeout)
-    conditions = [AgentSession.last_activity_at >= cutoff, *_sessions_visible(scope)]
+    conditions = [AgentSession.ended_at.is_(None), AgentSession.last_activity_at >= cutoff, *_sessions_visible(scope)]
     total = (await session.execute(select(func.count()).select_from(AgentSession).where(*conditions))).scalar_one()
     if not total:
         return [], 0
