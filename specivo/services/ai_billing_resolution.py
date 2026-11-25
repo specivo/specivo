@@ -53,6 +53,7 @@ from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from specivo.core.ai_billing import (
     BILLING_METHOD_INSTANCE_ROUTE,
@@ -137,11 +138,25 @@ class BillingLookups:
     billed_as: dict[int, int] = field(default_factory=dict)
 
     async def billing_user_id(self, session: AsyncSession, user_id: int) -> int:
-        """Who *user_id*'s usage is billed as: the person an agent works for, else the user."""
+        """Who *user_id*'s usage is billed as: the person an agent works for, else the user.
+
+        Only while that person is active and not a service account: once they
+        are deactivated (or locked), new and re-resolved usage of the agent
+        falls back to the agent's own accounts.
+        """
         if user_id not in self.billed_as:
+            owner_row = aliased(User)
             owner = (
                 await session.execute(
-                    select(User.works_for_id).where(User.id == user_id, User.is_service_account.is_(True))
+                    select(owner_row.id)
+                    .select_from(User)
+                    .join(owner_row, owner_row.id == User.works_for_id)
+                    .where(
+                        User.id == user_id,
+                        User.is_service_account.is_(True),
+                        owner_row.status == "active",
+                        owner_row.is_service_account.is_(False),
+                    )
                 )
             ).scalar_one_or_none()
             self.billed_as[user_id] = owner if owner is not None else user_id

@@ -161,3 +161,17 @@ async def test_the_admin_page_sets_and_clears_works_for(
     # A person's page has no such section.
     page = await browser.get(f"/admin/users/{w.bob.id}/")
     assert 'data-testid="works-for"' not in page.text
+
+
+async def test_a_deactivated_owner_no_longer_pays_for_the_agent(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    agent = await _agent(db_session, w)
+    assert (await _works_for(client, w, agent, w.alice)).status_code == 200
+    covered = await one(client, w, "agent", record("k-agent-before"))
+    assert billing(covered)[0] == "employee"
+
+    w.alice.status = "deactivated"
+    await db_session.commit()
+    after = await one(client, w, "agent", record("k-agent-after"))
+    assert billing(after) == ("unknown", None)
