@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 19:36+0100\n"
+"POT-Creation-Date: 2026-11-25 20:21+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -416,7 +416,7 @@ msgid ""
 " five minutes."
 msgstr ""
 
-#: specivo/services/email_change_service.py:184 specivo/web/pages/admin.py:251
+#: specivo/services/email_change_service.py:184 specivo/web/pages/admin.py:256
 msgid "Enter a valid email address."
 msgstr ""
 
@@ -543,7 +543,7 @@ msgid ""
 msgstr ""
 
 #: specivo/services/email_change_service.py:745
-#: specivo/services/email_change_service.py:756 specivo/web/pages/admin.py:253
+#: specivo/services/email_change_service.py:756 specivo/web/pages/admin.py:258
 msgid "A user with this email already exists"
 msgstr ""
 
@@ -992,7 +992,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/agent_session_detail.html:66
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:50
 #: specivo/templates/themes/default/pages/projects/detail.html:54
-#: specivo/web/pages/admin.py:1083
+#: specivo/web/pages/admin.py:1122
 msgid "AI usage"
 msgstr ""
 
@@ -1088,7 +1088,7 @@ msgstr ""
 msgid "Cannot move issues to the sprint being completed"
 msgstr ""
 
-#: specivo/services/user_service.py:73 specivo/web/pages/admin.py:250
+#: specivo/services/user_service.py:73 specivo/web/pages/admin.py:255
 msgid ""
 "This is the last active administrator. Make another user an administrator"
 " first."
@@ -1405,7 +1405,7 @@ msgid "Preferences"
 msgstr ""
 
 #: specivo/templates/themes/default/components/header.html:172
-#: specivo/templates/themes/default/pages/admin/user_detail.html:187
+#: specivo/templates/themes/default/pages/admin/user_detail.html:220
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
 #: specivo/templates/themes/default/pages/auth/api_keys.html:30
@@ -1546,7 +1546,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/projects.html:3
 #: specivo/templates/themes/default/pages/admin/projects.html:11
 #: specivo/templates/themes/default/pages/admin/projects.html:27
-#: specivo/templates/themes/default/pages/admin/user_detail.html:228
+#: specivo/templates/themes/default/pages/admin/user_detail.html:261
 #: specivo/templates/themes/default/pages/auth/api_keys.html:99
 #: specivo/templates/themes/default/pages/dashboard.html:132
 #: specivo/templates/themes/default/pages/projects/agent_session_detail.html:10
@@ -1643,7 +1643,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:116
 #: specivo/templates/themes/default/pages/admin/dashboard.html:35
-#: specivo/web/pages/admin.py:1079
+#: specivo/web/pages/admin.py:1118
 msgid "Administration"
 msgstr ""
 
@@ -1702,8 +1702,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:9
 #: specivo/templates/themes/default/pages/admin/trackers.html:3
 #: specivo/templates/themes/default/pages/admin/trackers.html:9
-#: specivo/templates/themes/default/pages/admin/user_detail.html:4
-#: specivo/templates/themes/default/pages/admin/user_detail.html:10
+#: specivo/templates/themes/default/pages/admin/user_detail.html:5
+#: specivo/templates/themes/default/pages/admin/user_detail.html:11
 #: specivo/templates/themes/default/pages/admin/users.html:4
 #: specivo/templates/themes/default/pages/admin/users.html:10
 #: specivo/templates/themes/default/pages/admin/versions.html:3
@@ -1761,6 +1761,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/settings.html:151
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
+#: specivo/templates/themes/default/pages/admin/user_detail.html:146
 #: specivo/templates/themes/default/pages/ai_usage/form.html:187
 #: specivo/templates/themes/default/pages/auth/ai_billing_account_edit.html:33
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:27
@@ -1868,7 +1869,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:19
 #: specivo/templates/themes/default/pages/_link_graph_card.html:34
-#: specivo/templates/themes/default/pages/admin/user_detail.html:23
+#: specivo/templates/themes/default/pages/admin/user_detail.html:24
 #: specivo/templates/themes/default/pages/admin/users.html:27
 #: specivo/web/deps.py:238
 #, python-format
@@ -2674,7 +2675,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/currencies.html:59
 #: specivo/templates/themes/default/pages/admin/projects.html:43
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:31
-#: specivo/templates/themes/default/pages/admin/user_detail.html:231
+#: specivo/templates/themes/default/pages/admin/user_detail.html:264
 #: specivo/templates/themes/default/pages/admin/users.html:47
 #: specivo/templates/themes/default/pages/admin/versions.html:82
 #: specivo/templates/themes/default/pages/auth/ai_billing_accounts.html:43
@@ -3033,7 +3034,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:22
 #: specivo/templates/themes/default/pages/admin/ai_company_plan.html:35
-#: specivo/templates/themes/default/pages/admin/user_detail.html:80
+#: specivo/templates/themes/default/pages/admin/user_detail.html:81
 #: specivo/templates/themes/default/pages/admin/users.html:45
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:19
 msgid "Login"
@@ -3048,13 +3049,13 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
-#: specivo/templates/themes/default/pages/admin/user_detail.html:84
+#: specivo/templates/themes/default/pages/admin/user_detail.html:85
 #: specivo/templates/themes/default/pages/auth/profile.html:58
 msgid "Email"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:32
-#: specivo/templates/themes/default/pages/admin/user_detail.html:54
+#: specivo/templates/themes/default/pages/admin/user_detail.html:55
 msgid "Service Account"
 msgstr ""
 
@@ -3063,7 +3064,7 @@ msgid "Service accounts authenticate via API keys only and cannot log in via UI.
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:37
-#: specivo/templates/themes/default/pages/admin/user_detail.html:111
+#: specivo/templates/themes/default/pages/admin/user_detail.html:112
 #: specivo/templates/themes/default/pages/admin/users.html:84
 #: specivo/templates/themes/default/pages/auth/login.html:136
 msgid "Password"
@@ -3106,7 +3107,7 @@ msgid "Role"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:55
-#: specivo/templates/themes/default/pages/admin/user_detail.html:28
+#: specivo/templates/themes/default/pages/admin/user_detail.html:29
 #: specivo/templates/themes/default/pages/admin/users.html:33
 #: specivo/templates/themes/default/pages/projects/settings.html:241
 msgid "Member"
@@ -3115,7 +3116,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:65
 #: specivo/templates/themes/default/pages/admin/groups.html:101
 #: specivo/templates/themes/default/pages/admin/role_new.html:52
-#: specivo/templates/themes/default/pages/admin/user_detail.html:35
+#: specivo/templates/themes/default/pages/admin/user_detail.html:36
 #: specivo/templates/themes/default/pages/auth/api_keys.html:18
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:14
 msgid "Creating..."
@@ -3126,7 +3127,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:34
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:48
 #: specivo/templates/themes/default/pages/admin/projects.html:18
-#: specivo/templates/themes/default/pages/admin/user_detail.html:37
+#: specivo/templates/themes/default/pages/admin/user_detail.html:38
 #: specivo/templates/themes/default/pages/agent_sessions/_macros.html:5
 #: specivo/templates/themes/default/pages/auth/_ai_billing_account_macros.html:43
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:40
@@ -3388,6 +3389,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/ai_reimbursement_claims.html:33
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:29
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:43
+#: specivo/templates/themes/default/pages/admin/user_detail.html:144
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:159
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:173
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:329
@@ -3422,6 +3424,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/ai_company_plan.html:75
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
+#: specivo/templates/themes/default/pages/admin/user_detail.html:137
 #: specivo/templates/themes/default/pages/issues/form.html:373
 #: specivo/templates/themes/default/pages/issues/form.html:425
 #: specivo/templates/themes/default/pages/projects/settings.html:285
@@ -4080,7 +4083,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
 #: specivo/templates/themes/default/pages/admin/role_detail.html:49
 #: specivo/templates/themes/default/pages/admin/role_new.html:25
-#: specivo/templates/themes/default/pages/admin/user_detail.html:226
+#: specivo/templates/themes/default/pages/admin/user_detail.html:259
 #: specivo/templates/themes/default/pages/auth/_ai_billing_account_form.html:6
 #: specivo/templates/themes/default/pages/auth/api_keys.html:97
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:78
@@ -4346,7 +4349,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/currencies.html:81
 #: specivo/templates/themes/default/pages/admin/email.html:52
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:44
-#: specivo/templates/themes/default/pages/admin/user_detail.html:163
+#: specivo/templates/themes/default/pages/admin/user_detail.html:196
 #: specivo/templates/themes/default/pages/auth/profile.html:242
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:26
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:33
@@ -4409,8 +4412,8 @@ msgid "Active Projects"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:43
-#: specivo/templates/themes/default/pages/admin/user_detail.html:4
-#: specivo/templates/themes/default/pages/admin/user_detail.html:12
+#: specivo/templates/themes/default/pages/admin/user_detail.html:5
+#: specivo/templates/themes/default/pages/admin/user_detail.html:13
 #: specivo/templates/themes/default/pages/admin/users.html:4
 #: specivo/templates/themes/default/pages/admin/users.html:12
 #: specivo/templates/themes/default/pages/admin/users.html:36
@@ -4466,7 +4469,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:15
-#: specivo/web/pages/admin.py:1080
+#: specivo/web/pages/admin.py:1119
 msgid "Single sign-on"
 msgstr ""
 
@@ -5090,7 +5093,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/groups.html:53
 #: specivo/templates/themes/default/pages/admin/projects.html:45
 #: specivo/templates/themes/default/pages/admin/settings.html:158
-#: specivo/templates/themes/default/pages/admin/user_detail.html:232
+#: specivo/templates/themes/default/pages/admin/user_detail.html:265
 #: specivo/templates/themes/default/pages/admin/users.html:49
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:166
 #: specivo/templates/themes/default/pages/ai_usage/report.html:426
@@ -5457,8 +5460,8 @@ msgid "Create Project"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/projects.html:44
-#: specivo/templates/themes/default/pages/admin/user_detail.html:101
-#: specivo/templates/themes/default/pages/admin/user_detail.html:229
+#: specivo/templates/themes/default/pages/admin/user_detail.html:102
+#: specivo/templates/themes/default/pages/admin/user_detail.html:262
 #: specivo/templates/themes/default/pages/auth/api_keys.html:100
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:177
@@ -6029,8 +6032,8 @@ msgid ""
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:30
-#: specivo/templates/themes/default/pages/admin/user_detail.html:21
-#: specivo/templates/themes/default/pages/admin/user_detail.html:169
+#: specivo/templates/themes/default/pages/admin/user_detail.html:22
+#: specivo/templates/themes/default/pages/admin/user_detail.html:202
 #: specivo/templates/themes/default/pages/admin/users.html:25
 #: specivo/templates/themes/default/pages/auth/profile.html:247
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:20
@@ -6252,7 +6255,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:386
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:411
-#: specivo/templates/themes/default/pages/admin/user_detail.html:34
+#: specivo/templates/themes/default/pages/admin/user_detail.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:13
 #: specivo/templates/themes/default/pages/projects/settings.html:1090
@@ -6798,12 +6801,12 @@ msgstr ""
 msgid "New issues are private"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:18
+#: specivo/templates/themes/default/pages/admin/user_detail.html:19
 #: specivo/templates/themes/default/pages/auth/api_keys.html:13
 msgid "Failed to create key"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:19
+#: specivo/templates/themes/default/pages/admin/user_detail.html:20
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:27
 #: specivo/templates/themes/default/pages/auth/api_keys.html:14
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:13
@@ -6814,75 +6817,75 @@ msgstr ""
 msgid "Unable to connect. Please try again."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:20
+#: specivo/templates/themes/default/pages/admin/user_detail.html:21
 msgid "Revoke this API key? This cannot be undone."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:22
+#: specivo/templates/themes/default/pages/admin/user_detail.html:23
 #: specivo/templates/themes/default/pages/admin/users.html:26
 msgid "Just now"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:24
+#: specivo/templates/themes/default/pages/admin/user_detail.html:25
 #: specivo/templates/themes/default/pages/admin/users.html:28
 #, python-format
 msgid "%(count)s hours ago"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:25
+#: specivo/templates/themes/default/pages/admin/user_detail.html:26
 #: specivo/templates/themes/default/pages/admin/users.html:29
 #: specivo/web/deps.py:264
 msgid "Yesterday"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:26
+#: specivo/templates/themes/default/pages/admin/user_detail.html:27
 #: specivo/templates/themes/default/pages/admin/users.html:30
 #, python-format
 msgid "%(count)s days ago"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:27
+#: specivo/templates/themes/default/pages/admin/user_detail.html:28
 #: specivo/templates/themes/default/pages/admin/users.html:31
 #: specivo/templates/themes/default/pages/auth/profile.html:76
 msgid "Administrator"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:29
+#: specivo/templates/themes/default/pages/admin/user_detail.html:30
 msgid "Last API call"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:30
+#: specivo/templates/themes/default/pages/admin/user_detail.html:31
 #: specivo/templates/themes/default/pages/auth/profile.html:91
 msgid "Last login"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:31
+#: specivo/templates/themes/default/pages/admin/user_detail.html:32
 msgid "Must be replaced at next sign-in"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:32
+#: specivo/templates/themes/default/pages/admin/user_detail.html:33
 msgid "Chosen by the account owner"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:33
+#: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:16
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:12
 msgid "Copied!"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:36
+#: specivo/templates/themes/default/pages/admin/user_detail.html:37
 msgid "Create Key"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:38
+#: specivo/templates/themes/default/pages/admin/user_detail.html:39
 msgid "Revoked"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:39
+#: specivo/templates/themes/default/pages/admin/user_detail.html:40
 msgid "Nothing ticked: the key reaches every project the account can."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:40
+#: specivo/templates/themes/default/pages/admin/user_detail.html:41
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:25
@@ -6892,177 +6895,201 @@ msgstr ""
 msgid "All projects"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:41
+#: specivo/templates/themes/default/pages/admin/user_detail.html:42
 #: specivo/templates/themes/default/pages/auth/api_keys.html:26
 #, python-format
 msgid "Limited to: %(projects)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:42
+#: specivo/templates/themes/default/pages/admin/user_detail.html:43
 #: specivo/templates/themes/default/pages/auth/api_keys.html:27
 msgid "None: its projects were deleted"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:57
+#: specivo/templates/themes/default/pages/admin/user_detail.html:58
 msgid "Password change pending"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:69
+#: specivo/templates/themes/default/pages/admin/user_detail.html:70
 msgid "Account Details"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:72
+#: specivo/templates/themes/default/pages/admin/user_detail.html:73
 msgid ""
 "Service accounts authenticate via API keys only. They cannot log in via "
 "the web interface."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:75
+#: specivo/templates/themes/default/pages/admin/user_detail.html:76
 msgid "User account details and authentication information."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:91
+#: specivo/templates/themes/default/pages/admin/user_detail.html:92
 msgid "Change email address"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:94
+#: specivo/templates/themes/default/pages/admin/user_detail.html:95
 #: specivo/templates/themes/default/pages/auth/profile.html:215
 msgid "Change email"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:97
+#: specivo/templates/themes/default/pages/admin/user_detail.html:98
 msgid ""
 "The new address is used at once and marked verified, without a "
 "confirmation link. The old and the new address both get a notice."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:122
+#: specivo/templates/themes/default/pages/admin/user_detail.html:124
+#: specivo/templates/themes/default/pages/admin/user_detail.html:145
+msgid "Works for"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:126
+msgid ""
+"The AI usage this agent reports is billed through this person's billing "
+"accounts and plans: their payer, budgets and subscriptions cover it. The "
+"usage stays listed under the agent."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:140
+msgid "Nobody: the agent's usage is billed through its own accounts."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:144
+msgid "Change to"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:145
+msgid "Search people…"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:153
 msgid "Account status"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:131
+#: specivo/templates/themes/default/pages/admin/user_detail.html:164
 msgid ""
 "This account is deactivated. It cannot sign in and its API keys do not "
 "work."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:132
+#: specivo/templates/themes/default/pages/admin/user_detail.html:165
 msgid ""
 "API keys stay inactive after reactivation: activate them again or create "
 "new ones."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:136
+#: specivo/templates/themes/default/pages/admin/user_detail.html:169
 msgid "Reactivate account"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:140
+#: specivo/templates/themes/default/pages/admin/user_detail.html:173
 msgid ""
 "Deactivating signs the user out of every session and switches off all of "
 "their API keys. Reactivating the account later does not switch the keys "
 "back on."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:145
+#: specivo/templates/themes/default/pages/admin/user_detail.html:178
 msgid "Deactivate account"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:154
+#: specivo/templates/themes/default/pages/admin/user_detail.html:187
 #: specivo/templates/themes/default/pages/auth/profile.html:225
 msgid "Connected accounts"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:155
+#: specivo/templates/themes/default/pages/admin/user_detail.html:188
 msgid ""
 "Identity provider accounts this user can sign in with. Disconnecting one "
 "ends the sessions started with it."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:167
+#: specivo/templates/themes/default/pages/admin/user_detail.html:200
 msgid "Linked by"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:168
+#: specivo/templates/themes/default/pages/admin/user_detail.html:201
 #: specivo/templates/themes/default/pages/auth/profile.html:246
 msgid "Connected"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:169
+#: specivo/templates/themes/default/pages/admin/user_detail.html:202
 #: specivo/templates/themes/default/pages/auth/profile.html:247
 msgid "Last sign-in"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:174
+#: specivo/templates/themes/default/pages/admin/user_detail.html:207
 #: specivo/templates/themes/default/pages/auth/profile.html:252
 #: specivo/templates/themes/default/pages/projects/settings.html:1691
 msgid "Disconnect"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:180
+#: specivo/templates/themes/default/pages/admin/user_detail.html:213
 msgid "No accounts are connected."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:189
+#: specivo/templates/themes/default/pages/admin/user_detail.html:222
 msgid ""
 "Keys are used for MCP server connections, CI/CD pipelines, and "
 "programmatic access. The full key is shown only once when created."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:195
+#: specivo/templates/themes/default/pages/admin/user_detail.html:228
 msgid "New API Key Created"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:202
+#: specivo/templates/themes/default/pages/admin/user_detail.html:235
 msgid "Copy this key now. It will not be shown again."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:209
+#: specivo/templates/themes/default/pages/admin/user_detail.html:242
 #: specivo/templates/themes/default/pages/auth/api_keys.html:72
 msgid "Key name"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:212
+#: specivo/templates/themes/default/pages/admin/user_detail.html:245
 msgid "e.g. MCP Server, CI Pipeline"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:227
+#: specivo/templates/themes/default/pages/admin/user_detail.html:260
 msgid "Key Prefix"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:230
+#: specivo/templates/themes/default/pages/admin/user_detail.html:263
 msgid "Last Used"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:239
+#: specivo/templates/themes/default/pages/admin/user_detail.html:272
 #: specivo/templates/themes/default/pages/auth/api_keys.html:110
 msgid "No API keys yet. Create one to get started."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:260
+#: specivo/templates/themes/default/pages/admin/user_detail.html:293
 msgid "Revoke"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:279
+#: specivo/templates/themes/default/pages/admin/user_detail.html:312
 msgid "MCP Configuration"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:281
+#: specivo/templates/themes/default/pages/admin/user_detail.html:314
 msgid "Add this to your MCP client settings to connect to this Specivo instance."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:285
+#: specivo/templates/themes/default/pages/admin/user_detail.html:318
 msgid "MCP client type"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:289
+#: specivo/templates/themes/default/pages/admin/user_detail.html:322
 msgid "Claude Code / Cursor"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:293
+#: specivo/templates/themes/default/pages/admin/user_detail.html:326
 msgid "Codex CLI"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:325
+#: specivo/templates/themes/default/pages/admin/user_detail.html:358
 msgid ""
 "Replace <code>your-specivo-host</code> with this instance's hostname (use"
 " <code>http://</code> for local development, <code>https://</code> in "
@@ -7071,7 +7098,7 @@ msgid ""
 "access or local installation required."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:328
+#: specivo/templates/themes/default/pages/admin/user_detail.html:361
 msgid ""
 "Codex CLI reads MCP servers from <code>~/.codex/config.toml</code> and "
 "speaks Streamable HTTP natively. Replace <code>your-specivo-host</code> "
@@ -7632,7 +7659,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:149
 #: specivo/templates/themes/default/pages/ai_usage/report.html:50
 #: specivo/templates/themes/default/pages/auth/preferences.html:82
-#: specivo/web/pages/admin.py:1082
+#: specivo/web/pages/admin.py:1121
 msgid "Sessions"
 msgstr ""
 
@@ -10506,7 +10533,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/agents.html:8
 #: specivo/templates/themes/default/pages/issues/agents.html:15
 #: specivo/templates/themes/default/pages/issues/detail.html:293
-#: specivo/web/pages/admin.py:1077
+#: specivo/web/pages/admin.py:1116
 msgid "Agents"
 msgstr ""
 
@@ -12044,7 +12071,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:9
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:7
 #: specivo/templates/themes/default/pages/admin/trackers.html:7
-#: specivo/templates/themes/default/pages/admin/user_detail.html:8
+#: specivo/templates/themes/default/pages/admin/user_detail.html:9
 #: specivo/templates/themes/default/pages/admin/users.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:7
 #: specivo/templates/themes/default/pages/admin/workflows.html:7
@@ -15219,71 +15246,85 @@ msgid_plural "%(num)d years ago"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/web/pages/admin.py:235
+#: specivo/web/pages/admin.py:238
 msgid ""
 "Account deactivated. The user was signed out everywhere and their API "
 "keys were switched off."
 msgstr ""
 
-#: specivo/web/pages/admin.py:238
+#: specivo/web/pages/admin.py:241
 msgid ""
 "Account reactivated. The user can sign in again. API keys stay inactive: "
 "activate them again or create new ones."
 msgstr ""
 
-#: specivo/web/pages/admin.py:241
+#: specivo/web/pages/admin.py:244
 msgid "Email address changed. A notice went to the old and the new address."
 msgstr ""
 
-#: specivo/web/pages/admin.py:249
+#: specivo/web/pages/admin.py:245
+msgid ""
+"Saved. The agent's AI usage is now billed through that person's accounts "
+"and plans."
+msgstr ""
+
+#: specivo/web/pages/admin.py:246
+msgid "Saved. The agent's AI usage is billed through its own accounts again."
+msgstr ""
+
+#: specivo/web/pages/admin.py:254
 msgid "You cannot deactivate your own account."
 msgstr ""
 
-#: specivo/web/pages/admin.py:252
+#: specivo/web/pages/admin.py:257
 msgid "This is already the user's email address."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1075
+#: specivo/web/pages/admin.py:259
+msgid "Choose an active person (not a service account) for the agent to work for."
+msgstr ""
+
+#: specivo/web/pages/admin.py:1114
 msgid "Sign-in"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1076
+#: specivo/web/pages/admin.py:1115
 msgid "Access"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1078
+#: specivo/web/pages/admin.py:1117
 msgid "Issues and wiki"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1081
+#: specivo/web/pages/admin.py:1120
 msgid "Provisioning"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1145
+#: specivo/web/pages/admin.py:1184
 msgid "Unknown category."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1147
+#: specivo/web/pages/admin.py:1186
 msgid "Unknown event type."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1152
+#: specivo/web/pages/admin.py:1191
 msgid "No user has this login."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1157
+#: specivo/web/pages/admin.py:1196
 msgid "No project has this key."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1162
+#: specivo/web/pages/admin.py:1201
 msgid "The from date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1168
+#: specivo/web/pages/admin.py:1207
 msgid "The to date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1172
+#: specivo/web/pages/admin.py:1211
 msgid "The IP address is too long."
 msgstr ""
 

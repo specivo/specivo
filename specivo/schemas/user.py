@@ -82,6 +82,8 @@ class UserOut(BaseModel):
     display_name: str
     avatar_url: str | None
     is_service_account: bool
+    #: The person a service account works for (its AI usage is billed as them).
+    works_for_id: int | None = None
     created_at: datetime
 
     # Admin-visible fields included here for simplicity.

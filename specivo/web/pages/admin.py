@@ -209,6 +209,7 @@ async def admin_user_detail(
     from specivo.services.sso.identity_service import IdentityService
 
     identities = [] if target_user.is_service_account else await IdentityService().list_for_user(db, target_user.id)
+    works_for = await db.get(UserModel, target_user.works_for_id) if target_user.works_for_id is not None else None
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -221,6 +222,8 @@ async def admin_user_detail(
             "api_keys": keys_data,
             "identities": identities,
             "is_self": target_user.id == user.id,
+            "works_for": works_for,
+            "account_code": account or "",
             "account_message": _account_messages().get(account),
             "account_error": _account_errors().get(account),
         },
@@ -239,6 +242,8 @@ def _account_messages() -> dict[str, str]:
             "activate them again or create new ones."
         ),
         "email_changed": _("Email address changed. A notice went to the old and the new address."),
+        "works_for_set": _("Saved. The agent's AI usage is now billed through that person's accounts and plans."),
+        "works_for_cleared": _("Saved. The agent's AI usage is billed through its own accounts again."),
     }
 
 
@@ -251,6 +256,7 @@ def _account_errors() -> dict[str, str]:
         "email_invalid": _("Enter a valid email address."),
         "email_same": _("This is already the user's email address."),
         "email_taken": _("A user with this email already exists"),
+        "works_for_invalid": _("Choose an active person (not a service account) for the agent to work for."),
     }
 
 
@@ -326,6 +332,39 @@ async def admin_change_user_email(
         return _user_page_redirect(user_id, "email_same" if same else "email_invalid")
     await db.commit()
     return _user_page_redirect(user_id, "email_changed")
+
+
+@router.post("/admin/users/{user_id}/works-for/", response_model=None)
+async def admin_set_works_for(
+    user_id: int,
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    works_for_id: Annotated[str, Form(max_length=20)] = "",
+    works_for_login: Annotated[str, Form(max_length=100)] = "",
+    clear: Annotated[str, Form(max_length=5)] = "",
+) -> RedirectResponse:
+    """Set (a person picked by id, or typed by login) or clear the person a service account works for."""
+    from specivo.core.exceptions import AppError
+    from specivo.services.agent_owner_service import AgentOwnerService
+
+    target = await _target_or_404(db, user_id)
+    owner_id: int | None = None
+    if not clear:
+        if works_for_id.strip().isdecimal():
+            owner_id = int(works_for_id)
+        elif works_for_login.strip():
+            owner_id = await db.scalar(
+                select(UserModel.id).where(func.lower(UserModel.login) == works_for_login.strip().lower())
+            )
+        if owner_id is None:
+            return _user_page_redirect(user_id, "works_for_invalid")
+    try:
+        await AgentOwnerService().set_works_for(db, target, owner_id, actor=user, request=request)
+    except AppError:
+        return _user_page_redirect(user_id, "works_for_invalid")
+    await db.commit()
+    return _user_page_redirect(user_id, "works_for_cleared" if owner_id is None else "works_for_set")
 
 
 # ---------------------------------------------------------------------------

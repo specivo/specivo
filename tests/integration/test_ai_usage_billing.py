@@ -66,7 +66,11 @@ class World:
 
 @pytest_asyncio.fixture
 async def w(db_session: AsyncSession) -> World:
-    db = db_session
+    return await build_world(db_session)
+
+
+async def build_world(db: AsyncSession) -> World:
+    """The world above (also used by ``test_ai_usage_billing_agents``)."""
     admin: User = AdminUserFactory.build(login="bilr_admin", status="active")
     alice: User = UserFactory.build(login="bilr_alice", status="active")
     bob: User = UserFactory.build(login="bilr_bob", status="active")

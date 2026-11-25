@@ -463,6 +463,12 @@ def _iso(value: datetime | date | None) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def _billed_as(user_id: int) -> ColumnElement[bool]:
+    """Entries billed as *user_id*: theirs and those of the agents that work for them."""
+    agents = select(User.id).where(User.works_for_id == user_id)
+    return or_(AiUsageEntry.user_id == user_id, AiUsageEntry.user_id.in_(agents))
+
+
 class AiUsageService:
     """Visibility, authorization, writes and costs of AI usage entries."""
 
@@ -2244,7 +2250,7 @@ class AiUsageService:
         if account.owner_user_id is None:
             others: ColumnElement[bool] = and_(AiUsageEntry.route.is_not(None), movable)
         else:
-            others = and_(AiUsageEntry.user_id == account.owner_user_id, movable)
+            others = and_(_billed_as(account.owner_user_id), movable)
         condition = or_(AiUsageEntry.billing_account_id == account.id, others)
         return await self._rebill(
             session, [condition], actor_id=actor_id, details={"billing_account_id": account.id}, request=request
@@ -2262,6 +2268,18 @@ class AiUsageService:
             session, conditions, actor_id=actor_id, details={"project_key": project.key}, request=request
         )
 
+    async def rebill_for_agent(
+        self, session: AsyncSession, agent_id: int, *, actor_id: int | None, request: Request | None = None
+    ) -> RecomputeOutcome:
+        """Resolve again, and re-price, every entry of agent *agent_id* after the person it works for changed."""
+        return await self._rebill(
+            session,
+            [AiUsageEntry.user_id == agent_id],
+            actor_id=actor_id,
+            details={"target_user_id": agent_id, "reason": "works_for"},
+            request=request,
+        )
+
     async def rebill_for_member(
         self,
         session: AsyncSession,
@@ -2276,7 +2294,7 @@ class AiUsageService:
         After a company seat plan membership changed: the days it touches may
         now be covered by the plan, or no longer.
         """
-        conditions = [AiUsageEntry.user_id == user_id, AiUsageEntry.usage_date >= from_day]
+        conditions = [_billed_as(user_id), AiUsageEntry.usage_date >= from_day]
         return await self._rebill(
             session,
             conditions,

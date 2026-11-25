@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 19:36+0100\n"
+"POT-Creation-Date: 2026-11-25 20:21+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -417,7 +417,7 @@ msgid ""
 " five minutes."
 msgstr "请通过身份提供商重新登录，然后在五分钟内申请更改。"
 
-#: specivo/services/email_change_service.py:184 specivo/web/pages/admin.py:251
+#: specivo/services/email_change_service.py:184 specivo/web/pages/admin.py:256
 msgid "Enter a valid email address."
 msgstr "请输入有效的电子邮件地址。"
 
@@ -544,7 +544,7 @@ msgid ""
 msgstr "如果这不是您本人的操作，请立即重置密码并联系 %(brand)s 的管理员。密码重置邮件现在会发送到新地址，因此管理员可能需要先恢复您的地址。"
 
 #: specivo/services/email_change_service.py:745
-#: specivo/services/email_change_service.py:756 specivo/web/pages/admin.py:253
+#: specivo/services/email_change_service.py:756 specivo/web/pages/admin.py:258
 msgid "A user with this email already exists"
 msgstr "已存在使用此电子邮件的用户"
 
@@ -993,7 +993,7 @@ msgstr "编辑和删除其他人记录的工时。"
 #: specivo/templates/themes/default/pages/projects/agent_session_detail.html:66
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:50
 #: specivo/templates/themes/default/pages/projects/detail.html:54
-#: specivo/web/pages/admin.py:1083
+#: specivo/web/pages/admin.py:1122
 msgid "AI usage"
 msgstr "AI 使用"
 
@@ -1089,7 +1089,7 @@ msgstr "请先生成 SCIM 令牌，再开启预配。"
 msgid "Cannot move issues to the sprint being completed"
 msgstr "无法将工作项移动到正在完成的冲刺"
 
-#: specivo/services/user_service.py:73 specivo/web/pages/admin.py:250
+#: specivo/services/user_service.py:73 specivo/web/pages/admin.py:255
 msgid ""
 "This is the last active administrator. Make another user an administrator"
 " first."
@@ -1412,7 +1412,7 @@ msgid "Preferences"
 msgstr "偏好设置"
 
 #: specivo/templates/themes/default/components/header.html:172
-#: specivo/templates/themes/default/pages/admin/user_detail.html:187
+#: specivo/templates/themes/default/pages/admin/user_detail.html:220
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
 #: specivo/templates/themes/default/pages/auth/api_keys.html:30
@@ -1553,7 +1553,7 @@ msgstr "仪表盘"
 #: specivo/templates/themes/default/pages/admin/projects.html:3
 #: specivo/templates/themes/default/pages/admin/projects.html:11
 #: specivo/templates/themes/default/pages/admin/projects.html:27
-#: specivo/templates/themes/default/pages/admin/user_detail.html:228
+#: specivo/templates/themes/default/pages/admin/user_detail.html:261
 #: specivo/templates/themes/default/pages/auth/api_keys.html:99
 #: specivo/templates/themes/default/pages/dashboard.html:132
 #: specivo/templates/themes/default/pages/projects/agent_session_detail.html:10
@@ -1650,7 +1650,7 @@ msgstr "设置"
 
 #: specivo/templates/themes/default/components/sidebar.html:116
 #: specivo/templates/themes/default/pages/admin/dashboard.html:35
-#: specivo/web/pages/admin.py:1079
+#: specivo/web/pages/admin.py:1118
 msgid "Administration"
 msgstr "管理"
 
@@ -1709,8 +1709,8 @@ msgstr "管理"
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:9
 #: specivo/templates/themes/default/pages/admin/trackers.html:3
 #: specivo/templates/themes/default/pages/admin/trackers.html:9
-#: specivo/templates/themes/default/pages/admin/user_detail.html:4
-#: specivo/templates/themes/default/pages/admin/user_detail.html:10
+#: specivo/templates/themes/default/pages/admin/user_detail.html:5
+#: specivo/templates/themes/default/pages/admin/user_detail.html:11
 #: specivo/templates/themes/default/pages/admin/users.html:4
 #: specivo/templates/themes/default/pages/admin/users.html:10
 #: specivo/templates/themes/default/pages/admin/versions.html:3
@@ -1768,6 +1768,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/admin/settings.html:151
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
+#: specivo/templates/themes/default/pages/admin/user_detail.html:146
 #: specivo/templates/themes/default/pages/ai_usage/form.html:187
 #: specivo/templates/themes/default/pages/auth/ai_billing_account_edit.html:33
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:27
@@ -1875,7 +1876,7 @@ msgstr "刚刚"
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:19
 #: specivo/templates/themes/default/pages/_link_graph_card.html:34
-#: specivo/templates/themes/default/pages/admin/user_detail.html:23
+#: specivo/templates/themes/default/pages/admin/user_detail.html:24
 #: specivo/templates/themes/default/pages/admin/users.html:27
 #: specivo/web/deps.py:238
 #, python-format
@@ -2680,7 +2681,7 @@ msgstr "主题"
 #: specivo/templates/themes/default/pages/admin/currencies.html:59
 #: specivo/templates/themes/default/pages/admin/projects.html:43
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:31
-#: specivo/templates/themes/default/pages/admin/user_detail.html:231
+#: specivo/templates/themes/default/pages/admin/user_detail.html:264
 #: specivo/templates/themes/default/pages/admin/users.html:47
 #: specivo/templates/themes/default/pages/admin/versions.html:82
 #: specivo/templates/themes/default/pages/auth/ai_billing_accounts.html:43
@@ -3038,7 +3039,7 @@ msgstr "张三"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:22
 #: specivo/templates/themes/default/pages/admin/ai_company_plan.html:35
-#: specivo/templates/themes/default/pages/admin/user_detail.html:80
+#: specivo/templates/themes/default/pages/admin/user_detail.html:81
 #: specivo/templates/themes/default/pages/admin/users.html:45
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:19
 msgid "Login"
@@ -3053,13 +3054,13 @@ msgstr "johndoe"
 #: specivo/templates/themes/default/pages/admin/email.html:3
 #: specivo/templates/themes/default/pages/admin/email.html:11
 #: specivo/templates/themes/default/pages/admin/email.html:15
-#: specivo/templates/themes/default/pages/admin/user_detail.html:84
+#: specivo/templates/themes/default/pages/admin/user_detail.html:85
 #: specivo/templates/themes/default/pages/auth/profile.html:58
 msgid "Email"
 msgstr "电子邮件"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:32
-#: specivo/templates/themes/default/pages/admin/user_detail.html:54
+#: specivo/templates/themes/default/pages/admin/user_detail.html:55
 msgid "Service Account"
 msgstr "服务账户"
 
@@ -3068,7 +3069,7 @@ msgid "Service accounts authenticate via API keys only and cannot log in via UI.
 msgstr "服务账户仅通过 API 密钥进行身份验证，无法通过界面登录。"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:37
-#: specivo/templates/themes/default/pages/admin/user_detail.html:111
+#: specivo/templates/themes/default/pages/admin/user_detail.html:112
 #: specivo/templates/themes/default/pages/admin/users.html:84
 #: specivo/templates/themes/default/pages/auth/login.html:136
 msgid "Password"
@@ -3111,7 +3112,7 @@ msgid "Role"
 msgstr "角色"
 
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:55
-#: specivo/templates/themes/default/pages/admin/user_detail.html:28
+#: specivo/templates/themes/default/pages/admin/user_detail.html:29
 #: specivo/templates/themes/default/pages/admin/users.html:33
 #: specivo/templates/themes/default/pages/projects/settings.html:241
 msgid "Member"
@@ -3120,7 +3121,7 @@ msgstr "成员"
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:65
 #: specivo/templates/themes/default/pages/admin/groups.html:101
 #: specivo/templates/themes/default/pages/admin/role_new.html:52
-#: specivo/templates/themes/default/pages/admin/user_detail.html:35
+#: specivo/templates/themes/default/pages/admin/user_detail.html:36
 #: specivo/templates/themes/default/pages/auth/api_keys.html:18
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:14
 msgid "Creating..."
@@ -3131,7 +3132,7 @@ msgstr "创建中……"
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:34
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:48
 #: specivo/templates/themes/default/pages/admin/projects.html:18
-#: specivo/templates/themes/default/pages/admin/user_detail.html:37
+#: specivo/templates/themes/default/pages/admin/user_detail.html:38
 #: specivo/templates/themes/default/pages/agent_sessions/_macros.html:5
 #: specivo/templates/themes/default/pages/auth/_ai_billing_account_macros.html:43
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:40
@@ -3397,6 +3398,7 @@ msgstr "添加席位"
 #: specivo/templates/themes/default/pages/admin/ai_reimbursement_claims.html:33
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:29
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:43
+#: specivo/templates/themes/default/pages/admin/user_detail.html:144
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:159
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:173
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:329
@@ -3431,6 +3433,7 @@ msgstr "结束席位"
 #: specivo/templates/themes/default/pages/admin/ai_company_plan.html:75
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
+#: specivo/templates/themes/default/pages/admin/user_detail.html:137
 #: specivo/templates/themes/default/pages/issues/form.html:373
 #: specivo/templates/themes/default/pages/issues/form.html:425
 #: specivo/templates/themes/default/pages/projects/settings.html:285
@@ -4102,7 +4105,7 @@ msgstr "标识串"
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
 #: specivo/templates/themes/default/pages/admin/role_detail.html:49
 #: specivo/templates/themes/default/pages/admin/role_new.html:25
-#: specivo/templates/themes/default/pages/admin/user_detail.html:226
+#: specivo/templates/themes/default/pages/admin/user_detail.html:259
 #: specivo/templates/themes/default/pages/auth/_ai_billing_account_form.html:6
 #: specivo/templates/themes/default/pages/auth/api_keys.html:97
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:78
@@ -4369,7 +4372,7 @@ msgstr "已启用"
 #: specivo/templates/themes/default/pages/admin/currencies.html:81
 #: specivo/templates/themes/default/pages/admin/email.html:52
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:44
-#: specivo/templates/themes/default/pages/admin/user_detail.html:163
+#: specivo/templates/themes/default/pages/admin/user_detail.html:196
 #: specivo/templates/themes/default/pages/auth/profile.html:242
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:26
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:33
@@ -4432,8 +4435,8 @@ msgid "Active Projects"
 msgstr "活跃项目"
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:43
-#: specivo/templates/themes/default/pages/admin/user_detail.html:4
-#: specivo/templates/themes/default/pages/admin/user_detail.html:12
+#: specivo/templates/themes/default/pages/admin/user_detail.html:5
+#: specivo/templates/themes/default/pages/admin/user_detail.html:13
 #: specivo/templates/themes/default/pages/admin/users.html:4
 #: specivo/templates/themes/default/pages/admin/users.html:12
 #: specivo/templates/themes/default/pages/admin/users.html:36
@@ -4489,7 +4492,7 @@ msgstr "管理用户组及其授予的项目访问权限。"
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:15
-#: specivo/web/pages/admin.py:1080
+#: specivo/web/pages/admin.py:1119
 msgid "Single sign-on"
 msgstr "单点登录"
 
@@ -5119,7 +5122,7 @@ msgstr "正在添加……"
 #: specivo/templates/themes/default/pages/admin/groups.html:53
 #: specivo/templates/themes/default/pages/admin/projects.html:45
 #: specivo/templates/themes/default/pages/admin/settings.html:158
-#: specivo/templates/themes/default/pages/admin/user_detail.html:232
+#: specivo/templates/themes/default/pages/admin/user_detail.html:265
 #: specivo/templates/themes/default/pages/admin/users.html:49
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:166
 #: specivo/templates/themes/default/pages/ai_usage/report.html:426
@@ -5486,8 +5489,8 @@ msgid "Create Project"
 msgstr "创建项目"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:44
-#: specivo/templates/themes/default/pages/admin/user_detail.html:101
-#: specivo/templates/themes/default/pages/admin/user_detail.html:229
+#: specivo/templates/themes/default/pages/admin/user_detail.html:102
+#: specivo/templates/themes/default/pages/admin/user_detail.html:262
 #: specivo/templates/themes/default/pages/auth/api_keys.html:100
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:177
@@ -6059,8 +6062,8 @@ msgid ""
 msgstr "要吊销 SCIM 令牌吗？在生成新令牌之前，预配将停止。已预配的账户和用户组会保留。"
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:30
-#: specivo/templates/themes/default/pages/admin/user_detail.html:21
-#: specivo/templates/themes/default/pages/admin/user_detail.html:169
+#: specivo/templates/themes/default/pages/admin/user_detail.html:22
+#: specivo/templates/themes/default/pages/admin/user_detail.html:202
 #: specivo/templates/themes/default/pages/admin/users.html:25
 #: specivo/templates/themes/default/pages/auth/profile.html:247
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:20
@@ -6282,7 +6285,7 @@ msgstr "重定向 URI"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:386
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:411
-#: specivo/templates/themes/default/pages/admin/user_detail.html:34
+#: specivo/templates/themes/default/pages/admin/user_detail.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:13
 #: specivo/templates/themes/default/pages/projects/settings.html:1090
@@ -6837,12 +6840,12 @@ msgstr "默认私有"
 msgid "New issues are private"
 msgstr "新问题为私有"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:18
+#: specivo/templates/themes/default/pages/admin/user_detail.html:19
 #: specivo/templates/themes/default/pages/auth/api_keys.html:13
 msgid "Failed to create key"
 msgstr "创建密钥失败"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:19
+#: specivo/templates/themes/default/pages/admin/user_detail.html:20
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:27
 #: specivo/templates/themes/default/pages/auth/api_keys.html:14
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:13
@@ -6853,75 +6856,75 @@ msgstr "创建密钥失败"
 msgid "Unable to connect. Please try again."
 msgstr "无法连接，请重试。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:20
+#: specivo/templates/themes/default/pages/admin/user_detail.html:21
 msgid "Revoke this API key? This cannot be undone."
 msgstr "要吊销此 API 密钥吗？此操作无法撤销。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:22
+#: specivo/templates/themes/default/pages/admin/user_detail.html:23
 #: specivo/templates/themes/default/pages/admin/users.html:26
 msgid "Just now"
 msgstr "刚刚"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:24
+#: specivo/templates/themes/default/pages/admin/user_detail.html:25
 #: specivo/templates/themes/default/pages/admin/users.html:28
 #, python-format
 msgid "%(count)s hours ago"
 msgstr "%(count)s 小时前"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:25
+#: specivo/templates/themes/default/pages/admin/user_detail.html:26
 #: specivo/templates/themes/default/pages/admin/users.html:29
 #: specivo/web/deps.py:264
 msgid "Yesterday"
 msgstr "昨天"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:26
+#: specivo/templates/themes/default/pages/admin/user_detail.html:27
 #: specivo/templates/themes/default/pages/admin/users.html:30
 #, python-format
 msgid "%(count)s days ago"
 msgstr "%(count)s 天前"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:27
+#: specivo/templates/themes/default/pages/admin/user_detail.html:28
 #: specivo/templates/themes/default/pages/admin/users.html:31
 #: specivo/templates/themes/default/pages/auth/profile.html:76
 msgid "Administrator"
 msgstr "管理员"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:29
+#: specivo/templates/themes/default/pages/admin/user_detail.html:30
 msgid "Last API call"
 msgstr "上次 API 调用"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:30
+#: specivo/templates/themes/default/pages/admin/user_detail.html:31
 #: specivo/templates/themes/default/pages/auth/profile.html:91
 msgid "Last login"
 msgstr "上次登录"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:31
+#: specivo/templates/themes/default/pages/admin/user_detail.html:32
 msgid "Must be replaced at next sign-in"
 msgstr "下次登录时必须更换"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:32
+#: specivo/templates/themes/default/pages/admin/user_detail.html:33
 msgid "Chosen by the account owner"
 msgstr "由账户所有者设置"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:33
+#: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:16
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:12
 msgid "Copied!"
 msgstr "已复制！"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:36
+#: specivo/templates/themes/default/pages/admin/user_detail.html:37
 msgid "Create Key"
 msgstr "创建密钥"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:38
+#: specivo/templates/themes/default/pages/admin/user_detail.html:39
 msgid "Revoked"
 msgstr "已吊销"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:39
+#: specivo/templates/themes/default/pages/admin/user_detail.html:40
 msgid "Nothing ticked: the key reaches every project the account can."
 msgstr "未勾选任何项目：该密钥可访问此账户能访问的所有项目。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:40
+#: specivo/templates/themes/default/pages/admin/user_detail.html:41
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:25
@@ -6931,177 +6934,201 @@ msgstr "未勾选任何项目：该密钥可访问此账户能访问的所有项
 msgid "All projects"
 msgstr "所有项目"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:41
+#: specivo/templates/themes/default/pages/admin/user_detail.html:42
 #: specivo/templates/themes/default/pages/auth/api_keys.html:26
 #, python-format
 msgid "Limited to: %(projects)s"
 msgstr "仅限：%(projects)s"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:42
+#: specivo/templates/themes/default/pages/admin/user_detail.html:43
 #: specivo/templates/themes/default/pages/auth/api_keys.html:27
 msgid "None: its projects were deleted"
 msgstr "无：其项目已被删除"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:57
+#: specivo/templates/themes/default/pages/admin/user_detail.html:58
 msgid "Password change pending"
 msgstr "待更改密码"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:69
+#: specivo/templates/themes/default/pages/admin/user_detail.html:70
 msgid "Account Details"
 msgstr "账户详情"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:72
+#: specivo/templates/themes/default/pages/admin/user_detail.html:73
 msgid ""
 "Service accounts authenticate via API keys only. They cannot log in via "
 "the web interface."
 msgstr "服务账户仅通过 API 密钥进行身份验证，无法通过 Web 界面登录。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:75
+#: specivo/templates/themes/default/pages/admin/user_detail.html:76
 msgid "User account details and authentication information."
 msgstr "用户账户详情及身份验证信息。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:91
+#: specivo/templates/themes/default/pages/admin/user_detail.html:92
 msgid "Change email address"
 msgstr "更改电子邮件地址"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:94
+#: specivo/templates/themes/default/pages/admin/user_detail.html:95
 #: specivo/templates/themes/default/pages/auth/profile.html:215
 msgid "Change email"
 msgstr "更改电子邮件"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:97
+#: specivo/templates/themes/default/pages/admin/user_detail.html:98
 msgid ""
 "The new address is used at once and marked verified, without a "
 "confirmation link. The old and the new address both get a notice."
 msgstr "新地址立即生效并标记为已验证，无需确认链接。旧地址和新地址都会收到通知。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:122
+#: specivo/templates/themes/default/pages/admin/user_detail.html:124
+#: specivo/templates/themes/default/pages/admin/user_detail.html:145
+msgid "Works for"
+msgstr "服务对象"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:126
+msgid ""
+"The AI usage this agent reports is billed through this person's billing "
+"accounts and plans: their payer, budgets and subscriptions cover it. The "
+"usage stays listed under the agent."
+msgstr "该智能体报告的 AI 用量通过此人的计费账户和套餐计费：由其付款方、预算和订阅承担。用量仍列在该智能体名下。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:140
+msgid "Nobody: the agent's usage is billed through its own accounts."
+msgstr "无：智能体的用量通过其自己的账户计费。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:144
+msgid "Change to"
+msgstr "更改为"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:145
+msgid "Search people…"
+msgstr "搜索人员…"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html:153
 msgid "Account status"
 msgstr "账户状态"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:131
+#: specivo/templates/themes/default/pages/admin/user_detail.html:164
 msgid ""
 "This account is deactivated. It cannot sign in and its API keys do not "
 "work."
 msgstr "此账户已停用。它无法登录，其 API 密钥也无法使用。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:132
+#: specivo/templates/themes/default/pages/admin/user_detail.html:165
 msgid ""
 "API keys stay inactive after reactivation: activate them again or create "
 "new ones."
 msgstr "重新启用账户后，API 密钥仍保持停用：请重新启用或创建新密钥。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:136
+#: specivo/templates/themes/default/pages/admin/user_detail.html:169
 msgid "Reactivate account"
 msgstr "重新启用账户"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:140
+#: specivo/templates/themes/default/pages/admin/user_detail.html:173
 msgid ""
 "Deactivating signs the user out of every session and switches off all of "
 "their API keys. Reactivating the account later does not switch the keys "
 "back on."
 msgstr "停用会让该用户退出所有会话，并关闭其所有 API 密钥。之后重新启用账户不会重新开启这些密钥。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:145
+#: specivo/templates/themes/default/pages/admin/user_detail.html:178
 msgid "Deactivate account"
 msgstr "停用账户"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:154
+#: specivo/templates/themes/default/pages/admin/user_detail.html:187
 #: specivo/templates/themes/default/pages/auth/profile.html:225
 msgid "Connected accounts"
 msgstr "已关联的账户"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:155
+#: specivo/templates/themes/default/pages/admin/user_detail.html:188
 msgid ""
 "Identity provider accounts this user can sign in with. Disconnecting one "
 "ends the sessions started with it."
 msgstr "此用户可用于登录的身份提供商账户。断开关联会结束通过该账户开始的会话。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:167
+#: specivo/templates/themes/default/pages/admin/user_detail.html:200
 msgid "Linked by"
 msgstr "关联方式"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:168
+#: specivo/templates/themes/default/pages/admin/user_detail.html:201
 #: specivo/templates/themes/default/pages/auth/profile.html:246
 msgid "Connected"
 msgstr "关联时间"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:169
+#: specivo/templates/themes/default/pages/admin/user_detail.html:202
 #: specivo/templates/themes/default/pages/auth/profile.html:247
 msgid "Last sign-in"
 msgstr "上次登录"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:174
+#: specivo/templates/themes/default/pages/admin/user_detail.html:207
 #: specivo/templates/themes/default/pages/auth/profile.html:252
 #: specivo/templates/themes/default/pages/projects/settings.html:1691
 msgid "Disconnect"
 msgstr "断开关联"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:180
+#: specivo/templates/themes/default/pages/admin/user_detail.html:213
 msgid "No accounts are connected."
 msgstr "没有已关联的账户。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:189
+#: specivo/templates/themes/default/pages/admin/user_detail.html:222
 msgid ""
 "Keys are used for MCP server connections, CI/CD pipelines, and "
 "programmatic access. The full key is shown only once when created."
 msgstr "密钥用于 MCP 服务器连接、CI/CD 流水线以及程序化访问。完整密钥仅在创建时显示一次。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:195
+#: specivo/templates/themes/default/pages/admin/user_detail.html:228
 msgid "New API Key Created"
 msgstr "已创建新的 API 密钥"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:202
+#: specivo/templates/themes/default/pages/admin/user_detail.html:235
 msgid "Copy this key now. It will not be shown again."
 msgstr "请立即复制此密钥，它不会再次显示。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:209
+#: specivo/templates/themes/default/pages/admin/user_detail.html:242
 #: specivo/templates/themes/default/pages/auth/api_keys.html:72
 msgid "Key name"
 msgstr "密钥名称"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:212
+#: specivo/templates/themes/default/pages/admin/user_detail.html:245
 msgid "e.g. MCP Server, CI Pipeline"
 msgstr "例如：MCP 服务器、CI 流水线"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:227
+#: specivo/templates/themes/default/pages/admin/user_detail.html:260
 msgid "Key Prefix"
 msgstr "密钥前缀"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:230
+#: specivo/templates/themes/default/pages/admin/user_detail.html:263
 msgid "Last Used"
 msgstr "上次使用"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:239
+#: specivo/templates/themes/default/pages/admin/user_detail.html:272
 #: specivo/templates/themes/default/pages/auth/api_keys.html:110
 msgid "No API keys yet. Create one to get started."
 msgstr "尚无 API 密钥。创建一个即可开始使用。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:260
+#: specivo/templates/themes/default/pages/admin/user_detail.html:293
 msgid "Revoke"
 msgstr "吊销"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:279
+#: specivo/templates/themes/default/pages/admin/user_detail.html:312
 msgid "MCP Configuration"
 msgstr "MCP 配置"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:281
+#: specivo/templates/themes/default/pages/admin/user_detail.html:314
 msgid "Add this to your MCP client settings to connect to this Specivo instance."
 msgstr "将此内容添加到你的 MCP 客户端设置中，以连接到此 Specivo 实例。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:285
+#: specivo/templates/themes/default/pages/admin/user_detail.html:318
 msgid "MCP client type"
 msgstr "MCP 客户端类型"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:289
+#: specivo/templates/themes/default/pages/admin/user_detail.html:322
 msgid "Claude Code / Cursor"
 msgstr "Claude Code / Cursor"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:293
+#: specivo/templates/themes/default/pages/admin/user_detail.html:326
 msgid "Codex CLI"
 msgstr "Codex CLI"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:325
+#: specivo/templates/themes/default/pages/admin/user_detail.html:358
 msgid ""
 "Replace <code>your-specivo-host</code> with this instance's hostname (use"
 " <code>http://</code> for local development, <code>https://</code> in "
@@ -7114,7 +7141,7 @@ msgstr ""
 "<code>spv_your_api_key_here</code> 替换为上方创建的 API 密钥。代理通过 HTTP 连接到 Specivo "
 "—— 无需访问数据库或在本地安装。"
 
-#: specivo/templates/themes/default/pages/admin/user_detail.html:328
+#: specivo/templates/themes/default/pages/admin/user_detail.html:361
 msgid ""
 "Codex CLI reads MCP servers from <code>~/.codex/config.toml</code> and "
 "speaks Streamable HTTP natively. Replace <code>your-specivo-host</code> "
@@ -7674,7 +7701,7 @@ msgstr "标有 * 的时段有无价格的条目。"
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:149
 #: specivo/templates/themes/default/pages/ai_usage/report.html:50
 #: specivo/templates/themes/default/pages/auth/preferences.html:82
-#: specivo/web/pages/admin.py:1082
+#: specivo/web/pages/admin.py:1121
 msgid "Sessions"
 msgstr "会话"
 
@@ -10545,7 +10572,7 @@ msgstr "暂无维基页面。"
 #: specivo/templates/themes/default/pages/issues/agents.html:8
 #: specivo/templates/themes/default/pages/issues/agents.html:15
 #: specivo/templates/themes/default/pages/issues/detail.html:293
-#: specivo/web/pages/admin.py:1077
+#: specivo/web/pages/admin.py:1116
 msgid "Agents"
 msgstr "智能体"
 
@@ -12065,7 +12092,7 @@ msgstr "轮换密钥"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:9
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:7
 #: specivo/templates/themes/default/pages/admin/trackers.html:7
-#: specivo/templates/themes/default/pages/admin/user_detail.html:8
+#: specivo/templates/themes/default/pages/admin/user_detail.html:9
 #: specivo/templates/themes/default/pages/admin/users.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:7
 #: specivo/templates/themes/default/pages/admin/workflows.html:7
@@ -15250,71 +15277,85 @@ msgid "%(num)d year ago"
 msgid_plural "%(num)d years ago"
 msgstr[0] "%(num)d 年前"
 
-#: specivo/web/pages/admin.py:235
+#: specivo/web/pages/admin.py:238
 msgid ""
 "Account deactivated. The user was signed out everywhere and their API "
 "keys were switched off."
 msgstr "账户已停用。该用户已在所有位置退出登录，其 API 密钥已关闭。"
 
-#: specivo/web/pages/admin.py:238
+#: specivo/web/pages/admin.py:241
 msgid ""
 "Account reactivated. The user can sign in again. API keys stay inactive: "
 "activate them again or create new ones."
 msgstr "账户已重新启用。该用户可以再次登录。API 密钥仍保持停用：请重新启用或创建新密钥。"
 
-#: specivo/web/pages/admin.py:241
+#: specivo/web/pages/admin.py:244
 msgid "Email address changed. A notice went to the old and the new address."
 msgstr "电子邮件地址已更改。已向旧地址和新地址发送通知。"
 
-#: specivo/web/pages/admin.py:249
+#: specivo/web/pages/admin.py:245
+msgid ""
+"Saved. The agent's AI usage is now billed through that person's accounts "
+"and plans."
+msgstr "已保存。智能体的 AI 用量现在通过此人的账户和套餐计费。"
+
+#: specivo/web/pages/admin.py:246
+msgid "Saved. The agent's AI usage is billed through its own accounts again."
+msgstr "已保存。智能体的 AI 用量重新通过其自己的账户计费。"
+
+#: specivo/web/pages/admin.py:254
 msgid "You cannot deactivate your own account."
 msgstr "您不能停用自己的账户。"
 
-#: specivo/web/pages/admin.py:252
+#: specivo/web/pages/admin.py:257
 msgid "This is already the user's email address."
 msgstr "这已经是该用户的电子邮件地址。"
 
-#: specivo/web/pages/admin.py:1075
+#: specivo/web/pages/admin.py:259
+msgid "Choose an active person (not a service account) for the agent to work for."
+msgstr "请选择一位在用的人员（不能是服务账号）作为智能体的服务对象。"
+
+#: specivo/web/pages/admin.py:1114
 msgid "Sign-in"
 msgstr "登录"
 
-#: specivo/web/pages/admin.py:1076
+#: specivo/web/pages/admin.py:1115
 msgid "Access"
 msgstr "访问"
 
-#: specivo/web/pages/admin.py:1078
+#: specivo/web/pages/admin.py:1117
 msgid "Issues and wiki"
 msgstr "工作项和维基"
 
-#: specivo/web/pages/admin.py:1081
+#: specivo/web/pages/admin.py:1120
 msgid "Provisioning"
 msgstr "预配"
 
-#: specivo/web/pages/admin.py:1145
+#: specivo/web/pages/admin.py:1184
 msgid "Unknown category."
 msgstr "未知类别。"
 
-#: specivo/web/pages/admin.py:1147
+#: specivo/web/pages/admin.py:1186
 msgid "Unknown event type."
 msgstr "未知事件类型。"
 
-#: specivo/web/pages/admin.py:1152
+#: specivo/web/pages/admin.py:1191
 msgid "No user has this login."
 msgstr "没有用户使用此登录名。"
 
-#: specivo/web/pages/admin.py:1157
+#: specivo/web/pages/admin.py:1196
 msgid "No project has this key."
 msgstr "没有项目使用此键。"
 
-#: specivo/web/pages/admin.py:1162
+#: specivo/web/pages/admin.py:1201
 msgid "The from date is not a valid date."
 msgstr "起始日期无效。"
 
-#: specivo/web/pages/admin.py:1168
+#: specivo/web/pages/admin.py:1207
 msgid "The to date is not a valid date."
 msgstr "结束日期无效。"
 
-#: specivo/web/pages/admin.py:1172
+#: specivo/web/pages/admin.py:1211
 msgid "The IP address is too long."
 msgstr "IP 地址过长。"
 

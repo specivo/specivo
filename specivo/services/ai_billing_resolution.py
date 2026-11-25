@@ -36,6 +36,11 @@ is no longer charged to the person's own plan. Usage named or routed to a
 company plan's account is charged to that plan only on the days the user
 holds a seat on it.
 
+An agent (a service account) that works for a person (``users.works_for_id``)
+is billed as that person: every step above reads the person's accounts, plans
+and seats, so the person's accounts, budgets and payer cover what their agent
+reports, while the entry stays the agent's.
+
 ``route`` never feeds pricing.
 """
 
@@ -67,6 +72,7 @@ from specivo.core.ai_billing import (
 from specivo.core.ai_subscriptions import utc_day
 from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_subscription import AiSubscription
+from specivo.models.user import User
 from specivo.services.ai_billing_account_service import AiBillingAccountService
 from specivo.services.ai_subscription_service import AiSubscriptionService
 
@@ -78,6 +84,7 @@ _subscriptions = AiSubscriptionService()
 class BillingRequest:
     """What resolution reads: the usage, what the record sent, and the stored entry when re-resolving."""
 
+    #: Whose usage it is; an agent's is resolved as the person it works for.
     user_id: int
     tool_slug: str | None
     provider: str | None
@@ -127,6 +134,18 @@ class BillingLookups:
 
     instance: list[AiBillingAccount] | None = None
     personal: dict[int, list[AiBillingAccount]] = field(default_factory=dict)
+    billed_as: dict[int, int] = field(default_factory=dict)
+
+    async def billing_user_id(self, session: AsyncSession, user_id: int) -> int:
+        """Who *user_id*'s usage is billed as: the person an agent works for, else the user."""
+        if user_id not in self.billed_as:
+            owner = (
+                await session.execute(
+                    select(User.works_for_id).where(User.id == user_id, User.is_service_account.is_(True))
+                )
+            ).scalar_one_or_none()
+            self.billed_as[user_id] = owner if owner is not None else user_id
+        return self.billed_as[user_id]
 
     async def instance_accounts(self, session: AsyncSession) -> list[AiBillingAccount]:
         if self.instance is None:
@@ -146,6 +165,7 @@ class BillingResolver:
         self, session: AsyncSession, req: BillingRequest, *, lookups: BillingLookups | None = None
     ) -> BillingResolution:
         lookups = lookups if lookups is not None else BillingLookups()
+        req = replace(req, user_id=await lookups.billing_user_id(session, req.user_id))
         requested = req.requested_cost_type
 
         if req.manual:
