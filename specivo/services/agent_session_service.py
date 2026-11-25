@@ -49,6 +49,8 @@ CLIENT_TYPES = (CLIENT_TYPE_MCP, CLIENT_TYPE_REST, CLIENT_TYPE_WEBHOOK)
 #: A client's own session id: opaque, never parsed, only checked against this shape.
 EXTERNAL_SESSION_ID_MAX = 200
 _EXTERNAL_SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}")
+#: The same shape, for callers outside this module.
+EXTERNAL_SESSION_ID_RE = _EXTERNAL_SESSION_ID
 
 #: MCP tools that act in no project: their project-less audit rows name nothing of any project,
 #: so a project's session timeline shows them. Project-less rows of every other tool are left out,
@@ -148,8 +150,14 @@ class AgentSessionService:
         client: ClientInfo | None = None,
         connection: str | None = None,
         client_type: str | None = None,
+        external_id: str | None = None,
     ) -> AgentSession:
         """Find the active session of this connection (or API key) or start a new one.
+
+        *external_id* (a plain REST call naming the client's session, header
+        ``X-Agent-Session-Id``) joins the account's open session with that
+        client session id, however it was opened, or starts a REST session
+        carrying it; plain REST calls without one never join such a session.
 
         *connection* is the MCP transport session id of the call
         (``Mcp-Session-Id``, or the session id of a legacy SSE stream). Each
@@ -176,6 +184,8 @@ class AgentSessionService:
         now = utcnow()
         client = client or parse_user_agent(user_agent)
         conn_hash = connection_hash(connection) if connection else None
+        if external_id is not None and conn_hash is None:
+            return await self._rest_in_client_session(session, api_key_id, user_id, client, external_id)
 
         # The most recent session of this connection, or of the key's plain REST calls.
         stmt = (
@@ -184,7 +194,7 @@ class AgentSessionService:
                 AgentSession.api_key_id == api_key_id,
                 AgentSession.connection_hash == conn_hash
                 if conn_hash is not None
-                else AgentSession.connection_hash.is_(None),
+                else and_(AgentSession.connection_hash.is_(None), AgentSession.external_session_id.is_(None)),
             )
             .order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc())
             .limit(1)
@@ -223,6 +233,45 @@ class AgentSessionService:
             "yes" if conn_hash else "no",
         )
         return agent_session
+
+    async def _rest_in_client_session(
+        self, session: AsyncSession, api_key_id: int, user_id: int, client: ClientInfo | None, external_id: str
+    ) -> AgentSession:
+        """A REST call naming client session *external_id*: that open session of the account, or a new one."""
+        check_external_session_id(external_id)
+        now = utcnow()
+        since = now - timedelta(seconds=_get_session_timeout())
+        existing = (
+            await session.execute(
+                select(AgentSession)
+                .where(
+                    AgentSession.user_id == user_id,
+                    AgentSession.external_session_id == external_id,
+                    AgentSession.ended_at.is_(None),
+                    AgentSession.last_activity_at >= since,
+                )
+                .order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.last_activity_at = now
+            await session.flush()
+            return existing
+        row = AgentSession(
+            api_key_id=api_key_id,
+            user_id=user_id,
+            connection_hash=None,
+            client_type=CLIENT_TYPE_REST,
+            client_name=client.name if client else None,
+            client_version=client.version if client else None,
+            external_session_id=external_id,
+            started_at=now,
+            last_activity_at=now,
+        )
+        session.add(row)
+        await session.flush()
+        return row
 
     async def record_issue(self, session: AsyncSession, agent_session_id: int, user: User, issue: Issue) -> bool:
         """Make *issue* the issue agent session *agent_session_id* is working on.
@@ -308,7 +357,11 @@ class AgentSessionService:
         The row is, in order: *agent_session_id* itself when it carries
         *external_id*; the connection's open row that does; *agent_session_id*
         when it carries no client id yet (the caller then records the id on
-        it); else a new row of the connection. Only *user*'s rows are read or
+        it); else a new row of the connection. An open row that only the
+        client's events opened (an event receiver, same account, same id) is
+        not left beside it: it is folded into *agent_session_id* in the third
+        case, and becomes the connection's row instead of a new one in the
+        last. Only *user*'s rows are read or
         written. Returns ``(row, created)``; the caller records the ids
         (``set_external``) on it.
 
@@ -327,8 +380,22 @@ class AgentSessionService:
             found.last_activity_at = now
             await session.flush()
             return found, False
+        # The client's events may have opened the conversation's session first (an event
+        # receiver): it becomes this connection's, so the conversation stays one session.
+        webhook = await self._open_webhook_row(session, user.id, external_id)
         if current.external_session_id is None:
+            if webhook is not None:
+                await self._absorb(session, current, webhook)
             return current, False
+        if webhook is not None:
+            webhook.api_key_id = current.api_key_id
+            webhook.connection_hash = current.connection_hash
+            webhook.client_type = current.client_type
+            webhook.client_name = current.client_name or webhook.client_name
+            webhook.client_version = current.client_version or webhook.client_version
+            webhook.last_activity_at = now
+            await session.flush()
+            return webhook, False
         row = AgentSession(
             api_key_id=current.api_key_id,
             user_id=user.id,
@@ -342,6 +409,57 @@ class AgentSessionService:
         session.add(row)
         await session.flush()
         return row, True
+
+    async def _open_webhook_row(self, session: AsyncSession, user_id: int, external_id: str) -> AgentSession | None:
+        """*user_id*'s newest open session that only an event receiver opened, with client session id *external_id*."""
+        since = utcnow() - timedelta(seconds=_get_session_timeout())
+        stmt = (
+            select(AgentSession)
+            .where(
+                AgentSession.user_id == user_id,
+                AgentSession.client_type == CLIENT_TYPE_WEBHOOK,
+                AgentSession.api_key_id.is_(None),
+                AgentSession.external_session_id == external_id,
+                AgentSession.ended_at.is_(None),
+                AgentSession.last_activity_at >= since,
+            )
+            .order_by(AgentSession.last_activity_at.desc(), AgentSession.id.desc())
+            .limit(1)
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
+
+    async def _absorb(self, session: AsyncSession, into: AgentSession, source: AgentSession) -> None:
+        """Fold session *source* into *into* (same account) and delete *source*.
+
+        Its audit rows and child sessions move to *into*; *into* keeps the
+        earlier start, adds the tool calls and takes the receiver, the parent
+        and the issue when it has none of its own.
+        """
+        from specivo.models.security_audit import SecurityAuditLog
+
+        await session.execute(
+            update(SecurityAuditLog)
+            .where(SecurityAuditLog.agent_session_id == source.id)
+            .values(agent_session_id=into.id)
+            .execution_options(synchronize_session=False)
+        )
+        await session.execute(
+            update(AgentSession)
+            .where(AgentSession.parent_session_id == source.id)
+            .values(parent_session_id=into.id)
+            .execution_options(synchronize_session="fetch")
+        )
+        if source.started_at < into.started_at:
+            into.started_at = source.started_at
+        into.tool_call_count += source.tool_call_count
+        into.receiver_id = into.receiver_id or source.receiver_id
+        if into.parent_external_session_id is None and source.parent_external_session_id is not None:
+            into.parent_external_session_id = source.parent_external_session_id
+            into.parent_session_id = source.parent_session_id
+        if into.issue_id is None:
+            into.issue_id = source.issue_id
+        await session.delete(source)
+        await session.flush()
 
     async def issue_for(
         self,
@@ -561,12 +679,14 @@ class AgentSessionService:
         client: ClientInfo | None = None,
         parent_external_id: str | None = None,
     ) -> AgentSession:
-        """Find *user*'s open webhook session with client session id *external_id*, or start one.
+        """Find *user*'s open session with client session id *external_id*, or start a webhook one.
 
         Open means not ended and active within the session timeout, as for
-        ``get_or_create_session``; the newest such row is extended. Only
-        *user*'s webhook rows are read, so an id another account uses (or an
-        MCP connection of the same account) never joins this one. A new row
+        ``get_or_create_session``; the newest such row is extended, whichever
+        way it was opened: the events of a conversation join the MCP (or REST)
+        session the same client opened for it, so one conversation is one
+        session. Only *user*'s rows are read, so an id another account uses
+        never joins this one. A new row
         has no API key, ``client_type`` ``webhook`` and the receiver's id; its
         parent (*parent_external_id*) is resolved and earlier children are
         linked by ``set_external``, within *user*'s sessions only. When some
@@ -584,7 +704,6 @@ class AgentSessionService:
             select(AgentSession)
             .where(
                 AgentSession.user_id == user.id,
-                AgentSession.client_type == CLIENT_TYPE_WEBHOOK,
                 AgentSession.external_session_id == external_id,
                 AgentSession.ended_at.is_(None),
                 AgentSession.last_activity_at >= since,
@@ -593,6 +712,8 @@ class AgentSessionService:
             .limit(1)
         )
         agent_session = (await session.execute(stmt)).scalar_one_or_none()
+        if agent_session is not None and agent_session.receiver_id is None:
+            agent_session.receiver_id = receiver_id
         if agent_session is None:
             agent_session = AgentSession(
                 api_key_id=None,
@@ -611,6 +732,10 @@ class AgentSessionService:
             agent_session.last_activity_at = now
             if parent_external_id is not None and agent_session.parent_external_session_id is None:
                 await self.set_external(session, agent_session.id, user, None, parent_external_id)
+        if agent_session.client_type != CLIENT_TYPE_WEBHOOK and agent_session.issue_id is not None:
+            # The client named the issue on its own connection: the events do not change it.
+            await session.flush()
+            return agent_session
         candidate = agent_session.issue_id or await self.issue_for_external(session, user.id, external_id)
         usable = candidate if candidate is not None and await self.can_log_on(session, user, candidate) else None
         if agent_session.issue_id != usable:
