@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-24 18:36+0100\n"
+"POT-Creation-Date: 2026-11-25 15:53+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -665,30 +665,30 @@ msgstr "该历史记录不属于此工作项。"
 msgid "Cannot reply to a journal on a different issue"
 msgstr "无法回复其他工作项的日志记录"
 
-#: specivo/services/link_suggestion_service.py:715
+#: specivo/services/link_suggestion_service.py:773
 msgid "An item cannot be linked to itself"
 msgstr "条目不能链接到自身"
 
-#: specivo/services/link_suggestion_service.py:717
+#: specivo/services/link_suggestion_service.py:775
 msgid "Suggested links join issues and wiki pages only"
 msgstr "建议链接只能连接工作项和维基页面"
 
-#: specivo/services/link_suggestion_service.py:745
+#: specivo/services/link_suggestion_service.py:803
 #, python-format
 msgid "The suggested link between %(source)s and %(target)s was already accepted"
 msgstr "%(source)s 与 %(target)s 之间的建议链接已被接受"
 
-#: specivo/services/link_suggestion_service.py:747
+#: specivo/services/link_suggestion_service.py:805
 #, python-format
 msgid "The suggested link between %(source)s and %(target)s was already dismissed"
 msgstr "%(source)s 与 %(target)s 之间的建议链接已被忽略"
 
-#: specivo/services/link_suggestion_service.py:750
+#: specivo/services/link_suggestion_service.py:808
 #, python-format
 msgid "No suggested link between %(source)s and %(target)s"
 msgstr "%(source)s 与 %(target)s 之间没有建议链接"
 
-#: specivo/services/link_suggestion_service.py:796
+#: specivo/services/link_suggestion_service.py:854
 msgid "A typed link between these items already exists"
 msgstr "这两个条目之间已存在类型化链接"
 
@@ -727,6 +727,7 @@ msgstr "超出层级深度上限：使用此父工作项后，层级（含子工
 #: specivo/services/permission_catalogue.py:79
 #: specivo/templates/themes/default/components/sidebar.html:38
 #: specivo/templates/themes/default/pages/_backlinks.html:7
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:40
 #: specivo/templates/themes/default/pages/admin/projects.html:163
@@ -1716,6 +1717,7 @@ msgid "Admin"
 msgstr "管理员"
 
 #: specivo/templates/themes/default/pages/_backlinks.html:7
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/projects/settings.html:975
 msgid "Wiki pages"
 msgstr "维基页面"
@@ -1982,6 +1984,7 @@ msgstr "概念（AI）"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:33
 #: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:164
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:178
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:413
@@ -2000,6 +2003,7 @@ msgstr "工作项"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:34
 #: specivo/templates/themes/default/pages/_link_graph.html:106
+#: specivo/templates/themes/default/pages/_link_suggestions.html:11
 msgid "Wiki page"
 msgstr "维基页面"
 
@@ -2439,97 +2443,97 @@ msgid ""
 "suggestions, not links: accept the right ones, dismiss the rest."
 msgstr "内容相似、但尚无任何链接指向此处的条目。它们只是建议，不是链接：接受合适的，忽略其余的。"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:18
+#: specivo/templates/themes/default/pages/_link_suggestions.html:25
 msgid "Similarity of the content, from 0 to 1"
 msgstr "内容相似度，从 0 到 1"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:28
+#: specivo/templates/themes/default/pages/_link_suggestions.html:36
 msgid "Link as"
 msgstr "链接为"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:31
+#: specivo/templates/themes/default/pages/_link_suggestions.html:39
 #: specivo/templates/themes/default/pages/issues/detail.html:608
 #: specivo/templates/themes/default/pages/issues/form.html:53
 #: specivo/templates/themes/default/pages/issues/form.html:394
 msgid "Relates to"
 msgstr "关联到"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:32
+#: specivo/templates/themes/default/pages/_link_suggestions.html:40
 #: specivo/templates/themes/default/pages/issues/detail.html:609
 #: specivo/templates/themes/default/pages/issues/form.html:54
 #: specivo/templates/themes/default/pages/issues/form.html:395
 msgid "Blocks"
 msgstr "阻塞"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:33
+#: specivo/templates/themes/default/pages/_link_suggestions.html:41
 #: specivo/templates/themes/default/pages/issues/detail.html:610
 #: specivo/templates/themes/default/pages/issues/form.html:55
 #: specivo/templates/themes/default/pages/issues/form.html:396
 msgid "Blocked by"
 msgstr "被阻塞于"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:34
+#: specivo/templates/themes/default/pages/_link_suggestions.html:42
 #: specivo/templates/themes/default/pages/issues/detail.html:611
 #: specivo/templates/themes/default/pages/issues/form.html:56
 #: specivo/templates/themes/default/pages/issues/form.html:397
 msgid "Duplicates"
 msgstr "重复于"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:35
+#: specivo/templates/themes/default/pages/_link_suggestions.html:43
 #: specivo/templates/themes/default/pages/issues/form.html:57
 #: specivo/templates/themes/default/pages/issues/form.html:398
 msgid "Duplicated by"
 msgstr "被重复于"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:36
+#: specivo/templates/themes/default/pages/_link_suggestions.html:44
 #: specivo/templates/themes/default/pages/issues/detail.html:612
 #: specivo/templates/themes/default/pages/issues/form.html:58
 #: specivo/templates/themes/default/pages/issues/form.html:399
 msgid "Precedes"
 msgstr "先于"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:37
+#: specivo/templates/themes/default/pages/_link_suggestions.html:45
 #: specivo/templates/themes/default/pages/issues/detail.html:613
 #: specivo/templates/themes/default/pages/issues/form.html:59
 #: specivo/templates/themes/default/pages/issues/form.html:400
 msgid "Follows"
 msgstr "后继于"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:38
+#: specivo/templates/themes/default/pages/_link_suggestions.html:46
 #: specivo/templates/themes/default/pages/issues/detail.html:614
 msgid "Copied to"
 msgstr "复制到"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:39
+#: specivo/templates/themes/default/pages/_link_suggestions.html:47
 #: specivo/templates/themes/default/pages/issues/detail.html:615
 msgid "Copied from"
 msgstr "复制自"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:41
+#: specivo/templates/themes/default/pages/_link_suggestions.html:49
 msgid "See also"
 msgstr "另请参阅"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:42
+#: specivo/templates/themes/default/pages/_link_suggestions.html:50
 msgid "Documents"
 msgstr "记录"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:43
+#: specivo/templates/themes/default/pages/_link_suggestions.html:51
 msgid "Implements"
 msgstr "实现"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:44
+#: specivo/templates/themes/default/pages/_link_suggestions.html:52
 msgid "Decided in"
 msgstr "决定于"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:45
+#: specivo/templates/themes/default/pages/_link_suggestions.html:53
 msgid "Supersedes"
 msgstr "取代"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:49
+#: specivo/templates/themes/default/pages/_link_suggestions.html:57
 msgid "Accept"
 msgstr "接受"
 
-#: specivo/templates/themes/default/pages/_link_suggestions.html:50
+#: specivo/templates/themes/default/pages/_link_suggestions.html:58
 #: specivo/templates/themes/default/pages/auth/api_keys.html:64
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:39
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:60
@@ -2537,6 +2541,12 @@ msgstr "接受"
 #: specivo/templates/themes/default/pages/projects/settings.html:1409
 msgid "Dismiss"
 msgstr "关闭"
+
+#: specivo/templates/themes/default/pages/_link_suggestions.html:65
+#, python-format
+msgid "%(count)s less similar suggestion not shown."
+msgid_plural "%(count)s less similar suggestions not shown."
+msgstr[0] "另有 %(count)s 条相似度较低的建议未显示。"
 
 #: specivo/templates/themes/default/pages/_markdown_editor_i18n.html:8
 #: specivo/templates/themes/default/pages/wiki/edit.html:68
@@ -15568,19 +15578,19 @@ msgstr "目前还没有维基页面、工作项或评论提及此工作项。"
 msgid "No wiki page, issue or comment links here yet."
 msgstr "目前还没有维基页面、工作项或评论链接到这里。"
 
-#: specivo/web/partials/links.py:225
+#: specivo/web/partials/links.py:244
 msgid "Linked."
 msgstr "已链接。"
 
-#: specivo/web/partials/links.py:225
+#: specivo/web/partials/links.py:244
 msgid "Dismissed. It will not be suggested again."
 msgstr "已忽略，不会再次建议。"
 
-#: specivo/web/partials/links.py:234
+#: specivo/web/partials/links.py:253
 msgid "That suggestion is no longer available."
 msgstr "该建议已不可用。"
 
-#: specivo/web/partials/links.py:236
+#: specivo/web/partials/links.py:255
 msgid "You do not have permission to link these items."
 msgstr "你没有链接这些条目的权限。"
 

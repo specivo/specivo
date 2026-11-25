@@ -4,54 +4,68 @@
 <div class="sp-suggestions" id="link-suggestions">
   {% if error %}<div class="sp-suggestions-message sp-suggestions-error" role="alert">{{ error }}</div>{% endif %}
   {% if done %}<div class="sp-suggestions-message" role="status">{{ done }}</div>{% endif %}
-  {% if not rows %}
+  {% if total == 0 %}
   <div class="sp-backlinks-empty">{% trans %}No suggestions: nothing similar that is not linked already.{% endtrans %}</div>
   {% else %}
   <p class="sp-suggestions-hint">{% trans %}Items with similar content that nothing links to this one yet. They are suggestions, not links: accept the right ones, dismiss the rest.{% endtrans %}</p>
-  <ul class="sp-backlinks-list">
-    {% for row in rows %}
-    <li class="sp-suggestions-row">
-      <div class="sp-suggestions-item">
-        <a class="sp-backlinks-ref" href="{{ row.url | prefixed }}">{{ row.shown_ref }}</a>
-        <span class="sp-backlinks-title">{{ row.title }}</span>
-        {% if row.status %}<span class="badge-status sp-backlinks-status">{{ row.status }}</span>{% endif %}
-        <span class="sp-suggestions-score" title="{{ _('Similarity of the content, from 0 to 1') }}">{{ row.score }}</span>
-      </div>
-      {% if row.can_decide %}
-      <form class="sp-form-row sp-suggestions-actions"
-            hx-post="{{ base }}/partials/link-suggestions/"
-            hx-target="closest .sp-suggestions"
-            hx-swap="outerHTML">
-        <input type="hidden" name="ref" value="{{ root_ref }}">
-        <input type="hidden" name="other_ref" value="{{ row.ref }}">
-        <div class="sp-form-field">
-          <label class="filter-label" for="sp-suggestion-type-{{ loop.index }}">{% trans %}Link as{% endtrans %}</label>
-          <select id="sp-suggestion-type-{{ loop.index }}" name="link_type" class="filter-select">
-            {% if row.both_issues %}
-            <option value="relates">{% trans %}Relates to{% endtrans %}</option>
-            <option value="blocks">{% trans %}Blocks{% endtrans %}</option>
-            <option value="blocked">{% trans %}Blocked by{% endtrans %}</option>
-            <option value="duplicates">{% trans %}Duplicates{% endtrans %}</option>
-            <option value="duplicated">{% trans %}Duplicated by{% endtrans %}</option>
-            <option value="precedes">{% trans %}Precedes{% endtrans %}</option>
-            <option value="follows">{% trans %}Follows{% endtrans %}</option>
-            <option value="copied_to">{% trans %}Copied to{% endtrans %}</option>
-            <option value="copied_from">{% trans %}Copied from{% endtrans %}</option>
-            {% else %}
-            <option value="see_also">{% trans %}See also{% endtrans %}</option>
-            <option value="documents">{% trans %}Documents{% endtrans %}</option>
-            <option value="implements">{% trans %}Implements{% endtrans %}</option>
-            <option value="decided_in">{% trans %}Decided in{% endtrans %}</option>
-            <option value="supersedes">{% trans %}Supersedes{% endtrans %}</option>
-            {% endif %}
-          </select>
+  {% for group, heading, kind_label in [("issue", _("Issues"), _("Issue")), ("wiki_page", _("Wiki pages"), _("Wiki page"))] %}
+  {% set rows = groups[group] %}
+  {% if rows %}
+  <section class="sp-suggestions-group" data-testid="suggestions-{{ group }}">
+    <h4 class="sp-backlinks-heading">{{ heading }} <span class="sp-backlinks-count">{{ rows | length }}</span></h4>
+    <ul class="sp-backlinks-list">
+      {% for row in rows %}
+      {% set field_id = "sp-suggestion-type-" ~ group ~ "-" ~ loop.index %}
+      <li class="sp-suggestions-row sp-suggestions-row--{{ group }}">
+        <div class="sp-suggestions-item">
+          <span class="sp-suggestions-kind">{{ kind_label }}</span>
+          <a class="sp-backlinks-ref" href="{{ row.url | prefixed }}">{{ row.shown_ref }}</a>
+          <span class="sp-backlinks-title">{{ row.title }}</span>
+          {% if row.status %}<span class="badge-status sp-backlinks-status">{{ row.status }}</span>{% endif %}
+          <span class="sp-suggestions-score" title="{{ _('Similarity of the content, from 0 to 1') }}">{{ row.score }}</span>
         </div>
-        <button type="submit" name="op" value="accept" class="sp-btn sp-btn-primary">{% trans %}Accept{% endtrans %}</button>
-        <button type="submit" name="op" value="dismiss" class="sp-btn sp-btn-ghost">{% trans %}Dismiss{% endtrans %}</button>
-      </form>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ul>
+        {% if row.preview %}<p class="sp-suggestions-preview">{{ row.preview }}</p>{% endif %}
+        {% if row.can_decide %}
+        <form class="sp-form-row sp-suggestions-actions"
+              hx-post="{{ base }}/partials/link-suggestions/"
+              hx-target="closest .sp-suggestions"
+              hx-swap="outerHTML">
+          <input type="hidden" name="ref" value="{{ root_ref }}">
+          <input type="hidden" name="other_ref" value="{{ row.ref }}">
+          <div class="sp-form-field">
+            <label class="filter-label" for="{{ field_id }}">{% trans %}Link as{% endtrans %}</label>
+            <select id="{{ field_id }}" name="link_type" class="filter-select">
+              {% if row.both_issues %}
+              <option value="relates">{% trans %}Relates to{% endtrans %}</option>
+              <option value="blocks">{% trans %}Blocks{% endtrans %}</option>
+              <option value="blocked">{% trans %}Blocked by{% endtrans %}</option>
+              <option value="duplicates">{% trans %}Duplicates{% endtrans %}</option>
+              <option value="duplicated">{% trans %}Duplicated by{% endtrans %}</option>
+              <option value="precedes">{% trans %}Precedes{% endtrans %}</option>
+              <option value="follows">{% trans %}Follows{% endtrans %}</option>
+              <option value="copied_to">{% trans %}Copied to{% endtrans %}</option>
+              <option value="copied_from">{% trans %}Copied from{% endtrans %}</option>
+              {% else %}
+              <option value="see_also">{% trans %}See also{% endtrans %}</option>
+              <option value="documents">{% trans %}Documents{% endtrans %}</option>
+              <option value="implements">{% trans %}Implements{% endtrans %}</option>
+              <option value="decided_in">{% trans %}Decided in{% endtrans %}</option>
+              <option value="supersedes">{% trans %}Supersedes{% endtrans %}</option>
+              {% endif %}
+            </select>
+          </div>
+          <button type="submit" name="op" value="accept" class="sp-btn sp-btn-primary">{% trans %}Accept{% endtrans %}</button>
+          <button type="submit" name="op" value="dismiss" class="sp-btn sp-btn-ghost">{% trans %}Dismiss{% endtrans %}</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% if hidden[group] %}
+    <div class="sp-backlinks-more">{% trans count=hidden[group] %}{{ count }} less similar suggestion not shown.{% pluralize %}{{ count }} less similar suggestions not shown.{% endtrans %}</div>
+    {% endif %}
+  </section>
+  {% endif %}
+  {% endfor %}
   {% endif %}
 </div>

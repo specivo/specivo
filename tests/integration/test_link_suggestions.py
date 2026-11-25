@@ -136,8 +136,29 @@ async def test_threshold_is_per_project_and_top_k_caps_each_item(db_session, wor
     await db_session.commit()
     monkeypatch.setattr(svc, "SIMILAR_LINKS_TOP_K", 1)
     await svc.compute_for_project(db_session, world.home.id)
-    # Each item keeps its single best neighbour: root-near (root, near), near-root, also-root.
-    assert await _suggested(db_session) == {_pair(root, near), _pair(also, root)}
+    # Each item keeps its single best issue and its single best page: root keeps near (page) and
+    # also (issue), near keeps root (its best issue), also keeps root and near.
+    assert await _suggested(db_session) == {_pair(root, near), _pair(also, root), _pair(also, near)}
+
+
+async def test_top_k_counts_issues_and_pages_apart(db_session, world, model, monkeypatch):
+    """Close issues never crowd out the pages of an item, nor the other way round."""
+    root = await issue(db_session, world, world.home, "Root")
+    issues = [await issue(db_session, world, world.home, f"Issue {n}") for n in range(3)]
+    pages = [await page(db_session, world, world.home, f"Page {n}") for n in range(2)]
+    await embed(db_session, model, root, A)
+    for item in issues:  # closer to the root than any page
+        await embed(db_session, model, item, NEAR_A)
+    for item in pages:
+        await embed(db_session, model, item, ALSO_NEAR_A)
+    world.home.settings = {**(world.home.settings or {}), svc.THRESHOLD_SETTING: 0.5}
+    await db_session.commit()
+    monkeypatch.setattr(svc, "SIMILAR_LINKS_TOP_K", 2)
+    await svc.compute_for_project(db_session, world.home.id)
+    root_pairs = {pair for pair in await _suggested(db_session) if _pair(root, root) <= pair}
+    root_issues = {pair for pair in root_pairs if any(pair == _pair(root, i) for i in issues)}
+    assert len(root_issues) >= 2
+    assert {_pair(root, p) for p in pages} <= root_pairs
 
 
 async def test_linked_pairs_are_never_suggested(db_session, world, model):

@@ -154,6 +154,51 @@ async def test_issue_page_lists_suggestions_with_actions_for_those_allowed(clien
     assert "Near page" in resp.text
 
 
+async def test_suggestions_are_grouped_by_type_with_previews(client, db_session, world):
+    model = await default_model(db_session, "sga-preview")
+    root = await issue(db_session, world, world.home, "Root", "Root text")
+    runbook = await page(
+        db_session, world, world.home, "Runbook", "## Steps\n\nThe **release** runbook [[testing|explains]] the steps."
+    )
+    twin = await issue(db_session, world, world.home, "Twin", "Twin *description* with [a link](https://example.com).")
+    for item, vector in ((root, A), (runbook, NEAR_A), (twin, TWIN)):
+        await embed(db_session, model, item, vector)
+    await compute_for_project(db_session, world.home.id)
+    await db_session.commit()
+
+    token = await _token(client, world.reader.login)
+    resp = await client.get(f"/partials/issues/{root.display_key}/suggestions/", cookies={"access_token": token})
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    issues_at = html.index('data-testid="suggestions-issue"')
+    pages_at = html.index('data-testid="suggestions-wiki_page"')
+    # Issues first, then wiki pages, each under its own heading, whatever the scores.
+    assert issues_at < html.index(">Twin<") < pages_at < html.index(">Runbook<")
+    assert "sp-suggestions-row--issue" in html and "sp-suggestions-row--wiki_page" in html
+    assert "Twin description with a link." in html
+    assert "Steps The release runbook explains the steps." in html
+
+
+async def test_each_type_lists_at_most_the_web_limit(client, suggested, db_session, world, monkeypatch):
+    import specivo.core.constants as constants
+    from specivo.models.search import EmbeddingModel
+
+    root, _near, _twin = suggested
+    model = (await db_session.execute(select(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)))).scalar_one()
+    second = await page(db_session, world, world.home, "Second page")
+    await embed(db_session, model, second, TWIN)  # 0.90 with the root: less similar than the near page
+    await compute_for_project(db_session, world.home.id)
+    await db_session.commit()
+    monkeypatch.setattr(constants, "SIMILAR_LINKS_WEB_LIMIT_PER_TYPE", 1)
+
+    token = await _token(client, world.reader.login)
+    resp = await client.get(f"/partials/issues/{root.display_key}/suggestions/", cookies={"access_token": token})
+    html = resp.text
+    assert "Near page" in html and "Twin" in html
+    assert "Second page" not in html
+    assert "1 less similar suggestion not shown." in html
+
+
 async def test_wiki_page_lists_suggestions_and_hides_invisible_ones(client, suggested, db_session, world):
     root, _near, _twin = suggested
     root.is_private = True

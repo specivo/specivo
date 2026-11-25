@@ -170,9 +170,13 @@ and that are not linked in any way yet. They are hints, not links. You find them
 - on an issue, in the **Relations** tab, under **Possibly related**;
 - on a wiki page, in the **Possibly related** section at the bottom (open it to load the list).
 
-Each suggestion shows the other item and a score from 0 to 1, how close the two texts are. At most
-five are listed, best first, and only items you can open yourself. A pair is suggested when its score
-reaches the project's threshold (0.80 unless changed, see below), at most five per item.
+Suggestions are listed in two groups, **Issues** and **Wiki pages**, each with its count. Every row
+is marked with its type (a blue *Issue* or a green *Wiki page* label and edge) and shows the other
+item, the first lines of its text (the issue description or the page content) and a score from 0 to
+1, how close the two texts are. Each group lists at most ten, best first, and only items you can open
+yourself; a note under the group says how many less similar ones are not shown. A pair is suggested
+when its score reaches the project's threshold (0.80 unless changed, see below), at most ten issues
+and ten pages per item.
 
 If you may link the two items, each suggestion has a **Link as** choice and two buttons:
 

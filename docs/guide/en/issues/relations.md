@@ -64,7 +64,8 @@ contains it.
 ## Possibly related
 
 Under **Mentioned in**, the tab lists issues and wiki pages of the project whose content is close to
-this issue but that nothing links yet, each with a score from 0 to 1. They are suggestions from
+this issue but that nothing links yet, issues and wiki pages in separate groups (at most ten of
+each), each with the start of its text and a score from 0 to 1. They are suggestions from
 semantic search, not links. If you may link the items, **Accept** turns one into a relation (with
 another issue) or a typed link such as **Documents** (with a wiki page), and **Dismiss** hides it for
 good. See [Possibly related: suggested links](../wiki/history-linking.md#possibly-related-suggested-links).
