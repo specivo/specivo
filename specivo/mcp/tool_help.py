@@ -56,7 +56,7 @@ PARAM_DESCRIPTION_MAX = 90
 COMMON_PARAMS: dict[str, str] = {
     "project_key": "Project key, e.g. ACME.",
     "issue_ref": "Issue key, e.g. ACME-12 (never a numeric id).",
-    "slug": "Wiki page slug.",
+    "slug": "Wiki page slug or title, e.g. 'Release Process'.",
     "offset": "",
     "limit": "",
 }
