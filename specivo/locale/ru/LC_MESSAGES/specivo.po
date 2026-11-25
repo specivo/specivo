@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 15:53+0100\n"
+"POT-Creation-Date: 2026-11-25 18:49+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -1294,8 +1294,8 @@ msgid "Searching…"
 msgstr "Поиск…"
 
 #: specivo/templates/themes/default/components/filter_combobox.html:33
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:142
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:187
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:144
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:189
 msgid "No matches"
 msgstr "Совпадений нет"
 
@@ -1865,7 +1865,7 @@ msgstr "Переиндексация..."
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:27
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:282
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:284
 #: specivo/templates/themes/default/pages/issues/detail.html:114
 #: specivo/templates/themes/default/pages/issues/detail.html:454
 #: specivo/templates/themes/default/pages/issues/form.html:435
@@ -2025,8 +2025,8 @@ msgid "Mentions"
 msgstr "Упоминания"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:18
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:55
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:329
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:56
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:331
 #: specivo/templates/themes/default/pages/issues/detail.html:295
 #: specivo/templates/themes/default/pages/issues/form.html:368
 msgid "Relations"
@@ -2064,7 +2064,7 @@ msgid "Pull requests"
 msgstr "Запросы на слияние"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:25
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:213
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:215
 #: specivo/templates/themes/default/pages/issues/form.html:315
 #: specivo/templates/themes/default/pages/projects/settings.html:28
 #: specivo/templates/themes/default/pages/projects/settings.html:946
@@ -2156,7 +2156,7 @@ msgstr "Метаданные"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:41
 #: specivo/templates/themes/default/pages/admin/versions.html:80
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:120
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:122
 #: specivo/templates/themes/default/pages/issues/description_diff.html:71
 #: specivo/templates/themes/default/pages/issues/form.html:155
 #: specivo/templates/themes/default/pages/projects/settings.html:403
@@ -2170,7 +2170,7 @@ msgstr "Версия"
 #: specivo/templates/themes/default/pages/ai_usage/report.html:18
 #: specivo/templates/themes/default/pages/ai_usage/report.html:36
 #: specivo/templates/themes/default/pages/dashboard.html:110
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:165
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:167
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:108
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:185
 msgid "Sprint"
@@ -2178,7 +2178,7 @@ msgstr "Спринт"
 
 #: specivo/templates/themes/default/pages/_link_graph.html:43
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:21
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:87
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:88
 #: specivo/templates/themes/default/pages/issues/form.html:144
 #: specivo/templates/themes/default/pages/issues/list.html:58
 #: specivo/templates/themes/default/pages/issues/list.html:257
@@ -2748,8 +2748,8 @@ msgid "of"
 msgstr "из"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:30
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:27
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:104
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:28
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:106
 #: specivo/templates/themes/default/pages/issues/form.html:135
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:238
 msgid "Priority"
@@ -2800,7 +2800,7 @@ msgstr "Тема"
 #: specivo/templates/themes/default/pages/auth/api_keys.html:102
 #: specivo/templates/themes/default/pages/auth/profile.html:70
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:17
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:77
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:78
 #: specivo/templates/themes/default/pages/issues/form.html:127
 #: specivo/templates/themes/default/pages/issues/list.html:255
 #: specivo/templates/themes/default/pages/my/_hermes_receivers_panel.html:81
@@ -6683,7 +6683,7 @@ msgstr "Копировать"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:148
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:387
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:412
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:351
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:353
 #: specivo/templates/themes/default/pages/projects/settings.html:1091
 #: specivo/templates/themes/default/pages/projects/settings.html:1323
 msgid "Copied"
@@ -7286,8 +7286,8 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/trackers.html:23
 #: specivo/templates/themes/default/pages/admin/workflows.html:20
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:32
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:114
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:33
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:116
 #: specivo/templates/themes/default/pages/issues/form.html:95
 #: specivo/templates/themes/default/pages/issues/list.html:256
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:218
@@ -7662,7 +7662,8 @@ msgstr "Не удалось разблокировать пользовател�
 #: specivo/templates/themes/default/pages/admin/users.html:32
 #: specivo/templates/themes/default/pages/agent_sessions/_macros.html:11
 #: specivo/templates/themes/default/pages/auth/profile.html:82
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:19
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:21
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:56
 msgid "Service account"
 msgstr "Сервисная учётная запись"
 
@@ -7775,8 +7776,8 @@ msgid "Due date"
 msgstr "Срок"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:84
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:36
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:238
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:37
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:240
 #: specivo/templates/themes/default/pages/projects/settings.html:406
 msgid "Progress"
 msgstr "Прогресс"
@@ -9179,8 +9180,8 @@ msgstr "Только исключённые"
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:77
 #: specivo/templates/themes/default/pages/ai_usage/project.html:96
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:158
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:204
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:160
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:206
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:34
 #: specivo/templates/themes/default/pages/projects/settings.html:1029
 msgid "Clear"
@@ -9196,7 +9197,7 @@ msgid "Search issues..."
 msgstr "Искать задачи..."
 
 #: specivo/templates/themes/default/pages/ai_usage/my.html:103
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:365
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:367
 #: specivo/templates/themes/default/pages/issues/detail.html:393
 msgid "Move"
 msgstr "Перемещение"
@@ -11338,6 +11339,8 @@ msgstr "изменил страницу вики"
 
 #: specivo/templates/themes/default/pages/dashboard/_activity.html:33
 #: specivo/templates/themes/default/pages/issues/_activity.html:21
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:25
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:93
 msgid "Agent"
 msgstr "Агент"
 
@@ -11378,11 +11381,11 @@ msgstr "Страница вики изменена"
 msgid "No recent activity."
 msgstr "Недавних действий нет."
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:7
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:9
 msgid "Agents working now"
 msgstr "Агенты за работой"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:9
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:11
 #, python-format
 msgid "%(count)s active"
 msgid_plural "%(count)s active"
@@ -11390,35 +11393,35 @@ msgstr[0] "%(count)s активна"
 msgstr[1] "%(count)s активны"
 msgstr[2] "%(count)s активны"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:20
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:22
 #: specivo/templates/themes/default/pages/issues/_agents_tab.html:56
 msgid "Unknown client"
 msgstr "Неизвестный клиент"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:27
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:29
 msgid "Running timer"
 msgstr "Идёт таймер"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:27
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:29
 #, python-format
 msgid "Timer %(elapsed)s"
 msgstr "Таймер %(elapsed)s"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:30
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:32
 msgid "No issue yet"
 msgstr "Задачи пока нет"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:34
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:36
 #, python-format
 msgid "Started %(when)s"
 msgstr "Начата %(when)s"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:35
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:37
 #, python-format
 msgid "Last active %(when)s"
 msgstr "Последняя активность %(when)s"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:41
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:43
 #, python-format
 msgid "and %(count)s more session"
 msgid_plural "and %(count)s more sessions"
@@ -11426,11 +11429,28 @@ msgstr[0] "и ещё %(count)s сессия"
 msgstr[1] "и ещё %(count)s сессии"
 msgstr[2] "и ещё %(count)s сессий"
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:44
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:46
 msgid "No agents active right now."
 msgstr "Сейчас активных агентов нет."
 
-#: specivo/templates/themes/default/pages/dashboard/_sessions.html:46
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:50
+msgid "Assigned to agents"
+msgstr "Назначено агентам"
+
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:63
+#, python-format
+msgid "Updated %(when)s"
+msgstr "Обновлено %(when)s"
+
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:69
+#, python-format
+msgid "and %(count)s more issue"
+msgid_plural "and %(count)s more issues"
+msgstr[0] "и ещё %(count)s задача"
+msgstr[1] "и ещё %(count)s задачи"
+msgstr[2] "и ещё %(count)s задач"
+
+#: specivo/templates/themes/default/pages/dashboard/_sessions.html:73
 #, python-format
 msgid "A session closes after %(count)s minute without activity."
 msgid_plural "A session closes after %(count)s minutes without activity."
@@ -12050,36 +12070,45 @@ msgstr "Хронология"
 msgid "Show only"
 msgstr "Показывать только"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:46
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:262
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:47
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:264
 #: specivo/templates/themes/default/pages/issues/form.html:168
 msgid "Due Date"
 msgstr "Срок выполнения"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:95
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:93
+msgid "Service account: an AI agent works the issues assigned to it"
+msgstr "Сервисный аккаунт: ИИ-агент работает над назначенными ему задачами"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:97
 msgid "-- Unassigned --"
 msgstr "-- Не назначен --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:139
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:99
+#: specivo/templates/themes/default/pages/issues/form.html:148
+msgid "agent"
+msgstr "агент"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:141
 msgid "-- No version --"
 msgstr "-- Без версии --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:184
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:186
 msgid "-- No sprint --"
 msgstr "-- Без спринта --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:219
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:221
 #: specivo/templates/themes/default/pages/issues/form.html:317
 #: specivo/templates/themes/default/pages/wiki/edit.html:85
 #: specivo/templates/themes/default/pages/wiki/show.html:119
 msgid "Add tags..."
 msgstr "Добавить теги..."
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:226
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:228
 msgid "No tags"
 msgstr "Нет тегов"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:254
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:256
 #: specivo/templates/themes/default/pages/issues/form.html:164
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:38
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:74
@@ -12087,80 +12116,80 @@ msgstr "Нет тегов"
 msgid "Start Date"
 msgstr "Дата начала"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:275
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:277
 #: specivo/templates/themes/default/pages/issues/form.html:183
 #: specivo/templates/themes/default/pages/issues/form.html:192
 msgid "hours"
 msgstr "часы"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:278
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:280
 #: specivo/templates/themes/default/pages/issues/form.html:185
 #: specivo/templates/themes/default/pages/issues/form.html:194
 msgid "minutes"
 msgstr "минуты"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:287
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:289
 #: specivo/templates/themes/default/pages/issues/form.html:172
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:129
 #: specivo/templates/themes/default/pages/projects/version_detail.html:169
 msgid "Estimated"
 msgstr "Оценка"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:288
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:290
 #: specivo/templates/themes/default/pages/issues/form.html:181
 #: specivo/templates/themes/default/pages/issues/form.html:183
 #: specivo/templates/themes/default/pages/issues/form.html:185
 msgid "Original estimate"
 msgstr "Исходная оценка"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:289
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:291
 #: specivo/templates/themes/default/pages/issues/form.html:190
 #: specivo/templates/themes/default/pages/issues/form.html:192
 #: specivo/templates/themes/default/pages/issues/form.html:194
 msgid "Remaining estimate"
 msgstr "Оставшаяся оценка"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:294
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:296
 msgid "Time Logged"
 msgstr "Затраченное время"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:307
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:309
 msgid "Watchers"
 msgstr "Наблюдатели"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:316
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:318
 msgid "+ Watch"
 msgstr "+ Следить"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:317
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:319
 msgid "Unwatch"
 msgstr "Не следить"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:352
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:354
 msgid "Press Ctrl+C to copy"
 msgstr "Нажмите Ctrl+C, чтобы скопировать"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:354
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:356
 msgid "Branch name"
 msgstr "Имя ветки"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:357
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:359
 msgid "Copy branch name"
 msgstr "Копировать имя ветки"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:369
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:371
 msgid "-- Select project --"
 msgstr "-- Выберите проект --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:374
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:376
 msgid "Optional note"
 msgstr "Необязательный комментарий"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:375
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:377
 msgid "Move issue"
 msgstr "Переместить задачу"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:378
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:380
 msgid ""
 "Version, sprint, category and tags are cleared. History and the old "
 "reference are kept."
@@ -12168,26 +12197,26 @@ msgstr ""
 "Версия, спринт, категория и теги будут сброшены. История и старый "
 "идентификатор сохранятся."
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:381
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:383
 msgid "No other projects available"
 msgstr "Нет других доступных проектов"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:390
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:392
 #, python-format
 msgid "Imported from: %(label)s"
 msgstr "Импортировано из: %(label)s"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:393
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:395
 #, python-format
 msgid "Created %(ago)s"
 msgstr "Создано %(ago)s"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:393
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:395
 #, python-format
 msgid "by %(name)s"
 msgstr "пользователем %(name)s"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:396
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:398
 #, python-format
 msgid "Updated %(ago)s"
 msgstr "Обновлено %(ago)s"
@@ -16490,23 +16519,23 @@ msgstr "Ваша учётная запись %(provider)s подключена."
 msgid "Your %(provider)s account was disconnected."
 msgstr "Ваша учётная запись %(provider)s отключена."
 
-#: specivo/web/pages/dashboard.py:205
+#: specivo/web/pages/dashboard.py:208
 msgid "Seat cost without usage"
 msgstr "Подписки без использования"
 
-#: specivo/web/pages/dashboard.py:207
+#: specivo/web/pages/dashboard.py:210
 msgid "No project"
 msgstr "Без проекта"
 
-#: specivo/web/pages/dashboard.py:207
+#: specivo/web/pages/dashboard.py:210
 msgid "Unknown model"
 msgstr "Неизвестная модель"
 
-#: specivo/web/pages/dashboard.py:306
+#: specivo/web/pages/dashboard.py:309
 msgid "created"
 msgstr "создал"
 
-#: specivo/web/pages/dashboard.py:308
+#: specivo/web/pages/dashboard.py:311
 #, python-format
 msgid "%(num)d update"
 msgid_plural "%(num)d updates"
@@ -16514,7 +16543,7 @@ msgstr[0] "%(num)d изменение"
 msgstr[1] "%(num)d изменения"
 msgstr[2] "%(num)d изменений"
 
-#: specivo/web/pages/dashboard.py:310
+#: specivo/web/pages/dashboard.py:313
 #, python-format
 msgid "%(num)d comment"
 msgid_plural "%(num)d comments"
@@ -16522,12 +16551,12 @@ msgstr[0] "%(num)d комментарий"
 msgstr[1] "%(num)d комментария"
 msgstr[2] "%(num)d комментариев"
 
-#: specivo/web/pages/dashboard.py:312
+#: specivo/web/pages/dashboard.py:315
 #, python-format
 msgid "%(hours)sh logged"
 msgstr "записано %(hours)s ч"
 
-#: specivo/web/pages/dashboard.py:315
+#: specivo/web/pages/dashboard.py:318
 #, python-format
 msgid "%(num)d commit"
 msgid_plural "%(num)d commits"
@@ -16535,7 +16564,7 @@ msgstr[0] "%(num)d коммит"
 msgstr[1] "%(num)d коммита"
 msgstr[2] "%(num)d коммитов"
 
-#: specivo/web/pages/dashboard.py:317
+#: specivo/web/pages/dashboard.py:320
 #, python-format
 msgid "%(num)d edit"
 msgid_plural "%(num)d edits"
@@ -16543,7 +16572,7 @@ msgstr[0] "%(num)d правка"
 msgstr[1] "%(num)d правки"
 msgstr[2] "%(num)d правок"
 
-#: specivo/web/pages/dashboard.py:319
+#: specivo/web/pages/dashboard.py:322
 msgid "resolved"
 msgstr "решил"
 

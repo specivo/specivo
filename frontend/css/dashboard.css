@@ -101,6 +101,8 @@ a.sp-dash-kpi:hover { border-color: var(--sp-border-strong); box-shadow: var(--s
 .sp-dash-session-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-sm); margin-top: 2px; }
 .sp-dash-timer { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); }
 .sp-dash-session-time { display: flex; flex-direction: column; align-items: flex-end; font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); white-space: nowrap; }
+.sp-dash-agent-issues { border-top: 1px solid var(--sp-border); }
+.sp-dash-subhead { margin: 0; padding: var(--sp-space-md) var(--sp-space-lg) 0; font-size: var(--sp-font-size-sm); font-weight: 600; }
 
 /* ---- Segmented period switch and filter chips ------------------------ */
 .sp-dash-segmented { display: inline-flex; gap: 2px; padding: 3px; background: var(--sp-bg-input); border-radius: var(--sp-border-radius); }

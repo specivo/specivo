@@ -169,9 +169,12 @@ def _label_projects(scope: dash.DashboardScope, issues: list[Issue]) -> None:
 
 async def sessions_context(db: AsyncSession, scope: dash.DashboardScope) -> dict[str, Any]:
     sessions, total = await dash.active_sessions(db, scope)
+    agent_issues, agent_issues_total = await dash.agent_issues(db, scope)
     return {
         "agent_sessions": sessions,
         "agent_sessions_total": total,
+        "agent_issues": agent_issues,
+        "agent_issues_total": agent_issues_total,
         "session_timeout_minutes": max(1, get_settings().agent_session_timeout // 60),
     }
 

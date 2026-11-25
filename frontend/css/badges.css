@@ -96,3 +96,6 @@
    written, and the path is relative to the bundle (dist/css/) so it stays
    under the URL prefix. */
 .sp-avatar-icon-git::before { -webkit-mask-image: url('../../img/avatars/git.svg'); mask-image: url('../../img/avatars/git.svg'); }
+
+/* An issue's assignee that is a service account (an AI agent). */
+.sp-badge-agent { display: inline-block; padding: 1px 6px; border-radius: 4px; background: var(--sp-success-subtle); color: #166534; font-size: 0.72rem; font-weight: 500; white-space: nowrap; }
