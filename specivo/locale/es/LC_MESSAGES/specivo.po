@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 18:49+0100\n"
+"POT-Creation-Date: 2026-11-25 19:36+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -819,7 +819,7 @@ msgstr ""
 "profundidad, y se permiten como máximo %(max)s."
 
 #: specivo/services/permission_catalogue.py:79
-#: specivo/templates/themes/default/components/sidebar.html:38
+#: specivo/templates/themes/default/components/sidebar.html:44
 #: specivo/templates/themes/default/pages/_backlinks.html:7
 #: specivo/templates/themes/default/pages/_link_suggestions.html:11
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:31
@@ -919,7 +919,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/ai_usage/form.html:181
 #: specivo/templates/themes/default/pages/search.html:46
 #: specivo/templates/themes/default/pages/time/form.html:46
-#: specivo/templates/themes/default/pages/time/list.html:59
+#: specivo/templates/themes/default/pages/time/list.html:71
 msgid "Comments"
 msgstr "Comentarios"
 
@@ -969,7 +969,7 @@ msgid "Read comments marked as private."
 msgstr "Leer comentarios marcados como privados."
 
 #: specivo/services/permission_catalogue.py:145
-#: specivo/templates/themes/default/components/sidebar.html:57
+#: specivo/templates/themes/default/components/sidebar.html:63
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:166
 #: specivo/templates/themes/default/pages/projects/detail.html:45
@@ -1084,7 +1084,7 @@ msgid "Edit and delete time entries other people logged."
 msgstr "Editar y eliminar registros de tiempo de otras personas."
 
 #: specivo/services/permission_catalogue.py:191
-#: specivo/templates/themes/default/components/sidebar.html:75
+#: specivo/templates/themes/default/components/sidebar.html:81
 #: specivo/templates/themes/default/pages/ai_usage/form.html:15
 #: specivo/templates/themes/default/pages/ai_usage/issue.html:8
 #: specivo/templates/themes/default/pages/ai_usage/issue.html:15
@@ -1159,6 +1159,8 @@ msgstr "Editar y excluir registros de uso de IA de otras personas."
 #: specivo/templates/themes/default/pages/ai_usage/report.html:418
 #: specivo/templates/themes/default/pages/ai_usage/report.html:434
 #: specivo/templates/themes/default/pages/auth/ai_reimbursement_claim.html:102
+#: specivo/templates/themes/default/pages/time/list.html:41
+#: specivo/templates/themes/default/pages/time/list.html:67
 msgid "Project"
 msgstr "Proyecto"
 
@@ -1385,7 +1387,7 @@ msgid "Timer running on %(target)s"
 msgstr "Temporizador en marcha en %(target)s"
 
 #: specivo/templates/themes/default/components/header.html:49
-#: specivo/templates/themes/default/components/sidebar.html:71
+#: specivo/templates/themes/default/components/sidebar.html:77
 msgid "Time Tracking"
 msgstr "Registro de tiempo"
 
@@ -1408,7 +1410,7 @@ msgstr "Descartar"
 #: specivo/templates/themes/default/pages/issues/detail.html:279
 #: specivo/templates/themes/default/pages/issues/detail.html:433
 #: specivo/templates/themes/default/pages/issues/detail.html:470
-#: specivo/templates/themes/default/pages/time/list.html:57
+#: specivo/templates/themes/default/pages/time/list.html:69
 msgid "Activity"
 msgstr "Actividad"
 
@@ -1662,7 +1664,7 @@ msgid "Dashboard"
 msgstr "Panel"
 
 #: specivo/templates/themes/default/components/sidebar.html:26
-#: specivo/templates/themes/default/components/sidebar.html:97
+#: specivo/templates/themes/default/components/sidebar.html:103
 #: specivo/templates/themes/default/pages/admin/dashboard.html:73
 #: specivo/templates/themes/default/pages/admin/groups.html:52
 #: specivo/templates/themes/default/pages/admin/projects.html:3
@@ -1685,7 +1687,16 @@ msgstr "Panel"
 msgid "Projects"
 msgstr "Proyectos"
 
-#: specivo/templates/themes/default/components/sidebar.html:45
+#: specivo/templates/themes/default/components/sidebar.html:31
+#: specivo/templates/themes/default/pages/time/form.html:11
+#: specivo/templates/themes/default/pages/time/list.html:7
+#: specivo/templates/themes/default/pages/time/list.html:14
+#: specivo/templates/themes/default/pages/time/list.html:19
+#: specivo/templates/themes/default/pages/time/list.html:24
+msgid "Time Entries"
+msgstr "Registros de tiempo"
+
+#: specivo/templates/themes/default/components/sidebar.html:51
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:10
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:15
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:207
@@ -1697,11 +1708,11 @@ msgstr "Proyectos"
 msgid "Backlog"
 msgstr "Backlog"
 
-#: specivo/templates/themes/default/components/sidebar.html:50
+#: specivo/templates/themes/default/components/sidebar.html:56
 msgid "Current Sprint"
 msgstr "Sprint actual"
 
-#: specivo/templates/themes/default/components/sidebar.html:63
+#: specivo/templates/themes/default/components/sidebar.html:69
 #: specivo/templates/themes/default/pages/issues/detail.html:297
 #: specivo/templates/themes/default/pages/projects/graph.html:5
 #: specivo/templates/themes/default/pages/projects/graph.html:11
@@ -1710,7 +1721,7 @@ msgstr "Sprint actual"
 msgid "Graph"
 msgstr "Grafo"
 
-#: specivo/templates/themes/default/components/sidebar.html:67
+#: specivo/templates/themes/default/components/sidebar.html:73
 #: specivo/templates/themes/default/pages/projects/detail.html:48
 #: specivo/templates/themes/default/pages/projects/roadmap.html:4
 #: specivo/templates/themes/default/pages/projects/roadmap.html:10
@@ -1719,7 +1730,7 @@ msgstr "Grafo"
 msgid "Roadmap"
 msgstr "Hoja de ruta"
 
-#: specivo/templates/themes/default/components/sidebar.html:79
+#: specivo/templates/themes/default/components/sidebar.html:85
 #: specivo/templates/themes/default/pages/projects/agent_session_detail.html:12
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:5
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:11
@@ -1727,7 +1738,7 @@ msgstr "Hoja de ruta"
 msgid "Agent sessions"
 msgstr "Sesiones de agente"
 
-#: specivo/templates/themes/default/components/sidebar.html:83
+#: specivo/templates/themes/default/components/sidebar.html:89
 #: specivo/templates/themes/default/pages/_link_graph.html:28
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:10
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:11
@@ -1737,11 +1748,11 @@ msgstr "Sesiones de agente"
 msgid "Sprints"
 msgstr "Sprints"
 
-#: specivo/templates/themes/default/components/sidebar.html:87
+#: specivo/templates/themes/default/components/sidebar.html:93
 msgid "Recurring"
 msgstr "Recurrentes"
 
-#: specivo/templates/themes/default/components/sidebar.html:91
+#: specivo/templates/themes/default/components/sidebar.html:97
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
 #: specivo/templates/themes/default/pages/admin/dashboard.html:213
 #: specivo/templates/themes/default/pages/admin/settings.html:3
@@ -1754,13 +1765,13 @@ msgstr "Recurrentes"
 msgid "Settings"
 msgstr "Configuración"
 
-#: specivo/templates/themes/default/components/sidebar.html:110
+#: specivo/templates/themes/default/components/sidebar.html:116
 #: specivo/templates/themes/default/pages/admin/dashboard.html:35
 #: specivo/web/pages/admin.py:1079
 msgid "Administration"
 msgstr "Administración"
 
-#: specivo/templates/themes/default/components/sidebar.html:113
+#: specivo/templates/themes/default/components/sidebar.html:119
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:19
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:56
 #: specivo/templates/themes/default/pages/admin/ai_billing_accounts.html:5
@@ -2123,7 +2134,8 @@ msgstr "Conceptos (IA)"
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:22
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:46
 #: specivo/templates/themes/default/pages/search.html:219
-#: specivo/templates/themes/default/pages/time/list.html:56
+#: specivo/templates/themes/default/pages/time/list.html:44
+#: specivo/templates/themes/default/pages/time/list.html:68
 msgid "Issue"
 msgstr "Incidencia"
 
@@ -3431,7 +3443,6 @@ msgstr "Presupuesto de este mes"
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:11
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:118
 #: specivo/templates/themes/default/pages/projects/version_detail.html:45
-#: specivo/templates/themes/default/pages/time/list.html:86
 #: specivo/templates/themes/default/pages/wiki/edit.html:14
 #: specivo/templates/themes/default/pages/wiki/show.html:42
 msgid "Edit"
@@ -3985,7 +3996,7 @@ msgstr "Todos los periodos"
 #: specivo/templates/themes/default/pages/ai_usage/my.html:76
 #: specivo/templates/themes/default/pages/ai_usage/project.html:95
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:33
-#: specivo/templates/themes/default/pages/time/list.html:39
+#: specivo/templates/themes/default/pages/time/list.html:51
 msgid "Filter"
 msgstr "Filtrar"
 
@@ -4465,7 +4476,7 @@ msgstr "Clave del proyecto"
 #: specivo/templates/themes/default/pages/ai_usage/my.html:59
 #: specivo/templates/themes/default/pages/ai_usage/project.html:58
 #: specivo/templates/themes/default/pages/ai_usage/report.html:168
-#: specivo/templates/themes/default/pages/time/list.html:27
+#: specivo/templates/themes/default/pages/time/list.html:47
 msgid "From"
 msgstr "Desde"
 
@@ -4475,7 +4486,7 @@ msgstr "Desde"
 #: specivo/templates/themes/default/pages/ai_usage/my.html:63
 #: specivo/templates/themes/default/pages/ai_usage/project.html:62
 #: specivo/templates/themes/default/pages/ai_usage/report.html:172
-#: specivo/templates/themes/default/pages/time/list.html:29
+#: specivo/templates/themes/default/pages/time/list.html:49
 msgid "To"
 msgstr "Para"
 
@@ -4506,7 +4517,8 @@ msgstr "Evento"
 #: specivo/templates/themes/default/pages/ai_usage/report.html:19
 #: specivo/templates/themes/default/pages/issues/detail.html:468
 #: specivo/templates/themes/default/pages/projects/settings.html:149
-#: specivo/templates/themes/default/pages/time/list.html:58
+#: specivo/templates/themes/default/pages/time/list.html:43
+#: specivo/templates/themes/default/pages/time/list.html:70
 msgid "User"
 msgstr "Usuario"
 
@@ -5018,7 +5030,7 @@ msgstr "Introduzca una fecha válida."
 #: specivo/templates/themes/default/pages/issues/description_diff.html:73
 #: specivo/templates/themes/default/pages/issues/detail.html:443
 #: specivo/templates/themes/default/pages/issues/detail.html:467
-#: specivo/templates/themes/default/pages/time/list.html:54
+#: specivo/templates/themes/default/pages/time/list.html:65
 #: specivo/templates/themes/default/pages/wiki/history.html:32
 msgid "Date"
 msgstr "Fecha"
@@ -7415,6 +7427,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:50
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
 #: specivo/templates/themes/default/pages/auth/api_keys.html:25
+#: specivo/templates/themes/default/pages/time/list.html:27
+#: specivo/templates/themes/default/pages/time/list.html:41
 #: specivo/web/pages/ai_spend_reports/drill.py:340
 msgid "All projects"
 msgstr "Todos los proyectos"
@@ -12526,7 +12540,7 @@ msgstr "No se pudo registrar el tiempo"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:423
 #: specivo/templates/themes/default/pages/issues/detail.html:469
-#: specivo/templates/themes/default/pages/time/list.html:55
+#: specivo/templates/themes/default/pages/time/list.html:66
 msgid "Hours"
 msgstr "Horas"
 
@@ -12931,7 +12945,8 @@ msgstr "Rotar secreto"
 #: specivo/templates/themes/default/pages/rate_limited.html:36
 #: specivo/templates/themes/default/pages/search.html:8
 #: specivo/templates/themes/default/pages/time/form.html:7
-#: specivo/templates/themes/default/pages/time/list.html:8
+#: specivo/templates/themes/default/pages/time/list.html:12
+#: specivo/templates/themes/default/pages/time/list.html:18
 #: specivo/templates/themes/default/pages/wiki/diff.html:8
 #: specivo/templates/themes/default/pages/wiki/edit.html:10
 #: specivo/templates/themes/default/pages/wiki/edit.html:18
@@ -15981,16 +15996,9 @@ msgstr ""
 #: specivo/templates/themes/default/pages/time/form.html:13
 #: specivo/templates/themes/default/pages/time/form.html:16
 #: specivo/templates/themes/default/pages/time/form.html:57
-#: specivo/templates/themes/default/pages/time/list.html:19
+#: specivo/templates/themes/default/pages/time/list.html:32
 msgid "Log Time"
 msgstr "Registrar tiempo"
-
-#: specivo/templates/themes/default/pages/time/form.html:11
-#: specivo/templates/themes/default/pages/time/list.html:4
-#: specivo/templates/themes/default/pages/time/list.html:10
-#: specivo/templates/themes/default/pages/time/list.html:14
-msgid "Time Entries"
-msgstr "Registros de tiempo"
 
 #: specivo/templates/themes/default/pages/time/form.html:26
 msgid "Hours *"
@@ -16012,24 +16020,28 @@ msgstr "Fecha *"
 msgid "Billable"
 msgstr "Facturable"
 
-#: specivo/templates/themes/default/pages/time/list.html:32
-msgid "All Users"
+#: specivo/templates/themes/default/pages/time/list.html:43
+msgid "All users"
 msgstr "Todos los usuarios"
 
-#: specivo/templates/themes/default/pages/time/list.html:46
+#: specivo/templates/themes/default/pages/time/list.html:44
+msgid "Issue…"
+msgstr "Incidencia…"
+
+#: specivo/templates/themes/default/pages/time/list.html:57
 #, python-format
 msgid "Total: %(hours)sh (%(count)s entry)"
 msgid_plural "Total: %(hours)sh (%(count)s entries)"
 msgstr[0] "Total: %(hours)s h (%(count)s entrada)"
 msgstr[1] "Total: %(hours)s h (%(count)s entradas)"
 
-#: specivo/templates/themes/default/pages/time/list.html:98
+#: specivo/templates/themes/default/pages/time/list.html:108
 msgid "No time entries yet. Log time to start tracking."
 msgstr ""
 "Aún no hay registros de tiempo. Registra tiempo para empezar el "
 "seguimiento."
 
-#: specivo/templates/themes/default/pages/time/list.html:98
+#: specivo/templates/themes/default/pages/time/list.html:108
 msgid "No time entries yet."
 msgstr "Aún no hay registros de tiempo."
 
@@ -16606,6 +16618,7 @@ msgstr ""
 "los próximos cinco minutos."
 
 #: specivo/web/pages/ai_usage/filters.py:255 specivo/web/pages/issues.py:181
+#: specivo/web/pages/time.py:139
 msgid "Unknown person"
 msgstr "Persona desconocida"
 

@@ -78,6 +78,7 @@ RESERVED_FIRST_SEGMENTS = frozenset(
         "sitemap.xml",
         "sitemaps",
         "static",
+        "time-entries",
     }
 )
 

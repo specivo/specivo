@@ -25,6 +25,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2z"/><path d="M16 21H8"/><path d="M12 17v4"/></svg>
       {% trans %}Projects{% endtrans %}
     </a>
+    {% if not anonymous %}
+    <a class="sidebar-item{% if active_page == 'time_all' %} active{% endif %}" href="{{ base }}/time-entries/" data-testid="sidebar-time-entries">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      {% trans %}Time Entries{% endtrans %}
+    </a>
+    {% endif %}
   </div>
 
   {% if active_project is defined and active_project %}
