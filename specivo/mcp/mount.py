@@ -37,7 +37,7 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route, request_response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -48,6 +48,7 @@ from specivo.mcp.persistent_session_manager import (
     serve_initialized_connection,
 )
 from specivo.mcp.server import mcp
+from specivo.mcp.toolsets import TOOLSETS_PARAM, UnknownToolsetError, format_toolsets, parse_toolsets
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,35 @@ class _StripWWWAuthenticate:
             await send(message)
 
         await self.app(scope, receive, send_filtered)
+
+
+_ENDPOINT_EVENT = b"event: endpoint"
+_SESSION_ID_QUERY = b"?session_id="
+
+
+def _with_toolsets_in_endpoint(send: Send, toolsets: str) -> Send:
+    """Wrap an SSE stream's ``send`` so the announced message endpoint carries ``toolsets``.
+
+    The SDK's transport announces ``<path>?session_id=<hex>`` in the stream's
+    first ``endpoint`` event; this rewrites it to
+    ``<path>?toolsets=<toolsets>&session_id=<hex>``. The post handler reads
+    only ``session_id``, and every message post then names the toolsets of
+    its stream, like a Streamable HTTP request. Only that one event changes.
+    """
+    marker = _SESSION_ID_QUERY
+    replacement = b"?" + f"{TOOLSETS_PARAM}={toolsets}".encode() + b"&session_id="
+    pending = True
+
+    async def send_with_toolsets(message: Message) -> None:
+        nonlocal pending
+        if pending and message["type"] == "http.response.body":
+            body = message.get("body", b"")
+            if _ENDPOINT_EVENT in body and marker in body:
+                message = {**message, "body": body.replace(marker, replacement, 1)}
+                pending = False
+        await send(message)
+
+    return send_with_toolsets
 
 
 _session_manager: StreamableHTTPSessionManager | None = None
@@ -177,6 +207,23 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
     server = mcp._lowlevel_server
 
     async def handle_sse(request: Request) -> Response:
+        # The stream's URL may choose toolsets. Its message posts go to the
+        # endpoint the transport announces, so the choice is carried into that
+        # endpoint's query string, where ToolsetMiddleware reads it.
+        toolsets_value = request.query_params.get(TOOLSETS_PARAM)
+        try:
+            toolsets = parse_toolsets(toolsets_value)
+        except UnknownToolsetError as exc:
+            return JSONResponse(
+                {"errors": [{"code": "unknown_toolset", "message": str(exc), "field": TOOLSETS_PARAM}]},
+                status_code=400,
+            )
+        send = request._send
+        if toolsets_value is not None and toolsets_value.strip():
+            send = _with_toolsets_in_endpoint(send, format_toolsets(toolsets))
+        return await _serve_sse(request, send)
+
+    async def _serve_sse(request: Request, send: Send) -> Response:
         # The SDK mints a new session id on every GET. A client whose stream
         # dropped reconnects, adopts the new endpoint and goes on sending
         # requests without repeating ``initialize`` (its protocol layer is
@@ -185,7 +232,7 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
         # call after a reconnect is refused with -32602. A client that does
         # send ``initialize`` gets the normal handshake.
         async with (
-            sse_transport.connect_sse(request.scope, request.receive, request._send) as (read_stream, write_stream),
+            sse_transport.connect_sse(request.scope, request.receive, send) as (read_stream, write_stream),
             server.lifespan(server) as lifespan_state,
         ):
             try:

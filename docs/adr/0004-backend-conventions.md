@@ -31,6 +31,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
 **Revised:** 2026-11-23 — recorded the manual billing override on AI usage entries (§4) and its audit event (§18).
 **Revised:** 2026-11-24 — recorded AI spend budgets, the viewer-less budget report and the once-per-month alert rule (§4), and the budget audit events (§18).
+**Revised:** 2026-11-25 — recorded the lean MCP tool listing and MCP toolsets (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -486,6 +487,16 @@ with HTTP 404, the spec's signal to re-initialize, never with a JSON-RPC error: 
 and no client recovers from it. The legacy SSE transport has no session continuity (the SDK mints an id per GET), so
 each SSE stream is served born initialized too (`serve_initialized_connection`): a client that reconnects its
 stream does not repeat `initialize`.
+
+**The MCP tool listing is kept lean.** Clients without a tool search put all of `tools/list` into the prompt on every
+turn. `SpecivoMCPServer` (`specivo.mcp.compact_server`) registers tools without structured output (every tool
+returns text, so no `outputSchema` and no `structuredContent`) and advertises compacted input schemas: no `title`,
+no `null` branch, no `default: null`. Validation keeps the original schemas. Tools belong to **toolsets**
+(`specivo.mcp.toolsets.TOOLSETS`, every tool in exactly one): `core` by default, `planning`, `recurring`, `admin` and
+`ai-spend` on request through `?toolsets=` on the MCP URL (or `all`). `ToolsetMiddleware` filters `tools/list` and
+answers a call of a tool outside the connection's toolsets with a tool error naming the toolset to add; an unknown
+name refuses the request. An SSE stream's choice is carried into the message endpoint it announces. A new tool goes
+into the table, and `tests/unit/test_mcp_tools_list_budget.py` holds the listing under a size budget.
 
 **AI usage surfaces.** The REST routes (`api/v1/ai_usage.py`) mirror time entries: `/projects/{key}/ai-usage/`,
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and

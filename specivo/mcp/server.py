@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version as _pkg_version
 from typing import Annotated, Any
 
-from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
@@ -37,6 +36,7 @@ from specivo.mcp.client_context import (
     mcp_client_var,
     mcp_connection_var,
 )
+from specivo.mcp.compact_server import SpecivoMCPServer
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools.agent_sessions import _agent_session
 from specivo.mcp.tools.comments import _add_comment, _list_comments
@@ -97,19 +97,22 @@ from specivo.mcp.tools.wiki import (
     _restore_wiki,
     _update_wiki_metadata,
 )
+from specivo.mcp.toolsets import ToolsetMiddleware
 from specivo.services.agent_session_service import CLIENT_TYPE_MCP, AgentSessionService
 from specivo.services.api_key_scope import activate_api_key_scope, end_scope_context, start_scope_context
 
 logger = logging.getLogger(__name__)
 
-mcp = MCPServer(
+mcp = SpecivoMCPServer(
     "specivo",
     version=_pkg_version("specivo"),
-    middleware=[ClientInfoMiddleware()],
+    middleware=[ClientInfoMiddleware(), ToolsetMiddleware()],
     instructions=(
         "Specivo -- self-hosted platform for project tracking, knowledge base, and AI-safe automation. "
         "Call specivo_setup_guide() to get the full agent configuration guide, "
         "or read the specivo://docs/agent-setup resource. "
+        "Tools come in toolsets (core by default; planning, recurring, admin, ai-spend on request): "
+        "add ?toolsets=core,planning (or ?toolsets=all) to the MCP URL to load more. "
         "Issue descriptions, comments and wiki pages are Markdown; a ```mermaid fenced block renders "
         "as a diagram, so draw flows, sequences and structures with Mermaid instead of ASCII art."
     ),

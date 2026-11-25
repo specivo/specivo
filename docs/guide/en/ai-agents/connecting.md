@@ -56,6 +56,32 @@ The two endpoints serve the same tools; choose the tab that matches your client.
     export SPECIVO_API_KEY=spv_your_api_key_here
     ```
 
+## Choose toolsets
+
+Many clients put the description of every tool a server offers into the agent's prompt on every
+turn. To keep that short, Specivo groups its tools into **toolsets**, and a connection loads only
+the ones it asks for:
+
+| Toolset | What it holds |
+|---|---|
+| `core` | Issues, comments, relations, the wiki, search and links, metadata and tags on issues and pages, time logging and the timer, projects, members and lookups. Loaded when you choose nothing. |
+| `planning` | Creating, changing, starting, completing and deleting versions and sprints, and listing their issues. |
+| `recurring` | Recurring task patterns and their occurrences. |
+| `admin` | Creating, changing and deleting metadata schemas and tags. |
+| `ai-spend` | AI usage logging and reports, AI subscriptions, billing accounts, reimbursement claims and spend budgets. |
+
+Add the `toolsets` parameter to the server URL, with the names separated by commas, or `all` for
+every tool:
+
+```text
+https://your-specivo-host/mcp/sse/?toolsets=core,ai-spend
+https://your-specivo-host/mcp/?toolsets=all
+```
+
+If the agent calls a tool its connection did not load, the call fails with a message naming the
+toolset to add. An unknown toolset name refuses the connection. Clients that search their tools
+before loading them, such as Claude Code, can use `all` at little cost.
+
 ## Verify the connection
 
 Once the client reloads, it should discover the `specivo_…` tools. Ask the agent to run
