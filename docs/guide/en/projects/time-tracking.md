@@ -109,6 +109,8 @@ button that opens this page for the project. The **Issue** column shows the issu
 links to it. The total at the top covers every entry that matches the filters, not only the page you
 are on, and long lists are paged.
 
+![The Time Entries page](../../assets/img/time-entries-all.webp)
+
 ## The project Time area
 
 Each project has a **Time** area that lists time entries and rolls them into reports — totals by

@@ -93,6 +93,8 @@ subagents, whether it completed or was interrupted, and the AI cost the reporter
 
 ## Manage receivers
 
+![Hermes receivers](../../assets/img/hermes-receivers.webp)
+
 The list shows each receiver's name, when it was created and when its last event arrived. You can:
 
 - **Deactivate** a receiver: Hermes' events are refused until you activate it again.

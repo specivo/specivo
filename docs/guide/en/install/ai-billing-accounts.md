@@ -76,6 +76,8 @@ patterns**, choose **Employer** under **Who pays** and **API** as the default co
 **Edit** on an account to change it or switch it off. Administrators also open a person's account
 from **Admin → AI subscriptions** (the **Billing account** column) to change it.
 
+![Admin, AI billing accounts](../../assets/img/admin-ai-billing-accounts.webp)
+
 ## Your own accounts
 
 Open **My AI billing accounts** from your user menu or your
@@ -84,6 +86,8 @@ the company accounts you can name in your reporter's configuration. Add a person
 for work with **Add an account**, and set the **Reimbursed share** if your employer pays part of it
 back. **My AI subscriptions** shows, for each subscription, a link to its account, where you set
 its reimbursed share.
+
+![My AI billing accounts](../../assets/img/my-ai-billing-accounts.webp)
 
 ## Reimbursement claims
 
@@ -165,6 +169,8 @@ From then on the agent's usage is billed as that person's: Specivo looks for the
 person's personal routed accounts, a record's slug naming the person's account, the person's
 subscriptions and company seats, so the payer, the plan, the budgets and the reports follow the person.
 The entries stay listed under the agent.
+
+![The Works for section of a service account](../../assets/img/admin-user-works-for.webp)
 
 - Only a service account can work for someone, only for an active person, and never for itself.
 - Setting or clearing it bills the agent's existing entries again. So does a later change to the

@@ -159,6 +159,12 @@ add its items to the graph. Drag anywhere on the picture to move it, scroll or p
 to see what it is. **Items in this graph**, under the picture, lists the same items as links, for
 the keyboard and screen readers, with a **Show its items** button for each tag, version and so on.
 
+![The project's Graph page](../../assets/img/project-graph.webp)
+
+![The Graph tab of an issue](../../assets/img/issue-graph.webp)
+
+![The Graph section of a wiki page](../../assets/img/wiki-graph.webp)
+
 The graph shows only what you can open yourself, like the lists above. It is capped so that a densely
 linked project stays readable: a read returns at most 1,000 links (the nearest ones first), and the
 picture holds at most 1,500 links across all the diamonds you open. When the server leaves some out,

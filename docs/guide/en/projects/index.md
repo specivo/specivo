@@ -144,6 +144,8 @@ graph, joined to every issue and page that mentions it, so an AI agent can ask "
 billing gateway?" (see [Concepts](../ai-agents/capabilities.md#concepts)). It is off by default,
 and it uses the project's own AI provider: no content is sent anywhere unless you set one up.
 
+![The Concept extraction (AI) card](../../assets/img/project-settings-concepts.webp)
+
 The **Concept extraction (AI)** card on the **General** tab has:
 
 - **AI provider** (instance administrators only): the **Base URL** of an OpenAI-compatible API, the
@@ -203,6 +205,8 @@ reports no route and no account. Changing it updates the usage already logged th
 default; usage an account decided keeps its payer. Changing it needs the *Manage project*
 permission and is recorded in the [audit log](../install/audit-log.md#ai-billing-accounts). Through
 the API it is the project's `ai_usage_payer_default` (`employer`, `employee` or `none`).
+
+![The General tab with Who pays for AI usage](../../assets/img/project-settings-payer.webp)
 
 ### Public projects and search engines
 

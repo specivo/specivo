@@ -36,6 +36,8 @@ From the top, the dashboard shows:
 - **Recent activity** — consecutive events by the same person or agent on the same issue are grouped into
   one row that you can expand. Filter the feed by **All**, **Agents** or **People**.
 
+![The Agents working now card with Assigned to agents](../../assets/img/dashboard-agents.webp)
+
 Every block covers all the projects you can open.
 
 ## 2. Open your project
