@@ -288,7 +288,14 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         "list-relations",
         "Which issues is {P}-1 related to?",
-        (Step(("specivo_list_relations", "specivo_show_issue"), {"issue_ref": "{P}-1"}, {"issue_ref": "{P}-1"}),),
+        # specivo_get_links answers it as well: its edges include the issue's relations.
+        (
+            Step(
+                ("specivo_list_relations", "specivo_show_issue", "specivo_get_links"),
+                {"issue_ref": "{P}-1"},
+                {"issue_ref": "{P}-1"},
+            ),
+        ),
     ),
     Scenario(
         "remove-relation",

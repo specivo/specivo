@@ -146,6 +146,17 @@ def matches(actual: Any, expected: Any) -> bool:
 _PAGE_KEYS = frozenset({"slug", "parent_slug", "target_ref", "source_ref"})
 
 
+#: The same item under another argument name: specivo_get_links takes ``ref``, specivo_tag ``target_ref``.
+_ARGUMENT_ALIASES: dict[str, tuple[str, ...]] = {"issue_ref": ("ref", "target_ref")}
+
+
+def _argument(arguments: dict[str, Any], key: str) -> tuple[bool, Any]:
+    for name in (key, *_ARGUMENT_ALIASES.get(key, ())):
+        if name in arguments:
+            return True, arguments[name]
+    return False, None
+
+
 def _argument_matches(key: str, actual: Any, expected: Any) -> bool:
     if matches(actual, expected):
         return True
@@ -158,10 +169,8 @@ def step_matches(step: Step, outcome: CallOutcome, fixture: Fixture) -> bool:
     if outcome.tool not in step.tools or outcome.is_error:
         return False
     expected = fill(step.check, fixture)
-    return all(
-        key in outcome.arguments and _argument_matches(key, outcome.arguments[key], value)
-        for key, value in expected.items()
-    )
+    found = {key: _argument(outcome.arguments, key) for key in expected}
+    return all(found[key][0] and _argument_matches(key, found[key][1], value) for key, value in expected.items())
 
 
 def first_tools(scenario: Scenario) -> set[str]:
