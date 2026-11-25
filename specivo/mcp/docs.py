@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from specivo.mcp.toolsets import ALL, CORE, TOOLSET_SUMMARIES, TOOLSETS, TOOLSETS_PARAM
+
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
 
@@ -132,6 +134,7 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
         mcp_server: If provided, tool table is generated from actual registered tools.
     """
     tool_rows = _build_tool_table(mcp_server)
+    toolset_section = _build_toolset_section()
     header = _format_header(fmt)
     footer = _format_footer(fmt)
 
@@ -148,6 +151,8 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 | Tool | Description |
 |------|-------------|
 {tool_rows}
+
+{toolset_section}
 
 ## Standard workflows
 
@@ -612,6 +617,25 @@ Codex will send `Authorization: Bearer $SPECIVO_API_KEY` on every request.
 No `mcp-remote` bridge needed — connects straight to `/mcp/`.
 """
     return ""
+
+
+def _build_toolset_section() -> str:
+    """Describe the toolsets and how a connection selects them."""
+    rows = []
+    for name, tools in TOOLSETS.items():
+        listed = "" if name == CORE else ": " + ", ".join(f"`{tool}`" for tool in tools)
+        default = " (default)" if name == CORE else ""
+        rows.append(f"- **{name}**{default} -- {TOOLSET_SUMMARIES[name]}{listed}")
+    return f"""## Toolsets
+
+A connection lists and may call only the tools of its toolsets, which keeps the tool list in your
+prompt short. Without a choice it gets `{CORE}`. Pick toolsets with the `{TOOLSETS_PARAM}` query parameter
+of the MCP URL: `https://your-specivo-host/mcp/?{TOOLSETS_PARAM}={CORE},ai-spend` (SSE:
+`/mcp/sse/?{TOOLSETS_PARAM}={CORE},ai-spend`), or `?{TOOLSETS_PARAM}={ALL}` for every tool. Clients with a
+tool search of their own (Claude Code, Hermes) lose little with `{ALL}`. Calling a tool outside the
+connection's toolsets returns an error naming the toolset to add.
+
+""" + "\n".join(rows)
 
 
 def _build_tool_table(mcp_server: MCPServer | None = None) -> str:

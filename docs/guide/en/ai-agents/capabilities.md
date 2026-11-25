@@ -5,9 +5,11 @@ description: What an AI agent can do through the Specivo MCP server — the tool
 # What agents can do
 
 Through the MCP server, an agent can reach most of what you'd do in the Specivo UI. The server
-exposes a catalog of around 40 tools, all prefixed `specivo_`. You rarely call them by name — you
+exposes a catalog of around 70 tools, all prefixed `specivo_`. You rarely call them by name — you
 describe what you want, and the client picks the right tool. This page groups them by area so you
-know the shape of what's possible.
+know the shape of what's possible. A connection loads the `core` toolset unless its URL asks for
+more: planning, recurring tasks, tag and schema management and AI spend are opt-in
+[toolsets](connecting.md#choose-toolsets).
 
 ## The tool catalog by area
 
