@@ -254,6 +254,17 @@ async def test_agents_working_now_shows_the_running_timer_and_the_service_accoun
     assert re.search(r"Timer 1:2[45]", admin)
 
 
+async def test_an_ended_session_is_not_working_now(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    w.public_issue.assigned_to_id = w.alice.id
+    ended = await _session(db_session, w.alice, w.public_issue)
+    ended.ended_at = utcnow()
+    await db_session.commit()
+    block = _block(await _get(client, w.alice), "dash-agents")
+    assert 'data-testid="dash-agents-empty"' in block
+    issues = _block(await _get(client, w.alice), "dash-my-issues")
+    assert "Public work" in issues and 'data-testid="dash-flag-agent"' not in issues
+
+
 async def test_agents_working_now_empty_state(client: AsyncClient, w: World) -> None:
     block = _block(await _get(client, w.alice), "dash-agents")
     assert 'data-testid="dash-agents-empty"' in block
