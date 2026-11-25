@@ -168,3 +168,65 @@ async def test_detail_hides_lineage_outside_the_project(
     assert 'data-testid="as-parent-link"' not in html
     resp = await client.get(f"/projects/{w.p.key}/agent-sessions/{parent.id}/", cookies=_cookie(w.manager))
     assert resp.status_code == 404
+
+
+async def _more_calls_and_usage(db: AsyncSession, w: SessionWorld, calls: int, entries: int) -> None:
+    from datetime import timedelta
+
+    from specivo.core.utils import utcnow
+    from specivo.services.security_audit_service import bounded_log
+    from tests.integration.agent_session_world import _usage
+
+    now = utcnow()
+    for i in range(calls):
+        db.add(
+            bounded_log(
+                {
+                    "event_type": "issue_listed",
+                    "user_id": w.agent.id,
+                    "project_id": w.p.id,
+                    "agent_session_id": w.live.id,
+                    "details": {"tool": f"list_issues_{i:02d}", "source": "mcp", "project_key": w.p.key},
+                    "created_at": now - timedelta(seconds=i + 1),
+                }
+            )
+        )
+    for _ in range(entries):
+        db.add(_usage(w.agent, w.p, w.pub, "0.10", external_session_id=w.live.external_session_id))
+    await db.commit()
+
+
+async def test_sections_page_in_place_above_twenty_items(
+    client: AsyncClient, db_session: AsyncSession, world: SessionWorld
+) -> None:
+    w = world
+    url = f"/projects/{w.p.key}/agent-sessions/{w.live.id}/"
+    # Two calls and two entries: no pager.
+    html = (await client.get(url, cookies=_cookie(w.manager))).text
+    assert 'data-testid="as-timeline-pager"' not in html and 'data-testid="as-usage-pager"' not in html
+
+    await _more_calls_and_usage(db_session, w, calls=25, entries=22)
+    html = (await client.get(url, cookies=_cookie(w.manager))).text
+    assert html.count('data-testid="as-timeline-row"') == 20
+    assert 'data-testid="as-timeline-pager"' in html and "1–20 of 27" in html
+    assert html.count("data-entry-id=") == 20
+    assert 'data-testid="as-usage-pager"' in html and "1–20 of 24" in html
+    # In place: the links and the size selector ask for the section's partial.
+    assert f'hx-get="{url}timeline/?offset=20&limit=20"' in html
+    assert f'hx-get="{url}usage/?offset=20&limit=20"' in html
+    assert f'hx-get="{url}usage/" hx-trigger="change"' in html
+
+    older = await client.get(f"{url}timeline/", params={"offset": 20, "limit": 20}, cookies=_cookie(w.manager))
+    assert older.text.count('data-testid="as-timeline-row"') == 7 and "21–27 of 27" in older.text
+    everything = await client.get(f"{url}usage/", params={"limit": 50}, cookies=_cookie(w.manager))
+    assert everything.status_code == 200, everything.text
+    assert everything.text.lstrip().startswith('<div class="sp-as-usage"')
+    assert everything.text.count("data-entry-id=") == 24 and "1–24 of 24" in everything.text
+    # A size that is not offered falls back to 20; without JS the page takes each section's own parameters.
+    odd = await client.get(f"{url}usage/", params={"limit": 7}, cookies=_cookie(w.manager))
+    assert odd.text.count("data-entry-id=") == 20
+    page = await client.get(url, params={"usage_offset": 20, "limit": 50}, cookies=_cookie(w.manager))
+    assert page.text.count('data-testid="as-timeline-row"') == 27 and page.text.count("data-entry-id=") == 4
+
+    member = await client.get(f"{url}usage/", cookies=_cookie(w.member))
+    assert member.status_code == 403

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 20:21+0100\n"
+"POT-Creation-Date: 2026-11-25 22:38+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -943,7 +943,7 @@ msgstr "创建、编辑、跳过和删除按计划新建工作项的重复任务
 
 #: specivo/services/permission_catalogue.py:177
 #: specivo/templates/themes/default/pages/admin/audit_log.html:78
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:12
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/detail.html:287
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
@@ -989,8 +989,8 @@ msgstr "编辑和删除其他人记录的工时。"
 #: specivo/templates/themes/default/pages/ai_usage/project.html:15
 #: specivo/templates/themes/default/pages/ai_usage/report.html:115
 #: specivo/templates/themes/default/pages/issues/detail.html:290
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:39
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:66
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:38
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:65
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:50
 #: specivo/templates/themes/default/pages/projects/detail.html:54
 #: specivo/web/pages/admin.py:1122
@@ -1043,7 +1043,7 @@ msgstr "编辑和排除其他人记录的 AI 使用。"
 #: specivo/templates/themes/default/pages/admin/group_detail.html:109
 #: specivo/templates/themes/default/pages/admin/projects.html:38
 #: specivo/templates/themes/default/pages/admin/versions.html:81
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:16
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:18
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:412
 #: specivo/templates/themes/default/pages/ai_usage/form.html:46
 #: specivo/templates/themes/default/pages/ai_usage/my.html:33
@@ -1493,7 +1493,7 @@ msgid "No tags yet — type to create one"
 msgstr "暂无标签 — 输入即可创建"
 
 #: specivo/templates/themes/default/components/macros.html:146
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:40
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:9
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:150
 #: specivo/templates/themes/default/pages/issues/_agents_tab.html:118
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:200
@@ -1505,6 +1505,7 @@ msgstr "第 %(first)s–%(last)s 条，共 %(total)s 条"
 #: specivo/templates/themes/default/pages/_my_issues.html:16
 #: specivo/templates/themes/default/pages/admin/audit_log.html:114
 #: specivo/templates/themes/default/pages/admin/currencies.html:42
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:17
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:201
 #: specivo/templates/themes/default/pages/ai_usage/my.html:67
 #: specivo/templates/themes/default/pages/ai_usage/project.html:66
@@ -1556,7 +1557,7 @@ msgstr "仪表盘"
 #: specivo/templates/themes/default/pages/admin/user_detail.html:261
 #: specivo/templates/themes/default/pages/auth/api_keys.html:99
 #: specivo/templates/themes/default/pages/dashboard.html:132
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:10
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:9
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:9
 #: specivo/templates/themes/default/pages/projects/detail.html:10
 #: specivo/templates/themes/default/pages/projects/list.html:4
@@ -1614,7 +1615,7 @@ msgid "Roadmap"
 msgstr "路线图"
 
 #: specivo/templates/themes/default/components/sidebar.html:85
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:12
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:11
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:5
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:11
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:14
@@ -2005,7 +2006,7 @@ msgstr "概念（AI）"
 #: specivo/templates/themes/default/pages/ai_usage/report.html:424
 #: specivo/templates/themes/default/pages/ai_usage/report.html:440
 #: specivo/templates/themes/default/pages/issues/detail.html:373
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:24
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:23
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:22
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:46
 #: specivo/templates/themes/default/pages/search.html:219
@@ -2714,7 +2715,7 @@ msgstr "状态"
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:605
 #: specivo/templates/themes/default/pages/issues/form.html:392
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:23
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:22
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:45
 #: specivo/templates/themes/default/pages/projects/settings.html:1637
 msgid "Type"
@@ -3206,7 +3207,7 @@ msgstr "预算已移除。"
 #: specivo/templates/themes/default/pages/auth/ai_billing_accounts.html:36
 #: specivo/templates/themes/default/pages/auth/ai_billing_accounts.html:76
 #: specivo/templates/themes/default/pages/auth/ai_reimbursement_claim.html:103
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:21
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:20
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:18
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:43
 msgid "Account"
@@ -4254,7 +4255,7 @@ msgid "Reset"
 msgstr "重置"
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:79
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:14
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:16
 #: specivo/templates/themes/default/pages/projects/settings.html:1191
 #: specivo/templates/themes/default/pages/projects/settings.html:1488
 msgid "Event"
@@ -7352,7 +7353,7 @@ msgstr "选择追踪器和角色以管理工作流状态流转。"
 
 #: specivo/templates/themes/default/pages/agent_sessions/_macros.html:4
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:42
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:37
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:36
 msgid "Ended"
 msgstr "已结束"
 
@@ -7367,7 +7368,21 @@ msgstr "未启用"
 msgid "Webhook"
 msgstr "Webhook"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:13
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:12
+#: specivo/templates/themes/default/pages/issues/_agents_tab.html:120
+#: specivo/templates/themes/default/pages/projects/settings.html:1217
+#: specivo/templates/themes/default/pages/projects/settings.html:1507
+msgid "Newer"
+msgstr "较新"
+
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:15
+#: specivo/templates/themes/default/pages/issues/_agents_tab.html:121
+#: specivo/templates/themes/default/pages/projects/settings.html:1219
+#: specivo/templates/themes/default/pages/projects/settings.html:1509
+msgid "Older"
+msgstr "较旧"
+
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:15
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:160
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:174
 #: specivo/templates/themes/default/pages/ai_usage/form.html:71
@@ -7383,43 +7398,33 @@ msgstr "Webhook"
 msgid "Tool"
 msgstr "工具"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:15
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:17
 msgid "Targets"
 msgstr "目标"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:37
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:39
 #, python-format
 msgid "The newest %(shown)s of %(total)s"
 msgstr "最新的 %(shown)s 条，共 %(total)s 条"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:37
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:39
 #, python-format
 msgid "%(count)s step"
 msgid_plural "%(count)s steps"
 msgstr[0] "%(count)s 个步骤"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:38
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:40
 #: specivo/templates/themes/default/pages/ai_usage/report.html:635
 msgid "Show all"
 msgstr "全部显示"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:44
-#: specivo/templates/themes/default/pages/issues/_agents_tab.html:120
-#: specivo/templates/themes/default/pages/projects/settings.html:1217
-#: specivo/templates/themes/default/pages/projects/settings.html:1507
-msgid "Newer"
-msgstr "较新"
-
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:45
-#: specivo/templates/themes/default/pages/issues/_agents_tab.html:121
-#: specivo/templates/themes/default/pages/projects/settings.html:1219
-#: specivo/templates/themes/default/pages/projects/settings.html:1509
-msgid "Older"
-msgstr "较旧"
-
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:50
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:46
 msgid "No tool calls recorded for this session in this project."
 msgstr "此会话在此项目中没有记录任何工具调用。"
+
+#: specivo/templates/themes/default/pages/agent_sessions/_usage.html:12
+msgid "No AI usage you can see is linked to this session."
+msgstr "没有你可见的 AI 使用与此会话关联。"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:36
 #: specivo/templates/themes/default/pages/ai_usage/report.html:485
@@ -7543,7 +7548,7 @@ msgstr "令牌"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:79
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:110
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:40
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:39
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:68
 #, python-format
 msgid "%(count)s entry"
@@ -10233,7 +10238,7 @@ msgid "Signed in with a password"
 msgstr "通过密码登录"
 
 #: specivo/templates/themes/default/pages/auth/preferences.html:97
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:35
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:34
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:47
 msgid "Started"
 msgstr "开始于"
@@ -12433,62 +12438,53 @@ msgstr "创建重复模板，按排期自动生成议题。"
 msgid "No recurring patterns have been created for this project yet."
 msgstr "此项目尚未创建任何重复模板。"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:6
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:16
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:5
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:15
 #, python-format
 msgid "Agent session #%(id)s"
 msgstr "代理会话 #%(id)s"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:22
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:21
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:44
 msgid "Client"
 msgstr "客户端"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:27
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:26
 msgid "Client session id"
 msgstr "客户端会话 ID"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:28
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:27
 msgid "Parent session"
 msgstr "父会话"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:34
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:33
 msgid "State"
 msgstr "状态"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:36
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:35
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:48
 msgid "Last activity"
 msgstr "最近活动"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:38
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:62
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:37
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:61
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:49
 msgid "Tool calls"
 msgstr "工具调用"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:47
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:46
 msgid "Related sessions"
 msgstr "相关会话"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:53
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:52
 msgid "Parent"
 msgstr "父级"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:63
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:62
 msgid ""
 "From the security audit log: which tool ran and on what, never its "
 "arguments or results. Calls in other projects are not shown."
 msgstr "来自安全审计日志：运行了哪个工具、作用于什么，从不包含其参数或结果。不显示其他项目中的调用。"
-
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:71
-#, python-format
-msgid "Showing the newest %(shown)s of %(total)s entries."
-msgstr "显示最新的 %(shown)s 条，共 %(total)s 条记录。"
-
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:73
-msgid "No AI usage you can see is linked to this session."
-msgstr "没有你可见的 AI 使用与此会话关联。"
 
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:28
 msgid "All sessions"
@@ -15674,4 +15670,7 @@ msgstr "该建议已不可用。"
 #: specivo/web/partials/links.py:255
 msgid "You do not have permission to link these items."
 msgstr "你没有链接这些条目的权限。"
+
+#~ msgid "Showing the newest %(shown)s of %(total)s entries."
+#~ msgstr "显示最新的 %(shown)s 条，共 %(total)s 条记录。"
 

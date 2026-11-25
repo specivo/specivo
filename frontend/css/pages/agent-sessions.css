@@ -65,3 +65,5 @@
   .sp-agent-block-head { flex-direction: column; }
   .sp-agent-block-when { align-items: flex-start; text-align: left; }
 }
+.sp-as-pager-size { display: inline-flex; align-items: center; gap: var(--sp-space-xs); margin-left: var(--sp-space-sm); }
+.sp-as-pager-size select { padding: 2px var(--sp-space-sm); border: 1px solid var(--sp-border); border-radius: 6px; background: var(--sp-bg-input); color: var(--sp-text); font-size: var(--sp-font-size-sm); }

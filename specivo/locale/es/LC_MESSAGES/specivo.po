@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-25 20:21+0100\n"
+"POT-Creation-Date: 2026-11-25 22:38+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -1047,7 +1047,7 @@ msgstr ""
 
 #: specivo/services/permission_catalogue.py:177
 #: specivo/templates/themes/default/pages/admin/audit_log.html:78
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:12
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:14
 #: specivo/templates/themes/default/pages/issues/detail.html:287
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
@@ -1093,8 +1093,8 @@ msgstr "Editar y eliminar registros de tiempo de otras personas."
 #: specivo/templates/themes/default/pages/ai_usage/project.html:15
 #: specivo/templates/themes/default/pages/ai_usage/report.html:115
 #: specivo/templates/themes/default/pages/issues/detail.html:290
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:39
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:66
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:38
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:65
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:50
 #: specivo/templates/themes/default/pages/projects/detail.html:54
 #: specivo/web/pages/admin.py:1122
@@ -1149,7 +1149,7 @@ msgstr "Editar y excluir registros de uso de IA de otras personas."
 #: specivo/templates/themes/default/pages/admin/group_detail.html:109
 #: specivo/templates/themes/default/pages/admin/projects.html:38
 #: specivo/templates/themes/default/pages/admin/versions.html:81
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:16
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:18
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:412
 #: specivo/templates/themes/default/pages/ai_usage/form.html:46
 #: specivo/templates/themes/default/pages/ai_usage/my.html:33
@@ -1610,7 +1610,7 @@ msgid "No tags yet — type to create one"
 msgstr "Aún no hay etiquetas — escribe para crear una"
 
 #: specivo/templates/themes/default/components/macros.html:146
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:40
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:9
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:150
 #: specivo/templates/themes/default/pages/issues/_agents_tab.html:118
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:200
@@ -1622,6 +1622,7 @@ msgstr "%(first)s–%(last)s de %(total)s"
 #: specivo/templates/themes/default/pages/_my_issues.html:16
 #: specivo/templates/themes/default/pages/admin/audit_log.html:114
 #: specivo/templates/themes/default/pages/admin/currencies.html:42
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:17
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:201
 #: specivo/templates/themes/default/pages/ai_usage/my.html:67
 #: specivo/templates/themes/default/pages/ai_usage/project.html:66
@@ -1673,7 +1674,7 @@ msgstr "Panel"
 #: specivo/templates/themes/default/pages/admin/user_detail.html:261
 #: specivo/templates/themes/default/pages/auth/api_keys.html:99
 #: specivo/templates/themes/default/pages/dashboard.html:132
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:10
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:9
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:9
 #: specivo/templates/themes/default/pages/projects/detail.html:10
 #: specivo/templates/themes/default/pages/projects/list.html:4
@@ -1731,7 +1732,7 @@ msgid "Roadmap"
 msgstr "Hoja de ruta"
 
 #: specivo/templates/themes/default/components/sidebar.html:85
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:12
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:11
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:5
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:11
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:14
@@ -2131,7 +2132,7 @@ msgstr "Conceptos (IA)"
 #: specivo/templates/themes/default/pages/ai_usage/report.html:424
 #: specivo/templates/themes/default/pages/ai_usage/report.html:440
 #: specivo/templates/themes/default/pages/issues/detail.html:373
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:24
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:23
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:22
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:46
 #: specivo/templates/themes/default/pages/search.html:219
@@ -2855,7 +2856,7 @@ msgstr "Estado"
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:605
 #: specivo/templates/themes/default/pages/issues/form.html:392
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:23
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:22
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:45
 #: specivo/templates/themes/default/pages/projects/settings.html:1637
 msgid "Type"
@@ -3372,7 +3373,7 @@ msgstr "Presupuesto eliminado."
 #: specivo/templates/themes/default/pages/auth/ai_billing_accounts.html:36
 #: specivo/templates/themes/default/pages/auth/ai_billing_accounts.html:76
 #: specivo/templates/themes/default/pages/auth/ai_reimbursement_claim.html:103
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:21
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:20
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:18
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:43
 msgid "Account"
@@ -4504,7 +4505,7 @@ msgid "Reset"
 msgstr "Restablecer"
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:79
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:14
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:16
 #: specivo/templates/themes/default/pages/projects/settings.html:1191
 #: specivo/templates/themes/default/pages/projects/settings.html:1488
 msgid "Event"
@@ -7882,7 +7883,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/agent_sessions/_macros.html:4
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_macros.html:42
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:37
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:36
 msgid "Ended"
 msgstr "Finalizada"
 
@@ -7897,7 +7898,21 @@ msgstr "Inactiva"
 msgid "Webhook"
 msgstr "Webhook"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:13
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:12
+#: specivo/templates/themes/default/pages/issues/_agents_tab.html:120
+#: specivo/templates/themes/default/pages/projects/settings.html:1217
+#: specivo/templates/themes/default/pages/projects/settings.html:1507
+msgid "Newer"
+msgstr "Más recientes"
+
+#: specivo/templates/themes/default/pages/agent_sessions/_pager.html:15
+#: specivo/templates/themes/default/pages/issues/_agents_tab.html:121
+#: specivo/templates/themes/default/pages/projects/settings.html:1219
+#: specivo/templates/themes/default/pages/projects/settings.html:1509
+msgid "Older"
+msgstr "Más antiguos"
+
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:15
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:160
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:174
 #: specivo/templates/themes/default/pages/ai_usage/form.html:71
@@ -7913,46 +7928,36 @@ msgstr "Webhook"
 msgid "Tool"
 msgstr "Herramienta"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:15
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:17
 msgid "Targets"
 msgstr "Destinos"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:37
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:39
 #, python-format
 msgid "The newest %(shown)s of %(total)s"
 msgstr "Los %(shown)s más recientes de %(total)s"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:37
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:39
 #, python-format
 msgid "%(count)s step"
 msgid_plural "%(count)s steps"
 msgstr[0] "%(count)s paso"
 msgstr[1] "%(count)s pasos"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:38
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:40
 #: specivo/templates/themes/default/pages/ai_usage/report.html:635
 msgid "Show all"
 msgstr "Mostrar todo"
 
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:44
-#: specivo/templates/themes/default/pages/issues/_agents_tab.html:120
-#: specivo/templates/themes/default/pages/projects/settings.html:1217
-#: specivo/templates/themes/default/pages/projects/settings.html:1507
-msgid "Newer"
-msgstr "Más recientes"
-
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:45
-#: specivo/templates/themes/default/pages/issues/_agents_tab.html:121
-#: specivo/templates/themes/default/pages/projects/settings.html:1219
-#: specivo/templates/themes/default/pages/projects/settings.html:1509
-msgid "Older"
-msgstr "Más antiguos"
-
-#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:50
+#: specivo/templates/themes/default/pages/agent_sessions/_timeline.html:46
 msgid "No tool calls recorded for this session in this project."
 msgstr ""
 "No hay llamadas a herramientas registradas para esta sesión en este "
 "proyecto."
+
+#: specivo/templates/themes/default/pages/agent_sessions/_usage.html:12
+msgid "No AI usage you can see is linked to this session."
+msgstr "Ningún uso de IA que puedas ver está vinculado a esta sesión."
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:36
 #: specivo/templates/themes/default/pages/ai_usage/report.html:485
@@ -8077,7 +8082,7 @@ msgstr "Tokens"
 
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:79
 #: specivo/templates/themes/default/pages/ai_usage/_issue_tab.html:110
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:40
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:39
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:68
 #, python-format
 msgid "%(count)s entry"
@@ -11002,7 +11007,7 @@ msgid "Signed in with a password"
 msgstr "Sesión iniciada con contraseña"
 
 #: specivo/templates/themes/default/pages/auth/preferences.html:97
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:35
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:34
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:47
 msgid "Started"
 msgstr "Inicio"
@@ -13300,49 +13305,49 @@ msgstr ""
 msgid "No recurring patterns have been created for this project yet."
 msgstr "Todavía no se han creado patrones recurrentes para este proyecto."
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:6
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:16
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:5
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:15
 #, python-format
 msgid "Agent session #%(id)s"
 msgstr "Sesión de agente #%(id)s"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:22
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:21
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:44
 msgid "Client"
 msgstr "Cliente"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:27
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:26
 msgid "Client session id"
 msgstr "Id de sesión del cliente"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:28
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:27
 msgid "Parent session"
 msgstr "Sesión padre"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:34
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:33
 msgid "State"
 msgstr "Estado"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:36
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:35
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:48
 msgid "Last activity"
 msgstr "Última actividad"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:38
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:62
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:37
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:61
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:49
 msgid "Tool calls"
 msgstr "Llamadas a herramientas"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:47
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:46
 msgid "Related sessions"
 msgstr "Sesiones relacionadas"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:53
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:52
 msgid "Parent"
 msgstr "Padre"
 
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:63
+#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:62
 msgid ""
 "From the security audit log: which tool ran and on what, never its "
 "arguments or results. Calls in other projects are not shown."
@@ -13350,15 +13355,6 @@ msgstr ""
 "Del registro de auditoría de seguridad: qué herramienta se ejecutó y "
 "sobre qué, nunca sus argumentos ni resultados. No se muestran las "
 "llamadas en otros proyectos."
-
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:71
-#, python-format
-msgid "Showing the newest %(shown)s of %(total)s entries."
-msgstr "Mostrando los %(shown)s registros más recientes de %(total)s."
-
-#: specivo/templates/themes/default/pages/projects/agent_session_detail.html:73
-msgid "No AI usage you can see is linked to this session."
-msgstr "Ningún uso de IA que puedas ver está vinculado a esta sesión."
 
 #: specivo/templates/themes/default/pages/projects/agent_sessions.html:28
 msgid "All sessions"
@@ -16815,4 +16811,7 @@ msgstr "Esa sugerencia ya no está disponible."
 #: specivo/web/partials/links.py:255
 msgid "You do not have permission to link these items."
 msgstr "No tienes permiso para enlazar estos elementos."
+
+#~ msgid "Showing the newest %(shown)s of %(total)s entries."
+#~ msgstr "Mostrando los %(shown)s registros más recientes de %(total)s."
 

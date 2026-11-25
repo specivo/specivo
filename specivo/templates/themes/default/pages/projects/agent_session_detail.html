@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 {% from "pages/agent_sessions/_macros.html" import session_state, account_cell, client_type_label with context %}
-{% from "pages/ai_usage/_macros.html" import entry_table with context %}
 
 {% block title %}{% trans id=session.id %}Agent session #{{ id }}{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -64,12 +63,5 @@
 {% include "pages/agent_sessions/_timeline.html" %}
 
 <h2 class="sp-as-section-title">{% trans %}AI usage{% endtrans %}</h2>
-{% if usage_rows %}
-<div class="card">
-  {{ entry_table(usage_rows, return_to, show_project=True) }}
-</div>
-{% if usage_total > usage_shown %}<p class="sp-text-muted-xs">{% trans shown=usage_shown, total=usage_total %}Showing the newest {{ shown }} of {{ total }} entries.{% endtrans %}</p>{% endif %}
-{% else %}
-<div class="card sp-as-empty" data-testid="as-usage-empty">{% trans %}No AI usage you can see is linked to this session.{% endtrans %}</div>
-{% endif %}
+{% include "pages/agent_sessions/_usage.html" %}
 {% endblock %}

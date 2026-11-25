@@ -1,0 +1,25 @@
+{# Paging for a section of a page that loads in place (htmx): "1–20 of 57", newer/older links and
+   a page-size selector, shown only when the section has more than SECTION_PAGER_MIN items.
+   p: {total, offset, limit, sizes, page_url, partial_url, prefix, min}. Without JS the links load the
+   whole page with the section's own parameters (prefix ~ "offset", prefix ~ "limit"). #}
+{% macro section_pager(p, target, testid) -%}
+{% if p.total > p.min %}
+{% set q = "&" ~ p.prefix ~ "limit=" ~ p.limit %}
+<div class="sp-as-pager" data-testid="{{ testid }}">
+  <span>{% trans first=p.offset + 1, last=[p.offset + p.limit, p.total] | min, total=p.total %}%(first)s–%(last)s of %(total)s{% endtrans %}</span>
+  <span class="sp-as-pager-links">
+    {% if p.offset > 0 %}{% set prev = [p.offset - p.limit, 0] | max %}
+    <a class="sp-page-link" href="{{ base }}{{ p.page_url }}?{{ p.prefix }}offset={{ prev }}{{ q }}" hx-get="{{ base }}{{ p.partial_url }}?offset={{ prev }}&limit={{ p.limit }}" hx-target="closest {{ target }}" hx-swap="outerHTML" data-testid="{{ testid }}-newer">&laquo; {% trans %}Newer{% endtrans %}</a>
+    {% endif %}
+    {% if p.offset + p.limit < p.total %}{% set next = p.offset + p.limit %}
+    <a class="sp-page-link" href="{{ base }}{{ p.page_url }}?{{ p.prefix }}offset={{ next }}{{ q }}" hx-get="{{ base }}{{ p.partial_url }}?offset={{ next }}&limit={{ p.limit }}" hx-target="closest {{ target }}" hx-swap="outerHTML" data-testid="{{ testid }}-older">{% trans %}Older{% endtrans %} &raquo;</a>
+    {% endif %}
+    <label class="sp-as-pager-size">{% trans %}Show{% endtrans %}
+      <select name="limit" hx-get="{{ base }}{{ p.partial_url }}" hx-trigger="change" hx-target="closest {{ target }}" hx-swap="outerHTML" data-testid="{{ testid }}-size">
+        {% for size in p.sizes %}<option value="{{ size }}" {{ 'selected' if size == p.limit else '' }}>{{ size }}</option>{% endfor %}
+      </select>
+    </label>
+  </span>
+</div>
+{% endif %}
+{%- endmacro %}

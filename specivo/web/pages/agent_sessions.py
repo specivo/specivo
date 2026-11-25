@@ -41,10 +41,12 @@ router = APIRouter(tags=["web-agent-sessions"], include_in_schema=False)
 _sessions = AgentSessionService()
 _audit = SecurityAuditService()
 
-#: Tool calls per page of the timeline.
-TIMELINE_PAGE_SIZE = 50
-#: AI usage entries shown on a session's page.
-USAGE_ENTRIES_SHOWN = 50
+#: Page sizes of a session page's sections (tool calls, AI usage); the first is the default.
+SECTION_PAGE_SIZES = (20, 50, 100)
+#: Tool calls per page of the timeline, unless the reader picks another size.
+TIMELINE_PAGE_SIZE = SECTION_PAGE_SIZES[0]
+#: A section shows its pager only with more items than this.
+SECTION_PAGER_MIN = 20
 _PAGE_SIZES = (10, 25, 50)
 #: Detail keys every MCP audit row carries; the timeline shows the others.
 _COMMON_DETAILS = frozenset({"tool", "source"})
@@ -164,23 +166,43 @@ def _detail_items(details: dict[str, Any]) -> list[tuple[str, str]]:
     return items
 
 
+def _section_limit(limit: int | None) -> int:
+    return limit if limit in SECTION_PAGE_SIZES else SECTION_PAGE_SIZES[0]
+
+
+def _pager(total: int, offset: int, limit: int, page_url: str, partial_url: str, prefix: str) -> dict[str, Any]:
+    """What ``pages/agent_sessions/_pager.html`` renders for one section."""
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "sizes": SECTION_PAGE_SIZES,
+        "page_url": page_url,
+        "partial_url": partial_url,
+        "prefix": prefix,
+        "min": SECTION_PAGER_MIN,
+    }
+
+
 async def timeline_context(
-    db: AsyncSession, project: Project, agent_session: AgentSession, offset: int = 0
+    db: AsyncSession, project: Project, agent_session: AgentSession, offset: int = 0, limit: int | None = None
 ) -> dict[str, Any]:
     """The context ``pages/agent_sessions/_timeline.html`` renders: one page of the session's tool calls.
 
     Rows of this project and the project-less rows of ``PROJECT_FREE_TOOLS``
     (the others can name other projects' issues); newest first, at most
-    ``TIMELINE_PAGE_SIZE`` per page. Embedding pages pass the result as
-    ``timeline`` and include the template.
+    *limit* (one of ``SECTION_PAGE_SIZES``, else ``TIMELINE_PAGE_SIZE``) per
+    page. Embedding pages pass the result as ``timeline`` and include the
+    template.
     """
+    limit = _section_limit(limit)
     items, total = await _audit.list_events(
         db,
         agent_session_id=agent_session.id,
         project_id=project.id,
         projectless_tools=PROJECT_FREE_TOOLS,
         offset=offset,
-        limit=TIMELINE_PAGE_SIZE,
+        limit=limit,
     )
     _logins, keys = await _audit.names_for(db, items)
     return {
@@ -196,9 +218,38 @@ async def timeline_context(
         ],
         "total": total,
         "offset": offset,
-        "limit": TIMELINE_PAGE_SIZE,
-        "base_url": f"{_base_url(project)}{agent_session.id}/",
-        "partial_url": f"{_base_url(project)}{agent_session.id}/timeline/",
+        "limit": limit,
+        "pager": _pager(
+            total,
+            offset,
+            limit,
+            f"{_base_url(project)}{agent_session.id}/",
+            f"{_base_url(project)}{agent_session.id}/timeline/",
+            "",
+        ),
+    }
+
+
+async def usage_context(
+    db: AsyncSession,
+    user: User,
+    project: Project,
+    agent_session: AgentSession,
+    offset: int = 0,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """The context ``pages/agent_sessions/_usage.html`` renders: one page of the session's AI usage entries."""
+    from specivo.services.ai_usage_service import AiUsageService
+    from specivo.web.pages.ai_usage.rows import _rows
+
+    limit = _section_limit(limit)
+    entries, total = await session_entries(db, user, agent_session, offset=offset, limit=limit)
+    refs = await AiUsageService().references(db, user, entries)
+    page_url = f"{_base_url(project)}{agent_session.id}/"
+    return {
+        "rows": await _rows(db, user, entries, refs),
+        "return_to": page_url,
+        "pager": _pager(total, offset, limit, page_url, f"{page_url}usage/", "usage_"),
     }
 
 
@@ -257,18 +308,19 @@ async def agent_session_detail(
     user: WebUser,
     project: ProjectForReader,
     offset: int = 0,
+    limit: int | None = None,
+    usage_offset: int = 0,
+    usage_limit: int | None = None,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """One session: who and what ran it, its tool calls from the audit log, and its AI usage. Needs manage_project."""
-    from specivo.services.ai_usage_service import AiUsageService
-    from specivo.web.pages.ai_usage.rows import _rows
+    """One session: who and what ran it, its tool calls from the audit log, and its AI usage. Needs manage_project.
 
+    ``offset``/``limit`` page the tool calls, ``usage_offset``/``usage_limit`` the AI usage; each
+    section also loads its pages in place (``.../timeline/``, ``.../usage/``).
+    """
     agent_session = await _managed_session(request, db, user, project, session_id)
     [row] = await _session_rows(db, user, project, [agent_session])
     lineage = await _sessions.visible_lineage(db, project.id, agent_session, user)
-    entries, usage_total = await session_entries(db, user, agent_session, limit=USAGE_ENTRIES_SHOWN)
-    refs = await AiUsageService().references(db, user, entries)
-    usage_rows = await _rows(db, user, entries, refs)
     await _audit.log_resource_viewed(
         db,
         user_id=user.id,
@@ -297,11 +349,8 @@ async def agent_session_detail(
                 }
                 for s in lineage
             ],
-            "timeline": await timeline_context(db, project, agent_session, max(offset, 0)),
-            "usage_rows": usage_rows,
-            "usage_total": usage_total,
-            "usage_shown": USAGE_ENTRIES_SHOWN,
-            "return_to": f"{_base_url(project)}{agent_session.id}/",
+            "timeline": await timeline_context(db, project, agent_session, max(offset, 0), limit),
+            "usage": await usage_context(db, user, project, agent_session, max(usage_offset, 0), usage_limit),
         },
     )
 
@@ -313,6 +362,7 @@ async def agent_session_timeline(
     user: WebUser,
     project: ProjectForReader,
     offset: int = 0,
+    limit: int | None = None,
     db: AsyncSession = DB_SESSION,
 ) -> Response:
     """The session's tool-call timeline alone, for pages that embed it (htmx). Needs manage_project."""
@@ -320,5 +370,24 @@ async def agent_session_timeline(
     return get_templates().TemplateResponse(
         request,
         "pages/agent_sessions/_timeline.html",
-        context={"user": user, "timeline": await timeline_context(db, project, agent_session, max(offset, 0))},
+        context={"user": user, "timeline": await timeline_context(db, project, agent_session, max(offset, 0), limit)},
+    )
+
+
+@router.get("/projects/{project_key}/agent-sessions/{session_id}/usage/", response_class=HTMLResponse)
+async def agent_session_usage(
+    request: Request,
+    session_id: int,
+    user: WebUser,
+    project: ProjectForReader,
+    offset: int = 0,
+    limit: int | None = None,
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """One page of the session's AI usage alone, for the session page's in-place paging. Needs manage_project."""
+    agent_session = await _managed_session(request, db, user, project, session_id)
+    return get_templates().TemplateResponse(
+        request,
+        "pages/agent_sessions/_usage.html",
+        context={"user": user, "usage": await usage_context(db, user, project, agent_session, max(offset, 0), limit)},
     )
