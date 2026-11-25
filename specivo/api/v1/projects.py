@@ -460,6 +460,7 @@ async def search_assignees(
             display_name=u.display_name,
             avatar_url=u.avatar_url,
             avatar_color=str((u.preferences or {}).get("avatar_color") or ""),
+            is_service_account=bool(u.is_service_account),
         )
         for u in users
     ]

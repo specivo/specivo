@@ -5,9 +5,13 @@ full pages apply:
 
 - issues: ``IssueService.visible_issues_clause`` within the projects
   ``ProjectService.accessible_projects_clause`` admits;
-- agent sessions: the viewer's own (sessions of their account's API keys),
-  with the issue shown only when the viewer can see it; administrators see
-  every session;
+- agent sessions: the viewer's own (sessions of their account's API keys)
+  and those of service accounts that are members of a project the viewer can
+  reach, a session tied to an issue only when the viewer can see that issue
+  (as on a project's sessions page); the issue of the viewer's own session is
+  shown only when visible; administrators see every session;
+- issues assigned to agents: open, visible issues assigned to a service
+  account;
 - AI spend and hours: administrators (the instance report of
   :class:`AiSpendReportService`) and managers of AI spend (the report of
   the projects where their role reads everyone's AI usage); hours of the same
@@ -38,11 +42,13 @@ from specivo.models.agent_session import AgentSession
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueStatus
+from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
 from specivo.models.repository import IssueCommitLink, RepositoryCommit
 from specivo.models.time_entry import ActiveTimer, TimeEntry
 from specivo.models.user import User
+from specivo.models.user_group import UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.services.ai_spend_report_service import AiSpendReportService, SpendReport
 from specivo.services.api_key_scope import is_global_admin
@@ -58,6 +64,8 @@ ACTIVITY_FILTERS: tuple[str, ...] = ("all", "agents", "people")
 
 #: Active sessions listed at most (the total is counted apart).
 SESSIONS_LIMIT = 6
+#: Rows of the "Assigned to agents" list.
+AGENT_ISSUES_LIMIT = 6
 #: Events read per activity source; the merged feed keeps the newest of them.
 ACTIVITY_SOURCE_LIMIT = 60
 #: Events the grouped feed is built from.
@@ -272,11 +280,37 @@ class ActiveSessionView:
         return f"{minutes // 60}:{minutes % 60:02d}"
 
 
+def _agent_accounts(scope: DashboardScope) -> Any:
+    """A subquery of the service accounts that are members (directly or through a group) of a project in *scope*."""
+    groups = select(UserGroupMember.group_id).where(UserGroupMember.user_id == User.id)
+    member = (
+        select(Member.id)
+        .where(
+            Member.project_id.in_(scope.project_ids),
+            or_(Member.user_id == User.id, Member.group_id.in_(groups)),
+        )
+        .exists()
+    )
+    return select(User.id).where(User.is_service_account.is_(True), member)
+
+
 def _sessions_visible(scope: DashboardScope) -> list[ColumnElement[bool]]:
-    """Administrators see every session; everyone else only the sessions of their own account (their own keys)."""
+    """The sessions the viewer may see on the dashboard.
+
+    Administrators see every session. Everyone else sees their own account's
+    sessions, and the sessions of the agents (service accounts) of the
+    projects they can reach, a session tied to an issue only when they can
+    see that issue, so nothing about hidden issues or other projects shows.
+    """
     if scope.is_admin:
         return []
-    return [AgentSession.user_id == scope.user.id]
+    if not scope.project_ids:
+        return [AgentSession.user_id == scope.user.id]
+    agent_session = and_(
+        AgentSession.user_id.in_(_agent_accounts(scope)),
+        or_(AgentSession.issue_id.is_(None), AgentSession.issue_id.in_(scope.visible_issue_ids())),
+    )
+    return [or_(AgentSession.user_id == scope.user.id, agent_session)]
 
 
 async def active_sessions(
@@ -345,6 +379,49 @@ async def active_sessions(
             view.issue_subject = row[3]
             view.status_name = row[4]
             view.timer_started_at = timers.get((view.user_id, issue_id))
+    return views, int(total)
+
+
+@dataclass
+class AgentIssueView:
+    """An open issue assigned to an agent (service account), for the dashboard."""
+
+    issue_key: str
+    subject: str
+    status_name: str
+    account: str
+    updated_at: datetime
+
+
+async def agent_issues(
+    session: AsyncSession, scope: DashboardScope, *, limit: int = AGENT_ISSUES_LIMIT
+) -> tuple[list[AgentIssueView], int]:
+    """The open issues the viewer can see that are assigned to a service account, and their count.
+
+    Most recently updated first: the update time is the issue's last activity.
+    """
+    if not scope.project_ids:
+        return [], 0
+    where = (
+        User.is_service_account.is_(True),
+        IssueStatus.category.not_in(_CLOSED),
+        Issue.project_id.in_(scope.project_ids),
+        _visible(scope.issue_visibility),
+    )
+    base = (
+        select(Issue.project_key, Issue.sequence_number, Issue.subject, IssueStatus.name, User.login, Issue.updated_at)
+        .join(IssueStatus, Issue.status_id == IssueStatus.id)
+        .join(User, User.id == Issue.assigned_to_id)
+        .where(*where)
+    )
+    total = (await session.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+    if not total:
+        return [], 0
+    rows = (await session.execute(base.order_by(Issue.updated_at.desc(), Issue.id.desc()).limit(limit))).all()
+    views = [
+        AgentIssueView(issue_key=f"{key}-{seq}", subject=subject, status_name=status, account=login, updated_at=updated)
+        for key, seq, subject, status, login, updated in rows
+    ]
     return views, int(total)
 
 
@@ -808,6 +885,7 @@ __all__ = [
     "ACTIVITY_FILTERS",
     "SPEND_PERIODS",
     "ActiveSessionView",
+    "AgentIssueView",
     "ActivityEvent",
     "ActivityGroup",
     "AttentionCounts",
@@ -815,6 +893,7 @@ __all__ = [
     "SpendSummary",
     "active_sessions",
     "activity_groups",
+    "agent_issues",
     "attention_counts",
     "issue_flags",
     "load_scope",

@@ -441,6 +441,7 @@ class AssigneeSuggestionOut(BaseModel):
     display_name: str
     avatar_url: str | None = None
     avatar_color: str = ""
+    is_service_account: bool = False
 
 
 class MemberOut(BaseModel):

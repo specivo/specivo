@@ -979,6 +979,7 @@ class ProjectService:
                     "display_name": user.display_name,
                     "avatar_url": user.avatar_url,
                     "avatar_color": (user.preferences or {}).get("avatar_color", ""),
+                    "is_service_account": bool(user.is_service_account),
                     "_last_login_at": user.last_login_at,
                     "roles": role_names,
                     "role_ids": role_ids,

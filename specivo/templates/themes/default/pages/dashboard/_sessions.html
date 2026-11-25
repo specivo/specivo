@@ -1,5 +1,7 @@
-{# Agents working now: the active agent sessions the reader may see.
-   Context: agent_sessions, agent_sessions_total, session_timeout_minutes, user #}
+{# Agents working now: the active agent sessions the reader may see, and the
+   open issues assigned to agents (service accounts).
+   Context: agent_sessions, agent_sessions_total, agent_issues, agent_issues_total,
+   session_timeout_minutes, user #}
 {% set tz = user.timezone if user is defined else 'UTC' %}
 <section class="card sp-dash-card" id="sp-dash-agents" aria-labelledby="sp-dash-agents-title" data-testid="dash-agents">
   <div class="sp-dash-card-head">
@@ -21,7 +23,7 @@
       </div>
       <div class="sp-dash-session-issue">
         {% if s.issue_key %}
-        <div class="sp-dash-session-subject"><a class="sp-dash-key" href="{{ base }}/issue/{{ s.issue_key }}/">{{ s.issue_key }}</a> {{ s.issue_subject }}</div>
+        <div class="sp-dash-session-subject"><a class="sp-dash-key" href="{{ base }}/issue/{{ s.issue_key }}/#agents">{{ s.issue_key }}</a> {{ s.issue_subject }}</div>
         <div class="sp-dash-session-state">
           <span class="badge-status {{ s.status_name | lower | replace(' ', '-') }}">{{ s.status_name }}</span>
           {% if s.timer_elapsed %}<span class="sp-dash-timer" title="{{ _('Running timer') }}">{% trans elapsed=s.timer_elapsed %}Timer {{ elapsed }}{% endtrans %}</span>{% endif %}
@@ -42,6 +44,31 @@
   {% endif %}
   {% else %}
   <p class="sp-dash-empty" data-testid="dash-agents-empty">{% trans %}No agents active right now.{% endtrans %}</p>
+  {% endif %}
+  {% if agent_issues %}
+  <div class="sp-dash-agent-issues" data-testid="dash-agent-issues">
+    <h3 class="sp-dash-subhead">{% trans %}Assigned to agents{% endtrans %} <span class="sp-dash-muted">{{ agent_issues_total }}</span></h3>
+    <ul class="sp-dash-sessions">
+      {% for i in agent_issues %}
+      <li class="sp-dash-session" data-testid="dash-agent-issue">
+        <div class="sp-dash-session-who">
+          <span class="sp-dash-strong">{{ i.account }}</span>
+          <span class="sp-dash-tag sp-dash-tag--agent">{% trans %}Service account{% endtrans %}</span>
+        </div>
+        <div class="sp-dash-session-issue">
+          <div class="sp-dash-session-subject"><a class="sp-dash-key" href="{{ base }}/issue/{{ i.issue_key }}/#agents">{{ i.issue_key }}</a> {{ i.subject }}</div>
+          <div class="sp-dash-session-state"><span class="badge-status {{ i.status_name | lower | replace(' ', '-') }}">{{ i.status_name }}</span></div>
+        </div>
+        <div class="sp-dash-session-time">
+          <span>{% trans when=i.updated_at | timeago(tz, 'relative') %}Updated {{ when }}{% endtrans %}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if agent_issues_total > agent_issues | length %}
+    <p class="sp-dash-more">{% trans count=agent_issues_total - agent_issues | length %}and {{ count }} more issue{% pluralize %}and {{ count }} more issues{% endtrans %}</p>
+    {% endif %}
+  </div>
   {% endif %}
   <p class="sp-dash-card-foot">{% trans count=session_timeout_minutes %}A session closes after {{ count }} minute without activity.{% pluralize %}A session closes after {{ count }} minutes without activity.{% endtrans %}</p>
 </section>

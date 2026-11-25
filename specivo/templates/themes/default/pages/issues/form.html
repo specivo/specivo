@@ -145,7 +145,7 @@
           <select id="assignee" class="modal-input" x-model="assigned_to_id">
             <option value="">{% trans %}Unassigned{% endtrans %}</option>
             {% for m in members %}
-            <option value="{{ m.user_id if m.user_id is defined else m.id }}">{{ m.user.login if m.user is defined else m.login }}</option>
+            <option value="{{ m.user_id if m.user_id is defined else m.id }}">{{ m.user.login if m.user is defined else m.login }}{% if m.is_service_account %} · {{ _('agent') }}{% endif %}</option>
             {% endfor %}
           </select>
         </div>

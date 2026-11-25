@@ -20,8 +20,9 @@
     <div>
       <label style="{{ lbl }}">{% trans %}Assignee{% endtrans %}</label>
       <span style="font-size: var(--sp-font-size-sm); font-weight: 500;">
-        {%- if issue.assigned_to %}{{ issue.assigned_to.display_name }}{% else %}{% trans %}Unassigned{% endtrans %}{% endif -%}
+        {%- if issue.assigned_to %}{{ issue.assigned_to.display_name or issue.assigned_to.login }}{% else %}{% trans %}Unassigned{% endtrans %}{% endif -%}
       </span>
+      {% if issue.assigned_to and issue.assigned_to.is_service_account %}<span class="sp-badge-agent" data-testid="assignee-agent-badge">{% trans %}Agent{% endtrans %}</span>{% endif %}
     </div>
     <div>
       <label style="{{ lbl }}">{% trans %}Priority{% endtrans %}</label>
@@ -89,12 +90,13 @@
       <div style="display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-xs);">
         {{ avatar(issue.assigned_to.login, size='sm', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
         <span style="font-size: var(--sp-font-size-sm); font-weight: 500;">{{ issue.assigned_to.display_name or issue.assigned_to.login }}</span>
+        {% if issue.assigned_to.is_service_account %}<span class="sp-badge-agent" data-testid="assignee-agent-badge" title="{{ _('Service account: an AI agent works the issues assigned to it') }}">{% trans %}Agent{% endtrans %}</span>{% endif %}
       </div>
       {% endif %}
       <select style="{{ sel }}" @change="onSelectInt('assigned_to_id', $event)">
         <option value="">{% trans %}-- Unassigned --{% endtrans %}</option>
         {% for m in members %}
-        <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if issue.assigned_to_id == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
+        <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if issue.assigned_to_id == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}{% if m.is_service_account %} · {{ _('agent') }}{% endif %}</option>
         {% endfor %}
       </select>
     </div>
