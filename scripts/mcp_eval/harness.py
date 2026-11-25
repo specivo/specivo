@@ -28,6 +28,7 @@ from specivo.mcp.auth import mcp_raw_key_var
 from specivo.mcp.server import mcp
 from specivo.mcp.tool_help import ToolListing, tool_listing_var
 from specivo.mcp.toolsets import mcp_toolsets_var, parse_toolsets
+from specivo.services.wiki_utils import slugify
 
 SYSTEM_PROMPT = (
     "You are an AI agent connected to Specivo, a project tracker with a wiki, through the tools given to you. "
@@ -140,11 +141,27 @@ def matches(actual: Any, expected: Any) -> bool:
     return str(expected).strip().lower() in str(actual).strip().lower()
 
 
+#: Arguments that name a wiki page. Specivo resolves them through ``slugify``, so a title
+#: ('Release Process') names the same page as its slug ('release-process').
+_PAGE_KEYS = frozenset({"slug", "parent_slug", "target_ref", "source_ref"})
+
+
+def _argument_matches(key: str, actual: Any, expected: Any) -> bool:
+    if matches(actual, expected):
+        return True
+    if key in _PAGE_KEYS and isinstance(actual, str) and isinstance(expected, str):
+        return slugify(expected) == slugify(actual)
+    return False
+
+
 def step_matches(step: Step, outcome: CallOutcome, fixture: Fixture) -> bool:
     if outcome.tool not in step.tools or outcome.is_error:
         return False
     expected = fill(step.check, fixture)
-    return all(key in outcome.arguments and matches(outcome.arguments[key], value) for key, value in expected.items())
+    return all(
+        key in outcome.arguments and _argument_matches(key, outcome.arguments[key], value)
+        for key, value in expected.items()
+    )
 
 
 def first_tools(scenario: Scenario) -> set[str]:
@@ -286,7 +303,10 @@ async def run_task(
     usage = {"input_tokens": 0, "output_tokens": 0, "turns": 0}
     started = time.monotonic()
     error = None
-    headers = {"Authorization": f"Bearer {config.api_key}"} if config.api_key else {}
+    # X-Title names the run in the endpoint's usage pages (OpenRouter's Activity shows it as the app).
+    headers = {"X-Title": "Specivo MCP eval"}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
     for _ in range(MAX_TURNS):
         payload = {"model": config.model, "messages": messages, "tools": tools, "temperature": config.temperature}
         response = await _post_with_deadline(http, f"{config.base_url}/chat/completions", headers, payload, config)
