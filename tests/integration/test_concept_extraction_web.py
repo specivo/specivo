@@ -46,3 +46,14 @@ async def test_an_administrator_sees_the_provider_without_its_key(client, db_ses
     assert "small-model" in html and "models.example.test" in html
     assert "api_key_encrypted" not in html
     assert "0 concepts from 0 issues and pages." in html
+
+
+async def test_the_key_hint_expression_stays_inside_its_attribute(client, db_session, world):
+    """The hint's two texts are JSON strings in an Alpine expression: a double-quoted attribute broke on them."""
+    import re
+
+    await enable(db_session, world.home, world.admin)
+    html = await _page(client, world.admin.login, world.home.key)
+    match = re.search(r"id=\"ai-provider-key-hint\" x-text='([^']*)'", html)
+    assert match is not None
+    assert match.group(1).startswith('provider && provider.has_api_key ? "A key is stored.')
