@@ -121,8 +121,7 @@ async def _team(db: AsyncSession, w: World) -> AiSubscription:
 
 
 async def test_the_tool_documents_the_company_ops_and_keeps_its_hints() -> None:
-    tools = {tool.name: tool for tool in await server.mcp.list_tools()}
-    description = tools["specivo_ai_subscriptions"].description or ""
+    description = server.mcp.tool_help("specivo_ai_subscriptions") or ""
     for word in ("company=true", "seat_count", "add_member", "end_member", "remove_member", "members"):
         assert word in description
     hints = TOOL_ANNOTATIONS["specivo_ai_subscriptions"]

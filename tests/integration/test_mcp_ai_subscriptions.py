@@ -146,7 +146,8 @@ INVOICES = (
 
 async def test_the_tool_is_registered_and_documented() -> None:
     tools = {tool.name: tool for tool in await server.mcp.list_tools()}
-    description = tools["specivo_ai_subscriptions"].description or ""
+    assert "specivo_ai_subscriptions" in tools
+    description = server.mcp.tool_help("specivo_ai_subscriptions") or ""
     for word in ("list", "presets", "add", "update", "end", "delete", "all or nothing", "project-limited"):
         assert word in description
     guide = generate_setup_guide()

@@ -15,7 +15,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from importlib.metadata import version as _pkg_version
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
@@ -113,6 +113,7 @@ mcp = SpecivoMCPServer(
         "or read the specivo://docs/agent-setup resource. "
         "Tools come in toolsets (core by default; planning, recurring, admin, ai-spend on request): "
         "add ?toolsets=core,planning (or ?toolsets=all) to the MCP URL to load more. "
+        "Tool descriptions are short: specivo_setup_guide(tool='<name>') returns a tool's full help. "
         "Issue descriptions, comments and wiki pages are Markdown; a ```mermaid fenced block renders "
         "as a diagram, so draw flows, sequences and structures with Mermaid instead of ASCII art."
     ),
@@ -230,12 +231,39 @@ async def agent_setup_resource() -> str:
     return generate_setup_guide(fmt="generic", mcp_server=mcp)
 
 
+def _tool_help_or_error(name: str) -> str:
+    """The full help of tool *name*; ``ToolError`` naming the known tools when there is none."""
+    text = mcp.tool_help(name.strip())
+    if text is None:
+        known = ", ".join(sorted(tool.name for tool in mcp._tool_manager.list_tools()))
+        raise ToolError(f"Unknown tool '{name}'. Known tools: {known}")
+    return text
+
+
+@mcp.resource(
+    "specivo://docs/tools/{name}",
+    name="tool-help",
+    title="Specivo Tool Help",
+    description="Full help of one Specivo MCP tool: its toolset, full description and parameter docs.",
+    mime_type="text/markdown",
+)
+async def tool_help_resource(name: str) -> str:
+    """Return the full help of tool *name* as an MCP resource."""
+    return _tool_help_or_error(name)
+
+
 # ---------------------------------------------------------------------------
 # Tool definitions
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_whoami"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_whoami"],
+    summary=(
+        "Your own identity: user_id, login, display name, admin flag. Call it for your user_id before self-assigning "
+        "(assigned_to_id)."
+    ),
+)
 async def specivo_whoami() -> str:
     """Return the authenticated user's identity.
 
@@ -246,7 +274,13 @@ async def specivo_whoami() -> str:
         return await _whoami(session, user)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_projects"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_projects"],
+    summary=(
+        "List the projects you can see: key, name, status. Project keys (e.g. ACME) are what other tools take as "
+        "project_key."
+    ),
+)
 async def specivo_list_projects(
     offset: Annotated[int, Field(description="Number of projects to skip (pagination).", ge=0)] = 0,
     limit: Annotated[int, Field(description="Max projects to return (1-100).", ge=1, le=100)] = 25,
@@ -259,7 +293,24 @@ async def specivo_list_projects(
         return await _list_projects(session, user, offset, limit)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_issues"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_issues"],
+    summary=(
+        "List a project's issues (tags shown inline). Filters: status ('open' default, 'closed', 'all', a status name "
+        "or id), sprint_id, metadata_filters ['key=value'], parent_ref, assignee (login, 'me', 'none'), tag, release "
+        "(version name or 'none'). An unknown filter value is an error."
+    ),
+    params={
+        "status": "'open' (default), 'closed', 'all', a status name or a status id.",
+        "sort": "field:direction, e.g. 'created_at:desc'.",
+        "sprint_id": "Sprint ID from specivo_list_sprints.",
+        "metadata_filters": "['key=value', ...], AND-combined; keys from specivo_list_metadata_schemas.",
+        "parent_ref": "Only direct children of this issue, e.g. ACME-12.",
+        "assignee": "Login, user id, 'me' or 'none'.",
+        "tag": "Tag name or id.",
+        "release": "Version name or id, or 'none'.",
+    },
+)
 async def specivo_list_issues(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     status: Annotated[
@@ -355,7 +406,13 @@ async def specivo_list_issues(  # noqa: PLR0913
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_show_issue"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_show_issue"],
+    summary=(
+        "Show an issue (ACME-12): fields, description, parent/children, tags, commits, PRs, links and relations. "
+        "metadata_only=true skips the body; search= returns one section of the description."
+    ),
+)
 async def specivo_show_issue(
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12. Never pass a numeric ID.")],
     metadata_only: Annotated[bool, Field(description="If true, skip description body to save tokens.")] = False,
@@ -389,7 +446,16 @@ async def specivo_show_issue(
         return await _show_issue(session, user, issue_ref, metadata_only, search)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_issue_development"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_issue_development"],
+    summary=(
+        "An issue's development activity as JSON: commits, PRs/MRs, reviews, CI, deployments, releases; a summary and a"
+        " paged timeline (kinds=, limit=, offset=)."
+    ),
+    params={
+        "kinds": "Subset of: commit, pull_request, review, ci, deployment, release.",
+    },
+)
 async def specivo_issue_development(
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12. Never pass a numeric ID.")],
     kinds: Annotated[
@@ -422,7 +488,20 @@ async def specivo_issue_development(
         return await _issue_development(session, user, issue_ref, kinds, limit, offset)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_issue"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_issue"],
+    summary=(
+        "Create an issue. tracker_id/status_id/priority_id come from specivo_list_lookups, assigned_to_id from "
+        "specivo_list_members (or specivo_whoami), fixed_version_id from specivo_list_versions. Can set metadata, tags "
+        "and parent_ref (sub-issue) in the same call; an invalid one creates nothing."
+    ),
+    params={
+        "metadata": "Metadata {key: value}, checked against the project's schemas.",
+        "is_private": "Omit for the tracker default; needs set_issues_private.",
+        "parent_ref": "Parent issue key, e.g. ACME-12, for a sub-issue.",
+        "tags": "Tag names; existing names reused, new ones created.",
+    },
+)
 async def specivo_create_issue(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     tracker_id: Annotated[int, Field(description="Tracker ID from specivo_list_lookups (e.g. 1=Bug, 2=Feature).")],
@@ -509,7 +588,18 @@ async def specivo_create_issue(  # noqa: PLR0913
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_issue"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_issue"],
+    summary=(
+        "Update an issue (ACME-12); pass only the fields to change. IDs from specivo_list_lookups / "
+        "specivo_list_members / specivo_list_versions / specivo_list_sprints. notes adds a journal comment. parent_ref "
+        "re-parents ('' = top-level). Prefer specivo_edit_description for description patches."
+    ),
+    params={
+        "parent_ref": "New parent key; '' makes it top-level; omit to keep.",
+        "description": "Full replacement; prefer specivo_edit_description.",
+    },
+)
 async def specivo_update_issue(  # noqa: PLR0913
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
     subject: Annotated[str | None, Field(description="New subject line.")] = None,
@@ -562,7 +652,13 @@ async def specivo_update_issue(  # noqa: PLR0913
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_move_issue"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_move_issue"],
+    summary=(
+        "Move an issue to another project: it gets a new KEY-N (the old one still resolves); version, sprint, category "
+        "and tags are cleared. The issue must have no parent or children."
+    ),
+)
 async def specivo_move_issue(
     issue_ref: Annotated[str, Field(description="Display key of the issue to move, e.g. ACME-12.")],
     target_project_key: Annotated[str, Field(description="Destination project key, e.g. OPS.")],
@@ -579,7 +675,16 @@ async def specivo_move_issue(
         return await _move_issue(session, user, issue_ref, target_project_key, notes)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_edit_description"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_edit_description"],
+    summary=(
+        "Search-and-replace in an issue description (first occurrence, exact text). Find the text first with "
+        "specivo_show_issue(issue_ref, search='...')."
+    ),
+    params={
+        "search_text": "Exact text to find (first occurrence).",
+    },
+)
 async def specivo_edit_description(
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
     search_text: Annotated[
@@ -596,14 +701,28 @@ async def specivo_edit_description(
         return await _edit_description(session, user, issue_ref, search_text, replace_text)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_search"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_search"],
+    summary=(
+        "Search issues, comments and wiki pages (hybrid full-text + semantic by default). An issue key such as ACME-42 "
+        "finds the issue first. expand=1 adds each top hit's links."
+    ),
+    params={
+        "project_key": "Limit to this project, e.g. ACME.",
+        "mode": "'hybrid' (default), 'keyword' (exact), 'semantic' (conceptual).",
+        "expand": "1 adds the link-graph neighbours of the top 5 hits.",
+        "scope": "",
+    },
+)
 async def specivo_search(
     query: Annotated[str, Field(description="Search query.")],
     project_key: Annotated[str | None, Field(description="Limit to this project. Uppercase, e.g. ACME.")] = None,
-    scope: Annotated[str, Field(description="'all', 'issues', or 'wiki'.")] = "all",
+    scope: Annotated[
+        Literal["all", "issues", "wiki", "comments", "attachments"], Field(description="'all', 'issues', or 'wiki'.")
+    ] = "all",
     limit: Annotated[int, Field(description="Max results to return (1-50).", ge=1, le=50)] = 10,
     mode: Annotated[
-        str,
+        Literal["hybrid", "keyword", "semantic"],
         Field(
             description=(
                 "Search mode: 'hybrid' (default, FTS + semantic with RRF fusion), "
@@ -646,7 +765,16 @@ async def specivo_search(
         return await _search(session, user, query, project_key, scope, limit, mode, expand)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_read_wiki"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_read_wiki"],
+    summary=(
+        "Read a wiki page by slug (from specivo_list_wiki_pages), with its links and backlinks. search= returns one "
+        "section; metadata_only=true skips the body."
+    ),
+    params={
+        "slug": "Wiki page slug from specivo_list_wiki_pages.",
+    },
+)
 async def specivo_read_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug from list_wiki_pages, e.g. 'architecture-overview'.")],
@@ -666,7 +794,25 @@ async def specivo_read_wiki(
         return await _read_wiki(session, user, project_key, slug, metadata_only, search)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_get_links"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_get_links"],
+    summary=(
+        "Link graph around a ref: an issue (ACME-12), wiki page (wiki:ACME/slug), or hub (tag:ACME/x, version:ACME/1.2,"
+        " sprint:, component:, user:login, concept:). Backlinks, links, relations, members; depth 1-2; to= finds a "
+        "path; filter=; format='compact'."
+    ),
+    params={
+        "ref": "ACME-12, wiki:ACME/slug, tag:ACME/x, version:ACME/1.2, sprint:, component:, user:login.",
+        "direction": "'in' (what points here), 'out' (what it links to) or 'both'.",
+        "depth": "1, or 2 to expand neighbours (3 from a hub).",
+        "types": "Edge kinds to keep, e.g. ['relation', 'wiki_link', 'tagged'].",
+        "limit": "",
+        "to": "Another ref: return the shortest path to it instead.",
+        "filter": 'Keep issues matching every key, e.g. {"status": "open"}.',
+        "format": "'json' (default) or 'compact' (one line per edge).",
+        "include_suggestions": "Also list suggested (similar) links.",
+    },
+)
 async def specivo_get_links(
     ref: Annotated[
         str,
@@ -679,7 +825,7 @@ async def specivo_get_links(
         ),
     ],
     direction: Annotated[
-        str,
+        Literal["in", "out", "both"],
         Field(
             description=(
                 "'in' = what points here: backlinks, relations towards it (and 'relates'), parent and "
@@ -738,7 +884,7 @@ async def specivo_get_links(
         ),
     ] = None,
     format: Annotated[
-        str,
+        Literal["json", "compact"],
         Field(
             description=(
                 "'json' (default) or 'compact': one line per edge, SRC -kind-> DST \"title\", after a header "
@@ -817,9 +963,24 @@ async def specivo_get_links(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_link_suggestion"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_link_suggestion"],
+    summary=(
+        "Accept or dismiss a suggested link (kind 'similar') between two issues or wiki pages. Accepting two issues "
+        "makes a relation; otherwise a typed link. Needs edit rights on ref's project."
+    ),
+    params={
+        "op": "",
+        "ref": "From: ACME-12 or wiki:ACME/slug.",
+        "other_ref": "To: an issue or wiki page ref.",
+        "link_type": "accept: a relation type (issues) or documents/implements/see_also/... (pages).",
+    },
+)
 async def specivo_link_suggestion(
-    op: Annotated[str, Field(description="accept (make it a real link) or dismiss (never suggest it again).")],
+    op: Annotated[
+        Literal["accept", "dismiss"],
+        Field(description="accept (make it a real link) or dismiss (never suggest it again)."),
+    ],
     ref: Annotated[
         str,
         Field(
@@ -856,7 +1017,10 @@ async def specivo_link_suggestion(
         return await _link_suggestion(session, user, op, ref, other_ref, link_type)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_wiki_pages"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_wiki_pages"],
+    summary="List a project's wiki pages: slug and title. Use the slug with the other wiki tools.",
+)
 async def specivo_list_wiki_pages(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
 ) -> str:
@@ -868,7 +1032,13 @@ async def specivo_list_wiki_pages(
         return await _list_wiki_pages(session, user, project_key)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_edit_wiki"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_edit_wiki"],
+    summary=(
+        "Search-and-replace in a wiki page (first occurrence, exact text). Read the page first (specivo_read_wiki or "
+        "specivo_read_wiki_section)."
+    ),
+)
 async def specivo_edit_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug.")],
@@ -884,7 +1054,16 @@ async def specivo_edit_wiki(
         return await _edit_wiki(session, user, project_key, slug, search_text, replace_text)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_append_wiki"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_append_wiki"],
+    summary=(
+        "Append Markdown to a wiki page: position='end' (default) or 'after:## Heading' (inserted at the end of that "
+        "section)."
+    ),
+    params={
+        "position": "'end' or 'after:## Heading'.",
+    },
+)
 async def specivo_append_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug.")],
@@ -904,7 +1083,17 @@ async def specivo_append_wiki(
         return await _append_wiki(session, user, project_key, slug, text, position)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_read_wiki_section"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_read_wiki_section"],
+    summary=(
+        "Read one section of a wiki page by heading ('## Name' exact, or 'Name' at any level). Saves tokens on long "
+        "pages."
+    ),
+    params={
+        "heading": "'## Architecture' or 'Architecture'.",
+        "include_children": "Include sub-headings (default true).",
+    },
+)
 async def specivo_read_wiki_section(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug.")],
@@ -934,7 +1123,17 @@ async def specivo_read_wiki_section(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_replace_wiki_section"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_replace_wiki_section"],
+    summary=(
+        "Replace a wiki section's body up to the next same-or-higher heading; the heading line stays. Read it first "
+        "with specivo_read_wiki_section."
+    ),
+    params={
+        "heading": "'## Architecture' or 'Architecture'.",
+        "text": "New section body (Markdown).",
+    },
+)
 async def specivo_replace_wiki_section(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug.")],
@@ -953,7 +1152,10 @@ async def specivo_replace_wiki_section(
         return await _replace_wiki_section(session, user, project_key, slug, heading, text)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_add_comment"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_add_comment"],
+    summary="Add a comment (Markdown) to an issue's history.",
+)
 async def specivo_add_comment(
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
     notes: Annotated[str, Field(description="Comment text (Markdown supported).")],
@@ -966,12 +1168,19 @@ async def specivo_add_comment(
         return await _add_comment(session, user, issue_ref, notes)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_comments"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_comments"],
+    summary="List an issue's comments, newest first, paginated. include_changes=true lists field changes too.",
+    params={
+        "order": "",
+        "include_changes": "Also list field changes.",
+    },
+)
 async def specivo_list_comments(
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
     limit: Annotated[int, Field(description="Max comments to return (1..50).", ge=1, le=50)] = 10,
     offset: Annotated[int, Field(description="Pagination offset (>=0).", ge=0)] = 0,
-    order: Annotated[str, Field(description="Order by created_at: 'asc' or 'desc'.")] = "desc",
+    order: Annotated[Literal["asc", "desc"], Field(description="Order by created_at: 'asc' or 'desc'.")] = "desc",
     include_changes: Annotated[
         bool,
         Field(description="Also list field-change entries, each change with record names next to ids."),
@@ -989,7 +1198,17 @@ async def specivo_list_comments(
         return await _list_comments(session, user, issue_ref, limit, offset, order, include_changes)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_wiki"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_wiki"],
+    summary=(
+        "Create a wiki page; the slug is derived from the title. parent_slug nests it; tags tags it in the same call "
+        "(never write tags into the text)."
+    ),
+    params={
+        "tags": "Tag names; existing names reused, new ones created.",
+        "title": "Page title (the slug derives from it).",
+    },
+)
 async def specivo_create_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     title: Annotated[str, Field(description="Page title. Slug is auto-derived from this.")],
@@ -1017,7 +1236,18 @@ async def specivo_create_wiki(
         return await _create_wiki(session, user, project_key, title, text, parent_slug, tags)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_wiki_metadata"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_wiki_metadata"],
+    summary=(
+        "Change a wiki page's title (old slug redirects), parent (parent_slug, '' = root) or protected flag without "
+        "touching its content. Pass at least one."
+    ),
+    params={
+        "parent_slug": "New parent slug; '' = root level.",
+        "title": "New title (renames; the old slug redirects).",
+        "protected": "Protected flag.",
+    },
+)
 async def specivo_update_wiki_metadata(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug to update.")],
@@ -1044,7 +1274,16 @@ async def specivo_update_wiki_metadata(
         return await _update_wiki_metadata(session, user, project_key, slug, parent_slug, title, protected)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_delete_wiki"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_delete_wiki"],
+    summary=(
+        "Destructive: move a wiki page to the trash (restore with specivo_restore_wiki). Children are re-parented "
+        "unless cascade_children=true. The Home page cannot be deleted."
+    ),
+    params={
+        "cascade_children": "true also deletes child pages; false re-parents them.",
+    },
+)
 async def specivo_delete_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Wiki page slug to delete.")],
@@ -1062,7 +1301,10 @@ async def specivo_delete_wiki(
         return await _delete_wiki(session, user, project_key, slug, cascade_children)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_restore_wiki"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_restore_wiki"],
+    summary="Restore a deleted wiki page from the trash; fails if an active page has the same slug.",
+)
 async def specivo_restore_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Slug of the deleted wiki page to restore.")],
@@ -1077,7 +1319,13 @@ async def specivo_restore_wiki(
         return await _restore_wiki(session, user, project_key, slug, cascade)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_lookups"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_lookups"],
+    summary=(
+        "List trackers, statuses, priorities and time activities with their IDs. Call it before creating or updating "
+        "issues or logging time: IDs differ per instance, never guess them."
+    ),
+)
 async def specivo_list_lookups() -> str:
     """List all trackers, statuses, priorities, and time entry activities with their IDs.
 
@@ -1088,7 +1336,10 @@ async def specivo_list_lookups() -> str:
         return await _list_lookups(session, user)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_members"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_members"],
+    summary="List a project's members with roles and user IDs (for assigned_to_id).",
+)
 async def specivo_list_members(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
 ) -> str:
@@ -1100,7 +1351,16 @@ async def specivo_list_members(
         return await _list_members(session, user, project_key)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_metadata_schemas"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_metadata_schemas"],
+    summary=(
+        "List a project's metadata schemas: the custom keys issues and pages may carry, with types and allowed values. "
+        "Call before setting metadata."
+    ),
+    params={
+        "content_type": "Only this content type, e.g. 'issue'.",
+    },
+)
 async def specivo_list_metadata_schemas(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     tracker_id: Annotated[int | None, Field(description="Filter to schemas for this tracker ID.")] = None,
@@ -1120,7 +1380,18 @@ async def specivo_list_metadata_schemas(
         return await _list_metadata_schemas(session, user, project_key, tracker_id, content_type)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_metadata_schema"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_metadata_schema"],
+    summary=(
+        "Create a metadata schema (JSON Schema Draft 2020-12) for a project. Needs manage_project; audited. Check "
+        "specivo_list_metadata_schemas for existing names first."
+    ),
+    params={
+        "name": "Schema name, unique per project, tracker and content type.",
+        "schema": "JSON Schema body (Draft 2020-12).",
+        "tracker_id": "Only this tracker (from specivo_list_lookups); omit for all.",
+    },
+)
 async def specivo_create_metadata_schema(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Human-readable schema name, unique per (project, tracker, content_type).")],
@@ -1163,7 +1434,16 @@ async def specivo_create_metadata_schema(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_metadata_schema"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_metadata_schema"],
+    summary=(
+        "Patch a metadata schema (schema_id from specivo_list_metadata_schemas); omitted fields stay. Needs "
+        "manage_project; audited."
+    ),
+    params={
+        "tracker_id": "New tracker id; null = all trackers.",
+    },
+)
 async def specivo_update_metadata_schema(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     schema_id: Annotated[int, Field(description="Numeric schema ID from specivo_list_metadata_schemas.")],
@@ -1202,7 +1482,13 @@ async def specivo_update_metadata_schema(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_delete_metadata_schema"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_delete_metadata_schema"],
+    summary=(
+        "Destructive: delete a metadata schema. Refused while issues still hold values for its keys. Needs "
+        "manage_project; audited."
+    ),
+)
 async def specivo_delete_metadata_schema(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     schema_id: Annotated[int, Field(description="Numeric schema ID from specivo_list_metadata_schemas.")],
@@ -1220,7 +1506,20 @@ async def specivo_delete_metadata_schema(
         return await _delete_metadata_schema(session, user, project_key, schema_id)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_metadata"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_metadata"],
+    summary=(
+        "Get, set, delete, append to or remove from one metadata key on an issue or wiki page ('issue:ACME-12', "
+        "'wiki:ACME/slug'). Values are checked against the schemas (specivo_list_metadata_schemas). get needs "
+        "view_issues, the rest edit_issues."
+    ),
+    params={
+        "target_ref": "'issue:ACME-12' (or 'ACME-12') or 'wiki:ACME/slug'.",
+        "key": "Metadata key.",
+        "op": "",
+        "value": "set: any JSON; append/remove: a value or list.",
+    },
+)
 async def specivo_metadata(
     target_ref: Annotated[
         str,
@@ -1233,7 +1532,7 @@ async def specivo_metadata(
     ],
     key: Annotated[str, Field(description="Metadata key to mutate.")],
     op: Annotated[
-        str,
+        Literal["set", "get", "delete", "append", "remove"],
         Field(description="One of: set, get, delete, append, remove."),
     ],
     value: Annotated[
@@ -1271,7 +1570,10 @@ async def specivo_metadata(
         return await _metadata(session, user, target_ref, key, op, value)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_relations"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_relations"],
+    summary="List an issue's relations with relation IDs (for specivo_remove_relation).",
+)
 async def specivo_list_relations(
     issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
 ) -> str:
@@ -1284,12 +1586,32 @@ async def specivo_list_relations(
         return await _list_relations(session, user, issue_ref)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_add_relation"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_add_relation"],
+    summary=(
+        "Relate two issues: 'issue_ref <relation_type> issue_to_key', e.g. ACME-1 blocks ACME-2. delay (days) only for "
+        "precedes/follows."
+    ),
+    params={
+        "issue_ref": "Source issue key, e.g. ACME-12.",
+        "relation_type": "",
+    },
+)
 async def specivo_add_relation(
     issue_ref: Annotated[str, Field(description="Source issue display key, e.g. ACME-12.")],
     issue_to_key: Annotated[str, Field(description="Target issue display key, e.g. ACME-15.")],
     relation_type: Annotated[
-        str,
+        Literal[
+            "relates",
+            "blocks",
+            "blocked",
+            "duplicates",
+            "duplicated",
+            "precedes",
+            "follows",
+            "copied_to",
+            "copied_from",
+        ],
         Field(description="relates|blocks|blocked|duplicates|duplicated|precedes|follows|copied_to|copied_from."),
     ],
     delay: Annotated[int | None, Field(description="Delay in days. Only meaningful for precedes/follows.")] = None,
@@ -1303,7 +1625,10 @@ async def specivo_add_relation(
         return await _add_relation(session, user, issue_ref, issue_to_key, relation_type, delay)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_remove_relation"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_remove_relation"],
+    summary="Remove a relation by ID (from specivo_list_relations) attached to issue_ref.",
+)
 async def specivo_remove_relation(
     issue_ref: Annotated[str, Field(description="Issue display key, e.g. ACME-12.")],
     relation_id: Annotated[int, Field(description="Relation ID from specivo_list_relations.")],
@@ -1317,7 +1642,16 @@ async def specivo_remove_relation(
         return await _remove_relation(session, user, issue_ref, relation_id)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_log_time"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_log_time"],
+    summary=(
+        "Log time on a project and optionally an issue. activity_id comes from specivo_list_lookups; spent_on is "
+        "YYYY-MM-DD (default today)."
+    ),
+    params={
+        "issue_ref": "Optional issue key, e.g. ACME-12.",
+    },
+)
 async def specivo_log_time(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     hours: Annotated[float, Field(description="Decimal hours, e.g. 1.5 for 90 minutes.")],
@@ -1348,9 +1682,21 @@ async def specivo_log_time(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_timer"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_timer"],
+    summary=(
+        "Your own timer: op get, start (issue_ref; a running timer is stopped and logged first), stop (logs the time, "
+        "with activity and comments) or discard (logs nothing). start/stop need log_time."
+    ),
+    params={
+        "op": "",
+        "issue_ref": "start: the issue, e.g. ACME-12.",
+        "activity": "stop: activity name or ID (specivo_list_lookups).",
+        "comments": "start: a note; stop: the time entry comment.",
+    },
+)
 async def specivo_timer(
-    op: Annotated[str, Field(description="One of: get, start, stop, discard.")],
+    op: Annotated[Literal["get", "start", "stop", "discard"], Field(description="One of: get, start, stop, discard.")],
     issue_ref: Annotated[
         str | None,
         Field(description="Issue display key to time, e.g. ACME-12. Required for 'start', ignored otherwise."),
@@ -1383,9 +1729,21 @@ async def specivo_timer(
         return await _timer(session, user, op, issue_ref, activity, comments)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_agent_session"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_agent_session"],
+    summary=(
+        "This connection's agent session: op get, or set (external_session_id = your client's session id, "
+        "parent_session_id, issue_ref you work on; '' clears it) so AI usage is attributed to it."
+    ),
+    params={
+        "op": "",
+        "external_session_id": "Your client's session id (1-200 chars of letters, digits, . _ : -).",
+        "parent_session_id": "set: the parent session's id.",
+        "issue_ref": "set: the issue this session works on; '' clears it.",
+    },
+)
 async def specivo_agent_session(
-    op: Annotated[str, Field(description="One of: set, get.")],
+    op: Annotated[Literal["set", "get"], Field(description="One of: set, get.")],
     external_session_id: Annotated[
         str | None,
         Field(
@@ -1443,6 +1801,22 @@ _NO_COUNTERS = (
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_log_ai_usage"],
+    summary=(
+        "Log one AI usage entry (tokens an AI tool used). Only figures from a hook, the reporter or the tool's own "
+        "usage output (e.g. /cost): never estimate. idempotency_key makes retries safe. Needs log_ai_usage."
+    ),
+    params={
+        "input_tokens": "From a hook, the reporter or /cost.",
+        "cost_type": "subscription, api, local, free or unknown; omit to derive.",
+        "cost_amount": "Decimal string, e.g. '0.42'; needs cost_currency.",
+        "usage_date": "UTC day YYYY-MM-DD (default: started_at's day, else today).",
+        "idempotency_key": "Bucket name: a retry replaces it instead of adding.",
+        "started_at": "ISO 8601 instant with offset.",
+        "ended_at": "ISO 8601 instant with offset.",
+        "parent_session_id": "Parent session id (subagent, branch, continuation).",
+        "unattended": "true for a run with nobody in the loop (cron).",
+        "profile": "Agent profile, e.g. 'research'.",
+    },
     description=(
         "Log one AI usage entry (tokens an AI tool used), the sibling of specivo_log_time. "
         + _NO_COUNTERS
@@ -1547,6 +1921,21 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_ai_usage"],
+    summary=(
+        "Read and manage AI usage entries: op list (project_key or issue_ref, or your own; filters), get, update "
+        "(entry_id + fields; reporter entries change only project, issue, comments, billing), exclude, include. Never "
+        "estimate token counts."
+    ),
+    params={
+        "op": "",
+        "entry_id": "get, update, exclude, include: the entry ID.",
+        "project_key": "list: the project; update: move there ('' = unassigned).",
+        "issue_ref": "list: only this issue; update: attribute to it ('' clears).",
+        "session_id": "list: only your entries from this agent session.",
+        "payer": "list: employer, employee or unknown; update: employer or employee.",
+        "billing_account": "list: id, slug or 'none'; update: slug ('' clears).",
+        "cost_amount": "update: e.g. '0.42' ('' without currency clears).",
+    },
     description=(
         "Read and manage AI usage entries. Ops: list (a project's entries you may read with project_key, or "
         "issue_ref; without either, the entries logged in your name, unassigned ones included; filters "
@@ -1566,7 +1955,10 @@ async def specivo_log_ai_usage(  # noqa: PLR0913
     ),
 )
 async def specivo_ai_usage(  # noqa: PLR0913
-    op: Annotated[str, Field(description="One of: list, get, update, exclude, include.")],
+    op: Annotated[
+        Literal["list", "get", "update", "exclude", "include"],
+        Field(description="One of: list, get, update, exclude, include."),
+    ],
     entry_id: Annotated[int | None, Field(description="Entry ID, for get, update, exclude and include.")] = None,
     project_key: Annotated[
         str | None, Field(description="list: the project. update: move the entry there ('' = unassigned).")
@@ -1667,6 +2059,21 @@ async def specivo_ai_usage(  # noqa: PLR0913
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_ai_usage_report"],
+    summary=(
+        "AI spend report in one currency: tokens, spend, API-equivalent value, leverage, grouped by group_by (user, "
+        "version, sprint, model, tool, payer, ...), per period. project_key, or the whole instance (admins). Filters: "
+        "dates or preset, issue_ref, release, sprint, payer."
+    ),
+    params={
+        "project_key": "Project key; omit for the whole instance (admins).",
+        "group_by": "Comma list: version, sprint, user, project, issue, tool, model, payer, ... ('' = total).",
+        "period": "day, week or month buckets.",
+        "rate_policy": "entry_date (default), latest or a date YYYY-MM-DD.",
+        "attended": "'attended' or 'unattended'.",
+        "profile": "Agent profile, or 'none'.",
+        "billing_account": "Id or slug, or 'none'.",
+        "issue_ref": "Only this issue's usage, e.g. ACME-12.",
+    },
     description=(
         "AI spend report: AI usage grouped and totalled in one reporting currency. With project_key, the "
         "project's entries you may read; without it, the whole instance (administrators only). group_by is a "
@@ -1782,6 +2189,18 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_ai_subscriptions"],
+    summary=(
+        "Your flat-rate AI subscriptions (seats): op list, presets (plan keys and prices), add (periods), update, end, "
+        "delete (prefer end). Admins: company seat plans (company=true) and members, add_member, end_member, "
+        "remove_member. Needs an unlimited personal key."
+    ),
+    params={
+        "op": "",
+        "user": "Another person's login (admins) or the member's login.",
+        "subscription_id": "The subscription or company plan ID.",
+        "starts_on": "First day, YYYY-MM-DD.",
+        "ends_on": "Last day, YYYY-MM-DD (update: '' reopens).",
+    },
     description=(
         "Manage the personal flat-rate AI subscriptions (Claude Pro/Max, ChatGPT Plus/Pro, Cursor, Copilot, "
         "Google AI) of the person behind your API key, e.g. registered from their invoices. Ops: list (your "
@@ -1808,7 +2227,9 @@ async def specivo_ai_usage_report(  # noqa: PLR0913
 )
 async def specivo_ai_subscriptions(  # noqa: PLR0913
     op: Annotated[
-        str,
+        Literal[
+            "list", "presets", "add", "update", "end", "delete", "members", "add_member", "end_member", "remove_member"
+        ],
         Field(
             description="One of: list, presets, add, update, end, delete, members, add_member, end_member, "
             "remove_member."
@@ -1892,6 +2313,16 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_ai_billing_accounts"],
+    summary=(
+        "AI billing accounts (gateway, subscription, api_key, local) and who pays (employer or employee): op list, "
+        "create, update, deactivate (never deleted). owner='instance' for company accounts (admins). Needs an unlimited"
+        " key."
+    ),
+    params={
+        "op": "",
+        "owner": "'instance' for company accounts, or a login (admins).",
+        "reimburse_share": "0 to 1 as a string, e.g. '0.5'; '' clears.",
+    },
     description=(
         "Manage AI billing accounts: what AI usage is paid through (a corporate gateway, a company plan, a "
         "personal subscription or API key, a local model) and who pays (employer or employee). Ops: list "
@@ -1912,7 +2343,10 @@ async def specivo_ai_subscriptions(  # noqa: PLR0913
     ),
 )
 async def specivo_ai_billing_accounts(  # noqa: PLR0913
-    op: Annotated[str, Field(description="One of: list, create, update, deactivate.")],
+    op: Annotated[
+        Literal["list", "create", "update", "deactivate"],
+        Field(description="One of: list, create, update, deactivate."),
+    ],
     owner: Annotated[
         str | None,
         Field(description="list, create: 'instance' for company accounts, or a login (administrators only)."),
@@ -1962,6 +2396,16 @@ async def specivo_ai_billing_accounts(  # noqa: PLR0913
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_ai_reimbursement_claims"],
+    summary=(
+        "Monthly AI reimbursement claims for self-paid usage in company projects: op list, get, create (month YYYY-MM, "
+        "ended), refresh, submit, withdraw, delete, export (CSV); admins approve, reject, paid. Needs an unlimited key."
+    ),
+    params={
+        "op": "",
+        "claim_id": "Every op but list and create: the claim ID.",
+        "currency": "create: ISO currency code.",
+        "user": "list: a login, or 'all' (admins).",
+    },
     description=(
         "AI reimbursement claims: an employee claims back, once a month, the reimbursable part of the AI usage "
         "they paid for themselves in company projects (each account's reimburse_share x (seat cost + marginal "
@@ -1978,7 +2422,9 @@ async def specivo_ai_billing_accounts(  # noqa: PLR0913
 )
 async def specivo_ai_reimbursement_claims(
     op: Annotated[
-        str,
+        Literal[
+            "list", "get", "create", "refresh", "submit", "withdraw", "approve", "reject", "paid", "delete", "export"
+        ],
         Field(
             description=("One of: list, get, create, refresh, submit, withdraw, approve, reject, paid, delete, export.")
         ),
@@ -2012,6 +2458,14 @@ async def specivo_ai_reimbursement_claims(
 
 @mcp.tool(
     annotations=TOOL_ANNOTATIONS["specivo_ai_spend_budgets"],
+    summary=(
+        "Monthly AI spend budgets on a billing account or a payer, alerting at thresholds (default [80, 100]): op list,"
+        " create, update, delete. amount is a decimal string, e.g. '500'. Needs an unlimited key."
+    ),
+    params={
+        "op": "",
+        "billing_account": "create: an id or slug.",
+    },
     description=(
         "AI spend budgets: a monthly budget on a billing account (a company gateway or plan, or your own "
         "account) or on everything one payer pays (employer or employee), with alerts mailed to administrators "
@@ -2027,7 +2481,9 @@ async def specivo_ai_reimbursement_claims(
     ),
 )
 async def specivo_ai_spend_budgets(
-    op: Annotated[str, Field(description="One of: list, create, update, delete.")],
+    op: Annotated[
+        Literal["list", "create", "update", "delete"], Field(description="One of: list, create, update, delete.")
+    ],
     budget_id: Annotated[int | None, Field(description="update, delete: the budget ID.")] = None,
     billing_account: Annotated[
         str | int | None, Field(description="create: the billing account, an id or slug (yours first).")
@@ -2062,7 +2518,10 @@ async def specivo_ai_spend_budgets(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_versions"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_versions"],
+    summary="List a project's versions (releases) with ID, status and due date; the ID is fixed_version_id on issues.",
+)
 async def specivo_list_versions(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
 ) -> str:
@@ -2074,7 +2533,17 @@ async def specivo_list_versions(
         return await _list_versions(session, user, project_key)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_version_issues"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_version_issues"],
+    summary=(
+        "List the issues of a version (version_id from specivo_list_versions; 0 = no version). fields: minimal, default"
+        " or full."
+    ),
+    params={
+        "version_id": "From specivo_list_versions; 0 = issues without a version.",
+        "fields": "",
+    },
+)
 async def specivo_list_version_issues(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     version_id: Annotated[
@@ -2082,7 +2551,7 @@ async def specivo_list_version_issues(
         Field(description="Version ID from list_versions. Use 0 for unversioned issues."),
     ],
     fields: Annotated[
-        str,
+        Literal["minimal", "default", "full"],
         Field(
             description=(
                 "Field level: 'minimal' (key+subject), "
@@ -2105,12 +2574,15 @@ async def specivo_list_version_issues(
         return await _list_version_issues(session, user, project_key, version_id, fields, offset, limit)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_version"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_version"],
+    summary="Create a version (release) in a project; status open (default), locked or closed; due_date YYYY-MM-DD.",
+)
 async def specivo_create_version(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Version name, e.g. 'v1.2.0'.")],
     description: Annotated[str | None, Field(description="Version description.")] = None,
-    status: Annotated[str, Field(description="One of: open, locked, closed.")] = "open",
+    status: Annotated[Literal["open", "locked", "closed"], Field(description="One of: open, locked, closed.")] = "open",
     due_date: Annotated[str | None, Field(description="Due date in YYYY-MM-DD format.")] = None,
 ) -> str:
     """Create a new version/milestone in a project.
@@ -2125,13 +2597,20 @@ async def specivo_create_version(
         return await _create_version(session, user, project_key, name, description, status, parsed_date)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_version"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_version"],
+    summary=(
+        "Update a version (version_id from specivo_list_versions); pass only the fields to change. due_date YYYY-MM-DD."
+    ),
+)
 async def specivo_update_version(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     version_id: Annotated[int, Field(description="Version ID from specivo_list_versions.")],
     name: Annotated[str | None, Field(description="New version name.")] = None,
     description: Annotated[str | None, Field(description="New description.")] = None,
-    status: Annotated[str | None, Field(description="One of: open, locked, closed.")] = None,
+    status: Annotated[
+        Literal["open", "locked", "closed"] | None, Field(description="One of: open, locked, closed.")
+    ] = None,
     due_date: Annotated[str | None, Field(description="Due date in YYYY-MM-DD format.")] = None,
 ) -> str:
     """Update an existing version/milestone.
@@ -2155,7 +2634,10 @@ async def specivo_update_version(
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_delete_version"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_delete_version"],
+    summary="Destructive: delete a version (version_id from specivo_list_versions). Refused while issues target it.",
+)
 async def specivo_delete_version(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     version_id: Annotated[int, Field(description="Version ID from specivo_list_versions.")],
@@ -2174,7 +2656,10 @@ async def specivo_delete_version(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_tags"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_tags"],
+    summary="List a project's tags with colors and usage counts. Call before tagging and reuse existing names.",
+)
 async def specivo_list_tags(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
 ) -> str:
@@ -2187,7 +2672,13 @@ async def specivo_list_tags(
         return await _list_tags(session, user, project_key)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_tag"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_tag"],
+    summary=(
+        "Create a project tag with an optional hex color. Needs manage_project; specivo_tag(op='add') also creates tags"
+        " on the fly."
+    ),
+)
 async def specivo_create_tag(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Tag name (unique per project, case-insensitive).")],
@@ -2202,7 +2693,10 @@ async def specivo_create_tag(
         return await _create_tag(session, user, project_key, name, color)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_tag"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_tag"],
+    summary="Rename or recolor a tag (tag_id from specivo_list_tags). Needs manage_project.",
+)
 async def specivo_update_tag(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     tag_id: Annotated[int, Field(description="Tag ID from specivo_list_tags.")],
@@ -2214,7 +2708,10 @@ async def specivo_update_tag(
         return await _update_tag(session, user, project_key, tag_id, name, color)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_delete_tag"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_delete_tag"],
+    summary="Destructive: delete a tag and detach it everywhere (tag_id from specivo_list_tags). Needs manage_project.",
+)
 async def specivo_delete_tag(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     tag_id: Annotated[int, Field(description="Tag ID from specivo_list_tags.")],
@@ -2224,7 +2721,18 @@ async def specivo_delete_tag(
         return await _delete_tag(session, user, project_key, tag_id)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_tag"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_tag"],
+    summary=(
+        "Get, add, remove or set the tags on an issue ('ACME-12') or wiki page ('wiki:ACME/slug'). add/set create "
+        "missing names; reuse names from specivo_list_tags."
+    ),
+    params={
+        "target_ref": "'ACME-12' or 'wiki:ACME/slug'.",
+        "op": "",
+        "value": "A tag name or list; set: the full list.",
+    },
+)
 async def specivo_tag(
     target_ref: Annotated[
         str,
@@ -2234,7 +2742,7 @@ async def specivo_tag(
             ),
         ),
     ],
-    op: Annotated[str, Field(description="One of: get, add, remove, set.")],
+    op: Annotated[Literal["get", "add", "remove", "set"], Field(description="One of: get, add, remove, set.")],
     value: Annotated[
         Any,
         Field(
@@ -2261,7 +2769,13 @@ async def specivo_tag(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_recurring_patterns"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_recurring_patterns"],
+    summary=(
+        "List a project's recurring task patterns with rule, anchor mode and next occurrence; pattern IDs for the other"
+        " recurring tools."
+    ),
+)
 async def specivo_list_recurring_patterns(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
 ) -> str:
@@ -2274,7 +2788,25 @@ async def specivo_list_recurring_patterns(
         return await _list_recurring_patterns(session, user, project_key)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_recurring_pattern"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_recurring_pattern"],
+    summary=(
+        "Create a recurring task pattern that generates issues on a schedule. Needs manage_recurring_tasks. Choose "
+        "anchor_mode ('fixed' calendar, 'flexible' after completion) and an IANA timezone; template_tracker_id from "
+        "specivo_list_lookups."
+    ),
+    params={
+        "template_subject": "Subject; macros {{year}} {{month}} {{day}} {{weekday}} {{quarter}}.",
+        "dtstart": "Series anchor, ISO 8601, e.g. '2026-01-05T09:00:00'.",
+        "byday": "Weekday tokens, e.g. 'MO,WE,FR' or '1MO,-1FR'.",
+        "rrule_raw": "Full RFC 5545 RRULE; overrides the structured fields.",
+        "anchor_mode": "'fixed' (calendar) or 'flexible' (after the previous one closes).",
+        "base_date_strategy": "flexible: anchor on the schedule or on completion.",
+        "timezone": "IANA zone, e.g. 'Asia/Bangkok' (default UTC).",
+        "template_description": "Description; same date macros.",
+        "freq": "",
+    },
+)
 async def specivo_create_recurring_pattern(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Human-readable pattern name, e.g. 'Weekly status report'.")],
@@ -2292,7 +2824,7 @@ async def specivo_create_recurring_pattern(  # noqa: PLR0913
         int, Field(description="Tracker ID for generated issues (from specivo_list_lookups).")
     ],
     freq: Annotated[
-        str,
+        Literal["daily", "weekly", "monthly", "yearly"],
         Field(description="Recurrence frequency: one of daily, weekly, monthly, yearly."),
     ],
     dtstart: Annotated[
@@ -2327,7 +2859,7 @@ async def specivo_create_recurring_pattern(  # noqa: PLR0913
         ),
     ] = None,
     anchor_mode: Annotated[
-        str,
+        Literal["fixed", "flexible"],
         Field(
             description=(
                 "'fixed' = occurrences fire on the calendar schedule regardless of "
@@ -2338,7 +2870,7 @@ async def specivo_create_recurring_pattern(  # noqa: PLR0913
         ),
     ] = "fixed",
     base_date_strategy: Annotated[
-        str,
+        Literal["scheduled", "completion"],
         Field(
             description=(
                 "For flexible mode: 'scheduled' anchors the next occurrence on the "
@@ -2415,14 +2947,23 @@ async def specivo_create_recurring_pattern(  # noqa: PLR0913
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_recurring_pattern"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_recurring_pattern"],
+    summary=(
+        "Update a recurring pattern (pattern_id from specivo_list_recurring_patterns); only future occurrences change. "
+        "Needs manage_recurring_tasks."
+    ),
+)
 async def specivo_update_recurring_pattern(  # noqa: PLR0913
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
     name: Annotated[str | None, Field(description="New pattern name.")] = None,
     template_subject: Annotated[str | None, Field(description="New subject for generated issues.")] = None,
     template_description: Annotated[str | None, Field(description="New description for generated issues.")] = None,
-    freq: Annotated[str | None, Field(description="New frequency: daily, weekly, monthly, or yearly.")] = None,
+    freq: Annotated[
+        Literal["daily", "weekly", "monthly", "yearly"] | None,
+        Field(description="New frequency: daily, weekly, monthly, or yearly."),
+    ] = None,
     rrule_interval: Annotated[int | None, Field(description="New interval between occurrences.")] = None,
     byday: Annotated[
         str | None,
@@ -2430,9 +2971,12 @@ async def specivo_update_recurring_pattern(  # noqa: PLR0913
     ] = None,
     rrule_count: Annotated[int | None, Field(description="New total occurrence count.")] = None,
     rrule_raw: Annotated[str | None, Field(description="New raw RFC 5545 RRULE string (overrides BY* fields).")] = None,
-    anchor_mode: Annotated[str | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")] = None,
+    anchor_mode: Annotated[
+        Literal["fixed", "flexible"] | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")
+    ] = None,
     base_date_strategy: Annotated[
-        str | None, Field(description="New base-date strategy: 'scheduled' or 'completion'.")
+        Literal["scheduled", "completion"] | None,
+        Field(description="New base-date strategy: 'scheduled' or 'completion'."),
     ] = None,
     dtstart: Annotated[str | None, Field(description="New ISO-8601 series anchor datetime.")] = None,
     timezone: Annotated[str | None, Field(description="New IANA timezone.")] = None,
@@ -2467,7 +3011,10 @@ async def specivo_update_recurring_pattern(  # noqa: PLR0913
         )
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_delete_recurring_pattern"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_delete_recurring_pattern"],
+    summary="Destructive: delete a recurring pattern; issues it generated stay. Needs manage_recurring_tasks.",
+)
 async def specivo_delete_recurring_pattern(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
@@ -2481,7 +3028,16 @@ async def specivo_delete_recurring_pattern(
         return await _delete_recurring_pattern(session, user, project_key, pattern_id)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_skip_recurrence_occurrence"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_skip_recurrence_occurrence"],
+    summary=(
+        "Skip one occurrence of a recurring pattern (occurrence_at from specivo_list_recurrence_occurrences); an "
+        "untouched issue already generated for it is removed. Needs manage_recurring_tasks."
+    ),
+    params={
+        "occurrence_at": "ISO 8601 datetime from specivo_list_recurrence_occurrences.",
+    },
+)
 async def specivo_skip_recurrence_occurrence(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
@@ -2505,7 +3061,13 @@ async def specivo_skip_recurrence_occurrence(
         return await _skip_recurrence_occurrence(session, user, project_key, pattern_id, occurrence_at)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_recurrence_occurrences"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_recurrence_occurrences"],
+    summary="Preview the upcoming occurrences of a recurring pattern (without generating issues).",
+    params={
+        "days": "Look-ahead in days (default: the pattern's lead time).",
+    },
+)
 async def specivo_list_recurrence_occurrences(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
@@ -2528,7 +3090,10 @@ async def specivo_list_recurrence_occurrences(
         return await _list_recurrence_occurrences(session, user, project_key, pattern_id, days)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_sprints"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_sprints"],
+    summary="List a project's sprints with ID, status and dates; the ID is sprint_id on issues.",
+)
 async def specivo_list_sprints(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
 ) -> str:
@@ -2540,7 +3105,17 @@ async def specivo_list_sprints(
         return await _list_sprints(session, user, project_key)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_list_sprint_issues"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_list_sprint_issues"],
+    summary=(
+        "List the issues of a sprint (sprint_id from specivo_list_sprints; 0 = backlog). fields: minimal, default or "
+        "full."
+    ),
+    params={
+        "sprint_id": "From specivo_list_sprints; 0 = backlog.",
+        "fields": "",
+    },
+)
 async def specivo_list_sprint_issues(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     sprint_id: Annotated[
@@ -2548,7 +3123,7 @@ async def specivo_list_sprint_issues(
         Field(description="Sprint ID from list_sprints. Use 0 for backlog (unassigned)."),
     ],
     fields: Annotated[
-        str,
+        Literal["minimal", "default", "full"],
         Field(
             description=(
                 "Field level: 'minimal' (key+subject), "
@@ -2571,7 +3146,10 @@ async def specivo_list_sprint_issues(
         return await _list_sprint_issues(session, user, project_key, sprint_id, fields, offset, limit)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_create_sprint"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_create_sprint"],
+    summary="Create a sprint (starts as planned); dates YYYY-MM-DD.",
+)
 async def specivo_create_sprint(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Sprint name, e.g. 'Sprint 5 — Route Optimization'.")],
@@ -2589,7 +3167,10 @@ async def specivo_create_sprint(
         return await _create_sprint(session, user, project_key, name, goal, parsed_start, parsed_end)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_update_sprint"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_update_sprint"],
+    summary="Update a sprint's name, goal or dates (YYYY-MM-DD); sprint_id from specivo_list_sprints.",
+)
 async def specivo_update_sprint(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     sprint_id: Annotated[int, Field(description="Sprint ID from specivo_list_sprints.")],
@@ -2608,7 +3189,10 @@ async def specivo_update_sprint(
         return await _update_sprint(session, user, project_key, sprint_id, name, goal, parsed_start, parsed_end)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_start_sprint"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_start_sprint"],
+    summary="Start a planned sprint; only one sprint per project can be active.",
+)
 async def specivo_start_sprint(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     sprint_id: Annotated[int, Field(description="Sprint ID to start.")],
@@ -2623,7 +3207,16 @@ async def specivo_start_sprint(
         return await _start_sprint(session, user, project_key, sprint_id)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_complete_sprint"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_complete_sprint"],
+    summary=(
+        "Complete the active sprint: unfinished issues move to move_incomplete_to_sprint_id (another open sprint of the"
+        " project) or to the backlog. Records a velocity snapshot."
+    ),
+    params={
+        "move_incomplete_to_sprint_id": "Sprint for unfinished issues; omit for the backlog.",
+    },
+)
 async def specivo_complete_sprint(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     sprint_id: Annotated[int, Field(description="Sprint ID to complete.")],
@@ -2648,15 +3241,43 @@ async def specivo_complete_sprint(
         return await _complete_sprint(session, user, project_key, sprint_id, move_incomplete_to_sprint_id)
 
 
-@mcp.tool(annotations=TOOL_ANNOTATIONS["specivo_setup_guide"])
+@mcp.tool(
+    annotations=TOOL_ANNOTATIONS["specivo_setup_guide"],
+    summary=(
+        "The Specivo agent guide (concepts, workflows, toolsets) as CLAUDE.md, .cursorrules or plain Markdown. "
+        "tool='specivo_x' returns one tool's full description and parameter docs instead."
+    ),
+    params={
+        "tool": "A tool name: return its full help.",
+        "format": "",
+    },
+)
 async def specivo_setup_guide(
     format: Annotated[
-        str, Field(description="'claude' for CLAUDE.md, 'cursor' for .cursorrules, 'generic' for plain md.")
+        Literal["claude", "cursor", "generic"],
+        Field(description="'claude' for CLAUDE.md, 'cursor' for .cursorrules, 'generic' for plain md."),
     ] = "claude",
+    tool: Annotated[
+        str | None,
+        Field(
+            description=(
+                "A tool name, e.g. 'specivo_create_issue': return that tool's full help (its toolset, full "
+                "description and every parameter with type, default and full description) instead of the guide."
+            )
+        ),
+    ] = None,
 ) -> str:
-    """Return the AI agent setup guide for Specivo.
+    """Return the AI agent setup guide for Specivo, or the full help of one tool.
 
     Generates configuration content with key concepts, tool overview,
     standard workflows, and anti-patterns. Call once, then save to your project.
+
+    ``tools/list`` carries short descriptions; pass ``tool=`` for a tool's full
+    description and parameter docs (the same text as the resource
+    ``specivo://docs/tools/{name}``). It works for tools of every toolset, also
+    those this connection does not load. An unknown name is an error listing
+    the known tools.
     """
+    if tool is not None:
+        return _tool_help_or_error(tool)
     return generate_setup_guide(fmt=format, mcp_server=mcp)

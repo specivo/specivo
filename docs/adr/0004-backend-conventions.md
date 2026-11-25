@@ -32,6 +32,7 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-23 — recorded the manual billing override on AI usage entries (§4) and its audit event (§18).
 **Revised:** 2026-11-24 — recorded AI spend budgets, the viewer-less budget report and the once-per-month alert rule (§4), and the budget audit events (§18).
 **Revised:** 2026-11-25 — recorded the lean MCP tool listing and MCP toolsets (§4).
+**Revised:** 2026-11-25 — recorded short MCP tool descriptions with the full help on demand (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -497,6 +498,13 @@ no `null` branch, no `default: null`. Validation keeps the original schemas. Too
 answers a call of a tool outside the connection's toolsets with a tool error naming the toolset to add; an unknown
 name refuses the request. An SSE stream's choice is carried into the message endpoint it announces. A new tool goes
 into the table, and `tests/unit/test_mcp_tools_list_budget.py` holds the listing under a size budget.
+Tools are advertised with **short descriptions** (`specivo.mcp.tool_help`): every `@mcp.tool` passes `summary=` (what
+the tool does, what to call first, hard rules: op values, where IDs come from, formats, destructive and permission
+notes) and, where a parameter's full text is too long, `params=` with a short one; shared parameters such as
+`project_key` take one short text from `COMMON_PARAMS`, and op-style arguments are `Literal` types so the schema
+carries an `enum`. The docstring and the `Field` descriptions stay the full text, served as help by
+`specivo_setup_guide(tool=...)`, the resource `specivo://docs/tools/{name}` and the error of a call whose arguments
+fail validation (`SpecivoMCPServer.call_tool` appends the tool's parameter docs; other errors keep their message).
 
 **AI usage surfaces.** The REST routes (`api/v1/ai_usage.py`) mirror time entries: `/projects/{key}/ai-usage/`,
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and

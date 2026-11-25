@@ -90,8 +90,10 @@ async def _entry(db: AsyncSession, entry_id: int) -> AiUsageEntry:
 async def test_descriptions_say_agents_cannot_count_their_tokens() -> None:
     tools = {tool.name: tool for tool in await server.mcp.list_tools()}
     for name in ("specivo_log_ai_usage", "specivo_ai_usage"):
-        assert "cannot see your own token counters" in (tools[name].description or "")
-        assert "/cost" in (tools[name].description or "")
+        # The short listing keeps the rule; the full help explains it.
+        assert "never estimate" in (tools[name].description or "").lower()
+        assert "cannot see your own token counters" in (server.mcp.tool_help(name) or "")
+        assert "/cost" in (server.mcp.tool_help(name) or "")
     assert "specivo_ai_usage_report" in tools
 
 
