@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version as _pkg_version
 from typing import Annotated, Any
 
-from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
@@ -37,6 +36,7 @@ from specivo.mcp.client_context import (
     mcp_client_var,
     mcp_connection_var,
 )
+from specivo.mcp.compact_server import SpecivoMCPServer
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools.agent_sessions import _agent_session
 from specivo.mcp.tools.comments import _add_comment, _list_comments
@@ -102,7 +102,7 @@ from specivo.services.api_key_scope import activate_api_key_scope, end_scope_con
 
 logger = logging.getLogger(__name__)
 
-mcp = MCPServer(
+mcp = SpecivoMCPServer(
     "specivo",
     version=_pkg_version("specivo"),
     middleware=[ClientInfoMiddleware()],
