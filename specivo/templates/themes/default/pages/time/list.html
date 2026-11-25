@@ -1,100 +1,110 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, pagination %}
+{% from "components/filter_combobox.html" import filter_combobox, issue_combobox %}
 
-{% block title %}{% trans %}Time Entries{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+{# The time entries of one project (project set) or of every project the reader
+   may read them in (project None, with a project filter). #}
+{% block title %}{% trans %}Time Entries{% endtrans %}{% if project %} - {{ project.name }}{% endif %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
+{% if project %}
 {{ breadcrumbs([
   {"label": _("Home"), "url": base ~ "/"},
   {"label": project.name, "url": base ~ "/projects/" ~ project.key},
   {"label": _("Time Entries")}
 ]) }}
+{% else %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": _("Time Entries")}
+]) }}
+{% endif %}
 
 <div class="page-header">
   <h1>{% trans %}Time Entries{% endtrans %}</h1>
-  {% if can_log_time %}
   <div class="page-header-actions">
+    {% if project %}
+    <a href="{{ base }}/time-entries/?project={{ project.key }}" class="sp-btn sp-btn-ghost" data-testid="time-all-projects-link">{% trans %}All projects{% endtrans %}</a>
+    {% endif %}
+    {% if can_log_time %}
     <a href="{{ base }}/projects/{{ project.key }}/time-entries/new/" class="sp-btn sp-btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}Log Time{% endtrans %}
     </a>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 
 {# Filters #}
-<form method="get" action="{{ base }}/projects/{{ project.key }}/time-entries/" class="filter-bar">
+<form method="get" action="{{ base }}{{ base_url }}" class="filter-bar" data-testid="time-filters">
+  {% if not project %}
+  {{ filter_combobox("project", _("Project"), _("All projects"), base ~ "/time-entries/projects/", "project", chip=project_chip, input_id="sp-time-project") }}
+  {% endif %}
+  {{ filter_combobox("user_id", _("User"), _("All users"), base ~ people_endpoint, "user", chip=person_chip, input_id="sp-time-user") }}
+  {{ issue_combobox("issue", "sp-time-issue", _("Issue"), _("Issue…"),
+       base ~ "/time-entries/issues/" ~ ("?project=" ~ project.key if project else ""),
+       scope_field="" if project else "project", testid="time-filter-issue", value=filters.issue) }}
   <span class="filter-label">{% trans %}From{% endtrans %}</span>
-  <input type="date" name="from_date" value="{{ filters.from_date or '' }}" class="filter-input">
+  <input type="date" name="from_date" value="{{ filters.from_date }}" class="filter-input">
   <span class="filter-label">{% trans %}To{% endtrans %}</span>
-  <input type="date" name="to_date" value="{{ filters.to_date or '' }}" class="filter-input">
-  <select name="user_id" class="filter-select">
-    <option value="">{% trans %}All Users{% endtrans %}</option>
-    {% if members is defined %}
-    {% for m in members %}
-    <option value="{{ m.user_id }}" {{ 'selected' if filters.user_id is defined and filters.user_id == m.user_id else '' }}>{{ m.user_id }}</option>
-    {% endfor %}
-    {% endif %}
-  </select>
+  <input type="date" name="to_date" value="{{ filters.to_date }}" class="filter-input">
   <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
 </form>
 
-{# Summary #}
-<div class="summary-box">
+{# Summary: every matching entry, not only this page #}
+<div class="summary-box" data-testid="time-summary">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-  {% set entry_count = total if total is defined else 0 %}
-  {% trans hours=total_hours if total_hours is defined else '0', count=entry_count %}Total: %(hours)sh (%(count)s entry){% pluralize %}Total: %(hours)sh (%(count)s entries){% endtrans %}
+  {% trans hours=total_hours, count=total %}Total: %(hours)sh (%(count)s entry){% pluralize count %}Total: %(hours)sh (%(count)s entries){% endtrans %}
 </div>
 
-{% if entries is defined and entries %}
+{% if entries %}
 <div class="card" style="overflow-x:auto;">
-  <table class="time-table">
+  <table class="time-table" data-testid="time-table">
     <thead>
       <tr>
         <th>{% trans %}Date{% endtrans %}</th>
         <th>{% trans %}Hours{% endtrans %}</th>
+        {% if not project %}<th>{% trans %}Project{% endtrans %}</th>{% endif %}
         <th>{% trans %}Issue{% endtrans %}</th>
         <th>{% trans %}Activity{% endtrans %}</th>
         <th>{% trans %}User{% endtrans %}</th>
         <th>{% trans %}Comments{% endtrans %}</th>
-        <th></th>
       </tr>
     </thead>
     <tbody>
       {% for entry in entries %}
-      <tr>
+      <tr data-testid="time-row">
         <td class="date-cell">{{ entry.spent_on }}</td>
         <td><span class="hours">{{ entry.hours }}</span></td>
-        <td>
-          {% if entry.issue_id %}
-          <a class="issue-key" href="#">#{{ entry.issue_id }}</a>
+        {% if not project %}
+        <td><a href="{{ base }}/projects/{{ entry.project.key }}/time-entries/" data-testid="time-project">{{ entry.project.name }}</a></td>
+        {% endif %}
+        <td class="sp-time-issue-cell">
+          {% if entry.issue %}
+          {% set key = entry.issue.project_key ~ "-" ~ entry.issue.sequence_number %}
+          <a class="issue-key" href="{{ base }}/issue/{{ key }}/" data-testid="time-issue-link">{{ key }}</a>
+          <span class="sp-time-issue-subject">{{ entry.issue.subject }}</span>
           {% else %}
           <span style="color:var(--sp-text-muted)">-</span>
           {% endif %}
         </td>
         <td>
           {% if entry.activity %}
-          <span class="activity-badge {{ entry.activity.name | lower if entry.activity else '' }}">{{ entry.activity.name if entry.activity else '-' }}</span>
+          <span class="activity-badge {{ entry.activity.name | lower }}">{{ entry.activity.name }}</span>
           {% else %}
           -
           {% endif %}
         </td>
-        <td>{{ entry.user.display_name if entry.user else '-' }}</td>
+        <td>{{ (entry.user.display_name or entry.user.login) if entry.user else '-' }}</td>
         <td class="comment-cell">{{ entry.comments or '' }}</td>
-        <td>
-          {% if can_manage_time_entries or (can_log_time and entry.user_id == user.id) %}
-          <button class="action-btn" title="{{ _('Edit') }}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          {% endif %}
-        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{{ pagination(total, offset, limit, base ~ base_url, page_query) }}
 {% else %}
-<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);" data-testid="time-empty">
   {% if can_log_time %}{% trans %}No time entries yet. Log time to start tracking.{% endtrans %}{% else %}{% trans %}No time entries yet.{% endtrans %}{% endif %}
 </div>
 {% endif %}

@@ -361,6 +361,133 @@ class TimeEntryService:
             raise NotFoundError(f"Time entry {entry_id} not found")
         return entry
 
+    async def scope_conditions(
+        self, session: AsyncSession, viewer: User, project: Project | None
+    ) -> list[ColumnElement[bool]]:
+        """WHERE conditions keeping the time entries *viewer* may read: of *project*, or of every project (None).
+
+        Without a project, entries are limited to the projects the viewer can
+        reach (``ProjectService.accessible_projects_clause``) and then to
+        ``visible_entries_clause_any``; with one, to ``visible_entries_clause``.
+        """
+        from specivo.services.project_service import ProjectService
+
+        if project is not None:
+            conditions: list[ColumnElement[bool]] = [TimeEntry.project_id == project.id]
+            visible = await self.visible_entries_clause(session, viewer, project)
+        else:
+            conditions = []
+            accessible = await ProjectService().accessible_projects_clause(session, viewer)
+            if accessible is not None:
+                conditions.append(TimeEntry.project_id.in_(select(Project.id).where(accessible)))
+            visible = await self.visible_entries_clause_any(session, viewer)
+        if visible is not None:
+            conditions.append(visible)
+        return conditions
+
+    async def list_entries(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        *,
+        project: Project | None = None,
+        user_id: int | None = None,
+        issue_id: int | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        offset: int = 0,
+        limit: int = 25,
+    ) -> tuple[list[TimeEntry], int, Decimal]:
+        """A page of the time entries *viewer* may read, newest first, their count and their total hours.
+
+        *project* None lists every project the viewer can read time entries
+        of. The count and the hours cover every matching entry, not the page.
+        Entries come with their user, activity, project and issue loaded.
+        """
+        conditions = await self.scope_conditions(session, viewer, project)
+        if user_id is not None:
+            conditions.append(TimeEntry.user_id == user_id)
+        if issue_id is not None:
+            conditions.append(TimeEntry.issue_id == issue_id)
+        if from_date is not None:
+            conditions.append(TimeEntry.spent_on >= from_date)
+        if to_date is not None:
+            conditions.append(TimeEntry.spent_on <= to_date)
+        total, hours = (
+            await session.execute(
+                select(func.count(), func.coalesce(func.sum(TimeEntry.hours), 0))
+                .select_from(TimeEntry)
+                .where(*conditions)
+            )
+        ).one()
+        if not total:
+            return [], 0, Decimal(0)
+        stmt = (
+            select(TimeEntry)
+            .where(*conditions)
+            .options(
+                selectinload(TimeEntry.user),
+                selectinload(TimeEntry.activity),
+                selectinload(TimeEntry.project),
+                selectinload(TimeEntry.issue),
+            )
+            .order_by(TimeEntry.spent_on.desc(), TimeEntry.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        entries = list((await session.execute(stmt)).scalars().all())
+        return entries, int(total), Decimal(hours)
+
+    async def search_people(
+        self,
+        session: AsyncSession,
+        viewer: User,
+        project: Project | None,
+        query: str = "",
+        *,
+        user_id: int | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[User]:
+        """The people with time entries *viewer* may read (in *project*, or anywhere), for the user filter.
+
+        *query* matches login or display name (case-insensitive); *user_id*
+        picks one person, so a filter chip never names someone the list would
+        not offer.
+        """
+        conditions = await self.scope_conditions(session, viewer, project)
+        stmt = select(User).where(User.id.in_(select(TimeEntry.user_id).where(*conditions)))
+        if user_id is not None:
+            stmt = stmt.where(User.id == user_id)
+        q = query.strip()
+        if q:
+            pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            stmt = stmt.where(
+                or_(User.login.ilike(pattern, escape="\\"), User.display_name.ilike(pattern, escape="\\"))
+            )
+        display = func.lower(func.coalesce(func.nullif(User.display_name, ""), User.login))
+        stmt = stmt.order_by(display, User.id).offset(offset).limit(limit)
+        return list((await session.execute(stmt)).scalars().all())
+
+    async def time_projects(self, session: AsyncSession, viewer: User, query: str = "") -> list[Project]:
+        """The projects *viewer* can reach and read time entries of, by name; *query* matches name or key."""
+        from specivo.services.permission_service import Permission, projects_granting
+        from specivo.services.project_service import ProjectService
+
+        stmt = select(Project).order_by(func.lower(Project.name), Project.id)
+        accessible = await ProjectService().accessible_projects_clause(session, viewer)
+        if accessible is not None:
+            stmt = stmt.where(accessible)
+        q = query.strip()
+        if q:
+            pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            stmt = stmt.where(or_(Project.name.ilike(pattern, escape="\\"), Project.key.ilike(pattern, escape="\\")))
+        projects = list((await session.execute(stmt)).scalars().all())
+        if viewer.is_admin or not projects:
+            return projects
+        granted = await projects_granting(session, viewer, projects, Permission.VIEW_TIME_ENTRIES)
+        return [p for p in projects if p.id in granted]
+
     async def list_for_project(
         self,
         session: AsyncSession,
