@@ -82,6 +82,20 @@ If the agent calls a tool its connection did not load, the call fails with a mes
 toolset to add. An unknown toolset name refuses the connection. Clients that search their tools
 before loading them, such as Claude Code, can use `all` at little cost.
 
+### Short tool descriptions, full help on request
+
+For the same reason, each tool is listed with a short description: what it does, what to call
+first, and its hard rules. Each description ends with a pointer to the full help, which the agent
+gets in any of three ways:
+
+- by calling `specivo_setup_guide` with `tool` set to a tool name, for example
+  `specivo_setup_guide(tool="specivo_create_issue")`;
+- by reading the resource `specivo://docs/tools/<tool name>`;
+- from the error of a call with a missing or wrongly typed argument, which lists all of the tool's
+  parameters with their full descriptions, so the agent can correct the call.
+
+The full help works for every tool, also one whose toolset the connection did not load.
+
 ## Verify the connection
 
 Once the client reloads, it should discover the `specivo_…` tools. Ask the agent to run

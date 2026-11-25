@@ -64,7 +64,8 @@ async def _report(db: AsyncSession, user: User, **kw: Any) -> str:
 
 async def test_the_tool_is_registered_and_documented() -> None:
     tools = {tool.name: tool for tool in await server.mcp.list_tools()}
-    description = tools["specivo_ai_usage_report"].description or ""
+    assert "specivo_ai_usage_report" in tools
+    description = server.mcp.tool_help("specivo_ai_usage_report") or ""
     assert "API-equivalent value" in description and "administrators" in description
 
 

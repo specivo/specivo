@@ -231,7 +231,7 @@ async def test_mcp_report_by_payer(db_session: AsyncSession, b: Billing) -> None
 async def test_mcp_tools_document_the_new_arguments() -> None:
     tools = {tool.name: tool for tool in await server.mcp.list_tools()}
     report = tools["specivo_ai_usage_report"]
-    assert "scope='organization'" in (report.description or "")
+    assert "scope='organization'" in (server.mcp.tool_help("specivo_ai_usage_report") or "")
     assert {"payer", "billing_account", "route", "scope"} <= set(report.input_schema["properties"])
     assert {"payer", "billing_account"} <= set(tools["specivo_ai_usage"].input_schema["properties"])
 

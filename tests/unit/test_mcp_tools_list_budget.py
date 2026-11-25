@@ -5,7 +5,10 @@ every turn, so it must not grow back unnoticed. The budgets sit a little above t
 measured size; raise one only together with a reason in the commit message.
 
 Measured as the JSON of the ``tools/list`` result a client receives over the
-in-process transport (the same middleware as over HTTP).
+in-process transport (the same middleware as over HTTP). Tools are listed with
+short descriptions (``specivo.mcp.tool_help``); each description and each
+parameter description has a maximum too, and every tool's full help is
+reachable (``tests/unit/test_mcp_tool_help.py`` checks its content).
 """
 
 from __future__ import annotations
@@ -17,14 +20,15 @@ import pytest
 from mcp import Client
 
 from specivo.mcp.server import mcp
+from specivo.mcp.tool_help import PARAM_DESCRIPTION_MAX, TOOL_DESCRIPTION_MAX
 from specivo.mcp.toolsets import CORE, TOOLSETS, mcp_toolsets_var, tools_in
 
 pytestmark = pytest.mark.unit
 
 #: Characters of the tools/list JSON for the default connection (core).
-CORE_BUDGET = 50_000
+CORE_BUDGET = 33_000
 #: Characters of the tools/list JSON with ?toolsets=all.
-ALL_BUDGET = 102_000
+ALL_BUDGET = 71_000
 
 
 async def _listed(toolsets: frozenset[str] | None) -> list[dict[str, Any]]:
@@ -74,3 +78,32 @@ async def test_calling_a_hidden_tool_names_the_toolset_to_enable() -> None:
     text = result.content[0].text  # type: ignore[union-attr]
     assert text.startswith("specivo_create_sprint is in the 'planning' toolset")
     assert "/mcp/?toolsets=core,planning" in text
+
+
+async def test_every_description_is_short() -> None:
+    tools = await _listed(frozenset(TOOLSETS))
+    too_long = [tool["name"] for tool in tools if len(tool.get("description", "")) > TOOL_DESCRIPTION_MAX]
+    assert too_long == []
+    for tool in tools:
+        assert tool.get("description"), tool["name"]
+
+
+async def test_every_parameter_description_is_short() -> None:
+    tools = await _listed(frozenset(TOOLSETS))
+    too_long = [
+        f"{tool['name']}.{name}"
+        for tool in tools
+        for name, prop in tool["inputSchema"].get("properties", {}).items()
+        if len(prop.get("description", "")) > PARAM_DESCRIPTION_MAX
+    ]
+    assert too_long == []
+
+
+async def test_every_tool_has_full_help() -> None:
+    tools = await _listed(frozenset(TOOLSETS))
+    async with Client(mcp) as client:
+        for tool in tools:
+            text = mcp.tool_help(tool["name"])
+            assert text and len(text) > len(tool["description"]) // 2, tool["name"]
+            resource = await client.read_resource(f"specivo://docs/tools/{tool['name']}")
+            assert resource.contents[0].text == text  # type: ignore[union-attr]

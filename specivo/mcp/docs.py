@@ -626,7 +626,8 @@ def _build_toolset_section() -> str:
         listed = "" if name == CORE else ": " + ", ".join(f"`{tool}`" for tool in tools)
         default = " (default)" if name == CORE else ""
         rows.append(f"- **{name}**{default} -- {TOOLSET_SUMMARIES[name]}{listed}")
-    return f"""## Toolsets
+    return (
+        f"""## Toolsets
 
 A connection lists and may call only the tools of its toolsets, which keeps the tool list in your
 prompt short. Without a choice it gets `{CORE}`. Pick toolsets with the `{TOOLSETS_PARAM}` query parameter
@@ -635,7 +636,18 @@ of the MCP URL: `https://your-specivo-host/mcp/?{TOOLSETS_PARAM}={CORE},ai-spend
 tool search of their own (Claude Code, Hermes) lose little with `{ALL}`. Calling a tool outside the
 connection's toolsets returns an error naming the toolset to add.
 
-""" + "\n".join(rows)
+"""
+        + "\n".join(rows)
+        + """
+
+### Full tool help
+
+`tools/list` carries short descriptions. A tool's full description and parameter docs (types,
+defaults, every rule) come from `specivo_setup_guide(tool="specivo_create_issue")` or the resource
+`specivo://docs/tools/specivo_create_issue`, for any tool of any toolset. A call whose arguments
+fail validation (a missing or mistyped argument, a value outside the allowed choices) returns the
+tool's full parameter docs with the error, so fix the call from there."""
+    )
 
 
 def _build_tool_table(mcp_server: MCPServer | None = None) -> str:
