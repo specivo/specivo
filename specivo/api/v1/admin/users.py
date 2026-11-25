@@ -277,6 +277,43 @@ async def change_user_email(
     return UserOut.model_validate(target)
 
 
+class AgentWorksFor(BaseModel):
+    """Body of ``PUT /admin/users/{id}/works-for/``."""
+
+    works_for_id: int | None = Field(
+        default=None, description="The person the service account works for; null for nobody."
+    )
+
+
+@router.put(
+    "/admin/users/{user_id}/works-for/",
+    response_model=UserOut,
+    summary="Set the person a service account works for (admin only)",
+    responses={
+        404: {"description": "No such user"},
+        422: {"description": "Not a service account, or the owner is not an active person"},
+    },
+)
+async def set_works_for(
+    user_id: int,
+    body: AgentWorksFor,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = DB_SESSION,
+) -> UserOut:
+    """The AI usage the agent reports is billed through that person's billing accounts and plans.
+
+    Its entries are resolved again at once; the change is audited.
+    """
+    from specivo.services.agent_owner_service import AgentOwnerService
+
+    target = await _get_user_or_404(db, user_id)
+    await AgentOwnerService().set_works_for(db, target, body.works_for_id, actor=admin, request=request)
+    await db.commit()
+    await db.refresh(target)
+    return UserOut.model_validate(target)
+
+
 # ---------------------------------------------------------------------------
 # Lock / unlock
 # ---------------------------------------------------------------------------

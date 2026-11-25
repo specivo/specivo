@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -72,6 +72,12 @@ class User(Base, TimestampMixin):
             "login NOT LIKE '$%' OR (password_hash IS NULL AND NOT is_admin)",
             name="ck_users_system_principal_inert",
         ),
+        # Only a service account (an agent) works for somebody, and never for itself.
+        CheckConstraint(
+            "works_for_id IS NULL OR (is_service_account AND works_for_id <> id)",
+            name="ck_users_works_for_agent",
+        ),
+        Index("ix_users_works_for_id", "works_for_id", postgresql_where=text("works_for_id IS NOT NULL")),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -102,6 +108,12 @@ class User(Base, TimestampMixin):
     deactivation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_service_account: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # The person a service account (an agent) works for: the AI usage the agent
+    # reports is billed through that person's billing accounts and plans
+    # (``specivo.services.ai_billing_resolution``). Set by administrators.
+    works_for_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     # Set when somebody other than the account owner chose the current password
     # (an administrator, an import). The owner is refused everything except the
     # way out until they replace it — see ``specivo.core.security`` for the API
