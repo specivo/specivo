@@ -19,7 +19,7 @@ from datetime import timedelta
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.utils import utcnow
@@ -156,3 +156,27 @@ async def test_an_mcp_call_in_a_project_names_it_on_its_audit_row(
         )
     ).all()
     assert [r[0] for r in rows] == [world.p.id, None]
+
+
+async def test_a_background_rest_call_opens_and_extends_no_session(
+    client: AsyncClient, db_session: AsyncSession, world: SessionWorld
+) -> None:
+    """A client's own housekeeping (X-Agent-Background: 1, e.g. a sync poll) is no agent work."""
+    db = db_session
+    before = world.live.last_activity_at
+    count = await db.scalar(
+        select(func.count()).select_from(AgentSession).where(AgentSession.user_id == world.agent.id)
+    )
+    headers = {
+        "Authorization": f"Bearer {world.agent_raw_key}",
+        "X-Agent-Background": "1",
+        "X-Agent-Session-Id": "opc-live",
+    }
+    resp = await client.get(f"/api/v1/projects/{world.p.key}/issues/", params={"assigned_to_id": "me"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    await db.refresh(world.live)
+    assert world.live.last_activity_at == before
+    after = await db.scalar(
+        select(func.count()).select_from(AgentSession).where(AgentSession.user_id == world.agent.id)
+    )
+    assert after == count
