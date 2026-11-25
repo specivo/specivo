@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import os
@@ -282,11 +283,11 @@ async def run_task(
     error = None
     headers = {"Authorization": f"Bearer {config.api_key}"} if config.api_key else {}
     for _ in range(MAX_TURNS):
-        response = await http.post(
-            f"{config.base_url}/chat/completions",
-            headers=headers,
-            json={"model": config.model, "messages": messages, "tools": tools, "temperature": config.temperature},
-        )
+        payload = {"model": config.model, "messages": messages, "tools": tools, "temperature": config.temperature}
+        response = await _post_with_deadline(http, f"{config.base_url}/chat/completions", headers, payload, config)
+        if response is None:
+            error = f"no answer within {config.timeout:.0f}s ({_ATTEMPTS} attempts)"
+            break
         if response.status_code >= 400:
             error = f"HTTP {response.status_code}: {response.text[:300]}"
             break
@@ -363,3 +364,22 @@ def comparison_table(rows: dict[str, dict[str, float]]) -> str:
 
 def to_json(results: Sequence[TaskResult]) -> list[dict[str, Any]]:
     return [asdict(result) for result in results]
+
+
+_ATTEMPTS = 3
+
+
+async def _post_with_deadline(
+    http: httpx.AsyncClient, url: str, headers: dict[str, str], payload: dict[str, Any], config: Any
+) -> httpx.Response | None:
+    """POST with a deadline on the whole request, retried; ``None`` when every attempt timed out.
+
+    httpx's timeout limits each read, and some endpoints (OpenRouter) keep a slow request open by
+    sending whitespace, so a stalled answer would otherwise wait forever.
+    """
+    for _ in range(_ATTEMPTS):
+        try:
+            return await asyncio.wait_for(http.post(url, headers=headers, json=payload), timeout=config.timeout)
+        except (TimeoutError, httpx.TransportError):
+            continue
+    return None
