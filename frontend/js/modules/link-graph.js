@@ -364,6 +364,9 @@ export function buildOption(state, theme, width) {
             type: 'graph',
             layout: 'force',
             roam: true,
+            // Drag and zoom anywhere on the canvas, not only over the drawn graph: zoomed out, the
+            // graph covers a small part of it and the rest would not move.
+            roamTrigger: 'global',
             draggable: true,
             autoCurveness: true,
             data: nodes,

@@ -133,6 +133,17 @@ def test_project_graph_zoom_buttons(admin_page: Page, linked: dict) -> None:
     zoom.locator('[data-graph-zoom="out"]').click()
     admin_page.wait_for_timeout(400)
     assert drawing() != zoomed_in
+    # Zoomed out, the graph covers a small part of the canvas: dragging its empty corner still moves it.
+    box = graph.locator("[data-graph-canvas]").bounding_box()
+    assert box is not None
+    before_drag = drawing()
+    x, y = box["x"] + box["width"] - 120, box["y"] + 40
+    admin_page.mouse.move(x, y)
+    admin_page.mouse.down()
+    admin_page.mouse.move(x - 150, y + 80, steps=8)
+    admin_page.mouse.up()
+    admin_page.wait_for_timeout(300)
+    assert drawing() != before_drag
     zoom.locator('[data-graph-zoom="reset"]').click()
     expect(graph.locator("[data-graph-canvas] svg")).to_be_visible()
     tracker.assert_no_errors()

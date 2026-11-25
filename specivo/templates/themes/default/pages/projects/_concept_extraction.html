@@ -43,7 +43,7 @@
     <div class="form-group sp-form-group-mb-md">
       <label class="form-label" for="ai-provider-key">{% trans %}API key (optional){% endtrans %}</label>
       <input class="form-input" type="password" id="ai-provider-key" x-model="apiKey" maxlength="1000" autocomplete="off" aria-describedby="ai-provider-key-hint">
-      <div class="form-hint" id="ai-provider-key-hint" x-text="provider && provider.has_api_key ? {{ _('A key is stored. Leave this empty to keep it.') | tojson }} : {{ _('Local servers usually need none.') | tojson }}"></div>
+      <div class="form-hint" id="ai-provider-key-hint" x-text='provider && provider.has_api_key ? {{ _('A key is stored. Leave this empty to keep it.') | tojson }} : {{ _('Local servers usually need none.') | tojson }}'></div>
       <label class="checkbox-row" for="ai-provider-remove-key" x-show="provider && provider.has_api_key">
         <input type="checkbox" id="ai-provider-remove-key" x-model="removeKey" class="sp-checkbox-accent-pointer">
         {% trans %}Remove the stored key{% endtrans %}
