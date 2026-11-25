@@ -186,6 +186,8 @@ class TaskResult:
     seconds: float = 0.0
     tools_called: list[str] = field(default_factory=list)
     error: str | None = None
+    #: Every call with its arguments, whether it failed, and the start of its answer (for reading a miss).
+    call_log: list[dict[str, Any]] = field(default_factory=list)
 
 
 def score(
@@ -201,6 +203,9 @@ def score(
         schema_rejected=sum(outcome.schema_rejected for outcome in outcomes),
         help_lookups=sum(outcome.help_lookup for outcome in outcomes),
         tools_called=[outcome.tool for outcome in outcomes],
+        call_log=[
+            {"tool": o.tool, "arguments": o.arguments, "is_error": o.is_error, "text": o.text[:300]} for o in outcomes
+        ],
         **usage,
     )
 
