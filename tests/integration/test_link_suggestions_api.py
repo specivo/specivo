@@ -22,7 +22,14 @@ from specivo.models.relation import IssueRelation
 from specivo.services.link_suggestion_service import THRESHOLD_SETTING, compute_for_project
 from tests.factories.user import TEST_PASSWORD
 from tests.integration.link_graph_helpers import World, build_world, issue, page, wiki_ref
-from tests.integration.link_suggestion_helpers import _no_queued_tasks, add_permission, cos, default_model, embed
+from tests.integration.link_suggestion_helpers import (
+    _no_queued_tasks,
+    add_permission,
+    cos,
+    default_model,
+    embed,
+    fill,
+)
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -30,8 +37,10 @@ assert _no_queued_tasks  # the autouse fixture, imported to be active here
 
 A = [1.0, 0.0, 0.0, 0.0]
 NEAR_A = [0.95, 0.31, 0.0, 0.0]
-# Close to A (0.90), not to NEAR_A (0.77): the twin is suggested for the root only.
+# Close to A (0.90), less to NEAR_A (0.77): with THRESHOLD, the twin is suggested for the root only.
 TWIN = [0.9, -0.3, 0.3, 0.0]
+# Centred, root ~ near is about 0.92, root ~ twin 0.84 to 0.86, near ~ twin 0.62 to 0.66.
+THRESHOLD = 0.75
 SCORE = f"{cos(A, NEAR_A):.3f}"
 
 
@@ -44,6 +53,8 @@ async def world(db_session: AsyncSession) -> World:
 async def suggested(db_session: AsyncSession, world: World):
     """Root issue ~ near page, and root ~ twin issue, as open suggestions (and nothing else)."""
     model = await default_model(db_session, "sga-mock")
+    await fill(db_session, world, model, world.home)
+    world.home.settings = {**(world.home.settings or {}), THRESHOLD_SETTING: THRESHOLD}
     root = await issue(db_session, world, world.home, "Root")
     near = await page(db_session, world, world.home, "Near page")
     twin = await issue(db_session, world, world.home, "Twin")
@@ -156,6 +167,7 @@ async def test_issue_page_lists_suggestions_with_actions_for_those_allowed(clien
 
 async def test_suggestions_are_grouped_by_type_with_previews(client, db_session, world):
     model = await default_model(db_session, "sga-preview")
+    await fill(db_session, world, model, world.home)
     root = await issue(db_session, world, world.home, "Root", "Root text")
     runbook = await page(
         db_session, world, world.home, "Runbook", "## Steps\n\nThe **release** runbook [[testing|explains]] the steps."
@@ -218,9 +230,12 @@ async def test_wiki_page_lists_suggestions_and_hides_invisible_ones(client, sugg
 
 async def test_project_threshold_setting(admin_client, world):
     url = f"/api/v1/projects/{world.home.key}/"
-    resp = await admin_client.patch(url, json={THRESHOLD_SETTING: 0.42})
-    assert resp.status_code == 422
-    resp = await admin_client.patch(url, json={THRESHOLD_SETTING: 0.9})
-    assert resp.status_code == 200, resp.text
-    assert resp.json()[THRESHOLD_SETTING] == 0.9
-    assert (await admin_client.get(url)).json()[THRESHOLD_SETTING] == 0.9
+    assert (await admin_client.get(url)).json()[THRESHOLD_SETTING] == 0.30  # the default
+    for bad in (-0.1, 0.96, 1.0):
+        resp = await admin_client.patch(url, json={THRESHOLD_SETTING: bad})
+        assert resp.status_code == 422, bad
+    for good in (0.0, 0.95, 0.42):
+        resp = await admin_client.patch(url, json={THRESHOLD_SETTING: good})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()[THRESHOLD_SETTING] == good
+    assert (await admin_client.get(url)).json()[THRESHOLD_SETTING] == 0.42

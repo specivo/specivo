@@ -17,7 +17,7 @@ from specivo.models.link_suggestion import EntitySuggestion, EntityVector
 from specivo.services import suggestion_eval
 from specivo.services.suggestion_eval import Case, evaluate
 from tests.integration.link_graph_helpers import World, build_world, issue, page, rebuild, wiki_ref
-from tests.integration.link_suggestion_helpers import _no_queued_tasks, default_model, embed, unit
+from tests.integration.link_suggestion_helpers import _no_queued_tasks, default_model, embed, fill, unit
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -53,6 +53,7 @@ async def labelled(db_session: AsyncSession, world: World, monkeypatch: pytest.M
     await embed(db_session, model, words, FAR, FAR, FAR, FAR, FAR, A)
     for filler in fillers:
         await embed(db_session, model, filler, FILLER)
+    await fill(db_session, world, model, world.home)  # enough items for the centred gate to apply
 
     async def fake_search(session, user, subject, project_id, issue_id, scope, n):
         assert subject == "Login timeout on mobile"

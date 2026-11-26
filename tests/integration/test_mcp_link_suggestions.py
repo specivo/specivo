@@ -20,7 +20,14 @@ from specivo.models.security_audit import SecurityAuditLog
 from specivo.services.link_suggestion_service import compute_for_project, default_model_id
 from tests.factories.user import UserFactory
 from tests.integration.link_graph_helpers import World, build_world, issue, page, wiki_ref
-from tests.integration.link_suggestion_helpers import _no_queued_tasks, add_permission, cos, default_model, embed
+from tests.integration.link_suggestion_helpers import (
+    _no_queued_tasks,
+    add_permission,
+    cos,
+    default_model,
+    embed,
+    fill,
+)
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.serial]
 
@@ -46,8 +53,10 @@ async def _suggest(db_session, world, *items_and_vectors) -> None:
 
 
 @pytest.fixture(autouse=True)
-async def _model(db_session: AsyncSession):
-    return await default_model(db_session, "sgm-mock")
+async def _model(db_session: AsyncSession, world: World):
+    model = await default_model(db_session, "sgm-mock")
+    await fill(db_session, world, model, world.home)  # enough items for the project to get suggestions
+    return model
 
 
 async def test_show_issue_and_read_wiki_list_possibly_related(db_session, world, monkeypatch):

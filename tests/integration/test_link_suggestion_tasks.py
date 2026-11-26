@@ -14,7 +14,7 @@ from specivo.tasks import celery_app
 from specivo.tasks import embeddings as embedding_tasks
 from specivo.tasks import link_suggestions as tasks
 from tests.integration.link_graph_helpers import World, build_world, comment, issue, page
-from tests.integration.link_suggestion_helpers import _no_queued_tasks, default_model, embed, key
+from tests.integration.link_suggestion_helpers import _no_queued_tasks, default_model, embed, fill, key
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -58,6 +58,7 @@ async def test_embedding_task_updates_vectors_and_queues_changed_items(db_sessio
 
 async def test_compute_task_runs_for_a_project_or_items(db_session, world, in_test_session):
     model = await default_model(db_session, "sgt-mock")
+    await fill(db_session, world, model, world.home)  # enough items for the project to get suggestions
     root = await issue(db_session, world, world.home, "Root")
     doc = await page(db_session, world, world.home, "Doc")
     await embed(db_session, model, root, A)

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.services.link_suggestion_service import compute_for_project
 from tests.factories.user import TEST_PASSWORD
 from tests.integration.link_graph_helpers import World, build_world, issue, page, wiki_ref
-from tests.integration.link_suggestion_helpers import _no_queued_tasks, default_model, embed
+from tests.integration.link_suggestion_helpers import _no_queued_tasks, default_model, embed, fill
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -34,6 +34,7 @@ async def world(db_session: AsyncSession) -> World:
 async def suggested(db_session: AsyncSession, world: World):
     """Root issue ~ near page ~ a private issue, as open suggestions, and nothing else linked."""
     model = await default_model(db_session, "lgs-mock")
+    await fill(db_session, world, model, world.home)  # enough items for the project to get suggestions
     root = await issue(db_session, world, world.home, "Suggestion root")
     near = await page(db_session, world, world.home, "Near graph page")
     hidden = await issue(db_session, world, world.home, "Private twin", private=True)

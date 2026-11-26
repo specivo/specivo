@@ -14,6 +14,7 @@ from specivo.core.constants import (
     CONCEPT_MIN_CONFIDENCE_THRESHOLD,
     GRAPH_METADATA_KEY_MAX_LENGTH,
     GRAPH_METADATA_KEYS_MAX,
+    SIMILAR_LINKS_DEFAULT_THRESHOLD,
     SIMILAR_LINKS_MAX_THRESHOLD,
     SIMILAR_LINKS_MIN_THRESHOLD,
 )
@@ -156,15 +157,17 @@ class ProjectUpdate(BaseModel):
             "An empty list turns them all off."
         ),
     )
-    # Cosine similarity a suggested link needs in this project (default 0.80).
+    # Centred cosine similarity a suggested link needs in this project.
     similar_links_threshold: float | None = Field(
         default=None,
         ge=SIMILAR_LINKS_MIN_THRESHOLD,
         le=SIMILAR_LINKS_MAX_THRESHOLD,
         description=(
-            "Cosine similarity two issues or wiki pages need to be suggested as related (kind similar in the "
-            f"link graph), from {SIMILAR_LINKS_MIN_THRESHOLD} to {SIMILAR_LINKS_MAX_THRESHOLD}; 0.80 when never "
-            "set. Applies from the next computation of the project's suggestions."
+            "How much closer two issues or wiki pages must be than two typical items of the project to be "
+            "suggested as related (kind similar in the link graph): their cosine similarity once the project's "
+            f"mean document vector is taken off both, from {SIMILAR_LINKS_MIN_THRESHOLD} to "
+            f"{SIMILAR_LINKS_MAX_THRESHOLD}; {SIMILAR_LINKS_DEFAULT_THRESHOLD} when never set. Higher means fewer, "
+            "stronger suggestions. Applies from the next computation of the project's suggestions."
         ),
     )
     # Concept extraction with the project's AI provider (off unless switched on).
@@ -313,7 +316,7 @@ class ProjectOut(BaseModel):
     similar_issues: bool | None = None
     # The issue metadata keys that become link graph nodes (default ["component"]). ``None`` in list responses.
     graph_metadata_keys: list[str] | None = None
-    # Detail only: the cosine similarity a suggested link needs in the project.
+    # Detail only: the centred cosine similarity a suggested link needs in the project.
     similar_links_threshold: float | None = None
     # Detail only: concept extraction switch, confidence threshold and run limit.
     concept_extraction: bool | None = None

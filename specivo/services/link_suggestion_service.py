@@ -12,8 +12,14 @@ Suggestions
 -----------
 :func:`compute_for_project` (the sweep) and :func:`compute_for_items` (after a
 source was embedded again) store, per item, its ``SIMILAR_LINKS_TOP_K``
-nearest issues and as many nearest pages in the same project with the same model whose cosine
-similarity reaches the project's threshold. Pairs already linked by any stored
+nearest issues and as many nearest pages in the same project with the same
+model, ranked by cosine similarity, that pass the project's threshold. The
+threshold is checked on the *centred* cosine: both vectors minus the mean
+vector of the project. Every document vector shares a large common direction,
+so two unrelated items of one project already score close to 0.9 raw, while
+centred they score about 0 and pairs people link about 0.3. The stored score
+stays the raw cosine. A project with fewer than ``SIMILAR_LINKS_MIN_ITEMS``
+vectors gets none: its mean is mostly its own items. Pairs already linked by any stored
 or structured edge (a text link, a typed link, a relation, parent and child)
 and pairs someone accepted or dismissed are skipped, so a dismissed pair never
 comes back for that model. The neighbour search is exact (no vector index):
@@ -55,6 +61,7 @@ from specivo.core.constants import (
     SIMILAR_LINKS_CANDIDATE_MARGIN,
     SIMILAR_LINKS_DEFAULT_THRESHOLD,
     SIMILAR_LINKS_MAX_THRESHOLD,
+    SIMILAR_LINKS_MIN_ITEMS,
     SIMILAR_LINKS_MIN_THRESHOLD,
     SIMILAR_LINKS_TOP_K,
 )
@@ -85,7 +92,7 @@ logger = logging.getLogger(__name__)
 Item = tuple[str, int]
 Pair = tuple[Item, Item]
 
-#: Project settings key: the cosine similarity a suggestion needs in this project.
+#: Project settings key: the centred cosine similarity a suggestion needs in this project.
 THRESHOLD_SETTING = "similar_links_threshold"
 
 #: First key of the two-key advisory lock taken per project while its suggestions are computed.
@@ -100,7 +107,7 @@ OPS = (OP_ACCEPT, OP_DISMISS)
 
 
 def similarity_threshold(settings: dict[str, Any] | None) -> float:
-    """The cosine similarity a suggestion needs in a project with these *settings*."""
+    """The centred cosine similarity a suggestion needs in a project with these *settings*."""
     raw = (settings or {}).get(THRESHOLD_SETTING)
     if isinstance(raw, bool) or not isinstance(raw, int | float):
         return SIMILAR_LINKS_DEFAULT_THRESHOLD
@@ -346,16 +353,39 @@ async def _decided_pairs(
 # Computing suggestions
 # ---------------------------------------------------------------------------
 
+#: The centred cosine similarity of vectors *a* and *b* around the mean vector *m* (SQL, pgvector).
+CENTRED_COSINE_SQL = "1 - (({a} - {m}) <=> ({b} - {m}))"
+
+
+def passes_threshold(centred: float, threshold: float) -> bool:
+    """Whether a pair with this centred cosine may be suggested (``NaN``, from a vector equal to the mean, may not)."""
+    return centred >= threshold
+
+
 # For each item of the scope, its nearest issues and, apart, its nearest pages
-# in its own (current) project, with the same model. Exact: no vector index.
+# in its own (current) project, with the same model, ranked by raw cosine;
+# each with its centred cosine around the project's mean vector, which the
+# threshold is checked on. Projects with too few vectors are left out. Exact: no vector index.
 _NEIGHBOURS_SQL = """
+WITH centre AS (
+    SELECT ss.project_id, avg(ev.vector) AS m
+    FROM entity_vectors ev
+    JOIN search_sources ss ON ss.id = ev.search_source_id
+    WHERE ev.model_id = :model_id
+      AND ss.source_type IN ('issue', 'wiki_page')
+      AND ss.project_id IN (SELECT ss1.project_id FROM search_sources ss1 WHERE {scope})
+    GROUP BY ss.project_id
+    HAVING count(*) >= :min_items
+)
 SELECT ss1.source_type AS item_type, ss1.entity_id AS item_id, ss1.project_id AS project_id,
-       nb.source_type AS other_type, nb.entity_id AS other_id, nb.score AS score
+       nb.source_type AS other_type, nb.entity_id AS other_id, nb.score AS score, nb.centred AS centred
 FROM entity_vectors ev1
 JOIN search_sources ss1 ON ss1.id = ev1.search_source_id
+JOIN centre c ON c.project_id = ss1.project_id
 CROSS JOIN (VALUES ('issue'), ('wiki_page')) AS kind(other_type)
 CROSS JOIN LATERAL (
-    SELECT ss2.source_type, ss2.entity_id, 1 - (ev2.vector <=> ev1.vector) AS score
+    SELECT ss2.source_type, ss2.entity_id, 1 - (ev2.vector <=> ev1.vector) AS score,
+           {centred} AS centred
     FROM entity_vectors ev2
     JOIN search_sources ss2 ON ss2.id = ev2.search_source_id
     WHERE ev2.model_id = ev1.model_id
@@ -377,7 +407,8 @@ class _Neighbour:
     item: Item
     project_id: int
     other: Item
-    score: float
+    score: float  # raw cosine: the order, and the stored score
+    centred: float  # cosine around the project's mean vector: the threshold is checked on it
 
 
 async def _neighbours(
@@ -386,6 +417,7 @@ async def _neighbours(
     params: dict[str, Any] = {
         "model_id": model_id,
         "candidates": SIMILAR_LINKS_TOP_K + SIMILAR_LINKS_CANDIDATE_MARGIN,
+        "min_items": SIMILAR_LINKS_MIN_ITEMS,
     }
     if project_id is not None:
         scope = "ss1.project_id = :project_id"
@@ -401,9 +433,11 @@ async def _neighbours(
         )
         params["issue_ids"] = issue_ids
         params["page_ids"] = page_ids
-    rows = await session.execute(text(_NEIGHBOURS_SQL.format(scope=scope)), params)
+    centred = CENTRED_COSINE_SQL.format(a="ev2.vector", b="ev1.vector", m="c.m")
+    rows = await session.execute(text(_NEIGHBOURS_SQL.format(scope=scope, centred=centred)), params)
     return [
-        _Neighbour((r.item_type, r.item_id), r.project_id, (r.other_type, r.other_id), float(r.score)) for r in rows
+        _Neighbour((r.item_type, r.item_id), r.project_id, (r.other_type, r.other_id), float(r.score), float(r.centred))
+        for r in rows
     ]
 
 
@@ -420,13 +454,17 @@ async def _lock_project(session: AsyncSession, project_id: int) -> None:
 
 
 def _pick(neighbours: list[_Neighbour], thresholds: dict[int, float], skip: set[Pair]) -> dict[Pair, tuple[float, int]]:
-    """The top-k admissible issues and top-k pages of each item, as ``pair -> (score, project id)``."""
+    """The top-k admissible issues and top-k pages of each item, as ``pair -> (score, project id)``.
+
+    *neighbours* come best raw score first; a neighbour is admissible when its
+    centred score passes the project's threshold and the pair is not in *skip*.
+    """
     chosen: dict[Pair, tuple[float, int]] = {}
     taken: dict[tuple[Item, str], int] = defaultdict(int)
     for nb in neighbours:
         if taken[(nb.item, nb.other[0])] >= SIMILAR_LINKS_TOP_K:
             continue
-        if nb.score < thresholds.get(nb.project_id, SIMILAR_LINKS_DEFAULT_THRESHOLD):
+        if not passes_threshold(nb.centred, thresholds.get(nb.project_id, SIMILAR_LINKS_DEFAULT_THRESHOLD)):
             continue
         pair = pair_key(nb.item, nb.other)
         if pair in skip:

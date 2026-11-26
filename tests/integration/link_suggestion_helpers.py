@@ -1,9 +1,14 @@
 """Shared setup for the suggested links tests: a mock default model and hand-made chunk embeddings.
 
 Not a test module. Builds on ``link_graph_helpers`` (two projects, an admin and
-a reader). Embeddings are written by hand with 4-dimensional vectors, so a
-test chooses exactly how close two items are; 4 dimensions also keep the rows
-out of the 384-dimension vector index other tests share.
+a reader). Embeddings are written by hand, so a test chooses exactly how close
+two items are. Tests write 4-dimensional vectors; :func:`embed` pads them with
+zeros to ``DIM`` dimensions (which changes no cosine), and :func:`fill` gives a
+project the ``SIMILAR_LINKS_MIN_ITEMS`` unrelated items a project needs before
+it gets suggestions, each on a dimension of its own past the first four. So
+the project's mean vector sits away from the test's items, and their centred
+scores stay close to their raw ones. ``DIM`` also keeps the rows out of the
+384-dimension vector index other tests share.
 """
 
 from __future__ import annotations
@@ -14,9 +19,15 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.constants import SIMILAR_LINKS_MIN_ITEMS
 from specivo.models.issue import Issue
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.models.wiki import WikiPage
+
+#: Dimensions of every hand-made embedding: the test's four, then one per filler, then spare ones.
+DIM = 32
+#: First dimension the fillers of :func:`fill` use.
+FILLER_DIM = 4
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +47,7 @@ async def default_model(db: AsyncSession, name: str) -> EmbeddingModel:
     for other in (await db.execute(select(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)))).scalars():
         other.is_default = False
     await db.flush()
-    model = EmbeddingModel(name=name, provider="mock", model_name=f"{name}-4", dimensions=4, is_default=True)
+    model = EmbeddingModel(name=name, provider="mock", model_name=f"{name}-{DIM}", dimensions=DIM, is_default=True)
     db.add(model)
     await db.commit()
     return model
@@ -53,6 +64,33 @@ def unit(*values: float) -> list[float]:
 
 def cos(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(unit(*a), unit(*b), strict=True))
+
+
+def padded(vector: list[float]) -> list[float]:
+    """*vector* with zeros up to ``DIM`` dimensions."""
+    assert len(vector) <= DIM
+    return [*vector, *([0.0] * (DIM - len(vector)))]
+
+
+def one_hot(dim: int) -> list[float]:
+    return [1.0 if i == dim else 0.0 for i in range(DIM)]
+
+
+async def fill(db: AsyncSession, world, model: EmbeddingModel, project, count: int = SIMILAR_LINKS_MIN_ITEMS) -> list:
+    """Add *count* unrelated issues to *project*, each embedded on a dimension of its own past the first four.
+
+    Enough of them lets the project get suggestions at all; being orthogonal to
+    every test vector and to each other, they are never suggested themselves.
+    """
+    from tests.integration.link_graph_helpers import issue
+
+    assert FILLER_DIM + count <= DIM
+    fillers = []
+    for n in range(count):
+        filler = await issue(db, world, project, f"Unrelated filler {n}")
+        await embed(db, model, filler, one_hot(FILLER_DIM + n))
+        fillers.append(filler)
+    return fillers
 
 
 async def embed(db: AsyncSession, model: EmbeddingModel, item: Issue | WikiPage, *vectors: list[float]) -> None:
@@ -76,7 +114,7 @@ async def embed(db: AsyncSession, model: EmbeddingModel, item: Issue | WikiPage,
         await db.flush()
         chunks.append(chunk)
     for chunk, vector in zip(chunks, vectors, strict=False):
-        db.add(ChunkEmbedding(chunk_id=chunk.id, model_id=model.id, embedding=vector))
+        db.add(ChunkEmbedding(chunk_id=chunk.id, model_id=model.id, embedding=padded(vector)))
     await db.commit()
 
 
