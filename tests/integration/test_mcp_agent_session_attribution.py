@@ -730,18 +730,20 @@ async def test_timeline_receiver_and_ingest_follow_each_client_session(
     assert await svc.issue_for_external(db_session, agent.id, "sess_a") == issue_id
     assert await svc.issue_for_external(db_session, agent.id, "sess_b") == second_id
 
-    # Receiver: a webhook event of sess_b joins sess_b's issue, not the connection's first one.
+    # Receiver: a webhook event of sess_b joins sess_b's open session (one session per client
+    # conversation), so it lands on sess_b's issue, not the connection's first one.
     hook = await svc.open_webhook_session(db_session, agent, "sess_b", receiver_id=None)
+    assert hook.id == b.id
     assert hook.issue_id == second_id
 
-    # Timeline: the second issue shows sess_b's MCP row and its webhook half as one node, without sess_a.
+    # Timeline: the second issue shows sess_b as one node, without sess_a.
     project = (await db_session.execute(select(Project).where(Project.key == "MSAPRJ"))).scalar_one()
     second = await db_session.get(Issue, second_id)
     assert second is not None
     blocks = await AgentTimelineService().sessions_for_issue(db_session, agent, project, second)
     session_ids = {sid for block in blocks for sid in block.session_ids}
-    assert {b.id, hook.id} <= session_ids
+    assert b.id in session_ids
     assert a.id not in session_ids
     nodes = [node for block in blocks for node in block.nodes if node.key == node_key(b)]
     assert len(nodes) == 1
-    assert sorted(nodes[0].ids) == sorted([b.id, hook.id])
+    assert nodes[0].ids == [b.id]
