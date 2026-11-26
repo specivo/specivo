@@ -40,7 +40,7 @@ def test_connect_repository_then_receive_ping(
     expect(admin_page.get_by_text("No repositories connected")).to_be_visible()
 
     admin_page.get_by_role("button", name="Connect a repository").first.click()
-    admin_page.get_by_label("Provider").select_option("github")
+    admin_page.get_by_test_id("repository-provider").select_option("github")
     admin_page.get_by_label("Repository", exact=True).fill(_REPO)
     admin_page.get_by_label("Repository URL").fill(f"https://github.example.com/{_REPO}")
     admin_page.get_by_test_id("repository-save").click()
