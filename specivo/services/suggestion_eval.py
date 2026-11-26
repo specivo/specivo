@@ -6,8 +6,9 @@ search with the issue's subject as the query:
 
 - ``chunk_mean``: the cosine similarity of document vectors (the mean of an
   item's chunk embeddings, L2-normalised), as suggestions are stored;
-- ``chunk_mean_threshold``: the same, keeping only scores that reach the
-  project's threshold, i.e. what could actually be suggested;
+- ``chunk_mean_threshold``: the same, keeping only the pairs whose centred
+  score passes the project's threshold (and nothing in a project with too
+  few vectors), as the suggestions are gated, i.e. what could actually be suggested;
 - ``best_chunk``: the best cosine similarity between any chunk of the issue
   and any chunk of the other item;
 - ``search``: ``SearchService.hybrid_search`` with the issue subject, the
@@ -190,9 +191,11 @@ WITH vec AS (
     JOIN chunk_embeddings ce ON ce.chunk_id = sc.id AND ce.model_id = :model_id
     WHERE ss.project_id = :project_id AND ss.source_type IN ('issue', 'wiki_page')
     GROUP BY ss.source_type, ss.entity_id
-)
-SELECT o.source_type, o.entity_id, 1 - (o.v <=> s.v) AS score
+),
+centre AS (SELECT avg(v) AS m, count(*) AS n FROM vec)
+SELECT o.source_type, o.entity_id, 1 - (o.v <=> s.v) AS score, {centred} AS centred, centre.n AS n
 FROM vec s
+CROSS JOIN centre
 JOIN vec o ON NOT (o.source_type = s.source_type AND o.entity_id = s.entity_id)
 WHERE s.source_type = 'issue' AND s.entity_id = :issue_id AND o.source_type = ANY(:types)
 ORDER BY o.v <=> s.v
@@ -221,18 +224,37 @@ LIMIT :n
 """
 
 
+def _chunk_mean_sql() -> str:
+    from specivo.services.link_suggestion_service import CENTRED_COSINE_SQL
+
+    return _CHUNK_MEAN_SQL.format(centred=CENTRED_COSINE_SQL.format(a="o.v", b="s.v", m="centre.m"))
+
+
 def _types(scope: str) -> list[str]:
     return ["issue", "wiki_page"] if scope == "all" else ["wiki_page"]
 
 
 async def _ranked(
     session: AsyncSession, sql: str, model_id: int, project_id: int, issue_id: int, scope: str, n: int
-) -> list[tuple[Item, float]]:
+) -> list[Any]:
+    """Rows of a ranking: ``source_type``, ``entity_id``, ``score`` (and ``centred``, ``n`` for the chunk mean)."""
     rows = await session.execute(
         text(sql),
         {"model_id": model_id, "project_id": project_id, "issue_id": issue_id, "types": _types(scope), "n": n},
     )
-    return [((r.source_type, r.entity_id), float(r.score)) for r in rows]
+    return list(rows)
+
+
+def _gated(rows: list[Any], threshold: float) -> list[Item]:
+    """The chunk mean ranking as suggestions gate it: centred score and the project's size."""
+    from specivo.core.constants import SIMILAR_LINKS_MIN_ITEMS
+    from specivo.services.link_suggestion_service import passes_threshold
+
+    return [
+        (r.source_type, r.entity_id)
+        for r in rows
+        if r.n >= SIMILAR_LINKS_MIN_ITEMS and passes_threshold(float(r.centred), threshold)
+    ]
 
 
 async def _search_ranked(
@@ -308,13 +330,13 @@ async def evaluate(
         )
 
         for scope in SCOPES:
-            mean = await _ranked(session, _CHUNK_MEAN_SQL, model_id, issue.project_id, issue.id, scope, n)
+            mean = await _ranked(session, _chunk_mean_sql(), model_id, issue.project_id, issue.id, scope, n)
             best = await _ranked(session, _BEST_CHUNK_SQL, model_id, issue.project_id, issue.id, scope, n)
             search = await _search_ranked(session, user, issue.subject, issue.project_id, issue.id, scope, n)
             rankings: dict[str, list[Item]] = {
-                "chunk_mean": [item for item, _ in mean],
-                "chunk_mean_threshold": [item for item, score in mean if score >= threshold],
-                "best_chunk": [item for item, _ in best],
+                "chunk_mean": [(r.source_type, r.entity_id) for r in mean],
+                "chunk_mean_threshold": _gated(mean, threshold),
+                "best_chunk": [(r.source_type, r.entity_id) for r in best],
                 "search": search,
             }
             result.top[scope] = {}

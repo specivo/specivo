@@ -187,9 +187,16 @@ Suggestions are listed in two groups, **Issues** and **Wiki pages**, each with i
 is marked with its type (a blue *Issue* or a green *Wiki page* label and edge) and shows the other
 item, the first lines of its text (the issue description or the page content) and a score from 0 to
 1, how close the two texts are. Each group lists at most ten, best first, and only items you can open
-yourself; a note under the group says how many less similar ones are not shown. A pair is suggested
-when its score reaches the project's threshold (0.80 unless changed, see below), at most ten issues
-and ten pages per item.
+yourself; a note under the group says how many less similar ones are not shown. At most ten issues
+and ten pages are suggested per item.
+
+Most items of one project already look alike to the embeddings: they share the project's vocabulary
+and the same kind of text, so even two unrelated items get a high score. A pair is therefore
+suggested only when the two items are clearly closer to each other than two typical items of the
+same project. Specivo checks this by comparing the two items after removing what all of the
+project's items have in common. The score shown is still the plain one. A project with fewer than
+10 issues and pages whose text has been embedded gets no suggestions, because there are too few
+items to tell what is typical.
 
 If you may link the two items, each suggestion has a **Link as** choice and two buttons:
 
@@ -206,11 +213,14 @@ Suggestions are recomputed when an issue or page is saved (once its text has bee
 every project each night. Pairs that are already linked (a written link, a typed link, a relation,
 parent and child) are never suggested.
 
-Project managers can change how close two items must be with the project setting
-`similar_links_threshold` (between 0.5 and 0.99) through the REST API
-(`PATCH /api/v1/projects/<KEY>/`); the next computation uses it. To
-compute the suggestions at once instead of waiting for the night, an administrator runs
-`python -m specivo.cli.similar_links` (or `--project ACME`) in the API container.
+Project managers can change how much closer than typical two items must be with the project setting
+`similar_links_threshold` through the REST API (`PATCH /api/v1/projects/<KEY>/`). It goes from 0 to
+0.95 and is 0.30 unless changed; a higher value means fewer, stronger suggestions. It is measured
+after the common part is removed, so it is not compared with the score shown on each row. The next
+computation uses it. To compute the suggestions at once instead of waiting for the night, an
+administrator runs `python -m specivo.cli.similar_links` (or `--project ACME`) in the API container.
+After an upgrade that changes how suggestions are chosen, the nightly computation brings every
+project up to date, or run that command to do it at once.
 
 ## What's next
 

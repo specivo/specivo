@@ -2,8 +2,10 @@
 them, and accepting or dismissing one (service level).
 
 - A document vector is the L2-normalised mean of an item's chunk embeddings.
-- Suggestions pair items of one project, with one model, at or above the
-  project's threshold, at most top-k per item; pairs linked in any way and
+- Suggestions pair items of one project, with one model, whose centred
+  score (around the project's mean vector) reaches the project's threshold,
+  at most top-k per item, best raw score first; the stored score is the raw
+  one. A project with too few vectors gets none. Pairs linked in any way and
   pairs already decided are never suggested.
 - The link graph returns them (kind ``similar``) only when asked, and only
   when the reader may see both ends.
@@ -31,6 +33,7 @@ from tests.integration.link_suggestion_helpers import (
     cos,
     default_model,
     embed,
+    fill,
     key,
     unit,
 )
@@ -53,8 +56,15 @@ async def world(db_session: AsyncSession) -> World:
 
 
 @pytest.fixture
-async def model(db_session: AsyncSession):
+async def bare_model(db_session: AsyncSession):
     return await default_model(db_session, "sgs-mock")
+
+
+@pytest.fixture
+async def model(db_session: AsyncSession, world: World, bare_model):
+    """The default model, with the unrelated fillers ``world.home`` needs to get suggestions at all."""
+    await fill(db_session, world, bare_model, world.home)
+    return bare_model
 
 
 async def _suggested(db: AsyncSession) -> set[frozenset]:
@@ -69,7 +79,8 @@ def _pair(a, b) -> frozenset:
 # -- vectors ------------------------------------------------------------------
 
 
-async def test_vector_is_the_normalised_mean_of_the_chunks(db_session, world, model):
+async def test_vector_is_the_normalised_mean_of_the_chunks(db_session, world, bare_model):
+    model = bare_model
     item = await issue(db_session, world, world.home, "Two chunks")
     await embed(db_session, model, item, [2.0, 0.0, 0.0, 0.0], [0.0, 2.0, 0.0, 0.0])
 
@@ -80,15 +91,16 @@ async def test_vector_is_the_normalised_mean_of_the_chunks(db_session, world, mo
         .join(SearchSource, SearchSource.id == EntityVector.search_source_id)
         .where(SearchSource.source_type == "issue", SearchSource.entity_id == item.id)
     )
-    assert [round(float(v), 4) for v in vector] == [0.7071, 0.7071, 0.0, 0.0]
+    assert [round(float(v), 4) for v in vector][:4] == [0.7071, 0.7071, 0.0, 0.0]
 
     # Nothing changed: nothing is reported, so no computation is queued.
     assert await svc.refresh_vectors(db_session, model.id, items=[key(item)]) == set()
 
 
-async def test_vector_goes_when_the_embeddings_go(db_session, world, model):
+async def test_vector_goes_when_the_embeddings_go(db_session, world, bare_model):
     from specivo.models.search import ChunkEmbedding
 
+    model = bare_model
     item = await issue(db_session, world, world.home, "Emptied")
     await embed(db_session, model, item, A)
     await svc.refresh_vectors(db_session, model.id, project_id=world.home.id)
@@ -127,7 +139,8 @@ async def test_threshold_is_per_project_and_top_k_caps_each_item(db_session, wor
     for item, vector in ((root, A), (near, NEAR_A), (also, ALSO_NEAR_A)):
         await embed(db_session, model, item, vector)
 
-    world.home.settings = {**(world.home.settings or {}), svc.THRESHOLD_SETTING: 0.93}
+    # Centred (around the project's mean), root ~ near is about 0.93, root ~ also 0.86, near ~ also 0.79.
+    world.home.settings = {**(world.home.settings or {}), svc.THRESHOLD_SETTING: 0.90}
     await db_session.commit()
     await svc.compute_for_project(db_session, world.home.id)
     assert await _suggested(db_session) == {_pair(root, near)}

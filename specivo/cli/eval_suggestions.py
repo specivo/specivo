@@ -9,7 +9,7 @@ The labelled file names issues and the wiki pages known to be right for each:
 or the same as JSON: ``{"ACME-12": ["wiki:ACME/runbook", "deploy-guide"]}``.
 
 For every issue it ranks the issue's neighbours by document vector (chunk
-mean, with and without the project's threshold) and by the best pair of
+mean, with and without the centred threshold suggestions use) and by the best pair of
 chunks, runs hybrid search with the issue's subject, and reports recall@k of
 each (over issues and pages, and over pages only), plus the pages the
 suggestions found that search missed. See ``specivo.services.suggestion_eval``.
