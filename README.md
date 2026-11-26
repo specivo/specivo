@@ -22,8 +22,8 @@ Your team uses Claude Code, Codex, Cursor and other AI tools every day, on perso
 seats and API keys. The invoice says how much. Specivo shows who spent it, and on which feature.
 
 - **Collected automatically.** The open-source [`ai-usage`](https://github.com/specivo/ai-usage-reporter)
-  reporter reads the local logs of Claude Code, Codex, Gemini CLI and OpenCode and sends only usage
-  numbers: never prompts, code or file contents.
+  reporter reads the local logs of Claude Code, Codex, Gemini CLI, OpenCode and Hermes Agent and
+  sends only usage numbers: never prompts, code or file contents.
 - **Every session tied to its issue.** Usage is attributed to the issue the agent worked on, from
   its own Specivo calls, commits, branch names or the repository. Long sessions are split per issue.
 - **Drill down.** From the company total to a project, a person, a feature and the sessions behind
@@ -38,6 +38,39 @@ seats and API keys. The invoice says how much. Specivo shows who spent it, and o
 
 More on [specivo.io/ai-usage](https://specivo.io/ai-usage/) and in the user guide:
 [Reporting AI usage](https://specivo.io/docs/specivo/ai-agents/reporting-ai-usage/) · [AI usage of a project, an issue and you](https://specivo.io/docs/specivo/projects/ai-usage/) · [AI spend reports](https://specivo.io/docs/specivo/projects/ai-spend-reports/).
+
+## Hermes Agent
+
+Specivo can be the issue tracker, wiki and cost ledger of
+[Hermes Agent](https://github.com/NousResearch/hermes-agent). The
+[Specivo plugin for Hermes](https://github.com/specivo/hermes-agent-specivo) connects the two:
+
+- **One setup command.** `hermes specivo setup` writes the Specivo MCP server and the signed event
+  webhook into Hermes's `config.yaml`, after showing the changes and backing up the file.
+  `hermes specivo doctor` checks the result.
+- **Every session on its issue.** Each Hermes session, its subagents included, becomes an agent
+  session in Specivo, linked to the issue it works on. The issue's **Agents** tab shows its sessions
+  with their tool calls, approvals and cost. Specivo keeps metadata only: tool names, status and
+  durations, never tool arguments or output.
+- **Issues as Kanban cards (optional).** Assign an issue to the agent's account and it becomes a
+  Hermes Kanban card. A claimed card moves the issue to In Progress, a completed card posts its
+  summary and resolves it, and a blocked card posts the reason.
+- **Memory (optional).** Hermes recalls matching issues and wiki pages before each turn and saves
+  notes worth keeping to the wiki.
+- **Cost.** The `ai-usage` reporter reads Hermes's own session store, so its spend appears per
+  issue, per person and per model next to your other AI tools. An agent's usage can be billed
+  through the person it works for.
+
+```bash
+hermes plugins install specivo/hermes-agent-specivo --ref <commit>
+hermes plugins enable specivo
+hermes specivo setup --url https://your-specivo-host --receiver-url <receiver URL> --project ACME
+```
+
+Setup steps: the [plugin README](https://github.com/specivo/hermes-agent-specivo#readme) and
+[Hermes Agent activity](https://specivo.io/docs/specivo/ai-agents/hermes-events/) in the user guide.
+Hermes Agent is a product of Nous Research; the plugin is not affiliated with or endorsed by Nous
+Research.
 
 ## The problem
 
@@ -77,7 +110,7 @@ Step-by-step self-hosting guide: [Self-host Specivo with Docker](https://specivo
 
 ## What's in it
 
-**AI usage and spend** — what each person, project and feature costs in AI, from Claude Code, Codex, Gemini CLI and OpenCode, with subscriptions, team seats and API keys, a drill-down from company to session, charts, CSV, REST API and MCP access. See [above](#ai-usage-and-spend-tracking).
+**AI usage and spend** — what each person, project and feature costs in AI, from Claude Code, Codex, Gemini CLI, OpenCode and Hermes Agent, with subscriptions, team seats and API keys, billing accounts that record who pays (the company or the employee), a drill-down from company to session, charts, CSV, REST API and MCP access. See [above](#ai-usage-and-spend-tracking).
 
 **Issues** — hierarchy up to 16 levels (nested set), workflow engine, time tracking, versions, relations (9 types), watchers, bulk operations, custom metadata schemas.
 
@@ -85,7 +118,9 @@ Step-by-step self-hosting guide: [Self-host Specivo with Docker](https://specivo
 
 **Hybrid search** — finds things by meaning, not just exact words: the "login flow" you wrote in January and the "auth sequence" you wrote in March turn up together, which keyword search alone cannot do. Full-text via PostgreSQL tsvector, semantic via pgvector embeddings, fused with Reciprocal Rank Fusion. Searches issues, wiki, comments, and attachments. Attachment descriptions are searchable: find that architecture diagram by what it shows, not its filename.
 
-**MCP server** — Model Context Protocol tools. Works with Claude Code, Codex, or anything that speaks MCP. Issues, wiki pages, comments, and attachment descriptions become searchable context that agents can pull and update — automatically or on user confirmation. One config line to connect. Ready-made agent instructions for Claude Code, Codex, and Cursor live in [**specivo-agent-skills**](https://github.com/specivo/specivo-agent-skills).
+**Link graph** — every link between issues, wiki pages, commits and pull requests, drawn as a graph on each issue, each page and the whole project. **Possibly related** suggests issues and pages whose content is close but that nobody has linked yet; accept one to turn it into a relation or a typed link. Optional **concept extraction** lets the project's own AI provider (a local model works too) find the features, systems and decisions your issues and pages talk about, and joins them in the graph. Agents can walk the same graph over MCP.
+
+**MCP server** — Model Context Protocol tools. Works with Claude Code, Codex, Hermes Agent, or anything that speaks MCP. Issues, wiki pages, comments, and attachment descriptions become searchable context that agents can pull and update — automatically or on user confirmation. One config line to connect. Tools come in toolsets (`?toolsets=core,planning`) with short descriptions and full help on request, so they take little room in the agent's prompt. Ready-made agent instructions for Claude Code, Codex, and Cursor live in [**specivo-agent-skills**](https://github.com/specivo/specivo-agent-skills).
 
 **Sprint management** — backlog, sprint planning, start/complete cycles. Issues move between sprints with full history preserved.
 
