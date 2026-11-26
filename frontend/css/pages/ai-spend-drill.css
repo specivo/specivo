@@ -96,6 +96,16 @@
 .sp-drill-kpi--spend .sp-aiu-amount { color: var(--sp-accent); }
 .sp-drill .sp-spend-totals { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); margin-bottom: var(--sp-space-md); }
 
+/* Who paid: the totals per payer */
+.sp-spend-payers { margin-bottom: var(--sp-space-md); }
+.sp-spend-payers-caption {
+  caption-side: top;
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--sp-font-size-sm);
+  padding-bottom: var(--sp-space-xs);
+}
+
 /* Group switch */
 .sp-drill-bar-row {
   display: flex;

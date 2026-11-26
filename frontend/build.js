@@ -51,6 +51,26 @@ const bundles = [
       ].join('\n'),
     },
   },
+  // The link graph view (issue Graph tab, wiki page Graph block, project
+  // Graph page), with ECharts' graph series tree-shaken in
+  // (lib/echarts-graph.js). Loaded only by the graph views: the project page
+  // from its chart_js block, the tab and the block on first opening
+  // (modules/link-graph-loader.js). Same ECharts banner as the spend charts.
+  {
+    type: 'js',
+    entryPoints: ['js/link-graph.js'],
+    outdir: jsOutdir,
+    outfile: path.join(jsOutdir, 'link-graph.min.js'),
+    banner: {
+      js: [
+        '/*! Apache ECharts | Copyright 2017-2026 The Apache Software Foundation |',
+        ' * Licensed under the Apache License, Version 2.0; this product includes software',
+        ' * developed at The Apache Software Foundation (https://www.apache.org/).',
+        ' * Parts derived from d3.js, Copyright 2010-2016 Mike Bostock (BSD-3-Clause).',
+        ' * Full texts: /static/vendor/LICENSES/ */',
+      ].join('\n'),
+    },
+  },
   {
     type: 'css',
     entryPoints: ['css/specivo.css'],

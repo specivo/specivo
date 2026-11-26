@@ -3,6 +3,46 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
+## [0.15.0] - 2026-11-26
+
+### Added
+- Added a link graph view: a Graph tab on issues, a Graph section on wiki pages and a project Graph page, with link-type filters, zoom buttons and a keyboard-readable item list
+- Added suggested links ("Possibly related") between issues and wiki pages whose content is close but not linked, with previews, accept (as a relation or a typed link) and dismiss in the web UI, REST and the `specivo_link_suggestion` MCP tool
+- Added the `similar_links_threshold` project setting (a pair must be clearly closer than two typical items of the project; projects with fewer than 10 embedded issues and pages get none) and `python -m specivo.cli.similar_links` to compute suggestions at once
+- Added optional concept extraction with the project's own OpenAI-compatible AI provider (local models work), shown as concept nodes in the link graph behind an off-by-default filter
+- Added AI billing accounts (gateways, company plans, personal subscriptions and keys) with the payer (employer or employee), resolved when usage arrives, with a project payer default and a manual override per entry
+- Added AI spend reports by payer, billing account and route, with an organization scope and reimbursable totals
+- Added company seat plans with dated members and per-seat fee shares
+- Added monthly AI reimbursement claims with an approval flow and CSV export
+- Added monthly AI spend budgets with threshold alerts per billing account and payer
+- Added "Works for" on agent service accounts, so an agent's AI usage is billed through the person it works for
+- Added the Hermes Agent integration: signed Hermes receivers (`/my/hermes-receivers/`) that turn Hermes sessions, tool calls, approvals and subagents into agent sessions; the plugin itself is a separate repository
+- Added an agent sessions page with a per-tool-call audit timeline, paged in place, and an Agents tab on the issue with steps, approvals and cost per session
+- Added external session ids, client type and parent session to agent sessions, and one agent session per client conversation on a shared MCP connection
+- Added agents' sessions and an "Assigned to agents" list to the dashboard, and an agent badge on assignees
+- Added an instance-wide Time Entries page with project, user and issue filters
+- Added MCP toolsets chosen per connection with `?toolsets=` (`core`, `planning`, `recurring`, `admin`, `ai-spend` or `all`)
+- Added read-only, destructive and idempotent hints to every MCP tool
+- Added an idempotency key and `started_at`/`ended_at` to `specivo_log_ai_usage`, and the parent session, unattended flag, agent profile, route and billing account fields to the AI usage contract
+- Added pricing of gateway and Nous usage through model-id spelling variants
+- Added guide pages for Hermes events and AI billing accounts, in English and Chinese
+
+### Changed
+- Changed an MCP connection to load only the `core` toolset unless its URL asks for more; add `?toolsets=all` to keep every tool
+- Changed MCP tools to short descriptions with the full help on request (`specivo_setup_guide(tool=...)`) and lean schemas without output schemas
+- Changed REST calls marked as background housekeeping to open no agent session
+
+### Fixed
+- Fixed the wiki trash never being purged; pages are now removed daily after `WIKI_TRASH_RETENTION_DAYS` (default 90)
+- Fixed the dashboard counting ended agent sessions as active
+- Fixed broken issue links and user ids in the time entry filters
+
+### Internal
+- Added migrations 0075 to 0091: agent session ids and audit, billing accounts, payer and route, Hermes receivers, reimbursement claims, seat plans, budgets, suggested links, concept extraction and works-for
+- Added the beat tasks `purge-wiki-trash` (daily), `check-ai-spend-budgets` (hourly), `sweep-similar-links` and `sweep-concept-extraction` (nightly), and the settings `HERMES_EVENT_RATE_LIMIT_PER_MINUTE` and `HERMES_EVENT_MAX_BODY_BYTES`
+- Added an MCP evaluation harness for full against short tool descriptions
+- Updated ESLint to 10.15.0 for the fixed minimatch (dev dependency)
+
 ## [0.14.0] - 2026-11-23
 
 ### Added

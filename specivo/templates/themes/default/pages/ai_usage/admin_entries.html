@@ -30,6 +30,12 @@
   {% if filters.version %} · {{ filters.version_label }}{% endif %}
   {% if filters.sprint %} · {{ filters.sprint_label }}{% endif %}
   {% if filters.cost_type %} · {{ filters.cost_type }}{% endif %}
+  {% if filters.attended == "unattended" %} · {% trans %}Unattended{% endtrans %}{% elif filters.attended %} · {% trans %}Attended{% endtrans %}{% endif %}
+  {% if filters.profile == "-" %} · {% trans %}No profile{% endtrans %}{% elif filters.profile %} · {{ filters.profile }}{% endif %}
+  {% if filters.payer == "employer" %} · {% trans %}Employer{% endtrans %}{% elif filters.payer == "employee" %} · {% trans %}Employee{% endtrans %}{% elif filters.payer %} · {% trans %}Unknown payer{% endtrans %}{% endif %}
+  {% if filters.billing_account %} · {{ filters.billing_account_label }}{% endif %}
+  {% if filters.route == "-" %} · {% trans %}No route{% endtrans %}{% elif filters.route %} · {{ filters.route }}{% endif %}
+  {% if filters.scope %} · {% trans %}Organization only{% endtrans %}{% endif %}
   · <a href="{{ base }}/admin/ai-spend/">{% trans %}Back to the report{% endtrans %}</a>
 </p>
 

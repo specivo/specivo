@@ -157,6 +157,9 @@ ENTITY_LINKS_MAX_PER_SOURCE = 500
 # Neighbours a link graph read returns by default, and at most.
 ENTITY_LINKS_DEFAULT_LIMIT = 50
 ENTITY_LINKS_MAX_LIMIT = 200
+# Edges a link graph read returns at most (more are cut, and the read says it was truncated),
+# so a densely linked project cannot send the browser thousands of edges to lay out.
+ENTITY_LINKS_MAX_EDGES = 1000
 # Neighbours of the first hop expanded when depth=2.
 ENTITY_LINKS_MAX_EXPANDED = 50
 # Linked items listed inline by specivo_show_issue / specivo_read_wiki per direction.
@@ -174,6 +177,49 @@ SEARCH_EXPAND_NEIGHBOURS = 10
 # Project settings graph_metadata_keys: how many keys at most, and how long each may be.
 GRAPH_METADATA_KEYS_MAX = 10
 GRAPH_METADATA_KEY_MAX_LENGTH = 64
+# Suggested links (``similar`` edges) from document vectors. Neighbours are ranked by raw cosine
+# similarity, but a pair is suggested only when its *centred* cosine (both vectors minus the mean
+# document vector of the project) reaches the project's threshold: two unrelated items of one project
+# score about 0.88 raw (every document vector shares the model's and the project's common direction)
+# but about 0 centred, while pairs people link score about 0.34 centred. The threshold is
+# settings["similar_links_threshold"] within the bounds below, a centred cosine. A project with fewer
+# than SIMILAR_LINKS_MIN_ITEMS vectors gets no suggestions: its mean is mostly its own items, which
+# makes centred scores meaningless. Also: the nearest issues, and as many nearest pages, kept per
+# item; the extra candidates read so that linked and dismissed pairs do not leave an item short; how
+# many are listed inline by show_issue / read_wiki; how many of each type ("Issues", "Wiki pages")
+# the web pages list; and the length of the plain-text preview each web row shows.
+SIMILAR_LINKS_TOP_K = 10
+SIMILAR_LINKS_DEFAULT_THRESHOLD = 0.30
+SIMILAR_LINKS_MIN_THRESHOLD = 0.0
+SIMILAR_LINKS_MAX_THRESHOLD = 0.95
+SIMILAR_LINKS_MIN_ITEMS = 10
+SIMILAR_LINKS_CANDIDATE_MARGIN = 20
+SIMILAR_LINKS_INLINE_LIMIT = 5
+SIMILAR_LINKS_WEB_LIMIT_PER_TYPE = 10
+SIMILAR_LINKS_PREVIEW_CHARS = 220
+# Concept extraction (``concept`` nodes, ``mentions`` edges) with the project's own AI provider:
+# the confidence a mention needs to be shown by default (below it, it is a suggestion; per project:
+# settings["concept_confidence_threshold"] within the bounds below), how many changed sources one run
+# sends to the model (settings["concept_extraction_run_limit"]), how much of a source is sent, the
+# answer size, how many concepts are kept per source and per project, and the request timeout.
+CONCEPT_DEFAULT_CONFIDENCE_THRESHOLD = 0.6
+CONCEPT_MIN_CONFIDENCE_THRESHOLD = 0.1
+CONCEPT_MAX_CONFIDENCE_THRESHOLD = 0.99
+CONCEPT_EXTRACTION_DEFAULT_RUN_LIMIT = 50
+CONCEPT_EXTRACTION_MAX_RUN_LIMIT = 500
+CONCEPT_EXTRACTION_MAX_INPUT_CHARS = 12_000
+CONCEPT_EXTRACTION_MAX_OUTPUT_TOKENS = 1_500
+CONCEPT_EXTRACTION_MAX_RESPONSE_BYTES = 256 * 1024
+CONCEPT_EXTRACTION_MAX_PER_SOURCE = 20
+CONCEPT_EXTRACTION_MAX_PER_PROJECT = 5_000
+CONCEPT_EXTRACTION_TIMEOUT_SECONDS = 120
+# Consecutive failed provider calls after which a run stops (the provider is down or refusing).
+CONCEPT_EXTRACTION_MAX_CONSECUTIVE_FAILURES = 3
+# Failed calls for the same content after which a source waits until its content changes.
+CONCEPT_EXTRACTION_MAX_SOURCE_FAILURES = 3
+# Wall-clock limit of one run (its lock lasts longer), and the pause between two manual runs of a project.
+CONCEPT_EXTRACTION_MAX_RUN_SECONDS = 5 * 3600
+CONCEPT_EXTRACTION_RUN_COOLDOWN_SECONDS = 600
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3

@@ -168,15 +168,74 @@ installation's first load runs in the database migration and is not audited. See
 | `ai_subscription_created` | the administrator | `subscription_id`, `target_user_id`, `target_login` (the person who holds it), `provider`, `plan_key`, `plan_name`, `tool_slugs`, `amount`, `currency`, `billing_period`, `starts_on`, `ends_on` |
 | `ai_subscription_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new`; a changed note shows only as `notes: {"changed": true}` |
 | `ai_subscription_deleted` | the administrator | the deleted subscription, as for `ai_subscription_created` |
+| `ai_subscription_member_added` | the administrator | a seat on a company seat plan: `subscription_id`, `plan_name`, `member_id`, `target_user_id`, `target_login` (the member), `starts_on`, `ends_on` |
+| `ai_subscription_member_updated` | the administrator | the same, plus `changes`: `starts_on` or `ends_on` with `old` and `new` |
+| `ai_subscription_member_removed` | the administrator | the removed seat, as for `ai_subscription_member_added` |
 | `ai_subscriptions_self_service_toggled` | the administrator | `enabled` |
-| `ai_subscriptions_changed` | the account whose key an agent used, over MCP (`specivo_ai_subscriptions` adding, updating, ending or deleting) | `tool: "ai_subscriptions"`, `source: "mcp"`, `op`, `subscription_ids`, `target_login` (whose subscriptions), and for a change the changed `fields` |
+| `ai_subscriptions_changed` | the account whose key an agent used, over MCP (`specivo_ai_subscriptions` adding, updating, ending or deleting, and the seat operations) | `tool: "ai_subscriptions"`, `source: "mcp"`, `op`, `subscription_ids`, `target_login` (whose subscriptions; none for a company plan), for a change the changed `fields`, and for a seat `member_id` |
 
-Only an administrator's change to **somebody else's** subscription is recorded as
-`ai_subscription_*`. People's changes to their own subscriptions, and an administrator's to their
+Only an administrator's change to **somebody else's** subscription, or to a company seat plan, is
+recorded as `ai_subscription_*`. A company plan's events have no `target_login` and add
+`seat_count`; every change to its seats is recorded. People's changes to their own subscriptions, and an administrator's to their
 own, are not, except that every change over MCP is `ai_subscriptions_changed`, like every agent
 tool call. Notes are
 never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 
+
+### AI billing accounts
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_billing_account_created` | the administrator | `account_id`, `slug`, `name`, `kind`, `owner` (`instance`, or the login of the person who owns it), `owner_user_id`, `payer`, `reimburse_share`, `route_patterns`, `tool_slugs`, `default_cost_type`, `is_active` |
+| `ai_billing_account_updated` | the administrator | the same, plus `changes`: each changed field with `old` and `new` |
+| `ai_billing_account_deactivated` | the administrator | as for `ai_billing_account_updated`, when the change switched the account off |
+| `ai_usage_payer_default_changed` | whoever changed the project setting | `project_key`, `old`, `new` (`employer`, `employee` or `none`), `entries` and `changed` (the usage entries looked at and changed) |
+| `ai_billing_accounts_changed` | the account whose key an agent used, over MCP (`specivo_ai_billing_accounts` creating, updating or switching off) | `tool: "ai_billing_accounts"`, `source: "mcp"`, `op`, `account_ids`, `owner`, and for an update the changed `fields` |
+
+Every change to a company account is recorded, and an administrator's change to **somebody else's**
+personal account. People's changes to their own accounts are not, except that every change over MCP
+is `ai_billing_accounts_changed`. When a change re-prices usage, `ai_usage_costs_recomputed` is
+written too. See [AI billing accounts](ai-billing-accounts.md).
+
+### Project AI providers
+
+| Event | Account | Details |
+|---|---|---|
+| `project_ai_provider_changed` | the administrator | `op` (`set` or `removed`), `project_key`; for `set` also `provider`, `model`, `host` (of the base URL) and `api_key` (`set`, `kept` or `removed`; the key itself is never recorded) |
+
+See [Concept extraction](../projects/index.md#concept-extraction-ai).
+
+### AI reimbursement claims
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_reimbursement_claim_submitted` | the person who made the claim | `claim_id`, `holder_user_id`, `holder_login`, `month` (`YYYY-MM`), `currency`, `total`, `entries`, `status_from`, `status_to` |
+| `ai_reimbursement_claim_withdrawn` | the person who made the claim | the same |
+| `ai_reimbursement_claim_approved` | the administrator | the same, plus `changed_entries`: entries edited, re-priced or removed since the claim was made |
+| `ai_reimbursement_claim_rejected` | the administrator | the same, plus `reason_given` (the reason itself is never copied into the log) |
+| `ai_reimbursement_claim_paid` | the administrator | the same |
+| `ai_reimbursement_claim_exported` | whoever downloaded the CSV | the same, plus `format` |
+| `ai_reimbursement_claims_changed` | the account whose key an agent used, over MCP (`specivo_ai_reimbursement_claims`) | `tool: "ai_reimbursement_claims"`, `source: "mcp"`, `op`, `claim_ids`, `holder` |
+
+These events are in the **AI usage** category, except `ai_reimbursement_claims_changed` (**Agents**).
+Making, refreshing and deleting a draft are not recorded. See
+[AI billing accounts](ai-billing-accounts.md#reimbursement-claims).
+
+### AI spend budgets
+
+| Event | Account | Details |
+|---|---|---|
+| `ai_spend_budget_created` | the person who set the budget | `budget_id`, `target` (`billing_account` or `payer`), `account_id`, `account_slug`, `owner` (`instance` or the owner's login), `payer`, `amount`, `currency`, `thresholds`, `is_active` |
+| `ai_spend_budget_updated` | the person who changed it | the same, plus `changes`: each changed field with `old` and `new` |
+| `ai_spend_budget_deleted` | the person who removed it | the same as `ai_spend_budget_created` |
+| `ai_spend_budget_alert_sent` | none (the hourly check) | the same, plus `month` (`YYYY-MM`), the `thresholds` reached, `spend` and `recipients` (how many people were emailed) |
+| `ai_spend_budgets_changed` | the account whose key an agent used, over MCP (`specivo_ai_spend_budgets`) | `tool: "ai_spend_budgets"`, `source: "mcp"`, `op`, `budget_ids`, `target` |
+
+Budgets on company accounts and payers are always recorded, and an administrator's change to
+**somebody else's** budget; people's changes to their own are not, except over MCP. The first three
+events are in the **Administration** category, `ai_spend_budget_alert_sent` in **AI usage** and
+`ai_spend_budgets_changed` in **Agents**. See
+[AI billing accounts](ai-billing-accounts.md#budgets-and-alerts).
 
 ### AI usage
 
@@ -184,6 +243,7 @@ never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 |---|---|---|
 | `ai_usage_logged_for_other` | the account that logged the usage | `entry_id`, `target_user_id`, `target_login` (whose usage it is), `source`, `tool`, `provider`, `model`, `usage_date`, `project_key`, `issue`, `reporter_api_key_id`; when a reporter sends new totals for an entry it already logged for that person, `status: "updated"` and `revision` too (a re-send with nothing new writes nothing) |
 | `ai_usage_updated_by_other` | the person who changed somebody else's entry | the same, plus `changes`: each changed field with `old` and `new`; a changed comment shows only as `comments: {"changed": true}` |
+| `ai_usage_billing_overridden` | whoever set or cleared the billing account of an entry by hand (their own entry or somebody else's) | the entry, as above, plus `override` (`set` or `cleared`), `changes` (each of `billing_method`, `billing_account_id`, `payer` and `cost_type` that changed, with `old` and `new`) and `billing_account` (the `old` and `new` account slugs). A change made together with other fields still writes `ai_usage_updated_by_other` for those fields |
 | `ai_usage_excluded`, `ai_usage_included` | whoever excluded the entry from reports, or included it again | the entry, as above |
 | `ai_usage_deleted` | whoever deleted the entry | the entry, plus its `tokens` and `cost_type` |
 | `ai_usage_logged`, `ai_usage_changed` | the agent account, over MCP (`specivo_log_ai_usage`; `specivo_ai_usage` updating, excluding or including an entry) | `tool: "log_ai_usage"` or `"ai_usage"`, `source: "mcp"`, and the `entry_id`; a logged entry adds `target_login`, `tool`, `model`, `usage_date`, `project_key` and `issue`, a change its `op` and the changed `fields` |
@@ -193,6 +253,19 @@ Usage people log for themselves through the web or the REST API is not recorded 
 always see their own entries. Over MCP, like every agent tool call, it is (`ai_usage_logged`). Comments
 are free text and never copied into the log, and no prompt, code or file name is ever stored with
 AI usage.
+### Agent sessions and Hermes receivers
+
+| Event | Who acted | Details |
+|---|---|---|
+| `agent_session_linked` | the agent account, over MCP (`specivo_agent_session` setting the client session ids or the working issue) | the session and, in the project of the issue, the issue; when the issue was cleared (`issue_ref=""`), `issue_cleared` holds the key it had. Clearing a session that has no issue writes nothing |
+| `member_change` with `action: "agent_works_for_changed"` | the administrator | `target_user_id`, `target_login` (the agent), `works_for_id` and `previous_works_for_id` |
+| `hermes_receiver_created`, `hermes_receiver_updated`, `hermes_receiver_deleted` | whoever managed the receiver | the receiver |
+| `hermes_event_rejected` | none (the sender is not signed in) | the reason the event was refused |
+| `agent_session_started`, `agent_session_ended` | the receiver's account | the session, from Hermes events |
+| `agent_tool_called`, `agent_approval_requested`, `agent_approval_resolved`, `agent_subagent_started`, `agent_subagent_stopped` | the receiver's account | the step: the tool name, status and the keys it named, never what was sent to a tool or what it returned |
+
+See [Hermes events](../ai-agents/hermes-events.md) and [Agent sessions](../ai-agents/capabilities.md#agent-sessions).
+
 ## Personal data
 
 The audit log holds personal data, readable by every instance administrator:

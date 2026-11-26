@@ -1,5 +1,5 @@
 ---
-description: AI subscriptions in Specivo — record the flat-rate AI plans people pay for (Claude Pro or Max, ChatGPT Plus or Pro, Cursor, Copilot, Google AI), in any currency, so AI usage counts as covered and spend reports can spread the fee.
+description: AI subscriptions in Specivo — record the flat-rate AI plans people pay for (Claude Pro or Max, ChatGPT Plus or Pro, Cursor, Copilot, Google AI) and the company's team plans with their seats, in any currency, so AI usage counts as covered and spend reports can spread the fee.
 ---
 
 # AI subscriptions
@@ -14,8 +14,11 @@ plans ("seats"). It is used for two things:
   [API prices](ai-model-prices.md), so you can compare what the seat costs with what the same usage
   would have cost per token.
 
-Subscriptions are personal: each one belongs to one person. Plans shared by a team are not
-supported yet.
+Subscriptions are personal: each one belongs to one person. A plan the company pays for and shares
+among several people, such as a Team or Enterprise plan, is a
+[company seat plan](#company-seat-plans). Each subscription is the fee schedule of a personal
+[billing account](ai-billing-accounts.md), created with it, which says who pays for the plan and
+what share of it the employer pays back; the **Billing account** column links to it.
 
 ## Who sees and changes them
 
@@ -93,6 +96,64 @@ Reports count a plan's fee per calendar month:
 Amounts stay in the plan's currency; reports convert them with the
 [exchange rates](exchange-rates.md).
 
+## Company seat plans
+
+A **company seat plan** is a Team or Enterprise plan the company pays for: a fee for a number of
+**seats**, each held by one person for a span of days. Administrators manage them under
+**Admin → Company AI plans**; every change, members included, is written to the
+[audit log](audit-log.md#ai-subscriptions).
+
+### Add a plan
+
+1. Open **Admin → Company AI plans**.
+2. Under **Add a company plan**, enter the plan name and provider, the **fee of the whole plan** per
+   month or year, the currency, the number of **seats** it pays for and the first day. Tick the tools
+   it covers, or none for the tools of its provider, as for a personal plan.
+3. Click **Add plan**. The plan's page opens.
+
+The fee may be **zero**, for a plan whose cost you book somewhere else but whose usage you still
+want to see as covered and paid by the company. A personal subscription's fee must be more than
+zero.
+
+Each plan gets a company [billing account](ai-billing-accounts.md) of kind **Subscription**, paid
+by the **employer**. Its payer cannot be changed to the employee.
+
+### Give people their seats
+
+On the plan's page, under **Seats**, enter a person's **login** and the **first day** of their seat
+(today by default), and click **Add seat**. A last day is optional.
+
+- **Someone leaves**: set the **last day** of their seat and click **End seat**. The months before
+  keep their share of the fee; reports of past months do not change.
+- **A seat entered by mistake**: click **Remove**. Its days lose the seat, as if it was never held.
+- A person holds at most one seat of a plan at a time, and on no day can more people hold a seat
+  than the plan has. Add seats to the plan first, or end someone's seat.
+
+When a seat is added, changed or removed, the person's AI usage from the first day it touches is
+resolved again, so usage reported before the seat was recorded is moved to the plan, or off it.
+
+### Which usage it covers
+
+A company plan covers its members' usage on the days they hold a seat, with the same rules as a
+personal plan: the tools it lists, or the tools of its provider. When a person holds a seat **and**
+has a plan of their own that covers the same usage, the **company plan is used first**. To send
+some usage to the person's own plan instead, the usage reporter can name that plan's billing
+account, or a person can set the billing of an entry by hand.
+
+### How the fee is shared
+
+The fee is split into **equal seats**: each member carries `fee ÷ seats` for each whole month they
+hold a seat, and the share of their days in a month they hold it only partly. For example, a
+750 USD plan with 25 seats costs 30 USD per member per month; a member who joins on 16 April (15 of
+April's 30 days) carries 15 USD in April.
+
+Each member's share is spread over **their own** usage of the plan in that month, like a personal
+plan's fee. A member's month without such usage, and the seats nobody held, are
+**unallocated seat cost**. Seats nobody held appear in the instance report on a row without a person.
+
+The company pays for the plan, so its usage is **employer** spend and its seat cost is **never
+reimbursable**.
+
 ## AI tools
 
 The tools that report AI usage are listed under **Admin → AI subscriptions → AI tools**. Specivo
@@ -127,6 +188,11 @@ The agent uses the `specivo_ai_subscriptions` tool:
 | `update` | Corrects one subscription. |
 | `end` | Sets the last day of one subscription, today by default. |
 | `delete` | Deletes one subscription. Prefer `end`: deleting removes the plan from past reports. |
+| `list`, `add` with `company=true` | Administrators: lists or adds company seat plans. Each period of `add` gives `seat_count`; the fee may be `"0"`. `update`, `end` and `delete` take a company plan's `subscription_id` too. |
+| `members` | Administrators: lists who holds a seat on a company plan (`subscription_id`). |
+| `add_member` | Administrators: gives a person (`user`, a login) a seat from `starts_on` (today by default), optionally to `ends_on`. |
+| `end_member` | Administrators: sets the last day of a seat (`member_id`, or `user`), today by default. |
+| `remove_member` | Administrators: removes a seat entered by mistake (`member_id`). Prefer `end_member`. |
 
 Register each invoice period as its own subscription, with the amount actually charged, tax
 included, in its currency, and a last day on every period that was followed by another. For
@@ -178,6 +244,8 @@ curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/js
 | `GET`, `POST /api/v1/my/ai-subscriptions/`; `GET`, `PATCH`, `DELETE /api/v1/my/ai-subscriptions/{id}/` | the person, for their own; writing needs self-service |
 | `GET`, `POST /api/v1/admin/ai-subscriptions/` (`?user_id=`, `?provider=`, `?active_on=`); `GET`, `PATCH`, `DELETE /api/v1/admin/ai-subscriptions/{id}/` | administrators |
 | `GET`, `PATCH /api/v1/admin/ai-subscriptions/settings/` (`{"self_service": false}`) | administrators |
+| `GET`, `POST /api/v1/admin/ai-company-plans/` (`?active_on=`); `GET`, `PATCH`, `DELETE /api/v1/admin/ai-company-plans/{id}/` | administrators |
+| `GET`, `POST /api/v1/admin/ai-company-plans/{id}/members/` (`{"login": "alice", "starts_on": "2026-11-01"}`); `PATCH`, `DELETE /api/v1/admin/ai-company-plans/{id}/members/{member_id}/` (`{"ends_on": "2027-01-31"}`) | administrators |
 | `GET`, `POST /api/v1/admin/ai-tools/`; `PATCH /api/v1/admin/ai-tools/{slug}/` | administrators |
 
 With a plan's `plan_key`, the fields you leave out take the plan's values; with `custom`, give

@@ -136,6 +136,57 @@ node in the project's link graph, so an AI agent can list everything in one comp
 [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph)). You can list
 up to 10 keys; leave the field empty for none. Only people who can manage the project see it.
 
+### Concept extraction (AI)
+
+A project can let an AI model read its issues and wiki pages and list the **concepts** they talk
+about: features, external systems, decisions and terms. Each concept becomes a node of the link
+graph, joined to every issue and page that mentions it, so an AI agent can ask "what mentions the
+billing gateway?" (see [Concepts](../ai-agents/capabilities.md#concepts)). It is off by default,
+and it uses the project's own AI provider: no content is sent anywhere unless you set one up.
+
+![The Concept extraction (AI) card](../../assets/img/project-settings-concepts.webp)
+
+The **Concept extraction (AI)** card on the **General** tab has:
+
+- **AI provider** (instance administrators only): the **Base URL** of an OpenAI-compatible API, the
+  **Model**, a **Provider name** used to price the usage, and an optional **API key**. A local
+  server such as Ollama, vLLM or LM Studio works too (for example `http://ollama:11434/v1`), so an
+  air-gapped install keeps everything on its own network. The project's content, private issues
+  included, is sent to this provider and to no other. The key is stored encrypted and is never
+  shown again; leave the field empty to keep it (it is dropped when the URL moves to another
+  server). Setting the provider needs an administrator signed in; an API key cannot change it.
+  **Remove AI provider** also switches the extraction off. Setting or removing a provider is
+  recorded in the audit log. Project managers see only the provider's server, not the full URL.
+- **Extract concepts with this AI provider**: the switch. It needs a provider and the *Manage
+  project* permission. The nightly runs are logged as AI usage of whoever switched it on, as long
+  as they are active and may still manage the project; otherwise nothing runs until someone
+  switches it on again.
+- **Confidence threshold** (0.6 by default): the model says how sure it is of each mention. Mentions
+  below the threshold are shown only as suggestions.
+- **Issues and pages per run** (50 by default, at most 500).
+- **Run now** queues a run at once (at most once every 10 minutes per project); its usage is logged
+  in the name of whoever clicked it. Otherwise a run happens every night.
+
+Each run sends only the issues (subject and description, not comments) and wiki pages whose text
+changed since they were last sent, at most the first 12,000 characters of each, and at most the
+number per run you set; the rest waits for the next run. An issue or page whose calls failed three
+times is not sent again until its text changes. Every call is recorded as
+[AI usage](ai-usage.md) of the tool `specivo-concepts` on the project, so its cost shows in the
+[AI spend reports](ai-spend-reports.md). A concept keeps, for every mention, the passage of the text
+it was found in and the model's confidence.
+
+The model's answer is treated as data: it must be JSON of a fixed shape, names and passages are
+limited in length, and a mention whose passage is not copied word for word from the text is
+dropped. Instructions written in an issue or page are never followed.
+
+You see a concept only when you can open at least one issue or page that mentions it, so a concept
+found only in a private issue stays hidden from everyone who cannot see that issue. While the
+extraction is switched off, its concepts are hidden. Through the API: `PATCH /api/v1/projects/<KEY>/`
+with `concept_extraction`, `concept_confidence_threshold` and `concept_extraction_run_limit`;
+`GET /api/v1/projects/<KEY>/concept-extraction/` and `POST .../concept-extraction/run/`;
+`PUT`/`DELETE /api/v1/projects/<KEY>/ai-provider/` for administrators. An administrator can also run
+`python -m specivo.cli.extract_concepts --project ACME` in the API container.
+
 ### Reporting currency
 
 Money reports for a project, such as AI spend, are shown in the instance's reporting currency. To
@@ -144,6 +195,18 @@ use another one for this project, open the **General** tab of its settings, pick
 Only currencies an administrator has enabled are offered; see
 [Currencies and the reporting currency](../install/currencies.md). Changing it needs the *Manage
 project* permission and is recorded in the audit log.
+
+### Who pays for AI usage
+
+The **General** tab also has **Who pays for AI usage**: *The employer*, *The employee* or *Not
+set*. It decides the payer of [AI usage](ai-usage.md) logged on the project when no
+[billing account](../install/ai-billing-accounts.md) does, for example usage from a tool that
+reports no route and no account. Changing it updates the usage already logged that took the
+default; usage an account decided keeps its payer. Changing it needs the *Manage project*
+permission and is recorded in the [audit log](../install/audit-log.md#ai-billing-accounts). Through
+the API it is the project's `ai_usage_payer_default` (`employer`, `employee` or `none`).
+
+![The General tab with Who pays for AI usage](../../assets/img/project-settings-payer.webp)
 
 ### Public projects and search engines
 

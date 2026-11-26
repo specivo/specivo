@@ -248,19 +248,29 @@ def test_bad_snapshots_are_refused(document: dict) -> None:
         parse_snapshot(document)
 
 
-def test_history_periods_must_be_closed_and_not_overlap() -> None:
+def test_history_periods_must_not_overlap_and_only_the_last_may_be_open() -> None:
     item = {"provider": "testprov", "model": "alpha-1", "input": "4", "output": "20"}
     ok = parse_history(
         {
             "periods": [
                 {**item, "effective_from": "2026-01-01T00:00:00Z", "effective_to": "2026-06-01T00:00:00Z"},
                 {**item, "effective_from": "2026-06-01T00:00:00Z", "effective_to": "2026-09-01T00:00:00Z"},
+                {**item, "effective_from": "2026-09-01T00:00:00Z"},
             ]
         }
     )
-    assert len(ok) == 2
+    assert len(ok) == 3 and ok[-1].effective_to is None
+    with pytest.raises(SeedFormatError, match="overlap"):
+        parse_history(
+            {
+                "periods": [
+                    {**item, "effective_from": "2026-01-01T00:00:00Z"},
+                    {**item, "effective_from": "2026-06-01T00:00:00Z", "effective_to": "2026-09-01T00:00:00Z"},
+                ]
+            }
+        )
     with pytest.raises(SeedFormatError):
-        parse_history({"periods": [{**item, "effective_from": "2026-01-01T00:00:00Z"}]})
+        parse_history({"periods": [{**item, "effective_from": "2026-01-01T00:00:00Z", "effective_to": "soon"}]})
     with pytest.raises(SeedFormatError):
         parse_history(
             {"periods": [{**item, "effective_from": "2026-06-01T00:00:00Z", "effective_to": "2026-01-01T00:00:00Z"}]}
@@ -405,6 +415,62 @@ def test_history_periods_are_inserted_once() -> None:
     ]
     again = plan_seed(stored, _snapshot(_price()), [earlier])
     assert again.is_empty and again.unchanged == 2
+
+
+def test_an_open_history_period_is_inserted_once_from_its_start() -> None:
+    start = AS_OF + timedelta(days=17)
+    open_period = HistoryPeriod(
+        price=_price(model="beta-1", input="1", output="3"), effective_from=start, effective_to=None
+    )
+    plan = plan_seed([], _snapshot(), [open_period])
+    assert [(p.effective_from, p.effective_to, p.from_history) for p in plan.inserts] == [(start, None, True)]
+    # No backfill: usage before the period's start stays unpriced.
+    assert plan.backfills == []
+    stored = [_stored(open_period.price, 2, start)]
+    again = plan_seed(stored, _snapshot(), [open_period])
+    assert again.is_empty and again.unchanged == 1
+
+
+def test_ending_an_open_history_period_closes_it_and_opens_the_next() -> None:
+    start, change = AS_OF + timedelta(days=17), AS_OF + timedelta(days=60)
+    first = _price(model="beta-1", input="1", output="3")
+    stored = [_stored(first, 2, start)]
+    ended = HistoryPeriod(price=first, effective_from=start, effective_to=change)
+    following = HistoryPeriod(
+        price=_price(model="beta-1", input="2", output="6"), effective_from=change, effective_to=None
+    )
+    plan = plan_seed(stored, _snapshot(), [following, ended])
+    assert plan.closes == {2: change}
+    assert [(p.price.model, p.effective_from, p.effective_to) for p in plan.inserts] == [("beta-1", change, None)]
+    assert plan.skipped == []
+
+
+def test_an_open_history_period_of_a_snapshot_model_is_skipped() -> None:
+    clash = HistoryPeriod(price=_price(input="4"), effective_from=LATER, effective_to=None)
+    plan = plan_seed([], _snapshot(_price()), [clash])
+    assert [p.from_history for p in plan.inserts] == [False]
+    assert len(plan.skipped) == 1
+
+
+def test_the_committed_history_has_no_overlapping_periods_per_model() -> None:
+    periods = load_history()
+    by_model: dict[tuple[str, str], list] = {}
+    for period in periods:
+        by_model.setdefault((period.price.provider, period.price.model), []).append(period)
+    for items in by_model.values():
+        items.sort(key=lambda p: p.effective_from)
+        for before, after in zip(items, items[1:], strict=False):
+            assert before.effective_to is not None and after.effective_from >= before.effective_to
+
+
+def test_the_committed_history_carries_nous_prices_with_a_source() -> None:
+    nous = [p for p in load_history() if p.price.provider == "nous"]
+    assert nous, "the history file prices the Nous models"
+    for period in nous:
+        assert period.price.note and "https://" in period.price.note
+    hermes = next(p for p in nous if p.price.model == "hermes-4-405b")
+    assert hermes.effective_to is None
+    assert hermes.price.prices["input"] == Decimal("1") and hermes.price.prices["output"] == Decimal("3")
 
 
 def test_a_history_period_overlapping_a_seed_period_is_skipped() -> None:

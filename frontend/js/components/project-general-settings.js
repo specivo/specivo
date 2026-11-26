@@ -15,6 +15,7 @@ export function projectGeneralSettings(initial) {
             similarIssues: initial.similarIssues !== false,
             graphMetadataKeys: (initial.graphMetadataKeys || []).join(', '),
             reportingCurrency: initial.reportingCurrency || '',
+            payerDefault: initial.payerDefault || 'none',
             saving: false,
             message: '',
 
@@ -30,7 +31,8 @@ export function projectGeneralSettings(initial) {
                         graph_metadata_keys: this.graphMetadataKeys.split(',')
                             .map(function (k) { return k.trim(); })
                             .filter(function (k) { return k.length > 0; }),
-                        reporting_currency_code: this.reportingCurrency || null
+                        reporting_currency_code: this.reportingCurrency || null,
+                        ai_usage_payer_default: this.payerDefault || 'none'
                     };
                     var res = await spFetch('/api/v1/projects/' + this.projectKey + '/', {
                         method: 'PATCH',

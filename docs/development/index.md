@@ -11,6 +11,10 @@ is read on GitHub.
 - [Security scanning with Trivy](security-scanning.md) — what CI scans, how to
   run the same scans locally, and what to do when the release gate fails.
 
+- [MCP tool listing evaluation](../../scripts/mcp_eval/README.md) — the harness that compares a
+  model's work with the full and the short tool descriptions: the scenarios, what it records and how
+  to run it against a throwaway database.
+
 Related, elsewhere in the repo:
 
 - `docs/adr/` — architecture decision records. Read these first when a design

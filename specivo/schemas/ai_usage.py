@@ -7,11 +7,17 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from specivo.core.ai_usage import COMMENTS_MAX_LENGTH, MAX_REQUEST_COUNT, MAX_TOKENS_PER_CLASS
+from specivo.core.ai_usage import (
+    COMMENTS_MAX_LENGTH,
+    IDEMPOTENCY_KEY_MAX_LENGTH,
+    MAX_REQUEST_COUNT,
+    MAX_TOKENS_PER_CLASS,
+)
 from specivo.schemas.common import IdName, PaginatedResponse
 from specivo.schemas.money import MoneyIn, MoneyOut
 
 AiUsageCostType = Literal["subscription", "api", "local", "free", "unknown"]
+AiUsagePayer = Literal["employer", "employee"]
 
 _COUNT = Field(0, ge=0, le=MAX_TOKENS_PER_CLASS)
 
@@ -41,6 +47,11 @@ class AiUsageCreate(BaseModel):
     amount actually paid, if known; it is the spend only for ``cost_type``
     ``api``. Leave ``cost_type`` out to have it derived from the user's AI
     subscriptions (``subscription`` when one covers the tool, else ``unknown``).
+
+    With ``idempotency_key`` the entry is the bucket of that key for its user:
+    sending the key again replaces the bucket's totals (or changes nothing when
+    they are the same), so a client that retries after a timeout never counts
+    twice. The route answers 201 for a new bucket and 200 for a replay.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -76,8 +87,28 @@ class AiUsageCreate(BaseModel):
     )
     comments: str | None = Field(None, max_length=COMMENTS_MAX_LENGTH)
     external_session_id: str | None = Field(None, max_length=200)
+    parent_session_id: str | None = Field(
+        None,
+        max_length=200,
+        description="The client's parent session: a subagent's parent, a branch, a continuation after compression",
+    )
+    unattended: bool = Field(False, description="A run with nobody in the loop, such as a cron or scheduled job")
+    profile: str | None = Field(
+        None, max_length=100, examples=["research"], description="The agent profile or home the usage came from"
+    )
     git_branch: str | None = Field(None, max_length=255)
     repo_hint: str | None = Field(None, max_length=255)
+    idempotency_key: str | None = Field(
+        None,
+        min_length=1,
+        max_length=IDEMPOTENCY_KEY_MAX_LENGTH,
+        pattern=r"^[\x21-\x7e]+$",
+        examples=["9f2c4e1a7b..."],
+        description=(
+            "Names the bucket for its user, so a retry replaces the totals instead of adding them: printable "
+            "ASCII without spaces. Recommended: sha256 of 'v1|<tool>|<session_id>|<model>|<usage_date>'"
+        ),
+    )
 
 
 class AiUsageUpdate(BaseModel):
@@ -85,9 +116,17 @@ class AiUsageUpdate(BaseModel):
 
     ``project_key`` moves the entry (``null``: unassigned; its issue is
     dropped unless ``issue_id`` is sent too). Reporter and import entries only
-    take ``project_key``, ``issue_id`` and ``comments`` (422
-    ``ai_usage_field_locked`` otherwise). ``tokens`` changes only the classes
-    sent.
+    take ``project_key``, ``issue_id``, ``comments`` and the billing override
+    (422 ``ai_usage_field_locked`` otherwise). ``tokens`` changes only the
+    classes sent.
+
+    Billing override, on any entry: ``billing_account_id`` sets the billing
+    account the usage was paid through (one of the entry user's own accounts
+    or an instance account; its payer becomes the entry's), ``payer`` alone
+    sets who paid without an account. The override is kept when the reporter
+    sends the bucket again and when accounts change. Send both as ``null``
+    (or either alone as ``null``) to clear it and let the server resolve the
+    billing again.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -109,10 +148,26 @@ class AiUsageUpdate(BaseModel):
     external_session_id: str | None = Field(None, max_length=200)
     git_branch: str | None = Field(None, max_length=255)
     repo_hint: str | None = Field(None, max_length=255)
+    billing_account_id: int | None = Field(
+        None, description="Override: the billing account the usage was paid through (null clears the override)"
+    )
+    payer: AiUsagePayer | None = Field(
+        None, description="Override without an account: who paid (with an account it must be the account's payer)"
+    )
 
 
 class AiUsageUserOut(IdName):
     login: str
+
+
+class AiUsageBillingAccountRef(BaseModel):
+    """The billing account an entry was paid through."""
+
+    id: int
+    slug: str
+    name: str
+    kind: str
+    instance: bool = Field(description="A company account (no owner)")
 
 
 class AiUsageEntryOut(BaseModel):
@@ -151,6 +206,16 @@ class AiUsageEntryOut(BaseModel):
     total_tokens: int = Field(description="All tokens of the entry: every class of both buckets")
     cost_type: str
     subscription_id: int | None
+    payer: str = Field(description="Who paid: employer, employee or unknown")
+    billing_method: str = Field(
+        description=(
+            "What decided the billing: manual (a person's override), record, instance_route, personal_route, "
+            "subscription, project_default or none"
+        )
+    )
+    billing_account: AiUsageBillingAccountRef | None = Field(
+        description="The billing account, when there is one and the reader may see it"
+    )
     cost_basis: str = Field(description="calculated, reported, manual, unpriced or partial")
     marginal_cost: MoneyOut | None
     api_equivalent_cost: MoneyOut | None
@@ -158,6 +223,9 @@ class AiUsageEntryOut(BaseModel):
     price_id: int | None
     priced_at: datetime
     external_session_id: str | None
+    parent_session_id: str | None
+    unattended: bool = Field(description="A run with nobody in the loop (cron, scheduled)")
+    profile: str | None = Field(description="The agent profile or home the usage came from")
     git_branch: str | None
     repo_hint: str | None
     client_name: str | None
@@ -222,6 +290,9 @@ class AiUsageIngestInfoOut(BaseModel):
     tools: list[str] = Field(description="Slugs of the active AI tools; other valid slugs are accepted too")
     currencies: list[str] = Field(description="Currency codes accepted in reported_cost")
     issue_ref_sources: list[str] = Field(description="Values of attribution.issue_ref_source the server knows")
+    optional_fields: list[str] = Field(
+        description="Record properties added within v1 that the server accepts; send them only when listed"
+    )
 
 
 class AiUsageIngestProblemOut(BaseModel):
@@ -243,6 +314,8 @@ class AiUsageIngestRecordOut(BaseModel):
     entry_id: int | None
     revision: int | None
     attribution: AiUsageIngestAttributionOut | None
+    payer: str | None = Field(None, description="Who pays for the stored entry: employer, employee or unknown")
+    billing_account: str | None = Field(None, description="Slug of the billing account the entry was paid through")
     warnings: list[AiUsageIngestProblemOut]
     error: AiUsageIngestProblemOut | None
 

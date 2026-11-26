@@ -76,6 +76,33 @@
   {{ pagination(total, offset, limit, base ~ "/admin/ai-model-prices/", page_query) }}
 </div>
 
+<div class="card sp-card-pad sp-mb-md" id="probe" data-testid="probe-card">
+  <h3 class="sp-card-h3">{% trans %}Which price applies?{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}Enter a model as a tool reports it, for example openrouter/anthropic/claude-sonnet-4.6, to see the price a usage entry gets and by which spelling. Dots and dashes between digits and OpenRouter suffixes such as :free are tried too. Leave the instant empty for now (UTC).{% endtrans %}</p>
+  <form method="get" action="{{ base }}/admin/ai-model-prices/#probe" class="sp-mp-filters">
+    <input type="text" name="probe_model" class="form-input" value="{{ probe.form.model }}" placeholder="{{ _('Model') }}" aria-label="{{ _('Model') }}" required>
+    <input type="text" name="probe_provider" class="form-input" value="{{ probe.form.provider }}" placeholder="{{ _('Provider (optional)') }}" aria-label="{{ _('Provider (optional)') }}" list="mp-providers">
+    <input type="datetime-local" name="probe_at" class="form-input" value="{{ probe.form.at }}" step="1" aria-label="{{ _('Instant (UTC)') }}">
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Check{% endtrans %}</button>
+  </form>
+  {% if probe.ran %}
+  {% if probe.error %}
+  <p class="flash flash-error sp-mt-md" role="alert" data-testid="probe-error">{% trans %}Enter the instant as a date and time, for example 2026-11-06T09:30.{% endtrans %}</p>
+  {% else %}
+  <p class="sp-text-muted-xs sp-mt-md">{% trans model=probe.model, at=probe.at %}Looked up {{ model }} at {{ at }}.{% endtrans %} {% trans %}Spellings tried:{% endtrans %} {{ probe.variants | join(", ") }}</p>
+  {% if probe.price %}
+  <p data-testid="probe-result" data-price-id="{{ probe.price.id }}">
+    {% if probe.matched_by == "model" %}{% trans %}Priced by its own name:{% endtrans %}{% elif probe.matched_by == "alias" %}{% trans %}Priced by an alias:{% endtrans %}{% else %}{% trans %}Priced by a spelling variant:{% endtrans %}{% endif %}
+    <a href="{{ base }}/admin/ai-model-prices/model/?{{ probe.price.history_query }}"><span class="sp-text-muted-xs">{{ probe.price.provider }}/</span>{{ probe.price.model }}</a>
+    ({{ source_label(probe.price.source) }}, {{ probe.price.from }} &rarr; {{ probe.price.to or _('open') }})
+  </p>
+  {% else %}
+  <p data-testid="probe-unpriced">{% trans %}Unpriced: no active price of any of these spellings is valid at that instant.{% endtrans %}</p>
+  {% endif %}
+  {% endif %}
+  {% endif %}
+</div>
+
 <div class="sp-mp-grid">
   <div class="card sp-card-pad" id="new-price" data-testid="new-price-card">
     <h3 class="sp-card-h3">{% trans %}Add a price{% endtrans %}</h3>

@@ -95,13 +95,10 @@ async def test_a_refusal_reaches_the_client_as_a_tool_error(
     monkeypatch.setattr(mcp_server_module, "authenticate_mcp_tool", authenticate)
 
     async with Client(mcp) as client:
-        refused = await client.call_tool(
-            "specivo_metadata", {"target_ref": "NOPE-1", "key": "commits", "op": "frobnicate"}
-        )
+        refused = await client.call_tool("specivo_metadata", {"target_ref": "NOPE-1", "key": "commits", "op": "get"})
         assert refused.is_error is True
         assert refused.content[0].text == (  # type: ignore[union-attr]
-            "Error executing tool specivo_metadata: invalid op 'frobnicate'. "
-            "Must be one of: append, delete, get, remove, set"
+            "Error executing tool specivo_metadata: issue 'NOPE-1' not found"
         )
         # The agent session the call opened was written before the refusal: rolled back with it.
         assert await _agent_sessions(db_engine, key_id) == 0

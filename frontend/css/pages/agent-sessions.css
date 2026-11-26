@@ -1,0 +1,69 @@
+/* Project > Agent sessions: the session list, a session's header and its tool-call timeline. */
+
+.sp-as-table td { vertical-align: top; }
+.sp-as-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-as-nowrap { white-space: nowrap; }
+.sp-as-account { font-weight: 500; color: var(--sp-text-primary); }
+.sp-as-id { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); overflow-wrap: anywhere; }
+
+.sp-as-state { display: inline-flex; align-items: center; gap: 6px; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-as-state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--sp-border); }
+.sp-as-state--active { color: var(--sp-success); }
+.sp-as-state--active::before { background: var(--sp-success); }
+
+.sp-as-header { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--sp-space-2xl); }
+.sp-as-header .sp-info-row { align-items: flex-start; gap: var(--sp-space-md); }
+.sp-as-header .sp-info-value { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+
+.sp-as-section-title { font-size: var(--sp-font-size-md); font-weight: 600; margin: var(--sp-space-2xl) 0 var(--sp-space-md); }
+.sp-as-lineage { list-style: none; margin: 0; padding: 0; }
+.sp-as-lineage li { padding: var(--sp-space-xs) 0; font-size: var(--sp-font-size-sm); }
+
+.sp-as-timeline .sp-table td { vertical-align: top; }
+.sp-as-event { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); }
+.sp-as-tool { font-weight: 600; color: var(--sp-text-primary); }
+.sp-as-details { display: flex; flex-wrap: wrap; gap: 4px; }
+.sp-as-detail { display: inline-flex; gap: 4px; padding: 1px 6px; border-radius: 4px; background: var(--sp-bg-page); font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }
+.sp-as-detail-key { color: var(--sp-text-muted); }
+.sp-as-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-space-md); padding: var(--sp-space-md) var(--sp-space-lg); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); }
+.sp-as-pager-links { display: flex; gap: var(--sp-space-sm); }
+.sp-as-empty { padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); }
+
+/* ADR-0005: secondary columns go at the 768px breakpoint, the header stacks. */
+@media (max-width: 768px) {
+  .sp-as-hide-md { display: none; }
+  .sp-as-header { grid-template-columns: 1fr; }
+}
+
+/* Issue > Agents tab: one block per agent session with its counters, cost, subagents and steps. */
+.sp-agent-tab { display: flex; flex-direction: column; gap: var(--sp-space-md); margin-top: var(--sp-space-md); }
+.sp-agent-tab-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--sp-space-sm); }
+.sp-agent-tab-title { font-size: var(--sp-font-size-md); font-weight: 600; margin: 0; }
+.sp-agent-block { padding: var(--sp-space-lg); display: flex; flex-direction: column; gap: var(--sp-space-md); min-width: 0; }
+.sp-agent-block .sp-as-timeline { margin: 0; box-shadow: none; }
+.sp-agent-block-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--sp-space-sm) var(--sp-space-lg); }
+.sp-agent-block-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-agent-block-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-base); font-weight: 600; margin: 0; }
+.sp-agent-block-client { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); overflow-wrap: anywhere; }
+.sp-agent-block-when { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.sp-agent-state--completed { color: var(--sp-text-secondary); }
+.sp-agent-state--completed::before { background: var(--sp-text-secondary); }
+.sp-agent-state--interrupted { color: var(--sp-warning); }
+.sp-agent-state--interrupted::before { background: var(--sp-warning); }
+.sp-agent-counters { display: flex; flex-wrap: wrap; gap: var(--sp-space-xs) var(--sp-space-lg); list-style: none; margin: 0; padding: 0; font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); }
+.sp-agent-counter-value { font-weight: 600; color: var(--sp-text-primary); font-variant-numeric: tabular-nums; }
+.sp-agent-cost { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-space-xs) var(--sp-space-md); padding: var(--sp-space-sm) var(--sp-space-md); border-radius: 6px; background: var(--sp-bg-page); }
+.sp-agent-cost-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.sp-agent-cost-value { font-weight: 600; color: var(--sp-text-primary); font-variant-numeric: tabular-nums; }
+.sp-agent-children { list-style: none; margin: 0; padding: 0 0 0 var(--sp-space-lg); border-left: 2px solid var(--sp-border); display: flex; flex-direction: column; gap: var(--sp-space-xs); }
+.sp-agent-child { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-xs) var(--sp-space-md); font-size: var(--sp-font-size-sm); }
+.sp-agent-block-foot { font-size: var(--sp-font-size-sm); }
+
+/* ADR-0005: at 768px and below the block header stacks. */
+@media (max-width: 768px) {
+  .sp-agent-block { padding: var(--sp-space-md); }
+  .sp-agent-block-head { flex-direction: column; }
+  .sp-agent-block-when { align-items: flex-start; text-align: left; }
+}
+.sp-as-pager-size { display: inline-flex; align-items: center; gap: var(--sp-space-xs); margin-left: var(--sp-space-sm); }
+.sp-as-pager-size select { padding: 2px var(--sp-space-sm); border: 1px solid var(--sp-border); border-radius: 6px; background: var(--sp-bg-input); color: var(--sp-text); font-size: var(--sp-font-size-sm); }

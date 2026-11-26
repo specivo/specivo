@@ -1,0 +1,107 @@
+{# Hermes event receivers of one account: list, create, rename/switch, rotate, delete.
+   Context: `receivers_api`, the JSON API base of the account's receivers
+   (/api/v1/my/hermes-receivers/ or /api/v1/admin/users/{id}/hermes-receivers/).
+   The token, secret and hooks.outbound block are answered once and shown once. #}
+<div class="card sp-hr-panel" data-testid="hermes-receivers"
+     x-data="hermesReceiverManager"
+     data-api="{{ receivers_api }}"
+     data-msg-create-failed="{{ _('Failed to create the receiver') }}"
+     data-msg-connect-failed="{{ _('Unable to connect. Please try again.') }}"
+     data-msg-confirm-delete="{{ _('Delete this receiver? Hermes events sent to it will be refused.') }}"
+     data-msg-confirm-rotate="{{ _('Rotate the secret? The current secret stops working at once.') }}"
+     data-msg-copied="{{ _('Copied!') }}"
+     data-msg-copy="{{ _('Copy') }}"
+     data-msg-creating="{{ _('Creating...') }}"
+     data-msg-create="{{ _('Create receiver') }}"
+     data-msg-active="{{ _('Active') }}"
+     data-msg-inactive="{{ _('Inactive') }}"
+     data-msg-deactivate="{{ _('Deactivate') }}"
+     data-msg-activate="{{ _('Activate') }}"
+     data-msg-never="{{ _('Never') }}">
+
+  <div class="sp-hr-head">
+    <h2 class="sp-hr-title">{% trans %}Hermes receivers{% endtrans %}</h2>
+  </div>
+  <p class="sp-hr-intro">
+    {% trans %}A receiver is where a Hermes Agent instance sends its activity: sessions, tool calls, approvals and subagents. Events are recorded as agent sessions of this account. Only metadata is kept, never tool arguments, results or commands. Cost is reported separately.{% endtrans %}
+  </p>
+
+  {# A new receiver, or a rotated secret: shown once #}
+  <template x-if="revealed">
+    <div class="flash flash-success sp-hr-reveal" data-testid="hermes-receiver-reveal">
+      <div class="sp-hr-reveal-body">
+        <strong x-show="revealed.url">{% trans %}Receiver created.{% endtrans %}</strong>
+        <strong x-show="!revealed.url">{% trans %}Secret rotated.{% endtrans %}</strong>
+        {% trans %}Copy these values now. They will not be shown again.{% endtrans %}
+        <template x-if="revealed.url">
+          <div>
+            <div class="sp-hr-reveal-label">{% trans %}URL{% endtrans %}</div>
+            <div class="sp-hr-reveal-row">
+              <code class="sp-hr-code" x-text="revealed.url"></code>
+              <button type="button" class="sp-btn-sm" @click="copy('url')" x-text="copiedField === 'url' ? msgCopied : msgCopy"></button>
+            </div>
+          </div>
+        </template>
+        <div class="sp-hr-reveal-label" x-text="revealed.secretEnv"></div>
+        <div class="sp-hr-reveal-row">
+          <code class="sp-hr-code" x-text="revealed.secret"></code>
+          <button type="button" class="sp-btn-sm" @click="copy('secret')" x-text="copiedField === 'secret' ? msgCopied : msgCopy"></button>
+        </div>
+        <template x-if="revealed.hooksConfig">
+          <div>
+            <div class="sp-hr-reveal-label">{% trans %}Add to the Hermes config.yaml, and set the secret in the Hermes environment:{% endtrans %}</div>
+            <div class="sp-hr-reveal-row">
+              <pre class="sp-hr-config" x-text="revealed.hooksConfig"></pre>
+              <button type="button" class="sp-btn-sm" @click="copy('hooksConfig')" x-text="copiedField === 'hooksConfig' ? msgCopied : msgCopy"></button>
+            </div>
+          </div>
+        </template>
+      </div>
+      <button type="button" class="sp-btn-sm sp-hr-dismiss" @click="dismiss()">{% trans %}Dismiss{% endtrans %}</button>
+    </div>
+  </template>
+
+  <form class="sp-form-row sp-hr-create" @submit.prevent="create()">
+    <div class="sp-form-field">
+      <label class="filter-label" for="hermes-receiver-name">{% trans %}Receiver name{% endtrans %}</label>
+      <input id="hermes-receiver-name" class="filter-input" type="text" maxlength="100" required
+             placeholder="{{ _('e.g. build host, default profile') }}" x-model="newName">
+    </div>
+    <button class="sp-btn sp-btn-primary" type="submit" :disabled="loading" x-text="loading ? msgCreating : msgCreate"></button>
+  </form>
+  <div x-show="error" class="sp-hr-error" role="alert" x-text="error"></div>
+
+  <div class="sp-table-scroll">
+  <table class="issue-table">
+    <thead>
+      <tr>
+        <th>{% trans %}Name{% endtrans %}</th>
+        <th>{% trans %}Created{% endtrans %}</th>
+        <th>{% trans %}Last event{% endtrans %}</th>
+        <th>{% trans %}Status{% endtrans %}</th>
+        <th>{% trans %}Actions{% endtrans %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-if="receivers.length === 0">
+        <tr><td colspan="5" class="sp-hr-empty">{% trans %}No receivers yet.{% endtrans %}</td></tr>
+      </template>
+      <template x-for="r in receivers" :key="r.id">
+        <tr data-testid="hermes-receiver-row">
+          <td class="sp-hr-name" x-text="r.name"></td>
+          <td class="sp-hr-muted" x-text="formatDate(r.created_at)"></td>
+          <td class="sp-hr-muted" x-text="r.last_event_at ? formatDate(r.last_event_at) : msgNever"></td>
+          <td><span class="badge-status" :class="r.is_active ? 'in-progress' : 'closed'" x-text="r.is_active ? msgActive : msgInactive"></span></td>
+          <td>
+            <div class="sp-hr-actions">
+              <button type="button" class="sp-btn-sm" @click="toggle(r)" x-text="r.is_active ? msgDeactivate : msgActivate"></button>
+              <button type="button" class="sp-btn-sm" @click="rotate(r)">{% trans %}Rotate secret{% endtrans %}</button>
+              <button type="button" class="sp-btn-sm danger" @click="remove(r)">{% trans %}Delete{% endtrans %}</button>
+            </div>
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  </div>
+</div>

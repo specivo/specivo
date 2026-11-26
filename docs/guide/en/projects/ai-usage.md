@@ -188,7 +188,28 @@ not change saved entries by themselves.
 
 **Edit** opens the same form. On entries logged by hand or through the API or MCP, everything can
 change. On entries sent by a **reporter** or an **import**, the tool, model, tokens and cost stay as
-reported and are shown read-only: you can change only the project, the issue and the comments.
+reported and are shown read-only: you can change only the project, the issue, the comments and the
+billing account.
+
+### Correct who paid
+
+The edit form shows who paid for the entry (**Paid by**) and the billing account it went through.
+Specivo works these out from the route, the [billing accounts](../install/ai-billing-accounts.md)
+and the project's payer default. When that is wrong, for example usage on a personal key that went
+through no gateway, choose the right account under **Billing account**:
+
+- a **company account**, or one of the entry's person's **personal accounts**: its payer becomes
+  the entry's;
+- **Paid by the employer** or **Paid by the employee**, with no account.
+
+Personal accounts are listed only for their owner and administrators, so a manager editing someone
+else's entry picks a company account or a payer. The account must be active. The cost type follows
+the account's default cost type unless the entry has its own.
+
+Your choice is marked **Set by hand**. It is kept when the reporter sends the entry again and when
+the billing accounts change. Choose **Automatic** to drop it: Specivo then works out the account and
+the payer again. Every change of the billing account is written to the
+[audit log](../install/audit-log.md#ai-usage).
 
 **Exclude** leaves an entry out of the totals and reports without deleting it, for example usage
 that was a test, or that someone else already counts. The entry stays in the list, marked
@@ -199,5 +220,5 @@ exclusion.
 by whoever may edit them; reported and imported entries only by administrators, since the reporter
 would send them again. Exclude them instead.
 
-Logging for someone else, editing someone else's entry, excluding, including and deleting are
-written to the [audit log](../install/audit-log.md).
+Logging for someone else, editing someone else's entry, setting or clearing the billing account,
+excluding, including and deleting are written to the [audit log](../install/audit-log.md).

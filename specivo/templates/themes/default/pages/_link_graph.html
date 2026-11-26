@@ -1,0 +1,130 @@
+{# The link graph view: the Graph tab of an issue, the Graph block of a wiki page and the project's Graph page.
+
+   link_graph(endpoint, scope, testid, opened) renders the controls, the drawing area and an item list; the
+   graph itself is drawn by link-graph.min.js (Apache ECharts), which only the graph views load. The data comes
+   from the link graph JSON (endpoint: /api/v1/issues/<ref>/links/, /api/v1/projects/<key>/wiki/<slug>/links/
+   or /api/v1/projects/<key>/links/); hub nodes are expanded through /api/v1/links/?ref=<hub>.
+
+   - scope: "item" (an issue or a page: two hops) or "project" (no root, one hop from the most linked items).
+   - opened: true when the graph is drawn on load (the project page); otherwise the tab or block that holds
+     it sets data-sp-graph-open when it is first opened (modules/link-graph-loader.js), which loads the bundle.
+
+   Every text the script shows is rendered here, translated, in data-msg-* attributes or <template>s: the
+   script never builds HTML from strings, and node titles only ever reach the page as text. #}
+{% macro link_graph(endpoint, scope="item", testid="link-graph", opened=false) %}
+{% set kinds = [
+  ("wiki_link", _("Wiki links"), true),
+  ("mention", _("Mentions"), true),
+  ("relation", _("Relations"), true),
+  ("parent,child", _("Parent and children"), true),
+  ("attachment_link", _("Links to files"), true),
+  ("typed_link", _("Accepted suggestions"), true),
+  ("attachment", _("Attachments"), true),
+  ("commit", _("Commits"), true),
+  ("pull_request", _("Pull requests"), true),
+  ("tagged", _("Tags"), false),
+  ("in_component,in_metadata", _("Components"), false),
+  ("targets_version", _("Versions"), false),
+  ("in_sprint", _("Sprints"), false),
+  ("assigned_to", _("Assignees"), false),
+  ("mentions", _("Concepts (AI)"), false),
+] %}
+{% set type_labels = {
+  "issue": _("Issue"),
+  "wiki_page": _("Wiki page"),
+  "attachment": _("Attachment"),
+  "commit": _("Commit"),
+  "pull_request": _("Pull request"),
+  "tag": _("Tag"),
+  "component": _("Component"),
+  "metadata": _("Metadata"),
+  "version": _("Version"),
+  "sprint": _("Sprint"),
+  "user": _("Assignee"),
+  "concept": _("Concept"),
+  "broken": _("Missing target"),
+} %}
+{% set kind_labels = {
+  "wiki_link": _("wiki link"),
+  "mention": _("mention"),
+  "attachment_link": _("link to a file"),
+  "relation": _("relation"),
+  "parent": _("parent"),
+  "child": _("child"),
+  "attachment": _("attachment"),
+  "commit": _("commit"),
+  "pull_request": _("pull request"),
+  "tagged": _("tag"),
+  "in_component": _("component"),
+  "in_metadata": _("metadata"),
+  "targets_version": _("version"),
+  "in_sprint": _("sprint"),
+  "assigned_to": _("assignee"),
+  "typed_link": _("accepted suggestion"),
+  "similar": _("suggested: similar content"),
+  "mentions": _("mentions concept"),
+} %}
+<div class="sp-graph"
+     data-sp-link-graph
+     data-testid="{{ testid }}"
+     data-endpoint="{{ endpoint }}"
+     data-expand-endpoint="{{ base }}/api/v1/links/"
+     data-scope="{{ scope }}"
+     data-sp-graph-src="{{ base }}/static/dist/js/{{ versioned['link-graph.min.js'] }}"
+     {% if opened %}data-sp-graph-open{% endif %}
+     data-type-labels='{{ type_labels | tojson }}'
+     data-kind-labels='{{ kind_labels | tojson }}'
+     data-msg-loading="{{ _('Loading the graph…') }}"
+     data-msg-error="{{ _('The graph could not be loaded.') }}"
+     data-msg-empty="{{ _('No links to show. Links appear here when issues, wiki pages and comments link to each other, or when issues are related.') if scope == 'project' else _('No links to show with these filters.') }}"
+     data-msg-truncated="{{ _('Not every link is shown: the graph stops at %(count)s items.') }}"
+     data-msg-cap="{{ _('The graph is full: open an item to explore from there.') }}"
+     data-msg-summary="{{ _('%(nodes)s items, %(edges)s links') }}"
+     data-msg-degree="{{ _('%(count)s items') }}"
+     data-msg-expand="{{ _('Show its items') }}"
+     data-msg-expanded="{{ _('Items shown') }}"
+     data-msg-open="{{ _('Open') }}"
+     data-msg-suggested="{{ _('Suggested, not a stored link') }}"
+     data-msg-hint-hub="{{ _('Click to show its items') }}"
+     data-msg-hint-open="{{ _('Click to open') }}">
+  <div class="sp-graph-controls">
+    <fieldset class="sp-graph-kinds">
+      <legend class="sp-graph-controls-label">{% trans %}Show links{% endtrans %}</legend>
+      {% for value, label, checked in kinds %}
+      {# A project graph leaves attachments out at first: every file would be a leaf of its own. #}
+      <label class="sp-graph-check"><input type="checkbox" value="{{ value }}" data-graph-kind{% if checked and not (scope == "project" and value == "attachment") %} checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+    </fieldset>
+    <label class="sp-graph-check sp-graph-suggest"><input type="checkbox" data-graph-suggestions data-testid="{{ testid }}-suggestions"> {% trans %}Show suggestions{% endtrans %}</label>
+  </div>
+
+  <p class="sp-graph-status" data-graph-status role="status" aria-live="polite">{% trans %}Loading the graph…{% endtrans %}</p>
+  <div class="sp-graph-stage">
+    <div class="sp-graph-canvas" data-graph-canvas role="img"
+         aria-label="{{ _('Link graph of the project. The list below the graph holds the same items.') if scope == 'project' else _('Link graph: this item and what it links to. The list below the graph holds the same items.') }}"></div>
+    <div class="sp-graph-zoom" role="group" aria-label="{{ _('Zoom') }}" data-testid="{{ testid }}-zoom">
+      <button type="button" class="sp-graph-zoom-btn" data-graph-zoom="in" title="{{ _('Zoom in') }}" aria-label="{{ _('Zoom in') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button type="button" class="sp-graph-zoom-btn" data-graph-zoom="out" title="{{ _('Zoom out') }}" aria-label="{{ _('Zoom out') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <button type="button" class="sp-graph-zoom-btn" data-graph-zoom="reset" title="{{ _('Reset the view') }}" aria-label="{{ _('Reset the view') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <ul class="sp-graph-legend" aria-label="{{ _('Legend') }}">
+    {% for type, label in [("issue", _("Issue")), ("wiki_page", _("Wiki page")), ("development", _("Commit or pull request")), ("attachment", _("Attachment")), ("hub", _("Tag, component, version, sprint or assignee")), ("broken", _("Missing target"))] %}
+    <li><span class="sp-graph-swatch sp-graph-swatch--{{ type }}" aria-hidden="true"></span>{{ label }}</li>
+    {% endfor %}
+    <li><span class="sp-graph-swatch sp-graph-swatch--suggested" aria-hidden="true"></span>{% trans %}Suggested link{% endtrans %}</li>
+  </ul>
+
+  <details class="sp-graph-list">
+    <summary>{% trans %}Items in this graph{% endtrans %} <span class="sp-graph-list-count" data-graph-count></span></summary>
+    <ul class="sp-graph-items" data-graph-items data-testid="{{ testid }}-items"></ul>
+  </details>
+</div>
+{% endmacro %}

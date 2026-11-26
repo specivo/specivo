@@ -15,8 +15,16 @@ from specivo.core.i18n import gettext as _
 from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.services.ai_spend_billing import (
+    NO_VALUE,
+    payer_text_value,
+    resolve_billing_account,
+    route_filter,
+    scope_text_value,
+)
 from specivo.services.ai_spend_planning import resolve_planning
 from specivo.services.ai_spend_report_service import (
+    ATTENDED_FILTERS,
     GROUP_BY,
     PERIODS,
     PRESETS,
@@ -24,6 +32,7 @@ from specivo.services.ai_spend_report_service import (
     SpendReport,
     default_range,
     normalize_filter_provider,
+    session_context_filters,
 )
 from specivo.services.ai_usage_chart_service import (
     BREAKDOWN_SHOWS,
@@ -59,6 +68,11 @@ DRILL_ORDER: tuple[str, ...] = (
     "provider",
     "cost_type",
     "branch",
+    "attended",
+    "profile",
+    "payer",
+    "billing_account",
+    "route",
 )
 FILTER_FIELD = {
     "project": "project",
@@ -71,6 +85,11 @@ FILTER_FIELD = {
     "provider": "provider",
     "cost_type": "cost_type",
     "branch": "branch",
+    "attended": "attended",
+    "profile": "profile",
+    "payer": "payer",
+    "billing_account": "billing_account",
+    "route": "route",
 }
 #: Where a click on a row of each grouping leads: the first of these not filtered yet, else the sessions.
 DRILL_NEXT: dict[str, tuple[str, ...]] = {
@@ -84,6 +103,11 @@ DRILL_NEXT: dict[str, tuple[str, ...]] = {
     "provider": ("model", "user", "issue"),
     "cost_type": ("user", "issue"),
     "branch": (),
+    "attended": ("user", "issue"),
+    "profile": ("user", "issue"),
+    "payer": ("billing_account", "user", "issue"),
+    "billing_account": ("user", "issue"),
+    "route": ("user", "issue"),
 }
 #: Page sizes of the sessions level.
 SESSION_LIMITS = (10, 25, 50)
@@ -112,6 +136,10 @@ class ReportForm:
     ``issue`` (a key, ``-`` for none), ``branch`` (``-`` for none),
     ``provider``, the grouping ``group`` (``sessions``: the entries), the
     sessions page (``offset``, ``limit``) and ``detail`` (every amount column).
+    ``attended`` is ``attended`` or ``unattended``; ``profile`` an agent
+    profile, ``-`` for none. ``payer`` is ``employer``, ``employee`` or
+    ``unknown``; ``billing_account`` an account id (``-``: none); ``route`` a
+    route (``-``: none); ``scope`` ``organization`` leaves personal usage out.
     """
 
     preset: str = "30d"
@@ -140,6 +168,12 @@ class ReportForm:
     version: str = ""
     #: The sprint filter: a sprint id, or ``-`` for entries without a sprint.
     sprint: str = ""
+    attended: str = ""
+    profile: str = ""
+    payer: str = ""
+    billing_account: str = ""
+    route: str = ""
+    scope: str = ""
     offset: int = 0
     limit: int = 25
     detail: str = ""
@@ -179,6 +213,12 @@ class ReportForm:
             provider=text("provider").lower()[:50],
             version=_planning_value(text("version")),
             sprint=_planning_value(text("sprint")),
+            attended=text("attended") if text("attended") in ATTENDED_FILTERS else "",
+            profile=text("profile")[:100],
+            payer=payer_text_value(text("payer")),
+            billing_account=_account_value(text("billing_account")),
+            route=text("route")[:100],
+            scope=scope_text_value(text("scope")),
             offset=int(offset) if offset.isdigit() and int(offset) < 10_000_000 else 0,
             limit=int(limit) if limit.isdigit() and int(limit) in SESSION_LIMITS else 25,
             detail="1" if text("detail") == "1" else "",
@@ -246,6 +286,12 @@ class ReportForm:
             "branch": self.branch,
             "version": self.version,
             "sprint": self.sprint,
+            "attended": self.attended,
+            "profile": self.profile,
+            "payer": self.payer,
+            "billing_account": self.billing_account,
+            "route": self.route,
+            "scope": self.scope,
             "bucket": self.bucket,
             "detail": self.detail,
             "offset": str(self.offset) if self.offset else "",
@@ -288,6 +334,12 @@ class ReportForm:
             "branch": self.branch,
             "version": self.version,
             "sprint": self.sprint,
+            "attended": self.attended,
+            "profile": self.profile,
+            "payer": self.payer,
+            "billing_account": self.billing_account,
+            "route": self.route,
+            "scope": self.scope,
             "format": "csv",
         }
         return urlencode({k: v for k, v in values.items() if v != ""})
@@ -316,6 +368,12 @@ def _form_params(  # noqa: PLR0913
     provider: str = Query(""),
     version: str = Query(""),
     sprint: str = Query(""),
+    attended: str = Query(""),
+    profile: str = Query(""),
+    payer: str = Query(""),
+    billing_account: str = Query(""),
+    route: str = Query(""),
+    scope: str = Query(""),
     offset: str = Query(""),
     limit: str = Query(""),
     detail: str = Query(""),
@@ -347,6 +405,12 @@ def _form_params(  # noqa: PLR0913
         provider=provider,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
+        payer=payer,
+        billing_account=billing_account,
+        route=route,
+        scope=scope,
         offset=offset,
         limit=limit,
         detail=detail,
@@ -419,6 +483,8 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         scope.labels["cost_type"] = _cost_type_text(form.cost_type)
     if form.branch:
         scope.labels["branch"] = _("No branch") if form.branch == NONE_VALUE else form.branch
+    _name_session_context(form, scope)
+    billing = await _resolve_billing(db, user, form, scope)
     planning = await _resolve_planning(db, user, project or scope.selected, form, scope)
     scope.filters = ReportFilters(
         user_id=int(form.user_id) if form.user_id else None,
@@ -433,8 +499,51 @@ async def _resolve(db: AsyncSession, user: User, project: Project | None, form: 
         branch=form.branch if form.branch and form.branch != NONE_VALUE else None,
         without_branch=form.branch == NONE_VALUE,
         **planning,
+        **session_context_filters(form.attended, form.profile),
+        **billing,
     )
     return scope
+
+
+async def _resolve_billing(db: AsyncSession, user: User, form: ReportForm, scope: Scope) -> dict[str, Any]:
+    """The payer, billing account, route and scope filters (``ReportFilters`` fields) and their labels.
+
+    A billing account *user* may not see matches nothing and is named by its number only.
+    """
+    fields: dict[str, Any] = {}
+    if form.payer:
+        fields["payer"] = form.payer
+        scope.labels["payer"] = payer_text(form.payer)
+    if form.billing_account:
+        found = await resolve_billing_account(db, user, form.billing_account)
+        fields.update(found.fields)
+        scope.labels["billing_account"] = (
+            _("No billing account") if form.billing_account == NONE_VALUE else found.label or form.billing_account
+        )
+    if form.route:
+        fields.update(route_filter(form.route))
+        scope.labels["route"] = _("No route") if form.route == NONE_VALUE else form.route
+    if form.scope:
+        fields["organization"] = True
+    return fields
+
+
+def _account_value(value: str) -> str:
+    """A billing account filter as the URL may hold it: an id or ``-``; anything else is no filter."""
+    return value if value == NO_VALUE or (value.isdecimal() and len(value) < 10) else ""
+
+
+def payer_text(value: Any) -> str:
+    """The name of a payer row or filter."""
+    return {"employer": _("Employer"), "employee": _("Employee")}.get(value, _("Unknown payer"))
+
+
+def _name_session_context(form: ReportForm, scope: Scope) -> None:
+    """The breadcrumb labels of the run (attended or not) and agent profile filters."""
+    if form.attended:
+        scope.labels["attended"] = attended_text(ATTENDED_FILTERS[form.attended])
+    if form.profile:
+        scope.labels["profile"] = _("No profile") if form.profile == NONE_VALUE else form.profile
 
 
 async def _resolve_planning(
@@ -455,6 +564,11 @@ async def _resolve_planning(
             fields[f"{dim}_id"] = found.id
             scope.labels[dim] = found.label if found.id != -1 else value
     return fields
+
+
+def attended_text(unattended: Any) -> str:
+    """The name of an ``attended`` row or filter: by the entries' ``unattended`` flag."""
+    return _("Unattended") if unattended else _("Attended")
 
 
 def _cost_type_text(value: str) -> str:

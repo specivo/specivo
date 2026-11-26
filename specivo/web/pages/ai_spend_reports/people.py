@@ -167,7 +167,10 @@ async def _people_view(
 async def _plan_names(
     db: AsyncSession, report: SpendReport, users: list[int], usage: dict[int, PersonUsage]
 ) -> dict[int, list[str]]:
-    """Plan names of *users* (instance report only): plans their entries used, and idle plans whose fee counts."""
+    """Plan names of *users* (instance report only): plans their entries used, and idle plans whose fee counts.
+
+    A company seat plan is named for each member whose entries used it.
+    """
     used = {sid for u in usage.values() for sid in u.subscription_ids}
     condition: Any = AiSubscription.id.in_(used) if used else None
     if report.unallocated_shown:
@@ -179,9 +182,16 @@ async def _plan_names(
         condition = idle if condition is None else (condition | idle)
     if condition is None:
         return {}
-    stmt = select(AiSubscription.user_id, AiSubscription.plan_name).where(condition).order_by(AiSubscription.plan_name)
+    stmt = (
+        select(AiSubscription.id, AiSubscription.user_id, AiSubscription.plan_name)
+        .where(condition)
+        .order_by(AiSubscription.plan_name)
+    )
+    rows = (await db.execute(stmt)).all()
     out: dict[int, list[str]] = {}
-    for uid, name in (await db.execute(stmt)).all():
-        if name not in out.setdefault(uid, []):
-            out[uid].append(name)
+    for sid, uid, name in rows:
+        holders = [uid] if uid is not None else [u for u, person in usage.items() if sid in person.subscription_ids]
+        for holder in holders:
+            if name not in out.setdefault(holder, []):
+                out[holder].append(name)
     return out

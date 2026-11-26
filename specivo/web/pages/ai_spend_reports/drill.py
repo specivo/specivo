@@ -17,12 +17,14 @@ from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.services.ai_spend_billing import HIDDEN_ACCOUNT
 from specivo.services.ai_spend_report_service import (
     GROUP_BY,
     HIDDEN_ISSUE,
     DrillFacts,
     ReportRow,
     SpendReport,
+    attended_filter_value,
     fold_rows,
     period_end,
 )
@@ -106,8 +108,14 @@ def _row_dims(report: SpendReport, row: ReportRow) -> dict[str, str] | None:
             if value == HIDDEN_ISSUE:
                 return None
             values["issue"] = row.labels.get("issue") or NONE_VALUE if value is not None else NONE_VALUE
-        elif dim in ("branch", "version", "sprint"):
+        elif dim == "billing_account":
+            if value == HIDDEN_ACCOUNT:
+                return None
+            values[dim] = str(value) if value is not None else NONE_VALUE
+        elif dim in ("branch", "version", "sprint", "profile", "route"):
             values[dim] = str(value) if value else NONE_VALUE
+        elif dim == "attended":
+            values["attended"] = attended_filter_value(value)
         elif value is None or value == "":
             return None
         else:
@@ -166,7 +174,7 @@ def _tabs(base_url: str, form: ReportForm, instance: bool) -> list[dict[str, Any
     filtered = set(form.filtered())
     in_project = not instance or (bool(form.project) and form.project != NONE_VALUE)
     dims = (["project"] if instance else []) + (["version", "sprint"] if in_project else [])
-    dims += ["user", "issue", "tool", "model", SESSIONS]
+    dims += ["user", "issue", "tool", "model", "payer", SESSIONS]
     return [
         {
             "group": dim,
@@ -215,7 +223,8 @@ def _fold(report: SpendReport) -> Folded:
     keep = set(ranked[: DRILL_MAX_ROWS - 1])
     kept = [r for i, r in enumerate(rows) if i in keep]
     rest = [r for i, r in enumerate(rows) if i not in keep]
-    return Folded(rows=kept, other=fold_rows(rest, report.currency, report.seat_cost_shown), groups=len(rest))
+    other = fold_rows(rest, report.currency, report.seat_cost_shown, report.reimbursable_shown)
+    return Folded(rows=kept, other=other, groups=len(rest))
 
 
 def _fold_periods(report: SpendReport) -> Folded:
@@ -236,7 +245,7 @@ def _fold_periods(report: SpendReport) -> Folded:
             rest.setdefault(row.period or date.min, []).append(row)
     period_other: dict[date, tuple[ReportRow, int]] = {}
     for period, items in rest.items():
-        other = fold_rows(items, report.currency, report.seat_cost_shown)
+        other = fold_rows(items, report.currency, report.seat_cost_shown, report.reimbursable_shown)
         other.period = period
         period_other[period] = (other, len({_group_of(report, r) for r in items}))
     kept.sort(key=lambda r: r.period or date.min)
@@ -261,7 +270,7 @@ def _sub_line(
     if dim == "user":
         usage = facts.usage.get(value) if value is not None else None
         return ", ".join(tool_names.get(t, t) for t in usage.tools) if usage else ""
-    if dim == "issue" and value == HIDDEN_ISSUE:
+    if (dim == "issue" and value == HIDDEN_ISSUE) or (dim == "billing_account" and value == HIDDEN_ACCOUNT):
         return ""
     people = facts.people_by_key.get(value)
     parts = []
@@ -436,6 +445,10 @@ async def _sessions(
             branch=f.branch,
             without_branch=f.without_branch,
             planning=f.planning,
+            unattended=f.unattended,
+            profile=f.profile,
+            without_profile=f.without_profile,
+            billing=f.billing,
             excluded=False,
             unassigned=True if f.unassigned else None,
             offset=form.offset,

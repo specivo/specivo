@@ -26,6 +26,7 @@ from specivo.models.agent_session import AgentSession
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.lookups import IssueStatus
+from specivo.models.member import Member
 from specivo.models.relation import IssueRelation
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
@@ -253,10 +254,104 @@ async def test_agents_working_now_shows_the_running_timer_and_the_service_accoun
     assert re.search(r"Timer 1:2[45]", admin)
 
 
+async def test_an_ended_session_is_not_working_now(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    w.public_issue.assigned_to_id = w.alice.id
+    ended = await _session(db_session, w.alice, w.public_issue)
+    ended.ended_at = utcnow()
+    await db_session.commit()
+    block = _block(await _get(client, w.alice), "dash-agents")
+    assert 'data-testid="dash-agents-empty"' in block
+    issues = _block(await _get(client, w.alice), "dash-my-issues")
+    assert "Public work" in issues and 'data-testid="dash-flag-agent"' not in issues
+
+
 async def test_agents_working_now_empty_state(client: AsyncClient, w: World) -> None:
     block = _block(await _get(client, w.alice), "dash-agents")
     assert 'data-testid="dash-agents-empty"' in block
     assert "No agents active right now." in block
+
+
+async def _agent(db: AsyncSession, login: str, *projects) -> User:
+    """A service account, a member (with no role) of *projects*."""
+    agent = ServiceAccountFactory.build(login=login, status="active")
+    db.add(agent)
+    await db.flush()
+    db.add_all([Member(project_id=p.id, user_id=agent.id) for p in projects])
+    await db.flush()
+    return agent
+
+
+async def test_agents_working_now_includes_the_agents_of_the_viewers_projects(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """A member sees the sessions of their projects' agents, not those of other agents or on hidden issues."""
+    db = db_session
+    ours = await _agent(db, "db-ours-agent", w.p)
+    outsider = await _agent(db, "db-outside-agent")
+    secret = await _agent(db, "db-secret-agent", w.p)
+    await _session(db, ours, w.public_issue)
+    await _session(db, outsider, None)
+    await _session(db, secret, w.private_issue)  # alice cannot see the private issue
+    await db.commit()
+
+    alice = _block(await _get(client, w.alice), "dash-agents")
+    assert alice.count('data-testid="dash-session"') == 1
+    assert "db-ours-agent" in alice and w.public_issue.display_key in alice
+    assert "db-outside-agent" not in alice and "db-secret-agent" not in alice
+
+    # dave is in no project: no agent of theirs to watch.
+    dave = _block(await _get(client, w.dave), "dash-agents")
+    assert 'data-testid="dash-agents-empty"' in dave
+
+    admin = _block(await _get(client, w.admin), "dash-agents")
+    assert admin.count('data-testid="dash-session"') == 3
+
+
+async def test_assigned_to_agents_lists_open_visible_issues(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    db = db_session
+    closed = ClosedStatusFactory.build(name="db Done")
+    db.add(closed)
+    await db.flush()
+    agent = await _agent(db, "db-worker-agent", w.p)
+    await _issue(db, w, 40, assigned_to_id=agent.id, subject="Weekly backup check")
+    await _issue(db, w, 41, assigned_to_id=agent.id, status=closed, subject="Finished agent job")
+    await _issue(db, w, 42, assigned_to_id=w.alice.id, subject="Person work")
+    w.private_issue.assigned_to_id = agent.id
+    await db.commit()
+
+    alice = _block(await _get(client, w.alice), "dash-agents")
+    assert 'data-testid="dash-agent-issues"' in alice
+    assert alice.count('data-testid="dash-agent-issue"') == 1
+    assert "Weekly backup check" in alice and "db-worker-agent" in alice
+    assert "Finished agent job" not in alice and "Person work" not in alice and "Private work" not in alice
+    assert f"/issue/{w.p.key}-40/#agents" in alice
+
+    dave = _block(await _get(client, w.dave), "dash-agents")
+    assert 'data-testid="dash-agent-issues"' not in dave
+
+    admin = _block(await _get(client, w.admin), "dash-agents")
+    assert admin.count('data-testid="dash-agent-issue"') == 2 and "Private work" in admin
+
+
+async def test_a_service_account_member_is_assignable_and_badged(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    db = db_session
+    agent = await _agent(db, "db-assign-agent", w.p)
+    await _issue(db, w, 50, assigned_to_id=agent.id, subject="Agent owned")
+    await db.commit()
+
+    resp = await client.get(
+        f"/api/v1/projects/{w.p.key}/assignees/search/", params={"q": "assign-agent"}, cookies=_cookies(w.alice)
+    )
+    assert resp.status_code == 200, resp.text[:300]
+    assert [(u["login"], u["is_service_account"]) for u in resp.json()] == [("db-assign-agent", True)]
+
+    page = _text(await _get(client, w.alice, f"/issue/{w.p.key}-50/"))
+    assert 'data-testid="assignee-agent-badge"' in page
+    assert "db-assign-agent · agent</option>" in page
 
 
 # ---------------------------------------------------------------------------

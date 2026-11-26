@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from specivo.mcp.toolsets import ALL, CORE, TOOLSET_SUMMARIES, TOOLSETS, TOOLSETS_PARAM
+
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
 
@@ -39,7 +41,11 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
     "specivo_get_links": (
         "Link graph of an issue, wiki page, tag, version, sprint, component or user: backlinks, links, "
-        "relations, members; depth 1-2 (3 from a hub); to= finds a path; filter=; format='compact'"
+        "relations, members, extracted concepts; depth 1-2 (3 from a hub); to= finds a path; filter=; "
+        "format='compact'; include_suggestions=true adds suggested links"
+    ),
+    "specivo_link_suggestion": (
+        "Accept (as a relation or a typed link) or dismiss a suggested link between two issues or wiki pages"
     ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
@@ -66,17 +72,35 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_remove_relation": "Remove a relation by ID",
     "specivo_log_time": "Log time against a project or issue",
     "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
+    "specivo_agent_session": (
+        "This connection's agent session: op='set' (your client's session id, which selects its own session on "
+        "a shared connection, parent id, issue_ref; '' clears it) or 'get'"
+    ),
     "specivo_log_ai_usage": (
         "Log AI tokens an AI tool used (from a hook, the reporter or /cost output -- never estimated)"
     ),
     "specivo_ai_usage": "AI usage entries: op='list', 'get', 'update', 'exclude' or 'include'",
     "specivo_ai_usage_report": (
-        "AI spend report: usage grouped by release, sprint, user, model, tool, project, issue, cost type, branch "
+        "AI spend report: usage grouped by release, sprint, user, model, tool, project, issue, cost type, branch, "
+        "attended or unattended run, agent profile, payer, billing account, route "
         "and period, in one currency"
     ),
     "specivo_ai_subscriptions": (
         "Your AI subscriptions (seats): op='list', 'presets', 'add' (several periods at once), 'update', 'end' "
-        "or 'delete'; warns about overlaps and gaps"
+        "or 'delete'; warns about overlaps and gaps. Administrators: company seat plans (company=true) and their "
+        "members ('members', 'add_member', 'end_member', 'remove_member')"
+    ),
+    "specivo_ai_billing_accounts": (
+        "AI billing accounts (gateways, company plans, personal keys) and who pays: op='list', 'create', "
+        "'update' or 'deactivate'"
+    ),
+    "specivo_ai_reimbursement_claims": (
+        "Monthly AI reimbursement claims: op='list', 'get', 'create', 'refresh', 'submit', 'withdraw', "
+        "'delete', 'export'; administrators 'approve', 'reject', 'paid'"
+    ),
+    "specivo_ai_spend_budgets": (
+        "Monthly AI spend budgets on a billing account or payer, alerted at thresholds: op='list', 'create', "
+        "'update' or 'delete'"
     ),
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
@@ -110,6 +134,7 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
         mcp_server: If provided, tool table is generated from actual registered tools.
     """
     tool_rows = _build_tool_table(mcp_server)
+    toolset_section = _build_toolset_section()
     header = _format_header(fmt)
     footer = _format_footer(fmt)
 
@@ -126,6 +151,8 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 | Tool | Description |
 |------|-------------|
 {tool_rows}
+
+{toolset_section}
 
 ## Standard workflows
 
@@ -165,6 +192,26 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    tags, versions and other structured nodes unless `types` names their kind.
 9. Save tokens with `format="compact"`: one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook
    "Runbook"`, titles written once, after a header line with the root and whether it was truncated.
+10. Suggested links: `specivo_show_issue` and `specivo_read_wiki` end with `Possibly related (suggested,
+   not linked):` -- up to 5 issues or pages of the same project whose content is close to this one
+   (cosine score in brackets) and that nothing links yet. They are hints from embeddings, not links:
+   read them before relying on them. `specivo_get_links(ref, include_suggestions=true)` (or
+   `types=["similar"]`) returns them as edges of kind `similar` with `suggested: true` and the score in
+   `label`; they are never returned otherwise. One that is right:
+   `specivo_link_suggestion(op="accept", ref, other_ref, link_type)`. Two issues get a relation
+   (`link_type` is the relation type, default `relates`); an issue and a page, or two pages, get a typed
+   link from `ref` to `other_ref` (`documents`, `implements`, `decided_in`, `supersedes` or `see_also`,
+   the default), shown as kind `typed_link`. A wrong one: `op="dismiss"`, and it is never suggested
+   again. Both need the permission that makes the link (`manage_issue_relations` between issues, else
+   `edit_issues` / `manage_wiki` on `ref`).
+11. Concepts: a project can let its own AI provider extract concepts (features, external systems,
+   decisions, terms) from its issues and wiki pages. Each is a hub node `concept:ACME/<name>`; an issue
+   or page points at it with an edge of kind `mentions` (the model's confidence in `label`, the quoted
+   `passage`). `specivo_get_links("concept:ACME/billing gateway")` lists what mentions it;
+   `types=["mentions"]` (or `"concept"`) lists the concepts of an item. Mentions below the project's
+   confidence threshold come only with `include_suggestions=true`, marked `suggested: true`. They are
+   a model's reading of the text, not links anyone made: check the passage. You see a concept only
+   when you may see an issue or page that mentions it.
 
 ### Connecting issues and pages (the link graph)
 - Issue to issue: add a relation with `specivo_add_relation` (`blocks`, `relates`, `duplicates`, ...)
@@ -233,7 +280,9 @@ The reporter (`POST /api/v1/ai-usage/ingest/`) is the routine way; the tools are
 and corrections.
 1. `specivo_log_ai_usage(tool="claude-code", model="claude-sonnet-4-5", input_tokens=N, output_tokens=N,
    cache_read_tokens=N, issue_ref="ACME-12")` -- without `issue_ref` / `project_key` the entry goes to
-   the issue this agent session works on, else stays unassigned; the server prices it
+   the issue this agent session works on, else stays unassigned; the server prices it. A client that
+   may retry passes `idempotency_key` (plus `started_at` / `ended_at` with an offset): the same key
+   again replaces the entry's totals instead of counting twice
 2. `specivo_ai_usage(op="list")` -- the entries logged in your name (unassigned ones included);
    `project_key="ACME"` for a project's entries you may read. Your own entries show the agent
    session they came from (`session=`); `session_id="..."` lists just that session's entries, to
@@ -249,6 +298,21 @@ and corrections.
    e.g. for the spend line of a closing note; `release="1.0"` or `sprint="Sprint 4"` totals one release or
    sprint (an issue counts towards its own, else its nearest parent's), and `group_by="version"` or
    `"sprint"` compares them
+
+### Link your client's sessions
+A client with its own session ids (Hermes, for example) names them, so AI usage the reporter sends with
+the same `session_id` and events from its webhook join the right agent session by id:
+1. `specivo_agent_session(op="set", external_session_id="sess_abc", parent_session_id="sess_root")`
+   -- once per session, with `issue_ref="ACME-12"` when the issue is already known
+2. Several sessions over one MCP connection (subagents, gateway chats): call `set` with the session's
+   own `external_session_id` before the work of each turn. Each id gets an agent session of its own on
+   the connection; the one named by the last `set` is current, so the connection's later tool calls,
+   issue changes and audit rows count towards it. Calls that run at the same time on one connection
+   cannot be told apart: give such sessions a connection each
+3. `specivo_agent_session(op="set", external_session_id="sess_abc", issue_ref="")` -- forget the issue
+   when the session stops working on it (done, or switched by hand); a change is audited
+4. `specivo_agent_session(op="get", external_session_id="sess_abc")` -- that session's issue and ids
+   (without `external_session_id`: the current one)
 
 ### Register AI subscriptions from invoices
 When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot, Google AI):
@@ -266,6 +330,59 @@ When a person hands you their AI plan invoices (Claude, ChatGPT, Cursor, Copilot
    Prefer `end` to `delete`: deleting removes the plan from past spend reports
 Needs an unlimited personal API key: a project-limited key and a service account are refused, since
 subscriptions belong to a person. Administrators pass `user="login"` for someone else's.
+
+### Register a company seat plan (administrators)
+A Team or Enterprise plan the employer pays for, shared by several people:
+1. `specivo_ai_subscriptions(op="add", company=true, periods=[{{"plan_name": "Claude Team",
+   "provider": "anthropic", "amount": "750", "currency": "USD", "seat_count": 25,
+   "starts_on": "2026-11-01"}}])` -- the fee of the whole plan; it may be `"0"` when its cost is
+   booked elsewhere. It gets a company billing account paid by the employer
+2. `op="add_member"` (`subscription_id`, `user="login"`, `starts_on`) for each person with a seat;
+   their usage of those days is charged to the plan, before their own subscriptions
+3. `op="end_member"` (`subscription_id`, `user` or `member_id`, `ends_on`) when someone leaves: the
+   months before keep their seat cost. `op="remove_member"` only for a seat entered by mistake
+4. `op="members"` lists the seats; `op="list", company=true` the plans
+Each member carries one seat's share of the fee (fee / seats, by the days they held it); seats nobody
+held show as unallocated seat cost in the instance report. Seat cost of a company plan is never
+reimbursable.
+
+### Register AI billing accounts
+Billing accounts say what usage was paid through and who pays (employer or employee):
+1. `specivo_ai_billing_accounts(op="list")` -- the company accounts and your own (each subscription
+   is the fee schedule of one of yours)
+2. A company gateway (administrators): `specivo_ai_billing_accounts(op="create", owner="instance",
+   slug="corp-gateway", name="Company gateway", kind="gateway", payer="employer",
+   route_patterns=["corp-*"], default_cost_type="api")` -- usage whose route matches is paid through it
+3. A personal API key used for work: `op="create"`, `kind="api_key"`, `payer="employee"`,
+   `reimburse_share="0.5"` for the part your employer pays back
+4. `op="update"` (`account_id` plus fields) to change one; `op="deactivate"` to switch one off (accounts
+   are never deleted; `is_active=true` switches one on again)
+Changing an account's payer, patterns, tools, default cost type or state re-resolves the usage it
+affects. A project's payer default (employer, employee or none) is a project setting
+(`ai_usage_payer_default`), used when no account decides.
+
+### Claim back AI usage you paid for
+An employee-paid account with a `reimburse_share` makes its usage in company projects (payer default
+`employer`) reimbursable: share x (seat cost + marginal spend).
+1. `specivo_ai_reimbursement_claims(op="create", month="2026-03")` -- a draft for a month that has ended,
+   priced from that month's usage; `op="get"` shows its entries, `op="refresh"` takes the current figures
+2. `op="submit"` (`claim_id`) -- the amounts are frozen from now on; administrators are mailed
+3. An administrator: `op="list", user="all", status="submitted"`, then `op="approve"`, `op="reject"`
+   (`reason`) or, once the money is sent, `op="paid"` -- never on their own claim
+4. `op="export"` returns the claim as CSV
+An entry edited, re-priced, re-billed, excluded or deleted after submission is reported as CHANGED;
+the claim keeps its amount. `op="withdraw"` takes a submitted claim back to draft.
+
+### Budget AI spend
+A monthly budget on a billing account, or on everything one payer pays, mails administrators and the
+account holder when this month's spend reaches a threshold (once per threshold and month):
+1. `specivo_ai_spend_budgets(op="create", billing_account="corp-gateway", amount="2000", currency="USD")`
+   -- alerts at 80% and 100% unless you pass `thresholds=[50, 80, 100]`
+2. Administrators: `op="create", payer="employer", amount="5000", currency="USD"` for the company's
+   whole AI spend
+3. `op="list"` shows each budget with this month's spend, percent and the alerts already sent;
+   `op="update"` (`budget_id` plus `amount`, `currency`, `thresholds` or `is_active`) and `op="delete"`
+Spend is the spend report's (marginal spend plus seat cost) for the calendar month so far.
 
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
@@ -377,14 +494,51 @@ the security audit log. Notable cases:
   entry of the project in the period; plan names never appear.
 - `specivo_ai_subscriptions` works on the key owner's own subscriptions, and only with an unlimited
   key of a person (not a service account); changing them needs self-service on. Administrators reach
-  anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events. Every
-  change over MCP writes `ai_subscriptions_changed`.
+  anyone's (`user=`), and their changes to somebody else's write `ai_subscription_*` events.
+  Company seat plans and their members are for administrators only; every change to them writes
+  `ai_subscription_*` / `ai_subscription_member_*` events. Every change over MCP writes
+  `ai_subscriptions_changed`.
+- `specivo_ai_billing_accounts` needs an unlimited key. Everyone lists the instance accounts and
+  their own; company accounts (`owner="instance"`) and other people's (`owner="login"`) are changed
+  by administrators only, and those changes write `ai_billing_account_*` events. Changing your own
+  needs self-service on. Every change over MCP writes `ai_billing_accounts_changed`.
+- `specivo_ai_reimbursement_claims` needs an unlimited key of a person. You see and change your own
+  claims; administrators see everyone's and approve, reject or mark paid somebody else's. Each step
+  writes an `ai_reimbursement_claim_*` event, and every change over MCP also writes
+  `ai_reimbursement_claims_changed`.
+- `specivo_ai_spend_budgets` needs an unlimited key. Administrators see and change every budget;
+  anyone else sees and changes the budgets on their own accounts (with self-service on). Budgets on company
+  accounts, on a payer and administrators' changes to somebody else's write `ai_spend_budget_*`
+  events; every change over MCP writes `ai_spend_budgets_changed`.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
 If a tool returns a permission error, the caller's API key user lacks the
 required role on that project. Audit rows are visible to project managers
 in the project security log.
+
+## Tool hints
+
+Every tool declares `readOnlyHint`, `destructiveHint`, `idempotentHint` and
+`openWorldHint` explicitly, and a test keeps them complete, so clients may rely
+on them for approvals and retries:
+
+- **readOnlyHint: true** -- lists, shows, reads, search, `specivo_whoami`,
+  `specivo_setup_guide` and `specivo_ai_usage_report`. Safe to retry after a
+  dropped session.
+- **destructiveHint: true** -- deletes, `specivo_remove_relation`,
+  `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence`,
+  `specivo_ai_subscriptions` (its `delete` and `remove_member` ops),
+  `specivo_ai_reimbursement_claims` and `specivo_ai_spend_budgets` (their `delete` ops).
+- **idempotentHint: true** -- updates by key, deletes, `specivo_add_relation`,
+  `specivo_tag` and `specivo_ai_usage`: a repeat with the same arguments
+  changes nothing more.
+- Creates, comments, appends, `specivo_edit_description`, `specivo_edit_wiki`,
+  `specivo_log_time`, `specivo_log_ai_usage`, `specivo_timer`,
+  `specivo_metadata` and `specivo_ai_billing_accounts` are not idempotent: do not blindly retry them after a
+  timeout; check first whether the first call went through.
+- **openWorldHint** is false everywhere: every tool acts on this instance only.
+  Tools with an `op` argument carry the hints of their most far-reaching op.
 
 ## Anti-patterns
 
@@ -463,6 +617,37 @@ Codex will send `Authorization: Bearer $SPECIVO_API_KEY` on every request.
 No `mcp-remote` bridge needed — connects straight to `/mcp/`.
 """
     return ""
+
+
+def _build_toolset_section() -> str:
+    """Describe the toolsets and how a connection selects them."""
+    rows = []
+    for name, tools in TOOLSETS.items():
+        listed = "" if name == CORE else ": " + ", ".join(f"`{tool}`" for tool in tools)
+        default = " (default)" if name == CORE else ""
+        rows.append(f"- **{name}**{default} -- {TOOLSET_SUMMARIES[name]}{listed}")
+    return (
+        f"""## Toolsets
+
+A connection lists and may call only the tools of its toolsets, which keeps the tool list in your
+prompt short. Without a choice it gets `{CORE}`. Pick toolsets with the `{TOOLSETS_PARAM}` query parameter
+of the MCP URL: `https://your-specivo-host/mcp/?{TOOLSETS_PARAM}={CORE},ai-spend` (SSE:
+`/mcp/sse/?{TOOLSETS_PARAM}={CORE},ai-spend`), or `?{TOOLSETS_PARAM}={ALL}` for every tool. Clients with a
+tool search of their own (Claude Code, Hermes) lose little with `{ALL}`. Calling a tool outside the
+connection's toolsets returns an error naming the toolset to add.
+
+"""
+        + "\n".join(rows)
+        + """
+
+### Full tool help
+
+`tools/list` carries short descriptions. A tool's full description and parameter docs (types,
+defaults, every rule) come from `specivo_setup_guide(tool="specivo_create_issue")` or the resource
+`specivo://docs/tools/specivo_create_issue`, for any tool of any toolset. A call whose arguments
+fail validation (a missing or mistyped argument, a value outside the allowed choices) returns the
+tool's full parameter docs with the error, so fix the call from there."""
+    )
 
 
 def _build_tool_table(mcp_server: MCPServer | None = None) -> str:

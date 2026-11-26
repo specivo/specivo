@@ -60,6 +60,16 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.cleanup.ensure_audit_partitions",
                 "schedule": 86400,  # daily
             },
+            "purge-wiki-trash": {
+                "task": "specivo.tasks.cleanup.purge_wiki_trash",
+                "schedule": 86400,  # daily
+            },
+            # Budget thresholds alert once per month; hourly keeps an overnight agent run from
+            # going unnoticed until the next day.
+            "check-ai-spend-budgets": {
+                "task": "specivo.tasks.ai_usage.check_ai_spend_budgets",
+                "schedule": 3600,  # hourly
+            },
             "sweep-webhook-deliveries": {
                 "task": "specivo.tasks.webhooks.sweep_webhook_deliveries",
                 "schedule": _WEBHOOK_SWEEP_INTERVAL_SECONDS,
@@ -67,6 +77,18 @@ celery_app.config_from_object(
             "sweep-repository-deliveries": {
                 "task": "specivo.tasks.repositories.sweep_repository_deliveries",
                 "schedule": _REPOSITORY_SWEEP_INTERVAL_SECONDS,
+            },
+            # Suggested links from the embeddings: recomputed per project once a day, on top of the
+            # incremental updates queued whenever an issue or page is embedded again.
+            "sweep-similar-links": {
+                "task": "specivo.tasks.link_suggestions.sweep_similar_links",
+                "schedule": crontab(minute=40, hour=3),
+            },
+            # Concept extraction with each project's own AI provider: only projects that switched
+            # it on, and only their changed issues and pages, up to each project's run limit.
+            "sweep-concept-extraction": {
+                "task": "specivo.tasks.concepts.sweep_concept_extraction",
+                "schedule": crontab(minute=10, hour=4),
             },
             "queue-link-graph-backfill": {
                 "task": "specivo.tasks.entity_links.queue_link_graph_backfill",
@@ -130,9 +152,11 @@ from specivo.tasks import (  # noqa: E402, F401
     ai_model_prices,
     ai_usage,
     cleanup,
+    concepts,
     embeddings,
     entity_links,
     exchange_rates,
+    link_suggestions,
     notifications,
     recurring,
     repositories,

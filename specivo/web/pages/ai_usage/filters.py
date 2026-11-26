@@ -14,7 +14,15 @@ from specivo.models.ai_usage_entry import AI_USAGE_COST_TYPES
 from specivo.models.project import Project
 from specivo.models.role import AI_USAGE_VISIBILITY_ALL
 from specivo.models.user import User
+from specivo.services.ai_spend_billing import (
+    BillingFilter,
+    payer_text_value,
+    resolve_billing_account,
+    route_filter,
+    scope_text_value,
+)
 from specivo.services.ai_spend_planning import PlanningFilter, resolve_planning
+from specivo.services.ai_spend_report_service import ATTENDED_FILTERS, session_context_filters
 from specivo.services.permission_service import ai_usage_visibility
 from specivo.web.pages.ai_usage._common import MY_URL, NONE_VALUE, _issues, _parse_date, _service, _tools
 
@@ -37,9 +45,21 @@ class Filters:
     #: A release (version id) or sprint id from the spend report's drill-through; ``-`` for none.
     version: str = ""
     sprint: str = ""
+    #: ``attended`` or ``unattended`` runs, and an agent profile (``-``: none), from the spend report.
+    attended: str = ""
+    profile: str = ""
+    #: Who paid (``employer``, ``employee``, ``unknown``), a billing account id and a route (``-``: none),
+    #: and ``organization`` (personal usage left out), from the spend report.
+    payer: str = ""
+    billing_account: str = ""
+    route: str = ""
+    scope: str = ""
     #: How the page names the release and sprint filters (set by the page once resolved).
     version_label: str = ""
     sprint_label: str = ""
+    #: How the page names the billing account filter, and its ``BillingFilter`` fields (set by ``name_billing``).
+    billing_account_label: str = ""
+    billing_fields: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
     def query(self) -> str:
@@ -58,6 +78,12 @@ class Filters:
             "branch": self.branch,
             "version": self.version,
             "sprint": self.sprint,
+            "attended": self.attended,
+            "profile": self.profile,
+            "payer": self.payer,
+            "billing_account": self.billing_account,
+            "route": self.route,
+            "scope": self.scope,
         }
         return urlencode({k: v for k, v in values.items() if v})
 
@@ -66,13 +92,39 @@ class Filters:
         return {"counted": False, "excluded": True}.get(self.status)
 
     def extra(self) -> dict[str, Any]:
-        """The provider, branch, release and sprint filters as ``list_entries`` takes them ("-": none)."""
+        """The provider, branch, release, sprint, run and profile filters as ``list_entries`` takes them."""
+        context = session_context_filters(self.attended, self.profile)
         return {
             "provider": self.provider or None,
             "branch": self.branch if self.branch and self.branch != NONE_VALUE else None,
             "without_branch": self.branch == NONE_VALUE,
             "planning": self.planning,
+            "unattended": context.get("unattended"),
+            "profile": context.get("profile"),
+            "without_profile": context.get("without_profile", False),
+            "billing": self.billing,
         }
+
+    @property
+    def billing(self) -> BillingFilter | None:
+        """The payer, billing account, route and scope filters; ``name_billing`` resolves the account first."""
+        return BillingFilter(**self.billing_fields) if self.billing_fields else None
+
+    async def name_billing(self, db: AsyncSession, viewer: User) -> None:
+        """Resolve the billing filters: an account *viewer* may not see matches nothing and is named by its id."""
+        fields: dict[str, Any] = {}
+        if self.payer:
+            fields["payer"] = self.payer
+        if self.billing_account:
+            found = await resolve_billing_account(db, viewer, self.billing_account)
+            fields.update(found.fields)
+            self.billing_account_label = (
+                _("No billing account") if self.billing_account == NONE_VALUE else found.label or self.billing_account
+            )
+        fields.update(route_filter(self.route))
+        if self.scope:
+            fields["organization"] = True
+        self.billing_fields = fields
 
     @property
     def planning(self) -> PlanningFilter:
@@ -110,6 +162,12 @@ def _filters(  # noqa: PLR0913
     branch: str = "",
     version: str = "",
     sprint: str = "",
+    attended: str = "",
+    profile: str = "",
+    payer: str = "",
+    billing_account: str = "",
+    route: str = "",
+    scope: str = "",
 ) -> Filters:
     return Filters(
         user_id=user_id.strip() if user_id.strip().isdigit() else "",
@@ -125,7 +183,18 @@ def _filters(  # noqa: PLR0913
         branch=branch.strip()[:255],
         version=_planning_value(version.strip()),
         sprint=_planning_value(sprint.strip()),
+        attended=attended.strip() if attended.strip() in ATTENDED_FILTERS else "",
+        profile=profile.strip()[:100],
+        payer=payer_text_value(payer),
+        billing_account=_account_value(billing_account.strip()),
+        route=route.strip()[:100],
+        scope=scope_text_value(scope),
     )
+
+
+def _account_value(value: str) -> str:
+    """A billing account filter: an id or ``-``; anything else is no filter."""
+    return value if value == NONE_VALUE or (value.isdecimal() and len(value) < 10) else ""
 
 
 def _planning_value(value: str) -> str:

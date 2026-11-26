@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_subscription_macros.html" import error_text, period_label, status_badge, covers with context %}
+
+{% block title %}{{ plan.plan_name }} - {% trans %}Company AI plans{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/ai-company-plans/">{% trans %}Company AI plans{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{{ plan.plan_name }}</span>
+</div>
+
+<h1 class="sp-page-h1">{{ plan.plan_name }}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans fee=plan.fee, seats=plan.seat_count, held=plan.seats_held %}{{ fee }} for {{ seats }} seats; {{ held }} held today. The company pays for this plan, so its seat cost is never reimbursable.{% endtrans %}{% if plan.billing_account_id %} <a href="{{ base }}/admin/ai-billing-accounts/{{ plan.billing_account_id }}/">{% trans %}Billing account{% endtrans %}: {{ plan.billing_account_slug }}</a>{% endif %}</p>
+
+{% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Plan added. Now give people their seats.{% endtrans %}</div>
+{% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Plan saved.{% endtrans %}</div>
+{% elif notice == "member_added" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Seat added.{% endtrans %}</div>
+{% elif notice == "member_ended" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Seat ended. The months before keep their seat cost.{% endtrans %}</div>
+{% elif notice == "member_saved" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Seat saved.{% endtrans %}</div>
+{% elif notice == "member_removed" %}<div class="flash flash-success" role="status" data-testid="company-plan-notice">{% trans %}Seat removed.{% endtrans %}</div>
+{% endif %}
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="company-plan-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="company-plan-seats-card">
+  <h3 class="sp-card-h3">{% trans %}Seats{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}When someone leaves, set the last day of their seat: the months before keep their share of the fee. Remove a seat only when it was entered by mistake.{% endtrans %}</p>
+  <form method="post" action="{{ base }}/admin/ai-company-plans/{{ plan.id }}/members/" class="sp-form-row sp-mb-md" data-testid="add-member-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="sp-form-field">
+      <label class="filter-label" for="member-login">{% trans %}Login{% endtrans %}</label>
+      <input id="member-login" type="text" name="login" class="filter-input" maxlength="255" value="{{ member_form.login }}" autocomplete="off" required>
+    </div>
+    <div class="sp-form-field">
+      <label class="filter-label" for="member-start">{% trans %}First day{% endtrans %}</label>
+      <input id="member-start" type="date" name="starts_on" class="filter-input" value="{{ member_form.starts_on }}" required>
+    </div>
+    <div class="sp-form-field">
+      <label class="filter-label" for="member-end">{% trans %}Last day (optional){% endtrans %}</label>
+      <input id="member-end" type="date" name="ends_on" class="filter-input" value="{{ member_form.ends_on }}">
+    </div>
+    <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Add seat{% endtrans %}</button>
+  </form>
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="company-plan-seats-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Person{% endtrans %}</th>
+          <th>{% trans %}Days{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Last day{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in seats %}
+        <tr data-member-id="{{ m.id }}">
+          <td>{{ m.name }} <span class="sp-text-muted-xs">{{ m.login }}</span></td>
+          <td class="sp-sub-dates">{{ m.starts_on }} &rarr; {{ m.ends_on or _('open') }}</td>
+          <td>{{ status_badge(m.status) }}</td>
+          <td>
+            <form method="post" action="{{ base }}/admin/ai-company-plans/{{ plan.id }}/members/{{ m.id }}/" class="sp-form-row">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="date" name="ends_on" class="filter-input" value="{{ m.ends_on or today }}" aria-label="{% trans login=m.login %}Last day of {{ login }}'s seat{% endtrans %}">
+              <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}End seat{% endtrans %}</button>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="{{ base }}/admin/ai-company-plans/{{ plan.id }}/members/{{ m.id }}/delete/">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="sp-btn-sm sp-btn-danger">{% trans %}Remove{% endtrans %}</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="sp-text-muted">{% trans %}Nobody holds a seat yet.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card sp-card-pad sp-mb-md" data-testid="edit-company-plan-card">
+  <h3 class="sp-card-h3">{% trans %}Plan{% endtrans %}</h3>
+  {% set submit_label = _("Save") %}
+  {% include "pages/auth/_ai_subscription_form.html" %}
+</div>
+
+<div class="card sp-card-pad" data-testid="delete-company-plan-card">
+  <h3 class="sp-card-h3">{% trans %}Delete this plan{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}To record that a plan ended, set its last day instead: deleting removes it and its seats from past spend reports too.{% endtrans %}</p>
+  <form method="post" action="{{ base }}/admin/ai-company-plans/{{ plan.id }}/delete/">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="sp-btn-sm sp-btn-danger">{% trans %}Delete{% endtrans %}</button>
+  </form>
+</div>
+{% endblock %}

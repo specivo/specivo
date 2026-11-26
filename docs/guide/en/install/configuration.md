@@ -62,6 +62,7 @@ docker compose up -d
 | `ROBOTS_TXT` | A fixed `robots.txt`, replacing the one Specivo serves. Unset by default. The admin setting `robots_txt` overrides it. See [Search engines](#search-engines). |
 | `CORS_ORIGINS` | Other browser origins allowed to call the API with a signed-in user's cookies, e.g. `["https://tools.example.com"]`. Empty by default: Specivo's own pages need no entry. List only origins you trust. |
 | `AUDIT_LOG_RETENTION_MONTHS` | Whole months of the [security audit log](audit-log.md) kept before the current month; older months are dropped daily. Default `12`. `0` keeps everything. |
+| `WIKI_TRASH_RETENTION_DAYS` | Days a deleted wiki page stays in the [wiki trash](../wiki/history-linking.md#delete-and-restore) before the worker deletes it for good, once a day, with its history, comments and attachments. Default `90`. `0` keeps the trash forever. |
 | `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
 | `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |
@@ -465,6 +466,8 @@ as *Accepted* and outgoing ones as *Pending*, and both are picked up once they r
 | `GIT_HOOK_MAX_BODY_BYTES` | Largest webhook body a repository integration accepts; larger ones are answered 413. Default `5242880` (5 MB), at least `1024`. |
 | `GIT_HOOK_RATE_LIMIT_PER_MINUTE` | Webhook requests per minute one repository integration may receive before Specivo answers 429. Default `120`. |
 | `GIT_HOOK_UNKNOWN_RATE_LIMIT_PER_MINUTE` | Requests per minute one client address may send to hook URLs that match no integration, or with a bad signature. Default `30`. |
+| `HERMES_EVENT_MAX_BODY_BYTES` | Largest event body a [Hermes receiver](../ai-agents/hermes-events.md) accepts; larger ones are answered 413. Default `1048576` (1 MB), at least `1024`. |
+| `HERMES_EVENT_RATE_LIMIT_PER_MINUTE` | Hermes events per minute one client address may send before Specivo answers 429. Default `600`. |
 | `AI_USAGE_INGEST_RATE_LIMIT_PER_MINUTE` | Batches per minute one account may send to the [AI usage ingest API](../ai-agents/reporting-ai-usage.md) before Specivo answers 429. Default `60`. |
 | `WEBHOOK_TIMEOUT` | Seconds an outgoing webhook may take for each step of a request (connecting, sending, reading the answer). Default `30`; a whole attempt is always cut off after 60 seconds. |
 

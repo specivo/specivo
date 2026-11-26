@@ -56,6 +56,58 @@ The two endpoints serve the same tools; choose the tab that matches your client.
     export SPECIVO_API_KEY=spv_your_api_key_here
     ```
 
+## Choose toolsets
+
+Many clients put the description of every tool a server offers into the agent's prompt on every
+turn. To keep that short, Specivo groups its tools into **toolsets**, and a connection loads only
+the ones it asks for:
+
+| Toolset | What it holds |
+|---|---|
+| `core` | Issues, comments, relations, the wiki, search and links, metadata and tags on issues and pages, time logging and the timer, projects, members and lookups. Loaded when you choose nothing. |
+| `planning` | Creating, changing, starting, completing and deleting versions and sprints, and listing their issues. |
+| `recurring` | Recurring task patterns and their occurrences. |
+| `admin` | Creating, changing and deleting metadata schemas and tags. |
+| `ai-spend` | AI usage logging and reports, AI subscriptions, billing accounts, reimbursement claims and spend budgets. |
+
+Add the `toolsets` parameter to the server URL, with the names separated by commas, or `all` for
+every tool:
+
+```text
+https://your-specivo-host/mcp/sse/?toolsets=core,ai-spend
+https://your-specivo-host/mcp/?toolsets=all
+```
+
+If the agent calls a tool its connection did not load, the call fails with a message naming the
+toolset to add. An unknown toolset name refuses the connection. Clients that search their tools
+before loading them, such as Claude Code, can use `all` at little cost.
+
+### Short tool descriptions, full help on request
+
+For the same reason, each tool is listed with a short description: what it does, what to call
+first, and its hard rules. Each description ends with a pointer to the full help, which the agent
+gets in any of three ways:
+
+- by calling `specivo_setup_guide` with `tool` set to a tool name, for example
+  `specivo_setup_guide(tool="specivo_create_issue")`;
+- by reading the resource `specivo://docs/tools/<tool name>`;
+- from the error of a call with a missing or wrongly typed argument, which lists all of the tool's
+  parameters with their full descriptions, so the agent can correct the call.
+
+The full help works for every tool, also one whose toolset the connection did not load.
+
+### Read, write and delete hints
+
+Every tool also tells the client what kind of call it is, with the standard MCP hints in `tools/list`:
+`readOnlyHint` (lists, shows, reads, search, `specivo_ai_usage_report`), `destructiveHint` (deletes,
+`specivo_remove_relation`, `specivo_complete_sprint`, `specivo_skip_recurrence_occurrence`, and
+`specivo_ai_subscriptions`, whose `delete` op removes a subscription), `idempotentHint` (repeating the
+call with the same arguments changes nothing more: updates by key, `specivo_add_relation`,
+`specivo_tag`) and `openWorldHint` (always false: a tool acts on your Specivo only). A client can
+retry a read tool after a dropped session and ask for approval only on writes. Creating tools,
+`specivo_add_comment`, `specivo_log_time`, `specivo_log_ai_usage` and `specivo_timer` are not
+idempotent: a client should check before it repeats them after a timeout.
+
 ## Verify the connection
 
 Once the client reloads, it should discover the `specivo_…` tools. Ask the agent to run

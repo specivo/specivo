@@ -11,11 +11,19 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import refuse_api_key, require_admin_api, require_admin_session_api
+from specivo.api.v1.hermes_receivers import created_out, patched_out
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError
 from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
+from specivo.schemas.hermes import (
+    HermesReceiverCreate,
+    HermesReceiverCreated,
+    HermesReceiverOut,
+    HermesReceiverPatched,
+    HermesReceiverUpdate,
+)
 from specivo.schemas.sso import UserIdentityOut
 from specivo.schemas.user import UserCreate, UserDeactivatedOut, UserOut, UserReactivatedOut
 from specivo.services.anonymous_user_service import real_users_clause, refuse_system_user
@@ -23,6 +31,7 @@ from specivo.services.api_key_scope import project_keys_by_api_key
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.email_change_service import EmailChangeService
+from specivo.services.hermes_receiver_service import HermesReceiverService
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.session_service import SessionService
 from specivo.services.sso.identity_service import IdentityService
@@ -263,6 +272,43 @@ async def change_user_email(
     """
     target = await _get_user_or_404(db, user_id)
     await EmailChangeService().admin_set_email(db, target, body.email, admin=admin)
+    await db.commit()
+    await db.refresh(target)
+    return UserOut.model_validate(target)
+
+
+class AgentWorksFor(BaseModel):
+    """Body of ``PUT /admin/users/{id}/works-for/``."""
+
+    works_for_id: int | None = Field(
+        default=None, description="The person the service account works for; null for nobody."
+    )
+
+
+@router.put(
+    "/admin/users/{user_id}/works-for/",
+    response_model=UserOut,
+    summary="Set the person a service account works for (admin only)",
+    responses={
+        404: {"description": "No such user"},
+        422: {"description": "Not a service account, or the owner is not an active person"},
+    },
+)
+async def set_works_for(
+    user_id: int,
+    body: AgentWorksFor,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = DB_SESSION,
+) -> UserOut:
+    """The AI usage the agent reports is billed through that person's billing accounts and plans.
+
+    Its entries are resolved again at once; the change is audited.
+    """
+    from specivo.services.agent_owner_service import AgentOwnerService
+
+    target = await _get_user_or_404(db, user_id)
+    await AgentOwnerService().set_works_for(db, target, body.works_for_id, actor=admin, request=request)
     await db.commit()
     await db.refresh(target)
     return UserOut.model_validate(target)
@@ -598,6 +644,98 @@ async def delete_user_identity(
     target = await _get_user_or_404(db, user_id)
     await _identity_svc.unlink(db, user_id=target.id, identity_id=identity_id, by="admin", actor_id=admin.id)
     await db.commit()
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Hermes event receivers of a user (admin manages another account's receivers)
+# ---------------------------------------------------------------------------
+
+_hermes_svc = HermesReceiverService()
+
+
+@router.get(
+    "/admin/users/{user_id}/hermes-receivers/",
+    response_model=list[HermesReceiverOut],
+    summary="List a user's Hermes receivers (admin only)",
+)
+async def list_user_hermes_receivers(
+    user_id: int,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = DB_SESSION,
+) -> list[HermesReceiverOut]:
+    """The account's receivers, without tokens or secrets."""
+    target = await _get_user_or_404(db, user_id)
+    return [HermesReceiverOut.model_validate(r) for r in await _hermes_svc.list_for_user(db, target.id)]
+
+
+@router.post(
+    "/admin/users/{user_id}/hermes-receivers/",
+    response_model=HermesReceiverCreated,
+    status_code=201,
+    summary="Create a Hermes receiver for a user (admin only, signed-in session)",
+    responses={201: {"description": "Created: token, secret and hooks_config are shown once"}},
+)
+async def create_user_hermes_receiver(
+    user_id: int,
+    body: HermesReceiverCreate,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_session_api)],
+    db: AsyncSession = DB_SESSION,
+) -> HermesReceiverCreated:
+    """Create a receiver whose events are recorded as the account's. It mints a credential, so no API key may."""
+    target = await _get_user_or_404(db, user_id)
+    minted = await _hermes_svc.create(db, owner=target, name=body.name, actor=admin, request=request)
+    return created_out(minted)
+
+
+@router.patch(
+    "/admin/users/{user_id}/hermes-receivers/{receiver_id}/",
+    response_model=HermesReceiverPatched,
+    summary="Change a user's Hermes receiver (admin only)",
+)
+async def update_user_hermes_receiver(
+    user_id: int,
+    receiver_id: int,
+    body: HermesReceiverUpdate,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = DB_SESSION,
+) -> HermesReceiverPatched:
+    """Rename or switch off with a key; rotating the secret or switching it on needs a signed-in session."""
+    if body.rotate_secret or body.is_active:
+        refuse_api_key(request)
+    target = await _get_user_or_404(db, user_id)
+    receiver = await _hermes_svc.get_for_user(db, target.id, receiver_id)
+    secret = await _hermes_svc.update(
+        db,
+        receiver,
+        owner=target,
+        actor=admin,
+        name=body.name,
+        is_active=body.is_active,
+        rotate_secret=body.rotate_secret,
+        request=request,
+    )
+    return patched_out(receiver, secret)
+
+
+@router.delete(
+    "/admin/users/{user_id}/hermes-receivers/{receiver_id}/",
+    status_code=204,
+    summary="Delete a user's Hermes receiver (admin only)",
+)
+async def delete_user_hermes_receiver(
+    user_id: int,
+    receiver_id: int,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Delete the receiver; taking access away stays possible with an admin API key."""
+    target = await _get_user_or_404(db, user_id)
+    receiver = await _hermes_svc.get_for_user(db, target.id, receiver_id)
+    await _hermes_svc.delete(db, receiver, owner=target, actor=admin, request=request)
     return Response(status_code=204)
 
 

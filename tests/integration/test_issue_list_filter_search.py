@@ -517,7 +517,7 @@ async def test_assignee_suggestions_are_the_assignable_people(client: AsyncClien
     # a member of another project, or a system account.
     assert logins == [w.alice.login, w.bob.login, w.reader.login]
     row = resp.json()[0]
-    assert set(row) == {"id", "login", "display_name", "avatar_url", "avatar_color"}
+    assert set(row) == {"id", "login", "display_name", "avatar_url", "avatar_color", "is_service_account"}
     assert "email" not in row
 
 

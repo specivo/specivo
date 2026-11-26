@@ -1,7 +1,7 @@
 """AI usage ingest API, contract v1 (``docs/contracts/ai-usage/v1/README.md``).
 
-- ``GET /ai-usage/ingest``: the versions, limits, server time, known tools, currencies and
-  ``issue_ref_source`` values.
+- ``GET /ai-usage/ingest``: the versions, limits, server time, known tools, currencies,
+  ``issue_ref_source`` values and the optional record fields the server accepts.
 - ``POST /ai-usage/ingest``: a batch of usage records, upserted one by one.
 
 The POST answers 200 with one result per record whenever the envelope is
@@ -25,6 +25,7 @@ from specivo.core.ai_usage_ingest import (
     MAX_AGE_DAYS,
     MAX_BYTES,
     MAX_RECORDS,
+    OPTIONAL_FIELDS,
     SUPPORTED_SCHEMAS,
     batch_validator,
     check_schema,
@@ -97,7 +98,7 @@ async def _read_body(request: Request) -> bytes:
 @router.get("/ingest", response_model=AiUsageIngestInfoOut, include_in_schema=False)
 @router.get("/ingest/", response_model=AiUsageIngestInfoOut)
 async def ingest_info(db: DbSession, current_user: User = Depends(get_current_user)) -> AiUsageIngestInfoOut:
-    """What the ingest endpoint accepts: contract versions, limits, the server's clock, tools and currencies."""
+    """What the ingest endpoint accepts: versions, limits, the server's clock, tools, currencies and optional fields."""
     settings = get_settings()
     tools = await AiToolService().list_tools(db)
     currencies = (await db.execute(select(Currency.code).order_by(Currency.code))).scalars().all()
@@ -115,6 +116,7 @@ async def ingest_info(db: DbSession, current_user: User = Depends(get_current_us
         tools=[tool.slug for tool in tools],
         currencies=list(currencies),
         issue_ref_sources=list(ISSUE_REF_METHODS),
+        optional_fields=list(OPTIONAL_FIELDS),
     )
 
 

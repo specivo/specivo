@@ -1,0 +1,14 @@
+{# The AI usage of one agent session, one page at a time (loads in place through .../usage/).
+   Context: `usage` from specivo.web.pages.agent_sessions.usage_context. #}
+{% from "pages/ai_usage/_macros.html" import entry_table with context %}
+{% from "pages/agent_sessions/_pager.html" import section_pager %}
+<div class="sp-as-usage" data-testid="as-usage">
+  {% if usage.rows %}
+  <div class="card">
+    {{ entry_table(usage.rows, usage.return_to, show_project=True) }}
+    {{ section_pager(usage.pager, ".sp-as-usage", "as-usage-pager") }}
+  </div>
+  {% else %}
+  <div class="card sp-as-empty" data-testid="as-usage-empty">{% trans %}No AI usage you can see is linked to this session.{% endtrans %}</div>
+  {% endif %}
+</div>

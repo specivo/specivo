@@ -59,6 +59,7 @@ from specivo.mcp.tools.links import (
     _get_links,
     _link_item,
     _link_lines,
+    _link_suggestion,
 )
 from specivo.mcp.tools.lookups import (
     _list_lookups,
@@ -188,6 +189,7 @@ __all__ = [
     "_get_links",
     "_link_item",
     "_link_lines",
+    "_link_suggestion",
     "_add_comment",
     "_change_line",
     "_list_comments",

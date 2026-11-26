@@ -78,15 +78,17 @@ async def test_downgrade_restores_the_old_tables_empty_and_upgrade_seeds_again()
 
     assert not await _table_exists("agent_token_logs")
     snapshot = load_snapshot()
-    expected = len(snapshot.prices) + len(load_history())
+    history = load_history()
+    expected = len(snapshot.prices) + len(history)
     rows = await _execute(
         "SELECT count(*), min(effective_from), max(effective_from), count(*) FILTER (WHERE effective_to IS NULL) "
         "FROM ai_model_prices WHERE source = 'seed'"
     )
     count, earliest, latest, open_rows = rows[0]
     assert count == expected
-    assert latest <= snapshot.as_of
-    assert open_rows == len(snapshot.prices)
+    # Snapshot periods start by its as_of; hand-kept history periods where the file says.
+    assert latest <= max([snapshot.as_of, *(p.effective_from for p in history)])
+    assert open_rows == len(snapshot.prices) + sum(1 for p in history if p.effective_to is None)
     assert earliest == FIRST_PERIOD_START  # first periods start in the past, not at the list's as_of
     missing_1h = await _execute("SELECT count(*) FROM ai_model_prices WHERE cache_write_1h IS NULL")
     assert missing_1h == [(0,)]

@@ -834,7 +834,7 @@ class AiUsageChartService:
     # -- seat cost (spend reports) -------------------------------------------------------
 
     @staticmethod
-    async def _seats(
+    async def _seats(  # noqa: C901
         session: AsyncSession,
         viewer: User,
         out: UsageCharts,
@@ -871,6 +871,7 @@ class AiUsageChartService:
             return
         cells = {b.start: b for b in out.buckets}
         plans: dict[int, _Fees] = {}
+        people: dict[int | None, _Fees] = {}
         for row in seat.rows:
             fees = _Fees(user_id=row.key.get("user"))
             for summary in (row.seat_allocated, row.seat_unallocated):
@@ -887,14 +888,17 @@ class AiUsageChartService:
             if sub_id is None:
                 continue
             fees.api = row.seat_api.total.amount if row.seat_api is not None else Decimal(0)
-            plans.setdefault(sub_id, _Fees(user_id=fees.user_id)).add(fees)
+            plan = plans.setdefault(sub_id, _Fees(user_id=fees.user_id))
+            if plan.user_id != fees.user_id:
+                # A company seat plan: carried by several people, so it names nobody.
+                plan.user_id = None
+            plan.add(fees)
+            people.setdefault(fees.user_id, _Fees(user_id=fees.user_id)).add(fees)
         if not plans:
             return
 
-        people: dict[int | None, _Fees] = {}
         total = _Fees(user_id=None)
         for plan in plans.values():
-            people.setdefault(plan.user_id, _Fees(user_id=plan.user_id)).add(plan)
             total.add(plan)
         out.leverage_total = total.person()
 

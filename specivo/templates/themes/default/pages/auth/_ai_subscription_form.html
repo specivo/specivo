@@ -1,4 +1,4 @@
-{# The subscription form. Context: form, form_action, presets, tools, currencies; people (admin add form only); submit_label. #}
+{# The subscription form. Context: form, form_action, presets, tools, currencies; people (admin add form only); show_seats (company plans); submit_label. #}
 <form method="post" action="{{ form_action | prefixed }}" class="sp-sub-form" data-testid="subscription-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if people is defined and people %}
@@ -29,6 +29,12 @@
     <label class="form-label" for="sub-amount">{% trans %}Fee{% endtrans %}</label>
     <input id="sub-amount" type="text" inputmode="decimal" name="amount" class="form-input" value="{{ form.amount }}" placeholder="20.00" required>
   </div>
+  {% if show_seats is defined and show_seats %}
+  <div class="sp-sub-field">
+    <label class="form-label" for="sub-seats">{% trans %}Seats{% endtrans %}</label>
+    <input id="sub-seats" type="number" min="1" max="100000" step="1" name="seat_count" class="form-input" value="{{ form.seat_count }}" required>
+  </div>
+  {% endif %}
   <div class="sp-sub-field">
     <label class="form-label" for="sub-currency">{% trans %}Currency{% endtrans %}</label>
     <select id="sub-currency" name="currency" class="form-input">

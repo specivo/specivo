@@ -472,6 +472,41 @@ async def try_silent_refresh(request: Request, db: AsyncSession) -> User | None:
 # ---------------------------------------------------------------------------
 
 
+async def _track_agent_session(request: Request, db: AsyncSession, api_key_id: int, user_id: int) -> None:
+    """Open or extend the agent session of an API key call; never blocks authentication.
+
+    A client's own housekeeping (``X-Agent-Background: 1``, e.g. a sync poll) is no agent
+    work: it opens or extends no session. ``X-Agent-Session-Id`` files the call under the
+    client's session of that id.
+    """
+    if _is_background(request):
+        return
+    try:
+        await _agent_session_service.get_or_create_session(
+            session=db,
+            api_key_id=api_key_id,
+            user_id=user_id,
+            user_agent=request.headers.get("User-Agent"),
+            external_id=_client_session_header(request),
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Agent session tracking is non-critical — never block auth
+        logger.warning("Agent session tracking failed: %s", exc)
+
+
+def _is_background(request: Request) -> bool:
+    """Whether a REST call says it is the client's background housekeeping, not agent work."""
+    return (request.headers.get("X-Agent-Background") or "").strip().lower() in ("1", "true", "yes")
+
+
+def _client_session_header(request: Request) -> str | None:
+    """The client's own session id a REST call names (``X-Agent-Session-Id``), when well formed."""
+    from specivo.services.agent_session_service import EXTERNAL_SESSION_ID_RE
+
+    value = (request.headers.get("X-Agent-Session-Id") or "").strip()
+    return value if value and EXTERNAL_SESSION_ID_RE.fullmatch(value) else None
+
+
 async def get_current_user(
     request: Request,
     db: AsyncSession = DB_SESSION,
@@ -581,18 +616,7 @@ async def authenticate_request(
         await activate_api_key_scope(db, api_key)
         request.state.api_key_id = api_key.id
 
-        # Auto-create/update agent session for API key usage
-        try:
-            user_agent = request.headers.get("User-Agent")
-            await _agent_session_service.get_or_create_session(
-                session=db,
-                api_key_id=api_key.id,
-                user_id=user.id,
-                user_agent=user_agent,
-            )
-        except Exception as exc:  # noqa: BLE001
-            # Agent session tracking is non-critical — never block auth
-            logger.warning("Agent session tracking failed: %s", exc)
+        await _track_agent_session(request, db, api_key.id, user.id)
 
         # No forced password-change check here, deliberately: an API key is not
         # a password, and an agent holding a valid one must not start failing

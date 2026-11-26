@@ -30,7 +30,7 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.client_ip import get_client_ip
@@ -82,6 +82,10 @@ class AuditEvent(StrEnum):
     TIME_LOGGED = "time_logged"
     TIMER_STARTED = "timer_started"
     TIMER_DISCARDED = "timer_discarded"
+    # An MCP client recorded its own session id, its parent's or its working
+    # issue on its agent session (details: ``external_session_id``,
+    # ``parent_external_session_id``, ``issue`` as a key only).
+    AGENT_SESSION_LINKED = "agent_session_linked"
     VERSIONS_LISTED = "versions_listed"
     VERSION_CREATED = "version_created"
     VERSION_UPDATED = "version_updated"
@@ -111,6 +115,8 @@ class AuditEvent(StrEnum):
     RELATION_LISTED = "relation_listed"
     RELATION_ADDED = "relation_added"
     RELATION_REMOVED = "relation_removed"
+    LINK_SUGGESTION_ACCEPTED = "link_suggestion_accepted"
+    LINK_SUGGESTION_DISMISSED = "link_suggestion_dismissed"
     PASSWORD_RESET_REQUESTED = "password_reset_requested"  # noqa: S105
     PASSWORD_RESET_COMPLETED = "password_reset_completed"  # noqa: S105
     PASSWORD_RESET_FAILED = "password_reset_failed"  # noqa: S105
@@ -199,24 +205,93 @@ class AuditEvent(StrEnum):
     AI_SUBSCRIPTION_CREATED = "ai_subscription_created"
     AI_SUBSCRIPTION_UPDATED = "ai_subscription_updated"
     AI_SUBSCRIPTION_DELETED = "ai_subscription_deleted"
+    # Company seat plans: the three events above, always (administrators
+    # manage them; ``target_login`` is ``None`` and ``seat_count`` is added),
+    # and a member added, changed (their days) or removed (details:
+    # ``subscription_id``, ``plan_name``, ``member_id``, ``target_user_id``,
+    # ``target_login``, ``starts_on``, ``ends_on``; a change adds ``changes``).
+    AI_SUBSCRIPTION_MEMBER_ADDED = "ai_subscription_member_added"
+    AI_SUBSCRIPTION_MEMBER_UPDATED = "ai_subscription_member_updated"
+    AI_SUBSCRIPTION_MEMBER_REMOVED = "ai_subscription_member_removed"
     AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED = "ai_subscriptions_self_service_toggled"
     # MCP tool calls that change AI subscriptions (``specivo_ai_subscriptions``
     # add, update, end, delete; every MCP call is audited): ``op``,
     # ``subscription_ids``, ``target_login`` and, for a change, ``fields``.
     AI_SUBSCRIPTIONS_CHANGED = "ai_subscriptions_changed"
+    # AI billing accounts. An instance account added, changed or deactivated
+    # (always: administrators manage them), or an administrator's change to
+    # somebody else's personal account (details: ``account_id``, ``slug``,
+    # ``name``, ``kind``, ``owner`` = ``instance`` or the owner's login,
+    # ``owner_user_id``, ``payer``, ``reimburse_share``, ``route_patterns``,
+    # ``tool_slugs``, ``default_cost_type``, ``is_active``; a change adds
+    # ``changes``: ``{field: {old, new}}``). People's changes to their own
+    # accounts are not audited. A project's AI usage payer default changed
+    # (``project_key``, ``old``, ``new``; ``none`` when unset), with the
+    # number of entries re-resolved (``entries``, ``changed``).
+    AI_BILLING_ACCOUNT_CREATED = "ai_billing_account_created"
+    AI_BILLING_ACCOUNT_UPDATED = "ai_billing_account_updated"
+    AI_BILLING_ACCOUNT_DEACTIVATED = "ai_billing_account_deactivated"
+    AI_USAGE_PAYER_DEFAULT_CHANGED = "ai_usage_payer_default_changed"
+    # A project's AI provider set or removed by an instance administrator (details: ``op``
+    # ``set`` / ``removed``, ``project_key``, ``provider``, ``model``, ``host`` of the base URL,
+    # ``api_key`` ``set`` / ``kept`` / ``removed``; never the key itself).
+    PROJECT_AI_PROVIDER_CHANGED = "project_ai_provider_changed"
+    # MCP tool calls that change AI billing accounts (``specivo_ai_billing_accounts``
+    # create, update, deactivate; every MCP call is audited): ``op``,
+    # ``account_ids``, ``owner`` and, for a change, ``fields``.
+    AI_BILLING_ACCOUNTS_CHANGED = "ai_billing_accounts_changed"
+    # AI reimbursement claims, written by ``AiReimbursementClaimService`` in the
+    # transaction of the change (details: ``claim_id``, ``holder_user_id``,
+    # ``holder_login``, ``month`` as ``YYYY-MM``, ``currency``, ``total`` at the
+    # currency's minor units, ``entries``, ``status_from``, ``status_to``). A
+    # claim submitted, withdrawn to draft, approved (adds ``changed_entries``:
+    # entries edited, re-priced or removed since the snapshot), rejected (adds
+    # ``reason_given``; the reason is free text and never logged) or marked
+    # paid; a claim exported as CSV (``format``, no status change).
+    AI_REIMBURSEMENT_CLAIM_SUBMITTED = "ai_reimbursement_claim_submitted"
+    AI_REIMBURSEMENT_CLAIM_WITHDRAWN = "ai_reimbursement_claim_withdrawn"
+    AI_REIMBURSEMENT_CLAIM_APPROVED = "ai_reimbursement_claim_approved"
+    AI_REIMBURSEMENT_CLAIM_REJECTED = "ai_reimbursement_claim_rejected"
+    AI_REIMBURSEMENT_CLAIM_PAID = "ai_reimbursement_claim_paid"
+    AI_REIMBURSEMENT_CLAIM_EXPORTED = "ai_reimbursement_claim_exported"
+    # MCP tool calls that change AI reimbursement claims
+    # (``specivo_ai_reimbursement_claims`` create, refresh, submit, withdraw,
+    # approve, reject, paid, delete): ``op``, ``claim_ids``, ``holder``.
+    AI_REIMBURSEMENT_CLAIMS_CHANGED = "ai_reimbursement_claims_changed"
+    # AI spend budgets, written by ``AiSpendBudgetService`` in the transaction
+    # of the change, for budgets on instance accounts and on a payer, and for
+    # an administrator's change to a budget on somebody else's personal
+    # account (details: ``budget_id``, ``target`` = ``billing_account`` or
+    # ``payer``, ``account_id``, ``account_slug``, ``owner`` = ``instance`` or
+    # the owner's login, ``payer``, ``amount`` at the currency's minor units,
+    # ``currency``, ``thresholds``, ``is_active``; a change adds ``changes``).
+    # A threshold reached in a month (``_alert_sent``, written by the check,
+    # no user): the same plus ``month`` as ``YYYY-MM``, ``thresholds`` reached,
+    # ``spend`` and ``recipients``.
+    AI_SPEND_BUDGET_CREATED = "ai_spend_budget_created"
+    AI_SPEND_BUDGET_UPDATED = "ai_spend_budget_updated"
+    AI_SPEND_BUDGET_DELETED = "ai_spend_budget_deleted"
+    AI_SPEND_BUDGET_ALERT_SENT = "ai_spend_budget_alert_sent"
+    # MCP tool calls that change AI spend budgets (``specivo_ai_spend_budgets``
+    # create, update, delete): ``op``, ``budget_ids``, ``target``.
+    AI_SPEND_BUDGETS_CHANGED = "ai_spend_budgets_changed"
     # AI usage entries. Logged in another user's name (details: ``entry_id``,
     # ``target_user_id``, ``target_login``, ``source``, ``tool``,
     # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
     # ``project_key``, ``issue``; a replay that changes the bucket adds
     # ``status: "updated"`` and ``revision``); changed by someone other than the entry's
     # user (the same plus ``changes``: ``{field: {old, new}}``, comments only
-    # as ``{"changed": true}``); excluded from reports, or included again;
-    # deleted. Costs recomputed for a range (``provider``, ``models``,
+    # as ``{"changed": true}``); its billing override set or cleared, by
+    # anyone (the same plus ``override`` = ``set`` / ``cleared``, ``changes``
+    # of ``billing_method``, ``billing_account_id``, ``payer`` and
+    # ``cost_type``, and ``billing_account`` ``{old, new}`` slugs); excluded
+    # from reports, or included again; deleted. Costs recomputed for a range (``provider``, ``models``,
     # ``from``, ``to``, ``entries``, ``changed``, and ``before`` / ``after``
     # totals per currency of ``marginal`` and ``api_equivalent``). Never
     # comments, prompts or code.
     AI_USAGE_LOGGED_FOR_OTHER = "ai_usage_logged_for_other"
     AI_USAGE_UPDATED_BY_OTHER = "ai_usage_updated_by_other"
+    AI_USAGE_BILLING_OVERRIDDEN = "ai_usage_billing_overridden"
     AI_USAGE_EXCLUDED = "ai_usage_excluded"
     AI_USAGE_INCLUDED = "ai_usage_included"
     AI_USAGE_DELETED = "ai_usage_deleted"
@@ -224,9 +299,45 @@ class AuditEvent(StrEnum):
     # MCP tool calls on AI usage (every MCP call is audited): logging, and editing, excluding or including.
     AI_USAGE_LOGGED = "ai_usage_logged"
     AI_USAGE_CHANGED = "ai_usage_changed"
+    # Hermes Agent activity received through a Hermes event receiver: one row per
+    # accepted event, ``user_id`` = the receiver's account, ``agent_session_id``
+    # set, ``details.source = "hermes"`` and ``details.delivery_id``. Metadata
+    # only (tool name, status, durations, ids, approval pattern keys, subagent
+    # role and status); never tool arguments, results, commands or goals.
+    AGENT_SESSION_STARTED = "agent_session_started"
+    AGENT_TOOL_CALLED = "agent_tool_called"
+    AGENT_APPROVAL_REQUESTED = "agent_approval_requested"
+    AGENT_APPROVAL_RESOLVED = "agent_approval_resolved"
+    AGENT_SUBAGENT_STARTED = "agent_subagent_started"
+    AGENT_SUBAGENT_STOPPED = "agent_subagent_stopped"
+    AGENT_SESSION_ENDED = "agent_session_ended"
+    # Hermes event receivers created, changed (``changes``: field names;
+    # ``secret_rotated``) or deleted (details: ``receiver_id``, ``name``,
+    # ``target_user_id``, ``target_login``); never the token or the secret.
+    HERMES_RECEIVER_CREATED = "hermes_receiver_created"
+    HERMES_RECEIVER_UPDATED = "hermes_receiver_updated"
+    HERMES_RECEIVER_DELETED = "hermes_receiver_deleted"
+    # An event a receiver refused (``reason``: ``unknown_receiver``,
+    # ``missing_signature``, ``invalid_signature``, ``secret_unreadable``,
+    # ``stale``; ``receiver_id`` when the receiver is known). Unknown receivers
+    # are written at most once a minute per client address.
+    HERMES_EVENT_REJECTED = "hermes_event_rejected"
 
 
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
+
+#: The events a Hermes event receiver writes for accepted activity.
+_HERMES_ACTIVITY_EVENTS = frozenset(
+    {
+        AuditEvent.AGENT_SESSION_STARTED,
+        AuditEvent.AGENT_TOOL_CALLED,
+        AuditEvent.AGENT_APPROVAL_REQUESTED,
+        AuditEvent.AGENT_APPROVAL_RESOLVED,
+        AuditEvent.AGENT_SUBAGENT_STARTED,
+        AuditEvent.AGENT_SUBAGENT_STOPPED,
+        AuditEvent.AGENT_SESSION_ENDED,
+    }
+)
 
 _EXCHANGE_RATE_ROW_EVENTS = frozenset(
     {
@@ -256,14 +367,50 @@ _AI_SUBSCRIPTION_ROW_EVENTS = frozenset(
         AuditEvent.AI_SUBSCRIPTION_CREATED,
         AuditEvent.AI_SUBSCRIPTION_UPDATED,
         AuditEvent.AI_SUBSCRIPTION_DELETED,
+        AuditEvent.AI_SUBSCRIPTION_MEMBER_ADDED,
+        AuditEvent.AI_SUBSCRIPTION_MEMBER_UPDATED,
+        AuditEvent.AI_SUBSCRIPTION_MEMBER_REMOVED,
     }
 )
 _AI_SUBSCRIPTION_EVENTS = _AI_SUBSCRIPTION_ROW_EVENTS | {AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED}
+
+_AI_BILLING_ACCOUNT_ROW_EVENTS = frozenset(
+    {
+        AuditEvent.AI_BILLING_ACCOUNT_CREATED,
+        AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
+        AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
+    }
+)
+_AI_REIMBURSEMENT_CLAIM_EVENTS = frozenset(
+    {
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_SUBMITTED,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_WITHDRAWN,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_APPROVED,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_REJECTED,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_PAID,
+        AuditEvent.AI_REIMBURSEMENT_CLAIM_EXPORTED,
+    }
+)
+_AI_SPEND_BUDGET_EVENTS = frozenset(
+    {
+        AuditEvent.AI_SPEND_BUDGET_CREATED,
+        AuditEvent.AI_SPEND_BUDGET_UPDATED,
+        AuditEvent.AI_SPEND_BUDGET_DELETED,
+        AuditEvent.AI_SPEND_BUDGET_ALERT_SENT,
+    }
+)
+_AI_BILLING_EVENTS = (
+    _AI_BILLING_ACCOUNT_ROW_EVENTS
+    | {AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED}
+    | _AI_REIMBURSEMENT_CLAIM_EVENTS
+    | _AI_SPEND_BUDGET_EVENTS
+)
 
 _AI_USAGE_EVENTS = frozenset(
     {
         AuditEvent.AI_USAGE_LOGGED_FOR_OTHER,
         AuditEvent.AI_USAGE_UPDATED_BY_OTHER,
+        AuditEvent.AI_USAGE_BILLING_OVERRIDDEN,
         AuditEvent.AI_USAGE_EXCLUDED,
         AuditEvent.AI_USAGE_INCLUDED,
         AuditEvent.AI_USAGE_DELETED,
@@ -286,7 +433,8 @@ class AuditCategory(StrEnum):
     AI_USAGE = "ai_usage"
 
 
-#: The category of each event. "Agents" holds the events only MCP tools write;
+#: The category of each event. "Agents" holds the events only MCP tools and the
+#: Hermes event receiver write;
 #: what agents do through actions people can take as well (tags, wiki deletes,
 #: timers) sits in that action's category, with ``details.source = "mcp"``.
 EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
@@ -339,6 +487,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.LOOKUPS_READ,
             AuditEvent.TIME_LOGGED,
             AuditEvent.TIMER_STARTED,
+            AuditEvent.AGENT_SESSION_LINKED,
             AuditEvent.VERSIONS_LISTED,
             AuditEvent.VERSION_CREATED,
             AuditEvent.VERSION_UPDATED,
@@ -353,7 +502,20 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.RELATION_LISTED,
             AuditEvent.RELATION_ADDED,
             AuditEvent.RELATION_REMOVED,
+            AuditEvent.LINK_SUGGESTION_ACCEPTED,
+            AuditEvent.LINK_SUGGESTION_DISMISSED,
             AuditEvent.AI_SUBSCRIPTIONS_CHANGED,
+            AuditEvent.AI_BILLING_ACCOUNTS_CHANGED,
+            AuditEvent.AI_REIMBURSEMENT_CLAIMS_CHANGED,
+            AuditEvent.AI_SPEND_BUDGETS_CHANGED,
+            AuditEvent.AGENT_SESSION_STARTED,
+            AuditEvent.AGENT_TOOL_CALLED,
+            AuditEvent.AGENT_APPROVAL_REQUESTED,
+            AuditEvent.AGENT_APPROVAL_RESOLVED,
+            AuditEvent.AGENT_SUBAGENT_STARTED,
+            AuditEvent.AGENT_SUBAGENT_STOPPED,
+            AuditEvent.AGENT_SESSION_ENDED,
+            AuditEvent.HERMES_EVENT_REJECTED,
         ],
         AuditCategory.AGENTS,
     ),
@@ -403,7 +565,21 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.AI_SUBSCRIPTION_CREATED,
             AuditEvent.AI_SUBSCRIPTION_UPDATED,
             AuditEvent.AI_SUBSCRIPTION_DELETED,
+            AuditEvent.AI_SUBSCRIPTION_MEMBER_ADDED,
+            AuditEvent.AI_SUBSCRIPTION_MEMBER_UPDATED,
+            AuditEvent.AI_SUBSCRIPTION_MEMBER_REMOVED,
             AuditEvent.AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED,
+            AuditEvent.AI_BILLING_ACCOUNT_CREATED,
+            AuditEvent.AI_BILLING_ACCOUNT_UPDATED,
+            AuditEvent.AI_BILLING_ACCOUNT_DEACTIVATED,
+            AuditEvent.AI_USAGE_PAYER_DEFAULT_CHANGED,
+            AuditEvent.PROJECT_AI_PROVIDER_CHANGED,
+            AuditEvent.AI_SPEND_BUDGET_CREATED,
+            AuditEvent.AI_SPEND_BUDGET_UPDATED,
+            AuditEvent.AI_SPEND_BUDGET_DELETED,
+            AuditEvent.HERMES_RECEIVER_CREATED,
+            AuditEvent.HERMES_RECEIVER_UPDATED,
+            AuditEvent.HERMES_RECEIVER_DELETED,
         ],
         AuditCategory.ADMINISTRATION,
     ),
@@ -449,12 +625,15 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
         [
             AuditEvent.AI_USAGE_LOGGED_FOR_OTHER,
             AuditEvent.AI_USAGE_UPDATED_BY_OTHER,
+            AuditEvent.AI_USAGE_BILLING_OVERRIDDEN,
             AuditEvent.AI_USAGE_EXCLUDED,
             AuditEvent.AI_USAGE_INCLUDED,
             AuditEvent.AI_USAGE_DELETED,
             AuditEvent.AI_USAGE_COSTS_RECOMPUTED,
             AuditEvent.AI_USAGE_LOGGED,
             AuditEvent.AI_USAGE_CHANGED,
+            *_AI_REIMBURSEMENT_CLAIM_EVENTS,
+            AuditEvent.AI_SPEND_BUDGET_ALERT_SENT,
         ],
         AuditCategory.AI_USAGE,
     ),
@@ -666,6 +845,26 @@ class GroupAction(StrEnum):
     DELETED = "deleted"
     USER_ADDED = "user_added"
     USER_REMOVED = "user_removed"
+
+
+def project_rows_clause(
+    project_id: int,
+    projectless_tools: Sequence[str] | None = None,
+    projectless_sources: Sequence[str] | None = None,
+) -> ColumnElement[bool]:
+    """The audit rows of *project_id*, plus the project-less rows of the tools and sources listed.
+
+    See ``SecurityAuditService.list_events`` for why only those project-less rows may be shown.
+    """
+    in_project = SecurityAuditLog.project_id == project_id
+    extra: list[ColumnElement[bool]] = []
+    if projectless_tools:
+        extra.append(SecurityAuditLog.details["tool"].astext.in_(list(projectless_tools)))
+    if projectless_sources:
+        extra.append(SecurityAuditLog.details["source"].astext.in_(list(projectless_sources)))
+    if not extra:
+        return in_project
+    return or_(in_project, and_(SecurityAuditLog.project_id.is_(None), or_(*extra)))
 
 
 class SecurityAuditService:
@@ -1556,7 +1755,8 @@ class SecurityAuditService:
         resource_id: int | None = None,
         request: Request | None = None,
     ) -> SecurityAuditLog:
-        """Log an administrator's change to another user's AI subscription, or the self-service switch.
+        """Log an administrator's change to another user's AI subscription or to a company seat plan
+        and its members, or the self-service switch.
 
         Written in the caller's transaction, in a savepoint, like
         :meth:`log_exchange_rate_change`.
@@ -1571,6 +1771,48 @@ class SecurityAuditService:
             user_id=user_id,
             resource_type="ai_subscription" if event_type in _AI_SUBSCRIPTION_ROW_EVENTS else "setting",
             resource_id=resource_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+
+    async def log_ai_billing_change(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        user_id: int | None,
+        details: dict[str, Any],
+        resource_id: int | None = None,
+        project_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log an AI billing account added, changed or deactivated, a project's payer default changed,
+        a step of an AI reimbursement claim (``resource_type`` ``ai_reimbursement_claim``), or an AI
+        spend budget set, changed, removed or alerting (``ai_spend_budget``).
+
+        Written in the caller's transaction, in a savepoint, like
+        :meth:`log_exchange_rate_change`.
+        """
+        if event_type not in _AI_BILLING_EVENTS:
+            raise ValueError(f"Not an AI billing event: {event_type!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        if event_type in _AI_BILLING_ACCOUNT_ROW_EVENTS:
+            resource_type = "ai_billing_account"
+        elif event_type in _AI_REIMBURSEMENT_CLAIM_EVENTS:
+            resource_type = "ai_reimbursement_claim"
+        elif event_type in _AI_SPEND_BUDGET_EVENTS:
+            resource_type = "ai_spend_budget"
+        else:
+            resource_type = "setting"
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event_type,
+            user_id=user_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            project_id=project_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],
@@ -1609,11 +1851,42 @@ class SecurityAuditService:
             details=details,
         )
 
+    async def log_hermes_event(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        *,
+        user_id: int,
+        agent_session_id: int,
+        details: dict[str, Any],
+        project_id: int | None = None,
+    ) -> SecurityAuditLog:
+        """Log one accepted Hermes event against its agent session.
+
+        Written in the caller's transaction **without** a savepoint: the row
+        is what the event is accepted for, so a failed write fails the request
+        (5xx, which Hermes retries once) and takes the delivery record with it.
+        """
+        if event_type not in _HERMES_ACTIVITY_EVENTS:
+            raise ValueError(f"Not a Hermes activity event: {event_type!r}")
+        info = current_request_info()
+        return await self._persist(
+            session,
+            event_type=event_type,
+            user_id=user_id,
+            project_id=project_id,
+            agent_session_id=agent_session_id,
+            details={"source": "hermes", **details},
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+        )
+
     # ------------------------------------------------------------------
     # Query
     # ------------------------------------------------------------------
 
-    async def list_events(
+    async def list_events(  # noqa: PLR0913
         self,
         session: AsyncSession,
         event_type: str | None = None,
@@ -1626,13 +1899,26 @@ class SecurityAuditService:
         *,
         event_types: Sequence[str] | None = None,
         ip_address: str | None = None,
+        agent_session_id: int | None = None,
+        agent_session_ids: Sequence[int] | None = None,
+        projectless_tools: Sequence[str] | None = None,
+        projectless_sources: Sequence[str] | None = None,
     ) -> tuple[list[SecurityAuditLog], int]:
         """Query audit logs with optional filters, newest first. Returns (items, total_count).
 
         ``event_type`` and ``event_types`` both narrow the event type (a row
         must match each one given); an empty ``event_types`` matches nothing.
         ``after`` is inclusive and ``before`` exclusive; a time range lets
-        PostgreSQL skip the partitions outside it.
+        PostgreSQL skip the partitions outside it. ``agent_session_id`` keeps
+        the rows of one agent session, ``agent_session_ids`` those of any of
+        several (an empty list matches nothing). With ``projectless_tools`` a
+        ``project_id`` filter also keeps the rows that name no project, but
+        only those of the MCP tools listed (``details.tool``): tools that act in
+        no project at all, such as ``whoami``. Project-less rows of other tools
+        can name issues or pages in projects the reader cannot see.
+        ``projectless_sources`` keeps the project-less rows whose
+        ``details.source`` is listed too: event receivers (``hermes``) whose
+        rows hold metadata only and never name an issue or page.
         """
         conditions: list[ColumnElement[bool]] = []
         if event_type is not None:
@@ -1641,8 +1927,12 @@ class SecurityAuditService:
             conditions.append(SecurityAuditLog.event_type.in_(list(event_types)))
         if user_id is not None:
             conditions.append(SecurityAuditLog.user_id == user_id)
+        if agent_session_id is not None:
+            conditions.append(SecurityAuditLog.agent_session_id == agent_session_id)
+        if agent_session_ids is not None:
+            conditions.append(SecurityAuditLog.agent_session_id.in_(list(agent_session_ids)))
         if project_id is not None:
-            conditions.append(SecurityAuditLog.project_id == project_id)
+            conditions.append(project_rows_clause(project_id, projectless_tools, projectless_sources))
         if ip_address is not None:
             conditions.append(SecurityAuditLog.ip_address == ip_address)
         if after is not None:

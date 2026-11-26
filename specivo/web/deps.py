@@ -74,6 +74,7 @@ _versioned_assets: dict[str, str] = {
     "alpine-init.min.js": "alpine-init.min.js",
     "app.min.js": "app.min.js",
     "spend-chart.min.js": "spend-chart.min.js",
+    "link-graph.min.js": "link-graph.min.js",
 }
 
 # Brand name — populated from DB setting at startup, updated via admin.

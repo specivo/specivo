@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_reimbursement_claim_macros.html" import status_badge, status_label with context %}
+
+{% block title %}{% trans %}AI reimbursement claims{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}AI reimbursement claims{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}AI reimbursement claims{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}People's monthly claims for the AI usage they paid for themselves in company projects. Approve or reject a submitted claim, then mark it paid once the money is sent. You cannot decide on your own claims. Every step is recorded in the audit log.{% endtrans %}</p>
+
+<form method="get" action="{{ base }}/admin/ai-reimbursement-claims/" class="sp-form-row sp-mb-md" data-testid="claims-filter">
+  <div class="sp-form-field">
+    <label class="filter-label" for="claims-status">{% trans %}Status{% endtrans %}</label>
+    <select id="claims-status" name="status" class="filter-select" data-testid="claims-status">
+      {% for s in ["all"] + statuses %}<option value="{{ s }}" {{ 'selected' if s == status else '' }}>{{ status_label(s) }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
+</form>
+
+<div class="card sp-card-pad" data-testid="admin-claims-card">
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="admin-claims-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Person{% endtrans %}</th>
+          <th>{% trans %}Month{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Amount{% endtrans %}</th>
+          <th class="sp-sub-num">{% trans %}Entries{% endtrans %}</th>
+          <th>{% trans %}Submitted{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in claims %}
+        <tr data-claim-id="{{ c.id }}">
+          <td>{{ c.holder_name }} <span class="sp-text-muted-xs">{{ c.holder_login }}</span></td>
+          <td>{{ c.month_label }}</td>
+          <td>{{ status_badge(c.status) }}{% if c.changed_entries %} <span class="sp-badge-warning" data-testid="claim-changed">{% trans count=c.changed_entries %}{{ count }} entry changed{% pluralize %}{{ count }} entries changed{% endtrans %}</span>{% endif %}</td>
+          <td class="sp-sub-num">{{ c.total }}</td>
+          <td class="sp-sub-num">{{ c.entry_count }}</td>
+          <td class="sp-sub-dates">{{ c.submitted_at }}</td>
+          <td><a class="sp-btn-sm" href="{{ base }}/admin/ai-reimbursement-claims/{{ c.id }}/">{% trans %}Open{% endtrans %}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="sp-text-muted">{% trans %}No claims.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if total > limit %}
+  <p class="sp-text-muted-xs">
+    {% if offset > 0 %}<a href="{{ base }}/admin/ai-reimbursement-claims/?status={{ status }}&offset={{ [offset - limit, 0] | max }}">{% trans %}Previous{% endtrans %}</a>{% endif %}
+    {% if offset + limit < total %}<a href="{{ base }}/admin/ai-reimbursement-claims/?status={{ status }}&offset={{ offset + limit }}">{% trans %}Next{% endtrans %}</a>{% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -9,6 +9,15 @@ logged (on behalf of), and ``reporter_user_id`` / ``reporter_api_key_id``, the
 account and key that wrote it. The reporter columns, ``source`` and the client
 name and version never change after the insert.
 
+``payer`` and ``billing_account_id`` say who paid and through which billing
+account; ``route`` is the backend the usage went through. Like ``cost_type``
+they are snapshots, resolved at write time (``billing_method`` says which
+step decided) and again when a billing account changes.
+
+``parent_session_id``, ``unattended`` and ``profile`` say where in an agent's
+work the usage happened: under which parent session, in a run nobody
+attended (cron, scheduled), for which agent profile.
+
 Costs are a **snapshot at write time** (see ``AiUsageService``):
 ``price_id`` and ``priced_at`` record which price row was used and at which
 instant; editing or adding prices never changes an entry by itself. Only an
@@ -26,6 +35,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     ColumnElement,
     Date,
@@ -41,6 +51,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from specivo.core.ai_billing import BILLING_METHOD_NONE, BILLING_METHODS, ENTRY_PAYERS, PAYER_UNKNOWN
 from specivo.core.ai_pricing import TOKEN_CLASSES
 from specivo.core.money import Money
 from specivo.models.base import Base, TimestampMixin
@@ -91,6 +102,12 @@ class AiUsageEntry(Base, TimestampMixin):
         ),
         CheckConstraint(_in("cost_type", AI_USAGE_COST_TYPES), name="ck_ai_usage_entries_cost_type"),
         CheckConstraint(_in("cost_basis", AI_USAGE_COST_BASES), name="ck_ai_usage_entries_cost_basis"),
+        CheckConstraint(_in("payer", ENTRY_PAYERS), name="ck_ai_usage_entries_payer"),
+        CheckConstraint(_in("billing_method", BILLING_METHODS), name="ck_ai_usage_entries_billing_method"),
+        CheckConstraint(
+            f"requested_cost_type IS NULL OR {_in('requested_cost_type', AI_USAGE_COST_TYPES)}",
+            name="ck_ai_usage_entries_requested_cost_type",
+        ),
         CheckConstraint(
             "source NOT IN ('reporter', 'import') OR idempotency_key IS NOT NULL",
             name="ck_ai_usage_entries_key_required",
@@ -126,6 +143,7 @@ class AiUsageEntry(Base, TimestampMixin):
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
         Index("ix_ai_usage_entries_project_date", "project_id", "usage_date"),
+        Index("ix_ai_usage_entries_project_unattended_date", "project_id", "unattended", "usage_date"),
         Index("ix_ai_usage_entries_user_date", "user_id", "usage_date"),
         Index("ix_ai_usage_entries_issue_id", "issue_id"),
         Index("ix_ai_usage_entries_reporter_date", "reporter_user_id", "usage_date"),
@@ -134,6 +152,7 @@ class AiUsageEntry(Base, TimestampMixin):
         Index("ix_ai_usage_entries_reporter_api_key_id", "reporter_api_key_id"),
         Index("ix_ai_usage_entries_tool_slug", "tool_slug"),
         Index("ix_ai_usage_entries_subscription_id", "subscription_id"),
+        Index("ix_ai_usage_entries_billing_account_id", "billing_account_id"),
         Index("ix_ai_usage_entries_price_id", "price_id"),
         Index("ix_ai_usage_entries_excluded_by_id", "excluded_by_id"),
     )
@@ -190,10 +209,33 @@ class AiUsageEntry(Base, TimestampMixin):
     reported_cost_amount: Mapped[Decimal | None] = amount_column(nullable=True)
     reported_cost_currency: Mapped[str | None] = currency_column(nullable=True)
     cost_basis: Mapped[str] = mapped_column(String(10), nullable=False, default="unpriced", server_default="unpriced")
+    #: Who paid and through which billing account: snapshots, set the same way
+    #: as ``cost_type`` (see :mod:`specivo.core.ai_billing`).
+    billing_account_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ai_billing_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    payer: Mapped[str] = mapped_column(String(8), nullable=False, default=PAYER_UNKNOWN, server_default=PAYER_UNKNOWN)
+    #: Which resolution step decided the account and payer (see ``BILLING_METHODS``).
+    billing_method: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=BILLING_METHOD_NONE, server_default=BILLING_METHOD_NONE
+    )
+    #: The cost type the record or person asked for (``NULL``: none, so the
+    #: account's default or the subscription decided). Kept so that a changed
+    #: billing account re-resolves the entry from what was sent.
+    requested_cost_type: Mapped[str | None] = mapped_column(String(12), nullable=True)
 
     # -- context -------------------------------------------------------------
     external_session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: The client's parent session (a subagent's, a branch's, a compression continuation's); opaque.
+    parent_session_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    #: A run with nobody in the loop (cron, scheduled); existing and hand-logged entries are attended.
+    unattended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    #: The agent profile or home the usage came from, stored verbatim.
+    profile: Mapped[str | None] = mapped_column(String(100), nullable=True)
     git_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: The raw backend id the usage went through (for example a gateway name).
+    #: Only selects a billing account; never feeds pricing.
+    route: Mapped[str | None] = mapped_column(String(100), nullable=True)
     repo_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)
     client_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     client_version: Mapped[str | None] = mapped_column(String(50), nullable=True)

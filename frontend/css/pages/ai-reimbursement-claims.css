@@ -1,0 +1,32 @@
+/* AI reimbursement claims (My AI reimbursement claims, the admin approval list, a claim). */
+.sp-claim-status {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: var(--sp-font-size-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--sp-bg-subtle, var(--sp-border));
+  color: var(--sp-text-secondary);
+}
+.sp-claim-status-submitted { background: var(--sp-info-subtle); color: var(--sp-info); }
+.sp-claim-status-approved,
+.sp-claim-status-paid { background: var(--sp-success-subtle); color: var(--sp-success); }
+.sp-claim-status-rejected { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+.sp-claim-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-claim-fact { display: flex; flex-direction: column; gap: 2px; }
+.sp-claim-fact-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-claim-fact-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sp-claim-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-claim-reject { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-space-sm); }
+.sp-claim-reject .form-input { min-width: 16rem; }
+.sp-claim-changed td { background: var(--sp-warning-subtle); }

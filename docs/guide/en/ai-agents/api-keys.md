@@ -97,6 +97,11 @@ with yours and ties its access to your login. The cleaner pattern is a **dedicat
 This keeps the agent's audit trail and permissions distinct from any person's, and lets you adjust
 or revoke its access without touching real users' accounts.
 
+An issue assigned to a service account is marked **Agent** in the issue sidebar and in the assignee
+pickers, and shows on the dashboard under **Assigned to agents**. To bill the agent's AI usage through
+a person's accounts and plans, an administrator sets who the account **works for** (see
+[Agents billed through the person they work for](../install/ai-billing-accounts.md#agents-billed-through-the-person-they-work-for)).
+
 !!! tip "Match the role to the job"
     The agent can only do what its account's role allows. Give the service account a read-only role
     on projects where the agent should look but not touch, and a write-capable role only where you

@@ -66,3 +66,4 @@ schemas, so the same fields stay consistent across issues. See [Issue metadata](
 - [Comment on it](comments.md) — discuss in Markdown, mention teammates, react with emoji.
 - [Attach files](attachments.md) — screenshots, logs, documents.
 - [Find it again](finding.md) — through the list, the board, or search.
+- [See what agents did for it](../ai-agents/capabilities.md#the-agents-tab-on-an-issue) — the **Agents** tab shows each agent session's steps, approvals, subagents and AI cost.

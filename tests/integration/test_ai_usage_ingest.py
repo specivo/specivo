@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.ai_usage import MAX_TOKENS_PER_CLASS
 from specivo.models.agent_session import AgentSession
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
@@ -226,6 +227,7 @@ async def test_info_lists_versions_limits_tools_and_currencies(client: AsyncClie
     assert "claude-code" in body["tools"]
     assert {"USD", "THB"} <= set(body["currencies"])
     assert body["issue_ref_sources"] == ["explicit", "env", "agent_log"]
+    assert body["optional_fields"] == ["route", "billing_account", "parent_session_id", "unattended", "profile"]
     assert datetime.fromisoformat(body["server_time"]).tzinfo is not None
 
     assert (await client.get(URL + "/", headers=w.auth("bot"))).status_code == 200
@@ -259,6 +261,45 @@ async def test_create_unchanged_update_replaces_totals(client: AsyncClient, db_s
     assert stored.user_id == stored.reporter_user_id == w.users["bot"].id
     assert stored.reporter_api_key_id == w.key_ids["bot"]
     assert (stored.client_name, stored.client_version) == ("ingest-tests", "1.2.3")
+
+
+async def test_session_context_fields_are_stored_and_a_flip_is_an_update(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    rec = record(
+        "k-context",
+        session_id="20261105_090112_d4e5f6",
+        parent_session_id="20261105_090000_a1b2c3",
+        unattended=True,
+        profile="research",
+        started_at="2026-11-05T09:00:00+07:00",
+    )
+    [created] = await post(client, w, "bot", rec)
+    assert created["status"] == "created", created
+    stored = await entry(db_session, created["entry_id"])
+    assert (stored.parent_session_id, stored.unattended, stored.profile) == (
+        "20261105_090000_a1b2c3",
+        True,
+        "research",
+    )
+
+    [same] = await post(client, w, "bot", rec)
+    assert same["status"] == "unchanged"
+
+    [flipped] = await post(client, w, "bot", {**rec, "unattended": False})
+    assert (flipped["status"], flipped["revision"]) == ("updated", 2)
+    [renamed] = await post(client, w, "bot", {**rec, "unattended": False, "profile": "ops"})
+    assert (renamed["status"], renamed["revision"]) == ("updated", 3)
+    # Leaving the fields out is an attended run without a parent or profile.
+    [cleared] = await post(
+        client,
+        w,
+        "bot",
+        record("k-context", session_id="20261105_090112_d4e5f6", started_at="2026-11-05T09:00:00+07:00"),
+    )
+    assert (cleared["status"], cleared["revision"]) == ("updated", 4)
+    stored = await entry(db_session, created["entry_id"])
+    assert (stored.parent_session_id, stored.unattended, stored.profile) == (None, False, None)
 
 
 async def test_both_token_buckets_are_stored_apart_and_priced_once(
@@ -466,6 +507,25 @@ async def test_unknown_record_fields_are_ignored_with_a_warning(client: AsyncCli
     assert result["warnings"][0]["message"].endswith("attribution.x, future_field, tokens.audio")
 
 
+async def test_route_and_billing_account_are_accepted(client: AsyncClient, w: World) -> None:
+    results = await post(
+        client,
+        w,
+        "bot",
+        record("k-route", route="llm-gateway.example.com", billing_account="acme-gateway"),
+        record("k-route-null", route=None, billing_account=None),
+        record("k-route-long", route="r" * 101),
+        record("k-account-bad", billing_account="Acme Gateway"),
+    )
+    assert [r["status"] for r in results] == ["created", "created", "rejected", "rejected"]
+    # No billing account acme-gateway exists here: the record is stored, the slug is reported.
+    assert [codes(r) for r in results[:2]] == [["billing_account_unknown"], []]
+    assert [(r["error"]["code"], r["error"]["field"]) for r in results[2:]] == [
+        ("invalid_record", "route"),
+        ("invalid_record", "billing_account"),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Attribution
 # ---------------------------------------------------------------------------
@@ -547,6 +607,124 @@ async def test_mcp_session_issue_overlapping_the_window(
     assert results[0]["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
     assert results[1]["attribution"]["method"] == "commit"
     assert results[2]["attribution"]["method"] == "none"
+
+
+async def _external_session(
+    db: AsyncSession, w: World, key: str, user: str, issue: Issue | None, external_id: str, **kw: Any
+) -> AgentSession:
+    row = AgentSession(
+        api_key_id=w.key_ids[key],
+        user_id=w.users[user].id,
+        issue_id=issue.id if issue is not None else None,
+        client_type="mcp",
+        external_session_id=external_id,
+        # Far from every record's window: only the id can match.
+        started_at=datetime(2026, 10, 1, 1, 0, tzinfo=UTC),
+        last_activity_at=datetime(2026, 10, 1, 2, 0, tzinfo=UTC),
+        **kw,
+    )
+    db.add(row)
+    await db.commit()
+    return row
+
+
+async def test_mcp_session_matched_by_the_external_session_id(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _external_session(db_session, w, "bot_mcp", "bot", w.issues[7], "sess_abc")
+    # A session overlapping the window in time names another issue: the id wins.
+    await _session(
+        db_session,
+        w,
+        "bot_mcp",
+        "bot",
+        w.issues[12],
+        datetime(2026, 11, 5, 1, 0, tzinfo=UTC),
+        datetime(2026, 11, 5, 2, 0, tzinfo=UTC),
+    )
+
+    by_id, no_window, unknown = await post(
+        client,
+        w,
+        "bot",
+        record("k-ext-1", session_id="sess_abc", started_at="2026-11-05T01:10:00Z", ended_at="2026-11-05T01:20:00Z"),
+        record("k-ext-2", session_id="sess_abc"),
+        record("k-ext-3", session_id="sess_other", started_at="2026-11-05T01:10:00Z", ended_at="2026-11-05T01:20:00Z"),
+    )
+
+    assert by_id["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
+    # Without a time window the id still attributes.
+    assert no_window["attribution"]["issue_ref"] == "INGX-7"
+    # An unknown id falls back to the time overlap.
+    assert unknown["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+
+async def test_mcp_session_matched_through_the_parent_of_the_external_id(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    root = await _external_session(db_session, w, "bot_mcp", "bot", w.issues[3], "sess_root")
+    await _external_session(
+        db_session,
+        w,
+        "bot_mcp",
+        "bot",
+        None,
+        "sess_child",
+        parent_external_session_id="sess_root",
+        parent_session_id=root.id,
+    )
+
+    [result] = await post(client, w, "bot", record("k-ext-parent", session_id="sess_child"))
+
+    assert result["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-3"}
+
+
+async def test_mcp_session_matched_through_the_records_parent_session_id(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """A subagent's own session is unknown to Specivo; the parent's session names the issue."""
+    await _external_session(db_session, w, "bot_mcp", "bot", w.issues[7], "sess_parent")
+    await _external_session(db_session, w, "bot_mcp", "bot", w.issues[12], "sess_known_child")
+
+    by_parent, own_first, neither = await post(
+        client,
+        w,
+        "bot",
+        record("k-par-1", session_id="sess_unknown_child", parent_session_id="sess_parent"),
+        record("k-par-2", session_id="sess_known_child", parent_session_id="sess_parent"),
+        record("k-par-3", session_id="sess_x", parent_session_id="sess_y"),
+    )
+
+    assert by_parent["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-7"}
+    # The record's own session comes first.
+    assert own_first["attribution"]["issue_ref"] == "INGX-12"
+    assert neither["attribution"]["method"] == "none"
+
+
+async def test_another_users_external_session_id_is_never_used(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    # bot2 claims the same external id on a session of its own.
+    await _external_session(db_session, w, "bot2", "bot2", w.issues[7], "sess_shared")
+
+    [result] = await post(client, w, "bot", record("k-ext-foreign", session_id="sess_shared"))
+
+    assert result["attribution"]["method"] == "none"
+
+
+async def test_on_behalf_external_session_id_tries_the_reporter_then_the_target(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    await _external_session(db_session, w, "teammate_mcp", "teammate", w.issues[12], "sess_tm")
+
+    [target_only] = await post(
+        client, w, "bot", record("k-ext-ob1", on_behalf_of="ingx-teammate", session_id="sess_tm")
+    )
+    assert target_only["attribution"] == {"method": "mcp_session", "project_key": "INGX", "issue_ref": "INGX-12"}
+
+    await _external_session(db_session, w, "bot_mcp", "bot", w.issues[7], "sess_tm")
+    [both] = await post(client, w, "bot", record("k-ext-ob2", on_behalf_of="ingx-teammate", session_id="sess_tm"))
+    assert both["attribution"]["issue_ref"] == "INGX-7"
 
 
 async def test_on_behalf_session_prefers_the_reporter_then_the_target(
@@ -1212,7 +1390,23 @@ def _example(path: Path) -> str:
     return text.replace("ACME", "INGX").replace("acme-", "ingx-").replace('"teammate"', '"ingx-teammate"')
 
 
-async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w: World) -> None:
+async def test_valid_examples_replay_through_the_endpoint(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    # The README's world holds the instance gateway acme-gateway, paid for by the employer.
+    db_session.add(
+        AiBillingAccount(
+            slug="ingx-gateway",
+            name="Acme gateway",
+            kind="gateway",
+            owner_user_id=None,
+            payer="employer",
+            route_patterns=[],
+            tool_slugs=[],
+            default_cost_type="api",
+        )
+    )
+    await db_session.commit()
     expected = json.loads((EXAMPLES / "expected.json").read_text())["valid"]
     assert sorted(expected) == sorted(p.name for p in (EXAMPLES / "valid").glob("*.json"))
     for name, outcomes in expected.items():
@@ -1226,6 +1420,8 @@ async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w
                 "method": r["attribution"]["method"] if r["attribution"] else None,
                 "issue_ref": r["attribution"]["issue_ref"] if r["attribution"] else None,
                 "project_key": r["attribution"]["project_key"] if r["attribution"] else None,
+                "payer": r["payer"],
+                "billing_account": r["billing_account"],
             }
             for r in results
         ]
@@ -1234,6 +1430,7 @@ async def test_valid_examples_replay_through_the_endpoint(client: AsyncClient, w
                 **o,
                 "issue_ref": o["issue_ref"] and o["issue_ref"].replace("ACME", "INGX"),
                 "project_key": o["project_key"] and o["project_key"].replace("ACME", "INGX"),
+                "billing_account": o["billing_account"] and o["billing_account"].replace("acme-", "ingx-"),
             }
             for o in outcomes
         ]

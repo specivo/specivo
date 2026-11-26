@@ -13,6 +13,7 @@ Node (``type``)           Ref                     Edge from an issue or page
 ``sprint``                ``sprint:KEY/<name>``   ``in_sprint``
 ``user``                  ``user:<login>``        ``assigned_to`` (the assignee only)
 ``commit``                ``commit:<sha12>``      ``commit`` (the ``commits`` metadata)
+``concept``               ``concept:KEY/<name>``  ``mentions`` (``entity_link_concepts``)
 ========================  ======================  ===================================
 
 Metadata nodes come from the issue metadata keys a project lists in
@@ -30,7 +31,7 @@ the repository links itself; otherwise it is a node of its own, ref
 
 Hubs
 ----
-Tag, component, metadata, version, sprint and user nodes are hubs: one of them
+Tag, component, metadata, version, sprint, user and concept nodes are hubs: one of them
 may join hundreds of items. A hub is expanded (its members listed) only when
 it is the root of the read, or when its edge kind is asked for explicitly.
 Otherwise it is a leaf that carries ``degree``: how many items the reader may
@@ -44,6 +45,8 @@ Visibility
 - A user is visible to any signed-in reader: the edge to them comes from an
   issue the reader may see, which is what the project's member list asks for
   too (``view_issues``). The anonymous user is never shown people.
+- A concept is visible to a reader who may see a source that mentions it
+  (``entity_link_concepts``), never because of its project alone.
 - Members of a hub are filtered like every other node, in SQL, so a degree
   never counts what the reader may not see.
 """
@@ -68,6 +71,18 @@ from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.models.wiki import WikiPage
 from specivo.services.api_key_scope import is_global_admin
+from specivo.services.entity_link_concepts import (
+    KIND_MENTIONS,
+    NODE_CONCEPT,
+    concept_degrees,
+    concept_edges_of,
+    concept_member_edges,
+    concept_projects,
+    describe_concepts,
+    item_concept_edges,
+    resolve_concept,
+    visible_concepts,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.sql.elements import ColumnElement
@@ -81,7 +96,15 @@ KIND_TARGETS_VERSION = "targets_version"
 KIND_IN_SPRINT = "in_sprint"
 KIND_ASSIGNED_TO = "assigned_to"
 HUB_KINDS = frozenset(
-    {KIND_TAGGED, KIND_IN_COMPONENT, KIND_IN_METADATA, KIND_TARGETS_VERSION, KIND_IN_SPRINT, KIND_ASSIGNED_TO}
+    {
+        KIND_TAGGED,
+        KIND_IN_COMPONENT,
+        KIND_IN_METADATA,
+        KIND_TARGETS_VERSION,
+        KIND_IN_SPRINT,
+        KIND_ASSIGNED_TO,
+        KIND_MENTIONS,
+    }
 )
 
 NODE_TAG = "tag"
@@ -98,6 +121,7 @@ HUB_KIND_OF = {
     NODE_VERSION: KIND_TARGETS_VERSION,
     NODE_SPRINT: KIND_IN_SPRINT,
     NODE_USER: KIND_ASSIGNED_TO,
+    NODE_CONCEPT: KIND_MENTIONS,
 }
 HUB_TYPES = frozenset(HUB_KIND_OF)
 
@@ -108,7 +132,7 @@ DEFAULT_GRAPH_METADATA_KEYS: tuple[str, ...] = (COMPONENT_KEY,)
 COMMITS_KEY = "commits"
 
 _SHA = re.compile(r"^[0-9a-f]{7,64}$")
-_PROJECT_REF_SCHEMES = (NODE_TAG, NODE_COMPONENT, NODE_METADATA, NODE_VERSION, NODE_SPRINT)
+_PROJECT_REF_SCHEMES = (NODE_TAG, NODE_COMPONENT, NODE_METADATA, NODE_VERSION, NODE_SPRINT, NODE_CONCEPT)
 HUB_REF_SCHEMES = (*_PROJECT_REF_SCHEMES, NODE_USER)
 
 
@@ -164,8 +188,10 @@ async def item_hub_edges(
         column = TagLink.issue_id if node[0] == "issue" else TagLink.wiki_page_id
         tag_ids = (await session.execute(select(TagLink.tag_id).where(column == node[1]))).scalars()
         edges.extend(_hub_edge(node, (NODE_TAG, tag_id), KIND_TAGGED) for tag_id in tag_ids)
-    if node[0] == "issue" and kinds & (HUB_KINDS | {"commit"}):
+    if node[0] == "issue" and kinds & (HUB_KINDS - {KIND_MENTIONS} | {"commit"}):
         edges.extend(await _issue_field_edges(session, node, kinds, set(linked_commits)))
+    if KIND_MENTIONS in kinds:
+        edges.extend(await item_concept_edges(session, node))
     return edges
 
 
@@ -245,7 +271,7 @@ async def hub_edges_of(
         for tag_id, issue_id, page_id in rows:
             item: NodeKey = ("issue", issue_id) if issue_id is not None else ("wiki_page", page_id)
             edges.append(_hub_edge(item, (NODE_TAG, tag_id), KIND_TAGGED))
-    if issues and kinds & (HUB_KINDS - {KIND_TAGGED}):
+    if issues and kinds & (HUB_KINDS - {KIND_TAGGED, KIND_MENTIONS}):
         rows = (
             await session.execute(
                 select(*_FIELD_COLUMNS)
@@ -258,6 +284,10 @@ async def hub_edges_of(
         hit = hit or len(rows) >= limit
         for row in rows:
             edges.extend(_field_edges(row, kinds))
+    if KIND_MENTIONS in kinds and (issues or pages):
+        concept_edges, concept_hit = await concept_edges_of(session, issues, pages, limit)
+        edges.extend(concept_edges)
+        hit = hit or concept_hit
     return edges, hit
 
 
@@ -378,10 +408,20 @@ class HubReader:
             project_id = self._hub_project.get(node)
             if project_id is None:
                 self._visible[node] = False
+            elif node[0] == NODE_CONCEPT:
+                continue  # decided below, from the sources that mention it
             elif node[0] == NODE_TAG:
                 self._visible[node] = self._issue_projects[project_id] or self._wiki_projects[project_id]
             else:
                 self._visible[node] = self._issue_projects[project_id]
+        concepts = {n for n in wanted if n[0] == NODE_CONCEPT and n in self._hub_project}
+        if concepts:
+            visible = await visible_concepts(self, (n[1] for n in concepts), self._readable_wikis())
+            for node in concepts:
+                self._visible[node] = node[1] in visible
+
+    def _readable_wikis(self) -> set[int]:
+        return {project_id for project_id, readable in self._wiki_projects.items() if readable}
 
     async def _load_hub_projects(self, nodes: set[NodeKey]) -> None:
         by_type: dict[str, set[Any]] = defaultdict(set)
@@ -396,6 +436,8 @@ class HubReader:
         for node_type in (NODE_COMPONENT, NODE_METADATA):
             for node_id in by_type[node_type]:
                 self._hub_project[(node_type, node_id)] = node_id[0]
+        for concept_id, project_id in (await concept_projects(self.session, by_type[NODE_CONCEPT])).items():
+            self._hub_project[(NODE_CONCEPT, concept_id)] = project_id
 
     def visible(self, node: NodeKey) -> bool:
         return self._visible.get(node, False)
@@ -410,6 +452,9 @@ class HubReader:
         await self.load([hub])
         if not self.visible(hub):
             return []
+        if hub[0] == NODE_CONCEPT:
+            readable = await self.wiki_readable(self._hub_project[hub])
+            return await concept_member_edges(self, hub, cap, wiki_readable=readable)
         stmt = select(Issue.id).where(self._member_condition(hub)).order_by(Issue.id.desc()).limit(cap)
         clause = await self.issue_clause()
         if clause is not None:
@@ -457,6 +502,11 @@ class HubReader:
                     counts[(node_type, hub_id)] = count
         if by_type[NODE_TAG]:
             await self._tag_degrees(by_type[NODE_TAG], clause, counts)
+        if by_type[NODE_CONCEPT]:
+            for concept_id, count in (
+                await concept_degrees(self, by_type[NODE_CONCEPT], self._readable_wikis())
+            ).items():
+                counts[(NODE_CONCEPT, concept_id)] = count
         for node_type in (NODE_COMPONENT, NODE_METADATA):
             for node_id in by_type[node_type]:
                 total = select(func.count()).select_from(Issue).where(self._member_condition((node_type, node_id)))
@@ -521,6 +571,7 @@ class HubReader:
         for node_type in (NODE_COMPONENT, NODE_METADATA):
             for node_id in by_type[node_type]:
                 out[(node_type, node_id)] = _metadata_link_node(node_type, node_id, keys[node_id[0]])
+        out.update(await describe_concepts(self.session, by_type[NODE_CONCEPT], keys))
         return out
 
     async def _project_keys(self) -> dict[int, str]:
@@ -576,7 +627,9 @@ def is_hub_ref(ref: str) -> bool:
 
 
 async def resolve_hub_root(session: AsyncSession, user: User, ref: str) -> NodeKey:
-    """Resolve ``tag:``, ``component:``, ``metadata:``, ``version:``, ``sprint:`` or ``user:`` refs *user* may see.
+    """Resolve ``tag:``, ``component:``, ``metadata:``, ``version:``, ``sprint:``, ``concept:`` or ``user:`` refs.
+
+    Only what *user* may see: a concept only when a source they may see mentions it.
 
     A project the user cannot reach, a permission they lack and a name that
     does not exist all answer "not found", as for issues.
@@ -595,10 +648,18 @@ async def resolve_hub_root(session: AsyncSession, user: User, ref: str) -> NodeK
     project = await _reachable_project(session, user, project_key.strip())
     hubs = HubReader(session, user)
     readable = await hubs.issues_readable(project.id)
-    if scheme == NODE_TAG:
+    if scheme in (NODE_TAG, NODE_CONCEPT):
         readable = readable or await hubs.wiki_readable(project.id)
     if not readable:
         raise NotFoundError(f"{scheme.capitalize()} {rest!r} not found")
+    if scheme == NODE_CONCEPT:
+        concept_id = await resolve_concept(session, project, name.strip())
+        node: NodeKey = (NODE_CONCEPT, concept_id)
+        if concept_id is not None:
+            await hubs.load([node])
+        if concept_id is None or not hubs.visible(node):
+            raise NotFoundError(f"Concept {rest!r} not found")
+        return node
     return await _resolve_in_project(session, project, scheme, name.strip(), rest)
 
 

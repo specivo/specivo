@@ -2,6 +2,7 @@
 {% from "components/macros.html" import breadcrumbs, pagination %}
 {% from "pages/ai_usage/_macros.html" import money_total, cost_type_label, unpriced_note, usage_charts, person_filter_field with context %}
 {% from "components/filter_combobox.html" import filter_combobox %}
+{% from "pages/auth/_ai_spend_budget_macros.html" import budget_meter with context %}
 
 {#
   The AI spend report: a project's (project set) or the instance's (admin page).
@@ -22,6 +23,11 @@
 {%- elif dim == "provider" %}{% trans %}Provider{% endtrans %}
 {%- elif dim == "model" %}{% trans %}Model{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Cost type{% endtrans %}
+{%- elif dim == "attended" %}{% trans %}Attended or unattended{% endtrans %}
+{%- elif dim == "profile" %}{% trans %}Agent profile{% endtrans %}
+{%- elif dim == "payer" %}{% trans %}Payer{% endtrans %}
+{%- elif dim == "billing_account" %}{% trans %}Billing account{% endtrans %}
+{%- elif dim == "route" %}{% trans %}Route{% endtrans %}
 {%- else %}{% trans %}Branch{% endtrans %}{% endif %}
 {%- endmacro %}
 
@@ -36,6 +42,11 @@
 {%- elif dim == "model" %}{% trans %}Model{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Cost type{% endtrans %}
 {%- elif dim == "branch" %}{% trans %}Branch{% endtrans %}
+{%- elif dim == "attended" %}{% trans %}Attended or unattended{% endtrans %}
+{%- elif dim == "profile" %}{% trans %}Agent profile{% endtrans %}
+{%- elif dim == "payer" %}{% trans %}Payer{% endtrans %}
+{%- elif dim == "billing_account" %}{% trans %}Billing account{% endtrans %}
+{%- elif dim == "route" %}{% trans %}Route{% endtrans %}
 {%- else %}{% trans %}Sessions{% endtrans %}{% endif %}
 {%- endmacro %}
 
@@ -49,6 +60,11 @@
 {%- elif dim == "provider" %}{% trans %}Spend by provider{% endtrans %}
 {%- elif dim == "cost_type" %}{% trans %}Spend by cost type{% endtrans %}
 {%- elif dim == "branch" %}{% trans %}Spend by branch{% endtrans %}
+{%- elif dim == "attended" %}{% trans %}Spend attended and unattended{% endtrans %}
+{%- elif dim == "profile" %}{% trans %}Spend by agent profile{% endtrans %}
+{%- elif dim == "payer" %}{% trans %}Spend by payer{% endtrans %}
+{%- elif dim == "billing_account" %}{% trans %}Spend by billing account{% endtrans %}
+{%- elif dim == "route" %}{% trans %}Spend by route{% endtrans %}
 {%- else %}{% trans %}Spend by model{% endtrans %}{% endif %}
 {%- endmacro %}
 
@@ -69,11 +85,20 @@
 {% macro cell(c) -%}
 {% if c.kind == "seat" %}<span class="sp-spend-seat-label">{% trans %}Unallocated seat cost{% endtrans %}</span>
 {%- elif c.kind == "hidden" %}<span class="sp-text-muted">{% trans %}An issue you cannot see{% endtrans %}</span>
-{%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% else %}–{% endif %}</span>
+{%- elif c.kind == "personal" %}<span class="sp-text-muted">{% trans %}Personal account{% endtrans %}</span>
+{%- elif c.kind == "none" %}<span class="sp-text-muted">{% if c.dim == "project" %}{% trans %}Unassigned{% endtrans %}{% elif c.dim == "issue" %}{% trans %}No issue{% endtrans %}{% elif c.dim == "branch" %}{% trans %}No branch{% endtrans %}{% elif c.dim == "version" %}{% trans %}No release{% endtrans %}{% elif c.dim == "sprint" %}{% trans %}No sprint{% endtrans %}{% elif c.dim == "profile" %}{% trans %}No profile{% endtrans %}{% elif c.dim == "billing_account" %}{% trans %}No billing account{% endtrans %}{% elif c.dim == "route" %}{% trans %}No route{% endtrans %}{% else %}–{% endif %}</span>
 {%- elif c.dim == "cost_type" %}{{ cost_type_label(c.value) }}
+{%- elif c.dim == "payer" %}{{ payer_text(c.value) }}
+{%- elif c.dim == "attended" %}{% if c.value %}{% trans %}Unattended{% endtrans %}{% else %}{% trans %}Attended{% endtrans %}{% endif %}
 {%- elif c.dim == "issue" %}<a class="issue-key" href="{{ base }}/issue/{{ c.label }}/">{{ c.label }}</a>
-{%- elif c.dim in ("model", "branch") %}<span class="sp-aiu-model">{{ c.label }}</span>
+{%- elif c.dim in ("model", "branch", "route") %}<span class="sp-aiu-model">{{ c.label }}</span>
 {%- else %}{{ c.label }}{% endif %}
+{%- endmacro %}
+
+{% macro payer_text(value) -%}
+{% if value == "employer" %}{% trans %}Employer{% endtrans %}
+{%- elif value == "employee" %}{% trans %}Employee{% endtrans %}
+{%- else %}{% trans %}Unknown payer{% endtrans %}{% endif %}
 {%- endmacro %}
 
 {% macro amount_cell(view) -%}
@@ -135,6 +160,9 @@
   {% if form.version %}<input type="hidden" name="version" value="{{ form.version }}">{% endif %}
   {% if form.sprint %}<input type="hidden" name="sprint" value="{{ form.sprint }}">{% endif %}
   {% if form.provider %}<input type="hidden" name="provider" value="{{ form.provider }}">{% endif %}
+  {% if form.profile %}<input type="hidden" name="profile" value="{{ form.profile }}">{% endif %}
+  {% if form.billing_account %}<input type="hidden" name="billing_account" value="{{ form.billing_account }}">{% endif %}
+  {% if form.route %}<input type="hidden" name="route" value="{{ form.route }}">{% endif %}
   {% if form.detail %}<input type="hidden" name="detail" value="1">{% endif %}
   <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}From{% endtrans %}</span>
@@ -188,6 +216,28 @@
     </select>
   </label>
   <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Runs{% endtrans %}</span>
+    <select name="attended" class="filter-select" data-testid="spend-attended">
+      <option value="">{% trans %}All{% endtrans %}</option>
+      <option value="attended" {{ 'selected' if form.attended == 'attended' else '' }}>{% trans %}Attended{% endtrans %}</option>
+      <option value="unattended" {{ 'selected' if form.attended == 'unattended' else '' }}>{% trans %}Unattended{% endtrans %}</option>
+    </select>
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Payer{% endtrans %}</span>
+    <select name="payer" class="filter-select" data-testid="spend-payer">
+      <option value="">{% trans %}All{% endtrans %}</option>
+      {% for p in ("employer", "employee", "unknown") %}<option value="{{ p }}" {{ 'selected' if form.payer == p else '' }}>{{ payer_text(p) }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="sp-aiu-filter">
+    <span class="filter-label">{% trans %}Usage{% endtrans %}</span>
+    <select name="scope" class="filter-select" data-testid="spend-scope">
+      <option value="">{% trans %}All usage{% endtrans %}</option>
+      <option value="organization" {{ 'selected' if form.scope == 'organization' else '' }}>{% trans %}Organization only{% endtrans %}</option>
+    </select>
+  </label>
+  <label class="sp-aiu-filter">
     <span class="filter-label">{% trans %}Currency{% endtrans %}</span>
     <select name="currency" class="filter-select" data-testid="spend-currency">
       <option value="">{% trans %}Reporting currency{% endtrans %}</option>
@@ -223,6 +273,7 @@
 
 {% if report and drill %}
 {% set seats = report.seat_cost_shown %}
+{% set reimb = report.reimbursable_shown %}
 {% set detail = form.detail == "1" %}
 {% set label_cols = (1 if report.period else 0) + (report.group_by | length) %}
 <section class="sp-drill" aria-labelledby="sp-drill-title" data-testid="spend-drill">
@@ -291,7 +342,44 @@
       <span class="sp-text-muted-xs">{% trans %}API-equivalent value of subscription usage per unit of seat cost{% endtrans %}</span>
     </div>
     {% endif %}
+    {% if reimb %}
+    <div class="sp-aiu-total">
+      <span class="sp-aiu-total-label">{% trans %}Reimbursable{% endtrans %}</span>
+      <span data-testid="spend-reimbursable">{{ money_total(totals.reimbursable) }}</span>
+      <span class="sp-text-muted-xs">{% trans %}The reimbursable share of employee-paid usage in company projects{% endtrans %}</span>
+    </div>
+    {% endif %}
   </div>
+
+  {% if payer_totals %}
+  <div class="sp-table-scroll">
+  <table class="sp-table sp-spend-payers" data-testid="spend-payers">
+    <caption class="sp-spend-payers-caption">{% trans %}Who paid{% endtrans %}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{% trans %}Payer{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Entries{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}Spend{% endtrans %}</th>
+        <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
+        {% if seats %}<th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>{% endif %}
+        {% if reimb %}<th scope="col" class="sp-aiu-num">{% trans %}Reimbursable{% endtrans %}</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in payer_totals %}
+      <tr data-testid="spend-payer-row" data-payer="{{ p.payer }}">
+        <th scope="row" data-label="{{ _('Payer') }}">{{ payer_text(p.payer) }}</th>
+        <td class="sp-aiu-num" data-label="{{ _('Entries') }}">{{ p.entries }}</td>
+        <td class="sp-aiu-num" data-label="{{ _('Spend') }}"><strong>{{ amount_cell(p.total_spend) }}</strong></td>
+        <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(p.api_equivalent) }}</td>
+        {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ p.leverage or "–" }}</td>{% endif %}
+        {% if reimb %}<td class="sp-aiu-num" data-label="{{ _('Reimbursable') }}">{{ amount_cell(p.reimbursable) }}</td>{% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
 
   {{ unpriced_note(totals.unpriced, totals.entries, unpriced_models) }}
 
@@ -382,6 +470,7 @@
             {% if detail %}
             <th scope="col" class="sp-aiu-num">{% trans %}API-equivalent value{% endtrans %}</th>
             {% if seats %}<th scope="col" class="sp-aiu-num">{% trans %}Leverage{% endtrans %}</th>{% endif %}
+            {% if reimb %}<th scope="col" class="sp-aiu-num">{% trans %}Reimbursable{% endtrans %}</th>{% endif %}
             {% endif %}
             <th scope="col" class="sp-drill-share-col">{% trans %}Share{% endtrans %}</th>
             {% if detail %}<th scope="col"><span class="sp-visually-hidden">{% trans %}Entries{% endtrans %}</span></th>{% endif %}
@@ -405,6 +494,7 @@
             {% if detail %}
             <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(r.api_equivalent) }}</td>
             {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ r.leverage or "–" }}</td>{% endif %}
+            {% if reimb %}<td class="sp-aiu-num" data-label="{{ _('Reimbursable') }}">{{ amount_cell(r.reimbursable) }}</td>{% endif %}
             {% endif %}
             <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-7" style="width:{{ r.share.width }}%"></span><span class="sp-drill-share-pct">{{ r.share.label }}</span></span></td>
             {% if detail %}<td></td>{% endif %}
@@ -436,6 +526,7 @@
             {% if detail %}
             <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(r.api_equivalent) }}</td>
             {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ r.leverage or "–" }}</td>{% endif %}
+            {% if reimb %}<td class="sp-aiu-num" data-label="{{ _('Reimbursable') }}">{{ amount_cell(r.reimbursable) }}</td>{% endif %}
             {% endif %}
             <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-{{ r.slot }}" style="width:{{ r.share.width }}%"></span><span class="sp-drill-share-pct">{{ r.share.label }}</span></span></td>
             {% if detail %}<td class="sp-aiu-actions" data-label="">{% if r.drill %}<a class="sp-btn-sm" href="{{ r.drill | prefixed }}" data-testid="spend-drill">{% if r.seat_only %}{% trans %}Subscriptions{% endtrans %}{% else %}{% trans %}Entries{% endtrans %}{% endif %}</a>{% endif %}</td>{% endif %}
@@ -460,6 +551,7 @@
             {% if detail %}
             <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(o.api_equivalent) }}</td>
             {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ o.leverage or "–" }}</td>{% endif %}
+            {% if reimb %}<td class="sp-aiu-num" data-label="{{ _('Reimbursable') }}">{{ amount_cell(o.reimbursable) }}</td>{% endif %}
             {% endif %}
             <td class="sp-drill-share-col" data-label="{{ _('Share') }}"><span class="sp-drill-share"><span class="sp-drill-share-bar sp-slot-7" style="width:{{ o.share.width }}%"></span><span class="sp-drill-share-pct">{{ o.share.label }}</span></span></td>
             {% if detail %}<td></td>{% endif %}
@@ -479,6 +571,7 @@
             {% if detail %}
             <td class="sp-aiu-num" data-label="{{ _('API-equivalent value') }}">{{ amount_cell(totals.api_equivalent) }}</td>
             {% if seats %}<td class="sp-aiu-num" data-label="{{ _('Leverage') }}">{{ totals.leverage or "–" }}</td>{% endif %}
+            {% if reimb %}<td class="sp-aiu-num" data-label="{{ _('Reimbursable') }}">{{ amount_cell(totals.reimbursable) }}</td>{% endif %}
             {% endif %}
             <td class="sp-drill-share-col"></td>
             {% if detail %}<td></td>{% endif %}
@@ -549,6 +642,35 @@
 {{ usage_charts(charts, has_rows=drill.rows | length > 0, bucket_links=bucket_links, show_links=show_links) }}
 {% endif %}
 </div>
+
+{#
+  The budgets of the running month (admin report only), outside the drill-down's swap target:
+  they do not change with the report's filters, so a drill step neither reloads nor removes them.
+#}
+{% if budgets %}
+<section class="card sp-card-pad sp-mt-md sp-budget-panel" aria-labelledby="sp-budgets-title" data-testid="spend-budgets">
+  <h2 id="sp-budgets-title" class="sp-card-h3">{% trans %}Budgets this month{% endtrans %}</h2>
+  <p class="sp-text-muted-xs sp-mb-md">{% trans %}Spend of the calendar month so far (UTC) against each monthly budget, whatever the report above shows.{% endtrans %} <a href="{{ base }}/admin/ai-billing-accounts/#payer-budgets">{% trans %}Budgets{% endtrans %} &rarr;</a></p>
+  <div class="sp-table-scroll">
+    <table class="sp-table" data-testid="spend-budgets-table">
+      <thead>
+        <tr>
+          <th scope="col">{% trans %}Budget{% endtrans %}</th>
+          <th scope="col">{% trans %}Spent this month{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in budgets %}
+        <tr data-testid="spend-budget-row" data-budget-id="{{ b.id }}">
+          <th scope="row">{% if b.account_id %}<a href="{{ base }}/admin/ai-billing-accounts/{{ b.account_id }}/">{{ b.name }}</a>{% if b.personal %} <span class="sp-text-muted-xs">{% trans %}personal{% endtrans %}</span>{% endif %}{% else %}{{ b.name }}{% endif %}</th>
+          <td>{{ budget_meter(b) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
 {% endblock %}
 
 {# The chart bundle (Apache ECharts, tree-shaken) loads only when there is a chart to draw. #}

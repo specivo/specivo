@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.ai_usage_entry import AiUsageEntry
@@ -234,6 +234,33 @@ async def test_log_own_usage_with_an_api_key(client: AsyncClient, w: World) -> N
     assert entry["cost_basis"] == "calculated"
     assert entry["locked"] is False and entry["excluded"] is False
     assert entry["revision"] == 1
+
+
+async def test_log_an_unattended_run_of_a_profile(client: AsyncClient, w: World) -> None:
+    entry = await log(
+        client, w, "alice", unattended=True, profile="research", parent_session_id="20261105_090000_a1b2c3"
+    )
+    assert (entry["unattended"], entry["profile"], entry["parent_session_id"]) == (
+        True,
+        "research",
+        "20261105_090000_a1b2c3",
+    )
+    fetched = await client.get(f"/api/v1/ai-usage/{entry['id']}/", headers=w.auth("alice"))
+    assert fetched.json()["unattended"] is True and fetched.json()["profile"] == "research"
+
+    plain = await log(client, w, "alice")
+    assert (plain["unattended"], plain["profile"], plain["parent_session_id"]) == (False, None, None)
+
+
+async def test_profile_and_unattended_are_checked(client: AsyncClient, w: World) -> None:
+    resp = await client.post("/api/v1/projects/AUAA/ai-usage/", json=body(profile="p" * 101), headers=w.auth("alice"))
+    assert resp.status_code == 422
+    resp = await client.post(
+        "/api/v1/projects/AUAA/ai-usage/", json=body(profile="research\nlab"), headers=w.auth("alice")
+    )
+    assert resp.status_code == 422 and error(resp)["field"] == "profile"
+    resp = await client.post("/api/v1/projects/AUAA/ai-usage/", json=body(unattended="soon"), headers=w.auth("alice"))
+    assert resp.status_code == 422
 
 
 async def test_entry_reports_both_buckets_and_their_total(client: AsyncClient, w: World) -> None:
@@ -626,3 +653,66 @@ async def test_on_behalf_of_a_system_account_is_an_unknown_login(
     )
     assert resp.status_code == 422, resp.text
     assert error(resp)["code"] == "ai_usage_target_unknown"
+
+
+# ---------------------------------------------------------------------------
+# Idempotency key
+# ---------------------------------------------------------------------------
+
+
+async def test_key_answers_201_then_200(client: AsyncClient, db_session: AsyncSession, w: World) -> None:
+    url = "/api/v1/my/ai-usage/"
+    first = await client.post(url, json=body(idempotency_key="aua-run-1"), headers=w.auth("alice"))
+    assert first.status_code == 201, first.text
+    assert (first.json()["idempotency_key"], first.json()["revision"]) == ("aua-run-1", 1)
+
+    again = await client.post(url, json=body(idempotency_key="aua-run-1"), headers=w.auth("alice"))
+    assert again.status_code == 200, again.text
+    assert (again.json()["id"], again.json()["revision"]) == (first.json()["id"], 1)
+
+    bigger = body(idempotency_key="aua-run-1", tokens={"input": 2_000_000, "output": 100_000})
+    replaced = await client.post(url, json=bigger, headers=w.auth("alice"))
+    assert replaced.status_code == 200, replaced.text
+    assert (replaced.json()["id"], replaced.json()["revision"]) == (first.json()["id"], 2)
+    assert float(replaced.json()["api_equivalent_cost"]["amount"]) == 5
+    assert replaced.json()["locked"] is False
+
+    count = await db_session.scalar(
+        select(func.count()).select_from(AiUsageEntry).where(AiUsageEntry.idempotency_key == "aua-run-1")
+    )
+    assert count == 1
+
+
+async def test_key_on_the_project_route(client: AsyncClient, w: World) -> None:
+    url = "/api/v1/projects/AUAA/ai-usage/"
+    payload = body(
+        idempotency_key="aua-run-2",
+        started_at="2026-03-10T09:15:00+07:00",
+        ended_at="2026-03-10T10:00:00+07:00",
+    )
+    first = await client.post(url, json=payload, headers=w.auth("alice"))
+    assert first.status_code == 201, first.text
+    assert first.json()["started_at"].startswith("2026-03-10T02:15:00")
+    again = await client.post(url, json=payload, headers=w.auth("alice"))
+    assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+
+
+async def test_key_of_another_reporter_is_409(client: AsyncClient, w: World) -> None:
+    await log(client, w, "runner", on_behalf_of="aua_alice", idempotency_key="aua-run-3")
+    resp = await client.post(
+        "/api/v1/projects/AUAA/ai-usage/", json=body(idempotency_key="aua-run-3"), headers=w.auth("alice")
+    )
+    assert resp.status_code == 409, resp.text
+    assert error(resp)["code"] == "key_conflict"
+
+
+async def test_invalid_keys_and_instants_are_422(client: AsyncClient, w: World) -> None:
+    for extra in (
+        {"idempotency_key": "has a space"},
+        {"idempotency_key": ""},
+        {"idempotency_key": "k" * 129},
+        {"ended_at": "2026-03-11T00:00:01Z"},
+        {"started_at": "2026-03-10T09:15:00"},
+    ):
+        resp = await client.post("/api/v1/my/ai-usage/", json=body(**extra), headers=w.auth("alice"))
+        assert resp.status_code == 422, (extra, resp.text)

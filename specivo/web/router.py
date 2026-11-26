@@ -7,7 +7,11 @@ from specivo.web.pages.admin_ai_model_prices import router as admin_ai_model_pri
 from specivo.web.pages.admin_exchange_rates import router as admin_exchange_rate_pages
 from specivo.web.pages.admin_roles import router as admin_role_pages
 from specivo.web.pages.admin_sso import router as admin_sso_pages
+from specivo.web.pages.agent_sessions import router as agent_session_pages
+from specivo.web.pages.ai_billing_accounts import router as ai_billing_account_pages
+from specivo.web.pages.ai_company_plans import router as ai_company_plan_pages
 from specivo.web.pages.ai_issue_usage import router as ai_issue_usage_pages
+from specivo.web.pages.ai_reimbursement_claims import router as ai_reimbursement_claim_pages
 from specivo.web.pages.ai_spend_reports import router as ai_spend_report_pages
 from specivo.web.pages.ai_subscriptions import router as ai_subscription_pages
 from specivo.web.pages.ai_usage import router as ai_usage_pages
@@ -15,6 +19,8 @@ from specivo.web.pages.auth import router as auth_pages
 from specivo.web.pages.connected_accounts import router as connected_account_pages
 from specivo.web.pages.dashboard import router as dashboard_pages
 from specivo.web.pages.email_change import router as email_change_pages
+from specivo.web.pages.hermes_receivers import router as hermes_receiver_pages
+from specivo.web.pages.issue_agents import router as issue_agent_pages
 from specivo.web.pages.issues import router as issue_pages
 from specivo.web.pages.issues import short_router as issue_short_pages
 from specivo.web.pages.projects import router as project_pages
@@ -35,9 +41,12 @@ web_router.include_router(auth_pages)
 web_router.include_router(sso_pages)
 web_router.include_router(connected_account_pages)
 web_router.include_router(email_change_pages)
+web_router.include_router(hermes_receiver_pages)
 # Before the project and admin pages, whose paths could otherwise match first.
 web_router.include_router(ai_spend_report_pages)
 web_router.include_router(ai_issue_usage_pages)
+web_router.include_router(issue_agent_pages)
+web_router.include_router(agent_session_pages)
 web_router.include_router(project_pages)
 web_router.include_router(wiki_pages)
 web_router.include_router(issue_pages)
@@ -55,4 +64,7 @@ web_router.include_router(admin_sso_pages)
 web_router.include_router(admin_exchange_rate_pages)
 web_router.include_router(admin_ai_model_price_pages)
 web_router.include_router(ai_subscription_pages)
+web_router.include_router(ai_company_plan_pages)
+web_router.include_router(ai_billing_account_pages)
+web_router.include_router(ai_reimbursement_claim_pages)
 web_router.include_router(ai_usage_pages)

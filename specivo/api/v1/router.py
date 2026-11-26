@@ -24,7 +24,10 @@ from specivo.api.v1.admin.users import router as admin_users_router
 from specivo.api.v1.admin.workflows import router as admin_workflows_router
 from specivo.api.v1.admin_ai_usage import router as admin_ai_usage_router
 from specivo.api.v1.agent_sessions import router as agent_sessions_router
+from specivo.api.v1.ai_billing_accounts import router as ai_billing_accounts_router
 from specivo.api.v1.ai_model_prices import router as ai_model_prices_router
+from specivo.api.v1.ai_reimbursement_claims import router as ai_reimbursement_claims_router
+from specivo.api.v1.ai_spend_budgets import router as ai_spend_budgets_router
 from specivo.api.v1.ai_spend_reports import router as ai_spend_reports_router
 from specivo.api.v1.ai_subscriptions import router as ai_subscriptions_router
 from specivo.api.v1.ai_usage import router as ai_usage_router
@@ -32,10 +35,14 @@ from specivo.api.v1.ai_usage_ingest import router as ai_usage_ingest_router
 from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
+from specivo.api.v1.concepts import router as concepts_router
 from specivo.api.v1.currencies import router as currencies_router
 from specivo.api.v1.exchange_rates import router as exchange_rates_router
+from specivo.api.v1.hermes_events import router as hermes_events_router
+from specivo.api.v1.hermes_receivers import router as hermes_receivers_router
 from specivo.api.v1.issues import router as issues_router
 from specivo.api.v1.link_graph_admin import router as link_graph_admin_router
+from specivo.api.v1.link_suggestions import router as link_suggestions_router
 from specivo.api.v1.links import router as links_router
 from specivo.api.v1.markdown import router as markdown_router
 from specivo.api.v1.metadata import router as metadata_router
@@ -64,6 +71,8 @@ api_router.include_router(projects_router)
 api_router.include_router(issues_router)
 api_router.include_router(relations_router)
 api_router.include_router(links_router)
+api_router.include_router(link_suggestions_router)
+api_router.include_router(concepts_router)
 api_router.include_router(link_graph_admin_router)
 api_router.include_router(versions_router)
 api_router.include_router(recurring_patterns_router)
@@ -78,6 +87,9 @@ api_router.include_router(currencies_router)
 api_router.include_router(exchange_rates_router)
 api_router.include_router(ai_model_prices_router)
 api_router.include_router(ai_subscriptions_router)
+api_router.include_router(ai_billing_accounts_router)
+api_router.include_router(ai_reimbursement_claims_router)
+api_router.include_router(ai_spend_budgets_router)
 api_router.include_router(admin_ai_usage_router)
 api_router.include_router(ai_usage_ingest_router)
 # Before the entries: /ai-usage/report/ is matched before /ai-usage/{entry_id}/.
@@ -94,6 +106,8 @@ api_router.include_router(saved_filters_router)
 api_router.include_router(admin_embedding_models_router)
 api_router.include_router(users_router)
 api_router.include_router(agent_sessions_router)
+api_router.include_router(hermes_events_router)
+api_router.include_router(hermes_receivers_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_user_groups_router)
 api_router.include_router(admin_roles_router)

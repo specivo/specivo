@@ -45,11 +45,17 @@ on any page — and click **Restore** next to it. The subpages that were deleted
 back too, in their old places. If another page has taken the deleted page's address (its slug) in the
 meantime, the restore is refused: rename or delete that page first.
 
-!!! warning "Deleting moves a page to trash, not oblivion"
+Pages stay in the trash for **90 days**. After that, the worker deletes them for good, once a day:
+the page with its whole history, its comments, its tags and its attachments (the files too). It can't
+be restored after that. A subpage that went to the trash later stays until its own 90 days are up.
+The administrator sets the period with `WIKI_TRASH_RETENTION_DAYS` (see
+[Configuration](../install/configuration.md)); `0` keeps the trash forever.
+
+!!! warning "Deleting moves a page to trash, then removes it"
     A deleted page disappears from the wiki and from normal navigation, and any `[[links]]` pointing to
     it will no longer resolve until it's restored. Restore it from the trash if you removed it by
-    mistake. Treat deletion as "hide and archive," not as a guaranteed permanent wipe — but still
-    delete deliberately, since readers and links lose the page in the meantime.
+    mistake, before the retention period runs out. Until then the page and its files are still stored,
+    so deleting is not an immediate wipe either.
 
 ## Cross-link pages
 
@@ -126,6 +132,95 @@ background with a progress count, and only one runs per project at a time. From 
 
 Tags, versions, sprints, assignees and the values of some metadata keys are part of the graph too,
 for AI agents: see [Navigating the link graph](../ai-agents/capabilities.md#navigating-the-link-graph).
+
+## Seeing the graph
+
+The links can also be seen as a picture:
+
+- an issue has a **Graph** tab, next to **Relations**;
+- a wiki page has a **Graph** section at the bottom, under **Linked from**;
+- a project has a **Graph** page in its menu, with the project's most linked issues and wiki pages
+  and the links between them.
+
+On an issue or a page, the graph shows the item (drawn larger), what it links to and what links to it,
+and one step further. Issues, wiki pages, commits and pull requests, attachments and missing targets
+(a `[[page]]` or issue key that does not exist) each have their own colour; the legend under the graph
+names them. Under **Show links**, tick or untick kinds of link: wiki links, mentions, relations, parent
+and children, links to files, attachments, commits and pull requests are shown at first. Ticking
+**Tags**, **Components**, **Versions**, **Sprints** or **Assignees** adds them as small diamonds with
+the number of items they hold. **Concepts (AI)** is off at first too: it adds the concepts that a
+project's AI provider found in its issues and pages (see
+[Concept extraction](../projects/index.md#concept-extraction-ai)), and is empty while that is off.
+**Accepted suggestions** are the typed links made from [suggestions](#possibly-related-suggested-links).
+
+Click an issue, page, commit or pull request to open it. Click a diamond (a tag, version and so on) to
+add its items to the graph. Drag anywhere on the picture to move it, scroll or pinch to zoom, or use the
+**Zoom in**, **Zoom out** and **Reset the view** buttons over the picture. Hover over an item or a line
+to see what it is. **Items in this graph**, under the picture, lists the same items as links, for
+the keyboard and screen readers, with a **Show its items** button for each tag, version and so on.
+
+![The project's Graph page](../../assets/img/project-graph.webp)
+
+![The Graph tab of an issue](../../assets/img/issue-graph.webp)
+
+![The Graph section of a wiki page](../../assets/img/wiki-graph.webp)
+
+The graph shows only what you can open yourself, like the lists above. It is capped so that a densely
+linked project stays readable: a read returns at most 1,000 links (the nearest ones first), and the
+picture holds at most 1,500 links across all the diamonds you open. When the server leaves some out,
+the line above the picture says so; when the picture is full it reads "The graph is full: open an
+item to explore from there." A graph of more than 150 items or 600 links is laid out at once instead
+of settling in an animation. **Show suggestions** adds
+suggested links, drawn as dashed lines, once your Specivo suggests links between similar issues and
+pages. The graph needs you to be signed in.
+
+## Possibly related: suggested links
+
+When semantic search is on (the bundled embedding model is installed), Specivo also suggests links
+that nobody wrote: issues and wiki pages of the same project whose content is close to each other
+and that are not linked in any way yet. They are hints, not links. You find them in two places:
+
+- on an issue, in the **Relations** tab, under **Possibly related**;
+- on a wiki page, in the **Possibly related** section at the bottom (open it to load the list).
+
+Suggestions are listed in two groups, **Issues** and **Wiki pages**, each with its count. Every row
+is marked with its type (a blue *Issue* or a green *Wiki page* label and edge) and shows the other
+item, the first lines of its text (the issue description or the page content) and a score from 0 to
+1, how close the two texts are. Each group lists at most ten, best first, and only items you can open
+yourself; a note under the group says how many less similar ones are not shown. At most ten issues
+and ten pages are suggested per item.
+
+Most items of one project already look alike to the embeddings: they share the project's vocabulary
+and the same kind of text, so even two unrelated items get a high score. A pair is therefore
+suggested only when the two items are clearly closer to each other than two typical items of the
+same project. Specivo checks this by comparing the two items after removing what all of the
+project's items have in common. The score shown is still the plain one. A project with fewer than
+10 issues and pages whose text has been embedded gets no suggestions, because there are too few
+items to tell what is typical.
+
+If you may link the two items, each suggestion has a **Link as** choice and two buttons:
+
+- **Accept** turns the suggestion into a real link. Two issues get a normal relation (choose the type:
+  **Relates to**, **Blocks**, **Duplicates**, ...), which needs the permission to manage issue
+  relations. An issue and a page, or two pages, get a *typed link* from the item you are on to the
+  other one: **See also**, **Documents**, **Implements**, **Decided in** or **Supersedes**. That
+  needs the permission to edit the issue, or to manage the wiki for a page. A typed link is listed
+  like a written link (in **Mentioned in** and **Linked from**) with its type, and is kept when the
+  text is edited, because it is not written in the text.
+- **Dismiss** hides the suggestion for good; it is not suggested again. It needs the same permission.
+
+Suggestions are recomputed when an issue or page is saved (once its text has been embedded) and for
+every project each night. Pairs that are already linked (a written link, a typed link, a relation,
+parent and child) are never suggested.
+
+Project managers can change how much closer than typical two items must be with the project setting
+`similar_links_threshold` through the REST API (`PATCH /api/v1/projects/<KEY>/`). It goes from 0 to
+0.95 and is 0.30 unless changed; a higher value means fewer, stronger suggestions. It is measured
+after the common part is removed, so it is not compared with the score shown on each row. The next
+computation uses it. To compute the suggestions at once instead of waiting for the night, an
+administrator runs `python -m specivo.cli.similar_links` (or `--project ACME`) in the API container.
+After an upgrade that changes how suggestions are chosen, the nightly computation brings every
+project up to date, or run that command to do it at once.
 
 ## What's next
 

@@ -8,9 +8,12 @@ call them.
 
 from __future__ import annotations
 
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+from specivo.mcp.client_context import agent_session_id_var
+from specivo.models.agent_session import AgentSession
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.entity_link_service import EntityLinkService
@@ -52,20 +55,42 @@ async def _log_tool(
     details: dict | None = None,
     project_id: int | None = None,
 ) -> None:
-    """Log an MCP tool call, with where the call came from when the request's audit context reaches it."""
+    """Log an MCP tool call, with where the call came from when the request's audit context reaches it.
+
+    A call that names a project (``project_key`` in *details*) without *project_id* gets that
+    project's id, so the row shows on the project's agent session timeline.
+
+    The row names the agent session of the call (``agent_session_id_var``),
+    and that session's ``tool_call_count`` goes up by one in the same
+    transaction, so a tool call that rolls back is neither logged nor counted.
+    """
     log_details = {"tool": tool_name, "source": "mcp"}
     if details:
         log_details.update(details)
+    if project_id is None and isinstance(log_details.get("project_key"), str):
+        # A call in a project names it on the row, so the project's agent session timeline shows it.
+        project_id = await session.scalar(
+            select(Project.id).where(func.upper(Project.key) == log_details["project_key"].strip().upper())
+        )
+    agent_session_id = agent_session_id_var.get()
     log = bounded_log(
         {
             "event_type": str(event_type),
             "user_id": user.id,
             "project_id": project_id,
+            "agent_session_id": agent_session_id,
             "details": log_details,
             **current_request_info(),
         }
     )
     session.add(log)
+    if agent_session_id is not None:
+        await session.execute(
+            update(AgentSession)
+            .where(AgentSession.id == agent_session_id)
+            .values(tool_call_count=AgentSession.tool_call_count + 1)
+            .execution_options(synchronize_session=False)
+        )
     await session.flush()
 
 

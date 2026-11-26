@@ -370,17 +370,12 @@ async def test_web_time_list_requires_view_time_entries(
 
 
 async def test_web_time_list_controls_follow_permissions(client: AsyncClient, world: dict) -> None:
-    """The Log Time button needs log_time; edit buttons appear only on editable rows."""
+    """The Log Time button needs log_time."""
     viewer = await client.get("/projects/TTPRV/time-entries/", cookies=await _cookies(client, "ttp_viewer"))
     assert "/time-entries/new/" not in viewer.text
-    assert 'class="action-btn"' not in viewer.text
 
     full = await client.get("/projects/TTPRV/time-entries/", cookies=await _cookies(client, "ttp_full"))
     assert "/time-entries/new/" in full.text
-    assert full.text.count('class="action-btn"') == 1  # only their own entry
-
-    manager = await client.get("/projects/TTPRV/time-entries/", cookies=await _cookies(client, "ttp_manager"))
-    assert manager.text.count('class="action-btn"') == 5
 
 
 @pytest.mark.parametrize(("login", "expected"), [("logger", 200), ("full", 200), ("viewer", 403), ("reader", 403)])

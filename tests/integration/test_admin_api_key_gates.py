@@ -174,6 +174,27 @@ async def test_api_key_for_a_user_is_session_only(key_client: AsyncClient, db_se
     assert keys == []
 
 
+async def test_hermes_receiver_for_a_user_is_session_only(key_client: AsyncClient, db_session: AsyncSession) -> None:
+    """A receiver records events as its account: minting one, or a new secret, needs a session."""
+    from specivo.services.hermes_receiver_service import HermesReceiverService
+
+    target = await _user(db_session)
+    url = f"/api/v1/admin/users/{target.id}/hermes-receivers/"
+    _assert_refused(await key_client.post(url, json={"name": "minted"}))
+    assert await HermesReceiverService().list_for_user(db_session, target.id) == []
+
+    minted = await HermesReceiverService().create(db_session, owner=target, name="existing", actor=target)
+    receiver = minted.receiver
+    await db_session.flush()
+    _assert_refused(await key_client.patch(f"{url}{receiver.id}/", json={"rotate_secret": True}))
+    # Switching it off and deleting it take access away, so a key may.
+    resp = await key_client.patch(f"{url}{receiver.id}/", json={"is_active": False})
+    assert resp.status_code == 200, resp.text
+    assert "secret" not in resp.json() or resp.json()["secret"] is None
+    _assert_refused(await key_client.patch(f"{url}{receiver.id}/", json={"is_active": True}))
+    assert (await key_client.delete(f"{url}{receiver.id}/")).status_code == 204
+
+
 async def test_email_change_is_session_only(key_client: AsyncClient, db_session: AsyncSession) -> None:
     """The address receives password reset links: setting it is a way to sign in."""
     target = await _user(db_session, email="gate-before@example.com")
@@ -193,6 +214,7 @@ SESSION_ONLY_ROUTES: list[tuple[str, str, str]] = [
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/unlock/"),
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/reactivate/"),
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/api-keys/"),
+    ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/hermes-receivers/"),
     ("specivo.api.v1.admin.kill_switch", "POST", "/admin/unkill/agent/{user_id}/"),
     ("specivo.api.v1.admin.credentials", "POST", "/admin/credentials/issue/"),
     ("specivo.api.v1.admin.sso", "POST", "/admin/sso/providers/"),
@@ -204,6 +226,8 @@ SESSION_ONLY_ROUTES: list[tuple[str, str, str]] = [
     ("specivo.api.v1.admin.sso", "PATCH", "/admin/settings/authentication/"),
     ("specivo.api.v1.admin.sso", "PATCH", "/admin/sso/providers/{provider_id}/scim/"),
     ("specivo.api.v1.admin.sso", "POST", "/admin/sso/providers/{provider_id}/scim/token/"),
+    # Where a project's content (private issues included) is sent, and with which key.
+    ("specivo.api.v1.concepts", "PUT", "/projects/{key}/ai-provider/"),
 ]
 
 
@@ -274,5 +298,7 @@ async def test_the_same_routes_work_with_a_session(admin_client: AsyncClient, db
     resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/reset-password/", json={"password": NEW_PASSWORD})
     assert resp.status_code == 200, resp.text
     resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/api-keys/", json={"name": "minted"})
+    assert resp.status_code == 201, resp.text
+    resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/hermes-receivers/", json={"name": "minted"})
     assert resp.status_code == 201, resp.text
     assert TEST_PASSWORD  # the fixture admin signed in with it

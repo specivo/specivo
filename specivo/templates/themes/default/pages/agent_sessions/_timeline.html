@@ -1,0 +1,48 @@
+{# The tool calls of one agent session, from the security audit log: metadata only (tool, event type,
+   the ids and keys the row holds). Context: `timeline` from specivo.web.pages.agent_sessions.timeline_context.
+   Embeddable: the pager (shown above 20 calls) swaps only this block through htmx, with a page-size
+   selector; without JS its links reload the whole page.
+   With `timeline.more_url` (the issue's Agents tab) it shows the newest rows only and links to all of them. #}
+{% from "pages/agent_sessions/_pager.html" import section_pager %}
+{% set t = timeline %}
+<div class="card sp-as-timeline" data-testid="as-timeline">
+  {% if t.rows %}
+  <div class="sp-table-scroll">
+  <table class="sp-table">
+    <thead>
+      <tr>
+        <th>{% trans %}Time{% endtrans %}</th>
+        <th>{% trans %}Tool{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Event{% endtrans %}</th>
+        <th>{% trans %}Targets{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Project{% endtrans %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in t.rows %}
+      <tr data-testid="as-timeline-row">
+        <td class="sp-as-nowrap">{{ r.created_at | localdt(user.timezone) }}</td>
+        <td><span class="sp-as-tool">{{ r.tool or "–" }}</span></td>
+        <td class="sp-as-hide-md"><span class="sp-as-event">{{ r.event_type }}</span></td>
+        <td>
+          {% if r.details %}<span class="sp-as-details">{% for key, value in r.details %}<span class="sp-as-detail"><span class="sp-as-detail-key">{{ key }}</span>{{ value }}</span>{% endfor %}</span>
+          {% else %}<span class="sp-text-muted">–</span>{% endif %}
+        </td>
+        <td class="sp-as-hide-md">{% if r.project_key %}{{ r.project_key }}{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if t.more_url %}
+  <div class="sp-as-pager">
+    <span>{% if t.total > t.rows | length %}{% trans shown=t.rows | length, total=t.total %}The newest {{ shown }} of {{ total }}{% endtrans %}{% else %}{% trans count=t.total %}{{ count }} step{% pluralize %}{{ count }} steps{% endtrans %}{% endif %}</span>
+    {% if t.total > t.rows | length %}<a class="sp-page-link" href="{{ base }}{{ t.more_url }}" data-testid="as-timeline-more">{% trans %}Show all{% endtrans %} &raquo;</a>{% endif %}
+  </div>
+  {% else %}
+  {{ section_pager(t.pager, ".sp-as-timeline", "as-timeline-pager") }}
+  {% endif %}
+  {% else %}
+  <div class="sp-as-empty" data-testid="as-timeline-empty">{% trans %}No tool calls recorded for this session in this project.{% endtrans %}</div>
+  {% endif %}
+</div>

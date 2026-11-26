@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from specivo.core.ai_usage_ingest import (
+    OPTIONAL_FIELDS,
     SCHEMA_DIR,
     RecordRejectedError,
     check_schema,
@@ -170,6 +171,96 @@ def test_attribution_is_normalised() -> None:
     assert parsed.attribution.issue_method == "env"
     assert parsed.attribution.project_key == "ACME"
     assert parsed.attribution.commits == ["ab" * 20]
+
+
+def test_optional_fields_are_optional_record_properties() -> None:
+    record = _published()["record.schema.json"]
+    assert OPTIONAL_FIELDS == ("route", "billing_account", "parent_session_id", "unattended", "profile")
+    for name in OPTIONAL_FIELDS:
+        assert name in record["properties"], name
+        assert name not in record["required"], name
+    info = _published()["info.schema.json"]
+    assert info["properties"]["optional_fields"]["type"] == "array"
+    assert "optional_fields" not in info["required"]
+
+
+def test_route_and_billing_account_are_parsed() -> None:
+    parsed = parse_record(_record(route="  llm-gateway.example.com ", billing_account="acme-gateway"), NOW)
+    assert parsed.route == "llm-gateway.example.com"
+    assert parsed.billing_account == "acme-gateway"
+    bare = parse_record(_record(route=None, billing_account=None), NOW)
+    assert (bare.route, bare.billing_account) == (None, None)
+    assert parse_record(_record(route="   "), NOW).route is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"route": "r" * 101}, "route"),
+        ({"route": ""}, "route"),
+        ({"route": "gateway\nhost"}, "route"),
+        ({"route": 7}, "route"),
+        ({"billing_account": "Acme-Gateway"}, "billing_account"),
+        ({"billing_account": "a" * 65}, "billing_account"),
+        ({"billing_account": "-acme"}, "billing_account"),
+        ({"billing_account": "acme gateway"}, "billing_account"),
+        ({"billing_account": ""}, "billing_account"),
+    ],
+)
+def test_route_and_billing_account_bounds(changes: dict[str, Any], field: str) -> None:
+    unknown, problem = check_schema(record_validator(), _record(**changes))
+    assert unknown == []
+    assert problem is not None
+    assert problem.field == field
+
+
+def test_route_and_billing_account_at_their_limits_are_valid() -> None:
+    unknown, problem = check_schema(record_validator(), _record(route="r" * 100, billing_account="a" + "-" * 63))
+    assert (unknown, problem) == ([], None)
+
+
+def test_session_context_fields_are_parsed() -> None:
+    parsed = parse_record(
+        _record(parent_session_id=" 20261105_090000_a1b2c3 ", unattended=True, profile=" research "), NOW
+    )
+    assert parsed.parent_session_id == "20261105_090000_a1b2c3"
+    assert parsed.unattended is True
+    assert parsed.profile == "research"
+
+
+def test_session_context_fields_default_to_an_attended_run_without_parent_or_profile() -> None:
+    bare = parse_record(_record(), NOW)
+    assert (bare.parent_session_id, bare.unattended, bare.profile) == (None, False, None)
+    nulls = parse_record(_record(parent_session_id=None, profile=None, unattended=False), NOW)
+    assert (nulls.parent_session_id, nulls.unattended, nulls.profile) == (None, False, None)
+    assert parse_record(_record(profile="   "), NOW).profile is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"unattended": "true"}, "unattended"),
+        ({"unattended": 1}, "unattended"),
+        ({"unattended": None}, "unattended"),
+        ({"profile": "p" * 101}, "profile"),
+        ({"profile": ""}, "profile"),
+        ({"profile": "research\tlab"}, "profile"),
+        ({"parent_session_id": "s" * 201}, "parent_session_id"),
+        ({"parent_session_id": ""}, "parent_session_id"),
+    ],
+)
+def test_session_context_field_bounds(changes: dict[str, Any], field: str) -> None:
+    unknown, problem = check_schema(record_validator(), _record(**changes))
+    assert unknown == []
+    assert problem is not None
+    assert problem.field == field
+
+
+def test_session_context_fields_at_their_limits_are_valid() -> None:
+    unknown, problem = check_schema(
+        record_validator(), _record(parent_session_id="s" * 200, profile="p" * 100, unattended=True)
+    )
+    assert (unknown, problem) == ([], None)
 
 
 @pytest.mark.parametrize(

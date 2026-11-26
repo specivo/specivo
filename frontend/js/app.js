@@ -24,6 +24,7 @@ import { initMermaid } from './modules/mermaid';
 import { initSelectAll } from './modules/select-all';
 import { initSpendDrill } from './modules/spend-drill';
 import { initIssueAiUsage } from './modules/issue-ai-usage';
+import { initLinkGraphLoader } from './modules/link-graph-loader';
 
 document.addEventListener('DOMContentLoaded', function () {
     initCsrf();
@@ -43,4 +44,5 @@ document.addEventListener('DOMContentLoaded', function () {
     initSelectAll();
     initSpendDrill();
     initIssueAiUsage();
+    initLinkGraphLoader();
 });

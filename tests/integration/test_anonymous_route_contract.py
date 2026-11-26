@@ -47,6 +47,10 @@ pytestmark = [pytest.mark.integration]
 # Everything under this prefix authenticates somebody or lets them recover an
 # account, so it is unauthenticated by design and outside the enumeration.
 _AUTH_PREFIX = "/api/v1/auth/"
+# Hermes posts its events without a session or key: the token in the URL and the
+# body's signature are the proof, and an unknown token answers 404 (Hermes treats
+# every 4xx as final). Covered by test_hermes_events.py.
+_SIGNED_RECEIVER_PREFIX = "/api/v1/hermes/events/"
 
 _PATH_PARAM = re.compile(r"\{[^}]+\}")
 
@@ -161,7 +165,7 @@ def _mutating_api_routes() -> list[tuple[str, str]]:
     for route in iter_api_routes(_test_app):
         if not route.path.startswith("/api/v1"):
             continue
-        if route.path.startswith(_AUTH_PREFIX):
+        if route.path.startswith((_AUTH_PREFIX, _SIGNED_RECEIVER_PREFIX)):
             continue
         for method in sorted(route.methods - {"GET", "HEAD", "OPTIONS"}):
             out.append((method, _PATH_PARAM.sub("1", route.path)))

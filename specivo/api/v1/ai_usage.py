@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from specivo.core.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from specivo.core.database import DbSession
@@ -29,6 +29,7 @@ from specivo.core.security import get_current_user
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.user import User
 from specivo.schemas.ai_usage import (
+    AiUsageBillingAccountRef,
     AiUsageCostType,
     AiUsageCreate,
     AiUsageEntryOut,
@@ -38,7 +39,13 @@ from specivo.schemas.ai_usage import (
     AiUsageUserOut,
 )
 from specivo.schemas.money import MoneyOut
-from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences
+from specivo.services.ai_usage_service import (
+    BILLING_OVERRIDE,
+    AiUsageInput,
+    AiUsageService,
+    BillingOverride,
+    EntryReferences,
+)
 from specivo.services.project_service import ProjectService
 
 router = APIRouter(tags=["ai-usage"])
@@ -46,6 +53,11 @@ _service = AiUsageService()
 _projects = ProjectService()
 
 _REQUIRED_ON_PATCH = ("tool", "model", "usage_date", "request_count")
+
+#: The 200 of a create sent again with its idempotency key.
+_REPLAYED: dict[int | str, dict[str, Any]] = {
+    200: {"model": AiUsageEntryOut, "description": "The idempotency key's bucket existed: replaced or unchanged"}
+}
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +70,15 @@ def _user_out(refs: EntryReferences, user_id: int) -> AiUsageUserOut:
     if user is None:
         return AiUsageUserOut(id=user_id, name="", login="")
     return AiUsageUserOut(id=user.id, name=user.display_name, login=user.login)
+
+
+def _account_ref(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageBillingAccountRef | None:
+    account = refs.accounts.get(entry.billing_account_id) if entry.billing_account_id is not None else None
+    if account is None:
+        return None
+    return AiUsageBillingAccountRef(
+        id=account.id, slug=account.slug, name=account.name, kind=account.kind, instance=account.owner_user_id is None
+    )
 
 
 def entry_out(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageEntryOut:
@@ -87,6 +108,9 @@ def entry_out(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageEntryOut:
         total_tokens=sum(entry.all_tokens().values()),
         cost_type=entry.cost_type,
         subscription_id=entry.subscription_id,
+        payer=entry.payer,
+        billing_method=entry.billing_method,
+        billing_account=_account_ref(entry, refs),
         cost_basis=entry.cost_basis,
         marginal_cost=MoneyOut.from_money(entry.marginal) if entry.marginal is not None else None,
         api_equivalent_cost=(MoneyOut.from_money(entry.api_equivalent) if entry.api_equivalent is not None else None),
@@ -94,6 +118,9 @@ def entry_out(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageEntryOut:
         price_id=entry.price_id,
         priced_at=entry.priced_at,
         external_session_id=entry.external_session_id,
+        parent_session_id=entry.parent_session_id,
+        unattended=entry.unattended,
+        profile=entry.profile,
         git_branch=entry.git_branch,
         repo_hint=entry.repo_hint,
         client_name=entry.client_name,
@@ -151,9 +178,13 @@ def input_of(data: AiUsageCreate) -> AiUsageInput:
         reported_cost=data.cost.to_money() if data.cost is not None else None,
         issue_id=data.issue_id,
         external_session_id=data.external_session_id,
+        parent_session_id=data.parent_session_id,
+        unattended=data.unattended,
+        profile=data.profile,
         git_branch=data.git_branch,
         repo_hint=data.repo_hint,
         comments=data.comments,
+        idempotency_key=data.idempotency_key,
     )
 
 
@@ -197,6 +228,9 @@ async def _changes(db: DbSession, viewer: User, entry: AiUsageEntry, data: AiUsa
             }
     if "cost" in sent:
         changes["reported_cost"] = data.cost.to_money() if data.cost is not None else None
+    if "billing_account_id" in sent or "payer" in sent:
+        override = BillingOverride(account_id=data.billing_account_id, payer=data.payer)
+        changes[BILLING_OVERRIDE] = None if override.is_clear else override
     return changes
 
 
@@ -254,11 +288,13 @@ async def list_project_ai_usage(  # noqa: PLR0913
     "/projects/{project_key}/ai-usage/",
     response_model=AiUsageEntryOut,
     status_code=status.HTTP_201_CREATED,
+    responses=_REPLAYED,
 )
 async def create_project_ai_usage(
     project_key: str,
     data: AiUsageCreate,
     request: Request,
+    response: Response,
     db: DbSession,
     current_user: User = Depends(get_current_user),
 ) -> AiUsageEntryOut:
@@ -267,11 +303,14 @@ async def create_project_ai_usage(
     Needs ``log_ai_usage`` there for one's own usage. With ``on_behalf_of``
     it needs ``log_ai_usage_for_others`` and the user must be an active member
     of the project; without that permission every login gets the same 403.
+    With ``idempotency_key``: 201 for a new bucket, 200 when it existed (its
+    totals replaced, or unchanged); 409 ``key_conflict`` when another account
+    reported it, 409 ``ai_usage_attribution_conflict`` when it is in another project.
     """
     project = await _projects.get_by_key(db, project_key.upper())
     await _projects.require_project_access(db, project, current_user)
     source, key_id = _source(request)
-    entry = await _service.create_for(
+    result = await _service.create_for(
         db,
         current_user,
         input_of(data),
@@ -281,7 +320,9 @@ async def create_project_ai_usage(
         api_key_id=key_id,
         request=request,
     )
-    return await _one_out(db, current_user, entry)
+    if result.status != "created":
+        response.status_code = status.HTTP_200_OK
+    return await _one_out(db, current_user, result.entry)
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +373,11 @@ async def list_my_ai_usage(  # noqa: PLR0913
     return await _page_out(db, current_user, entries, total, offset, limit)
 
 
-@router.post("/my/ai-usage/", response_model=AiUsageEntryOut, status_code=status.HTTP_201_CREATED)
+@router.post("/my/ai-usage/", response_model=AiUsageEntryOut, status_code=status.HTTP_201_CREATED, responses=_REPLAYED)
 async def create_my_ai_usage(
     data: AiUsageCreate,
     request: Request,
+    response: Response,
     db: DbSession,
     current_user: User = Depends(get_current_user),
 ) -> AiUsageEntryOut:
@@ -343,9 +385,11 @@ async def create_my_ai_usage(
 
     Needs no permission for one's own usage; ``on_behalf_of`` is for
     administrators only here. ``issue_id`` needs a project: use the project route.
+    With ``idempotency_key``: 201 for a new bucket, 200 when it existed (see the
+    project route).
     """
     source, key_id = _source(request)
-    entry = await _service.create_for(
+    result = await _service.create_for(
         db,
         current_user,
         input_of(data),
@@ -355,7 +399,9 @@ async def create_my_ai_usage(
         api_key_id=key_id,
         request=request,
     )
-    return await _one_out(db, current_user, entry)
+    if result.status != "created":
+        response.status_code = status.HTTP_200_OK
+    return await _one_out(db, current_user, result.entry)
 
 
 # ---------------------------------------------------------------------------
@@ -382,9 +428,12 @@ async def update_ai_usage(
 
     Moving it (``project_key``) is checked like logging it there in its user's
     name. Reporter and import entries keep their usage: 422
-    ``ai_usage_field_locked`` for anything but ``project_key``, ``issue_id``
-    and ``comments``. Changing the usage re-prices the entry. An edit by
-    someone else than the entry's user is audited.
+    ``ai_usage_field_locked`` for anything but ``project_key``, ``issue_id``,
+    ``comments`` and the billing override. Changing the usage re-prices the
+    entry. ``billing_account_id`` / ``payer`` set or clear the billing
+    override (422 ``ai_usage_billing_account_unknown`` for an account the
+    entry's user may not use or the caller may not see). An edit by someone
+    else than the entry's user is audited, and so is every override.
     """
     entry = await _service.get_visible(db, entry_id, current_user)
     changes = await _changes(db, current_user, entry, data)

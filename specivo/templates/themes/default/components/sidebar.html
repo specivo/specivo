@@ -25,6 +25,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2z"/><path d="M16 21H8"/><path d="M12 17v4"/></svg>
       {% trans %}Projects{% endtrans %}
     </a>
+    {% if not anonymous %}
+    <a class="sidebar-item{% if active_page == 'time_all' %} active{% endif %}" href="{{ base }}/time-entries/" data-testid="sidebar-time-entries">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      {% trans %}Time Entries{% endtrans %}
+    </a>
+    {% endif %}
   </div>
 
   {% if active_project is defined and active_project %}
@@ -58,6 +64,10 @@
     </a>
     {% endif %}
     {% if not anonymous %}
+    <a class="sidebar-item{% if active_page == 'graph' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/graph/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M6.3 8.2l4.4 7.6M17.7 8.2l-4.4 7.6"/></svg>
+      {% trans %}Graph{% endtrans %}
+    </a>
     <a class="sidebar-item{% if active_page == 'roadmap' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/roadmap/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       {% trans %}Roadmap{% endtrans %}
@@ -69,6 +79,10 @@
     <a class="sidebar-item{% if active_page == 'ai_usage' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/ai-usage/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
       {% trans %}AI usage{% endtrans %}
+    </a>
+    <a class="sidebar-item{% if active_page == 'agent_sessions' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/agent-sessions/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
+      {% trans %}Agent sessions{% endtrans %}
     </a>
     <a class="sidebar-item{% if active_page == 'sprints' %} active{% endif %}" href="{{ base }}/projects/{{ active_project.key }}/sprints/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>

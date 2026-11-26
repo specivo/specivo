@@ -1,0 +1,125 @@
+{#
+  What agents did for an issue (issue_agents.py): one block per agent session, its subagents, its newest
+  steps from the audit log and the AI cost of the block. Loaded by htmx into the issue page's tab
+  (#issue-agents-tab), and the body of the page /issue/{key}/agents/.
+
+  Every link of the tab has an href (the page, works without JavaScript) and an hx-get (this partial),
+  swapped into #issue-agents-tab.
+
+  Context: issue, project, state (AgentsTabState), blocks, total, first, last, prev, next, sub_links,
+  sessions_url.
+#}
+{% from "pages/agent_sessions/_macros.html" import account_cell, client_type_label with context %}
+
+{% macro tab_link(link, cls="", current=False, testid="", label="") -%}
+<a class="{{ cls }}" href="{{ link.href | prefixed }}" hx-get="{{ link.hx | prefixed }}" hx-push-url="false"
+   {%- if current %} aria-current="true"{% endif %}
+   {%- if label %} aria-label="{{ label }}"{% endif %}
+   {%- if testid %} data-testid="{{ testid }}"{% endif %}>{{ caller() }}</a>
+{%- endmacro %}
+
+{% macro state_badge(state) -%}
+{% if state == "running" %}<span class="sp-as-state sp-as-state--active" data-testid="agent-state">{% trans %}Running{% endtrans %}</span>
+{% elif state == "completed" %}<span class="sp-as-state sp-agent-state--completed" data-testid="agent-state">{% trans %}Completed{% endtrans %}</span>
+{% elif state == "interrupted" %}<span class="sp-as-state sp-agent-state--interrupted" data-testid="agent-state">{% trans %}Interrupted{% endtrans %}</span>
+{% else %}<span class="sp-as-state" data-testid="agent-state">{% trans %}Idle{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro types_label(types) -%}
+{% for t in types %}{{ client_type_label(t) }}{% if not loop.last %} + {% endif %}{% else %}–{% endfor %}
+{%- endmacro %}
+
+<div class="sp-agent-tab" data-testid="agents-tab"
+     hx-target="#issue-agents-tab" hx-swap="innerHTML show:none">
+  <div class="sp-agent-tab-head">
+    <h2 class="sp-agent-tab-title" id="agents-tab-title" tabindex="-1">{% trans %}What agents did on this issue{% endtrans %}</h2>
+    <a class="sp-btn sp-btn-sm sp-btn-ghost" href="{{ base }}{{ sessions_url }}" data-testid="agents-sessions-link">{% trans %}All agent sessions{% endtrans %}</a>
+  </div>
+
+  {% if state.has_children %}
+  <nav class="sp-drill-tabs sp-agent-scope" aria-label="{{ _('Sessions to show') }}" data-testid="agents-scope">
+    {% call tab_link(sub_links.on, cls="sp-drill-tab" ~ (" active" if state.sub else ""), current=state.sub, testid="agents-sub-on") %}{% trans %}With sub-issues{% endtrans %}{% endcall %}
+    {% call tab_link(sub_links.off, cls="sp-drill-tab" ~ ("" if state.sub else " active"), current=not state.sub, testid="agents-sub-off") %}{% trans %}This issue only{% endtrans %}{% endcall %}
+  </nav>
+  {% endif %}
+
+  {% if not blocks %}
+  <div class="card sp-as-empty" data-testid="agents-empty">{% trans %}No agent session you can see worked on this issue.{% endtrans %}</div>
+  {% endif %}
+
+  {% for b in blocks %}
+  <section class="card sp-agent-block" data-testid="agent-block" data-session-id="{{ b.id }}" aria-labelledby="agent-block-{{ b.id }}">
+    <header class="sp-agent-block-head">
+      <div class="sp-agent-block-who">
+        <h3 class="sp-agent-block-title" id="agent-block-{{ b.id }}">{{ account_cell(b) }}</h3>
+        <span class="sp-agent-block-client">
+          {% if b.clients %}{{ b.clients | join(", ") }}{% else %}{% trans %}Unknown client{% endtrans %}{% endif %}
+          · {{ types_label(b.client_types) }}
+          {% if b.cost and b.cost.profiles %}· <span data-testid="agent-profile">{% trans %}profile{% endtrans %} {{ b.cost.profiles | join(", ") }}</span>{% endif %}
+          {% if b.cost and b.cost.unattended %}· <span class="sp-aiu-badge" data-testid="aiu-unattended-badge" title="{{ _('A run with nobody in the loop, such as a cron or scheduled job') }}">{% trans %}unattended{% endtrans %}</span>{% endif %}
+        </span>
+      </div>
+      <div class="sp-agent-block-when">
+        {{ state_badge(b.state) }}
+        <span class="sp-text-muted-xs">
+          {{ b.started_at | localdt(user.timezone) }} –
+          {% if b.ended_at %}{{ b.ended_at | localdt(user.timezone) }}{% else %}{{ b.last_activity_at | localdt(user.timezone) }}{% endif %}
+          · {{ b.duration }}
+        </span>
+      </div>
+    </header>
+
+    <ul class="sp-agent-counters" aria-label="{{ _('Counters') }}">
+      <li data-testid="agent-tool-calls"><span class="sp-agent-counter-value">{{ b.tool_calls }}</span> {% trans count=b.tool_calls %}tool call{% pluralize %}tool calls{% endtrans %}</li>
+      <li data-testid="agent-approvals"><span class="sp-agent-counter-value">{{ b.approvals_requested }}</span> {% trans count=b.approvals_requested %}approval asked{% pluralize %}approvals asked{% endtrans %}
+        {%- if b.approvals_resolved %} ({% for choice, n in b.approvals_resolved %}{{ choice or _("no answer") }} {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}</li>
+      <li data-testid="agent-subagents"><span class="sp-agent-counter-value">{{ b.children | length }}</span> {% trans count=b.children | length %}subagent{% pluralize %}subagents{% endtrans %}</li>
+    </ul>
+
+    {% if b.cost_visible %}
+    <div class="sp-agent-cost" data-testid="agent-cost">
+      {% if b.cost %}
+      <span class="sp-agent-cost-label">{% trans %}AI cost{% endtrans %}</span>
+      <span class="sp-agent-cost-value" data-testid="agent-cost-spend">{{ b.cost.spend or "–" }}</span>
+      {% if b.cost.api %}<span class="sp-text-muted-xs">{% trans value=b.cost.api %}API value {{ value }}{% endtrans %}</span>{% endif %}
+      <span class="sp-text-muted-xs" title="{{ b.cost.tokens }}">{% trans tokens=b.cost.tokens_short %}{{ tokens }} tokens{% endtrans %}</span>
+      <span class="sp-text-muted-xs">{% trans count=b.cost.entries %}{{ count }} usage entry{% pluralize %}{{ count }} usage entries{% endtrans %}</span>
+      {% if b.cost.spend_unconverted %}<span class="sp-text-muted-xs">{% trans %}plus amounts without an exchange rate{% endtrans %}</span>{% endif %}
+      {% else %}
+      <span class="sp-agent-cost-label">{% trans %}AI cost{% endtrans %}</span>
+      <span class="sp-text-muted-xs" data-testid="agent-cost-pending">{% trans %}Not reported yet. The reporter sends usage every 30 minutes.{% endtrans %}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if b.children %}
+    <ul class="sp-agent-children" data-testid="agent-children">
+      {% for c in b.children %}
+      <li class="sp-agent-child" data-testid="agent-child" data-session-id="{{ c.id }}">
+        <a href="{{ base }}{{ c.detail_url }}">#{{ c.id }}</a>
+        <span>{% if c.clients %}{{ c.clients | join(", ") }}{% else %}{{ types_label(c.client_types) }}{% endif %}</span>
+        {{ state_badge(c.state) }}
+        <span class="sp-text-muted-xs">{{ c.started_at | localdt(user.timezone) }} · {{ c.duration }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% with timeline = b.timeline %}{% include "pages/agent_sessions/_timeline.html" %}{% endwith %}
+
+    <div class="sp-agent-block-foot">
+      <a href="{{ base }}{{ b.detail_url }}" data-testid="agent-open">{% trans %}Open session{% endtrans %} &raquo;</a>
+    </div>
+  </section>
+  {% endfor %}
+
+  {% if prev or next %}
+  <nav class="sp-as-pager" aria-label="{{ _('Pages of agent sessions') }}" data-testid="agents-pager">
+    <span>{% trans first=first, last=last, total=total %}{{ first }}–{{ last }} of {{ total }}{% endtrans %}</span>
+    <span class="sp-as-pager-links">
+      {% if prev %}{% call tab_link(prev, cls="sp-page-link", testid="agents-prev") %}&laquo; {% trans %}Newer{% endtrans %}{% endcall %}{% endif %}
+      {% if next %}{% call tab_link(next, cls="sp-page-link", testid="agents-next") %}{% trans %}Older{% endtrans %} &raquo;{% endcall %}{% endif %}
+    </span>
+  </nav>
+  {% endif %}
+</div>

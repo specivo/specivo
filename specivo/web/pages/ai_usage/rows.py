@@ -42,6 +42,7 @@ async def _rows(
         cache = tokens["cache_read"] + tokens["cache_write_5m"] + tokens["cache_write_1h"]
         issue_key = refs.issue_keys.get(e.issue_id) if e.issue_id is not None else None
         marginal, api_eq, reported = e.marginal, e.api_equivalent, e.reported_cost
+        account = refs.accounts.get(e.billing_account_id) if e.billing_account_id is not None else None
         rows.append(
             {
                 "id": e.id,
@@ -64,12 +65,19 @@ async def _rows(
                 "long_context": _fmt_int(long_total, locale) if long_total else "",
                 "cost_type": e.cost_type,
                 "cost_basis": e.cost_basis,
+                "payer": e.payer,
+                # The account's name when the reader may see it; "" for none or a private one.
+                "billing_account": account.name if account is not None else "",
+                "billing_private": account is None and e.billing_account_id is not None,
+                "billing_manual": e.billing_method == "manual",
                 "marginal": marginal.format(locale) if marginal is not None else "",
                 "api_equivalent": api_eq.format(locale) if api_eq is not None else "",
                 "reported": reported.format(locale) if reported is not None else "",
                 "project_key": refs.project_keys.get(e.project_id, "") if e.project_id is not None else "",
                 "issue_key": issue_key or "",
                 "branch": e.git_branch or "",
+                "unattended": e.unattended,
+                "profile": e.profile or "",
                 "comments": e.comments or "",
                 "excluded": e.is_excluded,
                 "editable": editable,

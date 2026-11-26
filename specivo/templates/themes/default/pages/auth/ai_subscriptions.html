@@ -13,7 +13,7 @@
 </div>
 
 <h1 class="sp-page-h1">{% trans %}My AI subscriptions{% endtrans %}</h1>
-<p class="sp-text-muted sp-mb-md">{% trans %}The flat-rate AI plans you pay for, such as Claude Max or ChatGPT Plus. AI usage from the tools a plan covers is counted as covered by the plan, and spend reports spread the fee over that usage. Only you and administrators see this page.{% endtrans %}</p>
+<p class="sp-text-muted sp-mb-md">{% trans %}The flat-rate AI plans you pay for, such as Claude Max or ChatGPT Plus. AI usage from the tools a plan covers is counted as covered by the plan, and spend reports spread the fee over that usage. Only you and administrators see this page.{% endtrans %} <a href="{{ base }}/my/ai-billing-accounts/">{% trans %}My AI billing accounts{% endtrans %} &rarr;</a></p>
 
 {% if notice == "created" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription added.{% endtrans %}</div>
 {% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="subscription-notice">{% trans %}Subscription saved.{% endtrans %}</div>
@@ -35,6 +35,7 @@
           <th class="sp-sub-num">{% trans %}Fee{% endtrans %}</th>
           <th>{% trans %}Days{% endtrans %}</th>
           <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Billing account{% endtrans %}</th>
           {% if can_edit %}<th></th>{% endif %}
         </tr>
       </thead>
@@ -46,10 +47,11 @@
           <td class="sp-sub-num">{{ s.fee }} <span class="sp-text-muted-xs">{{ period_label(s.billing_period) }}</span></td>
           <td class="sp-sub-dates">{{ s.starts_on }} &rarr; {{ s.ends_on or _('open') }}</td>
           <td>{{ status_badge(s.status) }}</td>
+          <td>{% if s.billing_account_id %}<a href="{{ base }}/my/ai-billing-accounts/{{ s.billing_account_id }}/" data-testid="subscription-account">{{ s.billing_account_slug or s.billing_account_id }}</a>{% endif %}</td>
           {% if can_edit %}<td><a class="sp-btn-sm" href="{{ base }}/my/ai-subscriptions/{{ s.id }}/">{% trans %}Edit{% endtrans %}</a></td>{% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="6" class="sp-text-muted">{% trans %}You have not added any AI subscriptions.{% endtrans %}</td></tr>
+        <tr><td colspan="7" class="sp-text-muted">{% trans %}You have not added any AI subscriptions.{% endtrans %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -26,7 +26,15 @@ from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.services.ai_usage_service import AiUsageInput, AiUsageService, EntryReferences, money_from
+from specivo.services.ai_billing_account_service import AiBillingAccountService
+from specivo.services.ai_usage_service import (
+    BILLING_OVERRIDE,
+    AiUsageInput,
+    AiUsageService,
+    BillingOverride,
+    EntryReferences,
+    money_from,
+)
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent
@@ -35,6 +43,7 @@ if TYPE_CHECKING:
     from specivo.services.ai_spend_report_service import SpendReport
 
 _usage = AiUsageService()
+_accounts = AiBillingAccountService()
 _issues = IssueService()
 _projects = ProjectService()
 
@@ -103,13 +112,32 @@ def _line(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
         flags.append("excluded")
     if entry.is_locked:
         flags.append("locked")
+    if entry.unattended:
+        flags.append("unattended")
     return (
         f"#{entry.id} {entry.usage_date.isoformat()} {_where(entry, refs)} {entry.tool_slug}/{entry.model} "
         f"user={_login(refs, entry.user_id)} {_tokens(entry)} cost_type={entry.cost_type} "
         f"marginal={_money(entry.marginal)} api_equivalent={_money(entry.api_equivalent)} source={entry.source}"
+        f" payer={entry.payer}"
         + (f" session={session_id}" if (session_id := _session(entry, viewer)) else "")
+        + (f" profile={entry.profile}" if entry.profile else "")
         + (f" [{', '.join(flags)}]" if flags else "")
     )
+
+
+def _billing(entry: AiUsageEntry, refs: EntryReferences) -> str:
+    """Who paid, through which account (when the reader may see it), and whether a person set it."""
+    account = refs.accounts.get(entry.billing_account_id) if entry.billing_account_id is not None else None
+    text = f"Payer: {entry.payer}"
+    if account is not None:
+        text += f"  Billing account: {account.slug}"
+    elif entry.billing_account_id is not None:
+        text += "  Billing account: (a personal account)"
+    if entry.billing_method == "manual":
+        text += "  (set by hand; clear it with billing_account='')"
+    else:
+        text += f"  (resolved: {entry.billing_method})"
+    return text
 
 
 def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
@@ -130,11 +158,15 @@ def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     ]
     session_id = _session(entry, viewer)
     if session_id:
-        lines.insert(3, f"Session: {session_id}")
+        parent = entry.parent_session_id if entry.user_id == viewer.id else None
+        lines.insert(3, f"Session: {session_id}" + (f" (parent {parent})" if parent else ""))
+    run = "unattended (nobody in the loop)" if entry.unattended else "attended"
+    lines.append(f"Run: {run}" + (f"  Profile: {entry.profile}" if entry.profile else ""))
     long = " ".join(f"{k}={v}" for k, v in entry.long_context_tokens().items() if v)
     if long:
         lines.append(f"Long-context tokens (included above): {long}")
     lines.append(f"Cost type: {entry.cost_type}  Basis: {entry.cost_basis}")
+    lines.append(_billing(entry, refs))
     lines.append(f"Marginal cost: {_money(entry.marginal)}")
     lines.append(f"API equivalent: {_money(entry.api_equivalent)}")
     if entry.reported_cost is not None:
@@ -145,7 +177,7 @@ def _details(entry: AiUsageEntry, refs: EntryReferences, viewer: User) -> str:
     if entry.is_excluded and entry.excluded_at is not None:
         lines.append(f"Excluded from reports since {entry.excluded_at.isoformat()}")
     if entry.is_locked:
-        lines.append("Reported usage: only the project, the issue and the comments can change.")
+        lines.append("Reported usage: only the project, the issue, the comments and the billing can change.")
     return "\n".join(lines)
 
 
@@ -167,6 +199,23 @@ def _parse_date(value: str | None, field: str) -> date | None:
         return date.fromisoformat(value.strip())
     except ValueError:
         raise ValidationError(message=f"{field} must be a date such as 2026-11-05", field=field) from None
+
+
+def _parse_instant(value: str | None, field: str) -> datetime | None:
+    """An ISO 8601 instant with an offset (``2026-11-23T09:15:00+07:00``, ``...Z``); None when empty."""
+    if value is None or not value.strip():
+        return None
+    try:
+        instant = datetime.fromisoformat(value.strip())
+    except ValueError:
+        raise ValidationError(
+            message=f"{field} must be an ISO 8601 instant such as 2026-11-05T09:15:00+07:00", field=field
+        ) from None
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValidationError(
+            message=f"{field} needs a time zone offset, for example 2026-11-05T09:15:00Z", field=field
+        )
+    return instant.astimezone(UTC)
 
 
 def _cost(amount: Any, currency: str | None) -> Money | None:
@@ -236,9 +285,22 @@ async def _log_ai_usage(  # noqa: PLR0913
     on_behalf_of: str | None = None,
     comments: str | None = None,
     session_id: str | None = None,
+    idempotency_key: str | None = None,
+    started_at: str | None = None,
+    ended_at: str | None = None,
+    parent_session_id: str | None = None,
+    unattended: bool = False,
+    profile: str | None = None,
 ) -> str:
-    """Log one AI usage entry (source ``mcp``); see ``specivo_log_ai_usage`` for the rules."""
-    day = _parse_date(usage_date, "usage_date") or datetime.now(UTC).date()
+    """Log one AI usage entry (source ``mcp``); see ``specivo_log_ai_usage`` for the rules.
+
+    With *idempotency_key* the entry is the caller's (or the target's) bucket
+    of that key: a retry replaces its totals or changes nothing, and the reply
+    ends with ``(created)``, ``(updated, revision N)`` or ``(unchanged)``.
+    """
+    started = _parse_instant(started_at, "started_at")
+    ended = _parse_instant(ended_at, "ended_at")
+    day = _parse_date(usage_date, "usage_date") or (started.date() if started else datetime.now(UTC).date())
     project: Project | None = None
     issue: Issue | None = None
     method: str | None = None
@@ -270,11 +332,17 @@ async def _log_ai_usage(  # noqa: PLR0913
         issue_id=issue.id if issue is not None else None,
         attribution_method=method,
         external_session_id=session_id,
+        parent_session_id=parent_session_id,
+        unattended=unattended,
+        profile=profile,
         client_name=client.name if client is not None else None,
         client_version=client.version if client is not None else None,
         comments=comments,
+        started_at=started,
+        ended_at=ended,
+        idempotency_key=idempotency_key,
     )
-    entry = await _usage.create_for(
+    result = await _usage.create_for(
         session,
         user,
         data,
@@ -283,6 +351,7 @@ async def _log_ai_usage(  # noqa: PLR0913
         source="mcp",
         api_key_id=mcp_api_key_id_var.get(),
     )
+    entry = result.entry
     await session.flush()
     refs = await _usage.references(session, user, [entry])
     await _log_tool(
@@ -298,6 +367,7 @@ async def _log_ai_usage(  # noqa: PLR0913
             "usage_date": entry.usage_date.isoformat(),
             "project_key": refs.project_keys.get(entry.project_id) if entry.project_id else None,
             "issue": refs.issue_keys.get(entry.issue_id) if entry.issue_id else None,
+            "upsert": result.status,
         },
         project_id=entry.project_id,
     )
@@ -305,12 +375,17 @@ async def _log_ai_usage(  # noqa: PLR0913
     if method == "mcp_session":
         where += " (the issue this agent session works on)"
     for_whom = f" for {_login(refs, entry.user_id)}" if entry.user_id != user.id else ""
-    return (
+    text = (
         f"Logged AI usage entry #{entry.id}{for_whom} on {where}: {entry.tool_slug}/{entry.model}, "
         f"{_tokens(entry)}.\n"
         f"Cost type: {entry.cost_type}. Marginal cost: {_money(entry.marginal)}. "
         f"API equivalent: {_money(entry.api_equivalent)} ({entry.cost_basis})."
     )
+    if entry.idempotency_key is None:
+        return text
+    if result.status == "updated":
+        return f"{text} (updated, revision {entry.revision})"
+    return f"{text} ({result.status})"
 
 
 # ---------------------------------------------------------------------------
@@ -337,6 +412,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     excluded: bool | None = None,
     unassigned: bool | None = None,
     session_id: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
     tokens: dict[str, int] | None = None,
     request_count: int | None = None,
     cost_amount: Any = None,
@@ -363,6 +440,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
             excluded=excluded,
             unassigned=unassigned,
             session_id=session_id,
+            payer=payer,
+            billing_account=billing_account,
             offset=offset,
             limit=limit,
         )
@@ -416,6 +495,8 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
     if cost_amount is not None or cost_currency is not None:
         cleared = (cost_amount is None or str(cost_amount).strip() == "") and not (cost_currency or "").strip()
         changes["reported_cost"] = None if cleared else _cost(cost_amount, cost_currency)
+    if billing_account is not None or payer is not None:
+        changes[BILLING_OVERRIDE] = await _override(session, entry, billing_account, payer)
     if not changes:
         raise ValidationError(message="op='update' needs at least one field to change", field="op")
     entry = await _usage.update(session, user, entry, changes)
@@ -428,6 +509,26 @@ async def _ai_usage(  # noqa: C901, PLR0912, PLR0913
         project_id=entry.project_id,
     )
     return await _show(session, user, entry)
+
+
+async def _override(
+    session: AsyncSession, entry: AiUsageEntry, billing_account: str | None, payer: str | None
+) -> BillingOverride | None:
+    """The billing override of an update: an account by slug (the entry user's own first, then an instance
+    account), a payer alone, or ``None`` to clear it (both empty)."""
+    slug = (billing_account or "").strip()
+    who = (payer or "").strip().lower() or None
+    if not slug:
+        return BillingOverride(payer=who) if who else None
+    account = await _accounts.find_by_slug(session, slug, user_id=entry.user_id, active_only=False)
+    if account is None:
+        raise AppError(
+            code="ai_usage_billing_account_unknown",
+            message="Choose an active billing account of the entry's user or of the instance",
+            status_code=422,
+            field="billing_account",
+        )
+    return BillingOverride(account_id=account.id, payer=who)
 
 
 async def _list(  # noqa: PLR0913
@@ -447,11 +548,15 @@ async def _list(  # noqa: PLR0913
     offset: int,
     limit: int,
     session_id: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
 ) -> str:
     """A project's entries the caller may read; without a project, the entries logged in the caller's name.
 
     *session_id* keeps the caller's own entries of that agent session (the
     id the reporter sends, shown on the caller's entries), in any project.
+    *payer* and *billing_account* (an id or slug, ``none`` for none; one the
+    caller may not see matches nothing) narrow them by who paid.
     """
     if limit < 1 or limit > _MAX_LIMIT:
         raise ValidationError(message=f"limit must be between 1 and {_MAX_LIMIT}", field="limit")
@@ -465,6 +570,7 @@ async def _list(  # noqa: PLR0913
         if project is None:
             project = await session.get(Project, issue.project_id)
     session_id = session_id.strip() if session_id else None
+    billing = await _billing_filter(session, user, payer=payer, billing_account=billing_account)
     user_id: int | None
     if project is None or session_id:
         # A session is one person's client session: only the caller's own entries match.
@@ -489,6 +595,7 @@ async def _list(  # noqa: PLR0913
         excluded=excluded,
         unassigned=unassigned if project is None else None,
         external_session_id=session_id,
+        billing=billing,
         offset=offset,
         limit=limit,
     )
@@ -510,6 +617,51 @@ async def _list(  # noqa: PLR0913
     refs = await _usage.references(session, user, entries)
     lines.extend(f"  {_line(entry, refs, user)}" for entry in entries)
     return "\n".join(lines)
+
+
+async def _billing_fields(
+    session: AsyncSession,
+    user: User,
+    *,
+    payer: str | None = None,
+    billing_account: str | None = None,
+    route: str | None = None,
+    scope: str | None = None,
+) -> dict[str, Any]:
+    """The payer, billing account, route and scope filters as ``BillingFilter`` / ``ReportFilters`` fields.
+
+    ``none`` selects usage without a billing account or route. An unknown
+    payer or scope is a 422; a billing account the caller may not see, or
+    none by that id or slug, matches nothing.
+    """
+    from specivo.services.ai_spend_billing import (
+        NO_VALUE,
+        parse_payer,
+        parse_scope,
+        resolve_billing_account,
+        route_filter,
+    )
+
+    def none_value(value: str | None) -> str | None:
+        text = (value or "").strip()
+        return NO_VALUE if text.casefold() == _NO_PLANNING else text or None
+
+    fields: dict[str, Any] = {}
+    if (found := parse_payer(payer)) is not None:
+        fields["payer"] = found
+    fields.update((await resolve_billing_account(session, user, none_value(billing_account))).fields)
+    fields.update(route_filter(none_value(route)))
+    if parse_scope(scope):
+        fields["organization"] = True
+    return fields
+
+
+async def _billing_filter(session: AsyncSession, user: User, *, payer: str | None, billing_account: str | None) -> Any:
+    """The entry list's payer and billing account filters (a ``BillingFilter``), or None without one."""
+    from specivo.services.ai_spend_billing import BillingFilter
+
+    fields = await _billing_fields(session, user, payer=payer, billing_account=billing_account)
+    return BillingFilter(**fields) if fields else None
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +696,8 @@ def _report_line(row: Any, report: Any) -> str:
             label = "(unallocated seat)"
         elif dim == "issue" and row.key.get(dim) == HIDDEN_ISSUE:
             label = "(issue you cannot see)"
+        elif dim == "billing_account" and row.key.get(dim) is None:
+            label = "(no billing account)"
         else:
             label = row.labels.get(dim) or f"(no {_NONE_NAMES.get(dim, dim)})"
         parts.append(f"{dim}={label}")
@@ -561,6 +715,8 @@ def _report_line(row: Any, report: Any) -> str:
             measures.insert(4, f"unallocated_seat={_report_amount(row.seat_unallocated)}")
         if row.leverage is not None:
             measures.append(f"leverage={format_decimal_plain(row.leverage)}x")
+    if report.reimbursable_shown:
+        measures.append(f"reimbursable={_report_amount(row.reimbursable)}")
     if row.unpriced_entries:
         measures.append(f"unpriced={row.unpriced_entries}")
     return f"{head}: " + " ".join(measures)
@@ -677,13 +833,19 @@ def _report_text(
         from specivo.services.ai_spend_report_service import fold_rows
 
         rest = report.rows[REPORT_MAX_ROWS:]
-        summed = fold_rows(rest, report.currency, report.seat_cost_shown)
+        summed = fold_rows(rest, report.currency, report.seat_cost_shown, report.reimbursable_shown)
         measures = _report_line(summed, report).split(": ", 1)[1]
         lines.append(
             f"  ... and {len(rest)} more rows, together: {measures} "
             "(narrow the period or the grouping, sort=spend for the largest first, or use the CSV export)"
         )
     lines.append(f"Total: {_report_line(report.totals, report).split(': ', 1)[1]}")
+    # Only when something says who paid: a report of unattributed usage stays as it was.
+    if any(row.key["payer"] != "unknown" for row in report.payer_totals):
+        lines.append("By payer:")
+        for row in report.payer_totals:
+            measures = _report_line(row, report).split(": ", 1)[1]
+            lines.append(f"  {row.key['payer']}: {measures}")
     return "\n".join(lines)
 
 
@@ -709,20 +871,39 @@ async def _ai_usage_report(  # noqa: PLR0913
     include_sub_issues: bool = False,
     release: str | None = None,
     sprint: str | None = None,
+    attended: str | None = None,
+    profile: str | None = None,
+    payer: str | None = None,
+    billing_account: str | None = None,
+    route: str | None = None,
+    scope: str | None = None,
 ) -> str:
     """The AI spend report as text: a project's (what the caller may read) or the instance's (administrators)."""
     from specivo.services.ai_spend_report_service import (
+        ATTENDED_FILTERS,
+        NO_PROFILE,
         AiSpendReportService,
         ReportFilters,
         default_range,
         parse_group_by,
+        session_context_filters,
     )
 
     await _check_report_request(user, preset)
+    attended = (attended or "").strip().lower() or None
+    if attended is not None and attended not in ATTENDED_FILTERS:
+        raise ValidationError(message="attended must be 'attended' or 'unattended'", field="attended")
+    profile = (profile or "").strip() or None
+    context = session_context_filters(attended, NO_PROFILE if profile == _NO_PLANNING else profile)
     first, last = default_range(preset)
     project, issue = await _report_scope(session, user, project_key, issue_ref)
     user_id = await _report_user_id(session, user_login)
     planning, planning_names = await _report_planning(session, user, project, release, sprint)
+    billing = await _billing_fields(
+        session, user, payer=payer, billing_account=billing_account, route=route, scope=scope
+    )
+    if billing.get("organization"):
+        planning_names.append("organization only")
     issue_id = issue.id if issue is not None else None
     report = await AiSpendReportService().report(
         session,
@@ -743,6 +924,8 @@ async def _ai_usage_report(  # noqa: PLR0913
             issue_id=None if include_sub_issues else issue_id,
             issue_tree_id=issue_id if include_sub_issues else None,
             **planning,
+            **context,
+            **billing,
         ),
         sort=sort or "key",
     )

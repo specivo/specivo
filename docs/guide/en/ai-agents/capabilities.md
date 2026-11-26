@@ -5,9 +5,11 @@ description: What an AI agent can do through the Specivo MCP server — the tool
 # What agents can do
 
 Through the MCP server, an agent can reach most of what you'd do in the Specivo UI. The server
-exposes a catalog of around 40 tools, all prefixed `specivo_`. You rarely call them by name — you
+exposes a catalog of around 70 tools, all prefixed `specivo_`. You rarely call them by name — you
 describe what you want, and the client picks the right tool. This page groups them by area so you
-know the shape of what's possible.
+know the shape of what's possible. A connection loads the `core` toolset unless its URL asks for
+more: planning, recurring tasks, tag and schema management and AI spend are opt-in
+[toolsets](connecting.md#choose-toolsets).
 
 ## The tool catalog by area
 
@@ -54,6 +56,7 @@ get the issues, not just text matches.
 | `component:ACME/<value>` | a component (the `component` metadata value) |
 | `metadata:ACME/<key>/<value>` | the value of another metadata key your project lists (see below) |
 | `user:<login>` | a person and the issues assigned to them |
+| `concept:ACME/<name>` | a concept extracted by the project's AI provider, and what mentions it (see below) |
 
 From a tag, version, sprint, component, metadata value or person, the result lists the members,
 newest first, up to `limit`. Anywhere else these nodes are leaves with a `degree`, the number of
@@ -66,7 +69,8 @@ The options:
 |---|---|
 | `direction` | `in` (what points here, or a node's members), `out` or `both` (default). |
 | `depth` | `1` (default) or `2`, which expands the linked issues and pages once more. From a tag, version, sprint, component, metadata value or person, `3` is allowed, for example a version, its issues, their tags and the pages with those tags. |
-| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`. Naming a node kind also expands those nodes at depth 2. |
+| `types` | Edge kinds to keep. Text links: `wiki_link`, `mention`, `attachment_link`. Typed links (accepted suggestions): `typed_link`. Structured: `relation`, `parent`, `child`, `attachment`, `commit`, `pull_request`. Nodes: `tagged`, `in_component`, `in_metadata`, `targets_version`, `in_sprint`, `assigned_to`, `mentions` (concepts; `concept` works too). Suggested links: `similar` (never returned unless named). Naming a node kind also expands those nodes at depth 2. |
+| `include_suggestions` | `true` adds suggested links (kind `similar`) to the kinds read, and the concept mentions below the project's confidence threshold. Off by default. |
 | `limit` | Neighbours at most, 1 to 200 (default 50). `truncated` says when more were left out. |
 | `to` | Another ref. Returns the shortest path between the two instead of the neighbours (see below). |
 | `filter` | Keeps only the issues that match, for example `{"status": "open", "component": "importer"}` (see below). |
@@ -95,6 +99,17 @@ kept issue.
 applicable), then one line per edge, `ACME-12 -wiki_link-> wiki:ACME/runbook "Runbook"`. A node's
 title is written once, after its ref.
 
+**Suggested links.** `specivo_show_issue` and `specivo_read_wiki` end with a line `Possibly related
+(suggested, not linked):` listing up to five issues or pages of the same project whose content is
+close (with a score from 0 to 1) and that nothing links yet. `specivo_get_links` returns them only
+when asked: `include_suggestions=true` or `types=["similar"]` adds edges of kind `similar`, with
+`suggested: true` and the score in `label`. They are hints from the embeddings, not links.
+`specivo_link_suggestion(op="accept", ref, other_ref, link_type)` makes one a real link: a relation
+between two issues (`link_type` is the relation type, `relates` by default), or a typed link from
+`ref` to `other_ref` for an issue and a page or two pages (`documents`, `implements`, `decided_in`,
+`supersedes` or `see_also`, the default), listed as kind `typed_link`. `op="dismiss"` hides the pair
+for good. Both need the permission that makes the link, and both are in the audit log.
+
 ??? note "Which metadata keys become nodes"
     Project managers choose the keys in **Project settings → General → Metadata keys in the link
     graph**: a comma-separated list of at most 10 [metadata](../metadata/index.md) keys, `component`
@@ -106,6 +121,25 @@ title is written once, after its ref.
     issues or wiki. Versions, sprints and metadata values need permission to view the project's
     issues. A person node appears only for signed-in users, and `user:<login>` works only for
     yourself, an administrator, or a member of a project whose issues you can view.
+
+### Concepts
+
+When a project has [concept extraction](../projects/index.md#concept-extraction-ai) switched on, its
+own AI provider lists the features, external systems, decisions and terms its issues and wiki pages
+talk about. Each is a node `concept:ACME/<name>` (the name in lower case), with the concept's kind
+as its `status`. An issue or page points at each concept it mentions with an edge of kind
+`mentions`: `label` is the model's confidence (for example `0.85`) and `passage` the text it was
+found in.
+
+- `specivo_get_links("concept:ACME/billing gateway")` lists the issues and pages that mention it.
+- `specivo_get_links("ACME-12", types=["mentions"])` lists the concepts of an issue. Without
+  `types` they come as leaves with a `degree`, like tags.
+- Mentions below the project's confidence threshold come only with `include_suggestions=true`,
+  marked `suggested: true`.
+- A path (`to=`) passes through a concept only when `types` names `mentions`.
+
+Concepts are a model's reading of the text, not links anyone made: check the passage before relying
+on one. You see a concept only when you may see an issue or page that mentions it.
 
 ## Read vs write
 
@@ -147,6 +181,110 @@ pause a new one starts. A session records:
   status, assigned to its own account, updated while it is in progress and assigned to its own
   account (so an agent resuming its issue marks it again, even when nothing changes), or started a
   timer on. The latest one wins. Only an issue the key's account can see is ever recorded.
+- **how it was opened**: `mcp` (an MCP connection) or `rest` (plain REST calls);
+- **the client's own session id and its parent's**, when the client reports them (see below).
+
+An agent client that has session ids of its own (a Hermes session, for example) can report them with
+`specivo_agent_session(op="set", external_session_id=..., parent_session_id=...)`, and can name its
+working issue in the same call with `issue_ref`. The ids are 1 to 200 letters, digits and `. _ : -`.
+The call changes only the session of the connection it is made on, and a parent is linked only to a
+session of the same account, so another account's ids never attach to yours. When the
+[reporter](reporting-ai-usage.md) later sends usage with the same `session_id`, Specivo attributes it
+to that session's issue (or, when that session names none, to the nearest one in its parent chain)
+instead of guessing from the time of the work. `specivo_agent_session(op="get")` shows the session.
+Setting ids is recorded in the audit log.
+
+A client that runs several conversations over one MCP connection (Hermes subagents or gateway chats,
+for example) calls `specivo_agent_session(op="set", external_session_id=...)` before the work of each
+one. Specivo selects, or creates, the session of that id on the connection, and the connection's later
+calls count toward it; `op="get"` with an `external_session_id` shows that session. Tool calls that
+run at the same time on one connection go to the session selected last, so give such sessions a
+connection each when that matters. `specivo_agent_session(op="set", issue_ref="")` clears the
+session's working issue; the change is audited.
+
+One client conversation is one session, however its calls arrive:
+
+- [Hermes events](hermes-events.md) with the same client session id join the account's open session. A
+  run's end ends only a session the events opened, not the MCP session the conversation goes on in.
+- A REST call with the header `X-Agent-Session-Id: <id>` joins the open session with that id, or
+  starts a REST session that carries it. REST calls without the header never join such a session.
+- A REST call with the header `X-Agent-Background: 1` is the client's own housekeeping, for example a
+  sync that polls for new issues. It opens or extends no session and so does not keep one looking
+  active. It is authenticated and audited as usual.
+
+### The Agent sessions page
+
+Every project has an **Agent sessions** page in its sidebar. It lists the sessions of the project's
+member accounts, most recently active first: the **Account** (with a **Service account** badge for
+agent accounts), the **Client**, the **Type** (MCP or REST), the **Issue** the session works on,
+when it **Started**, its **Last activity** (with an **Active**, **Inactive** or **Ended** mark), the
+number of **Tool calls**, and the **AI usage** linked to it (entries and spend you are allowed to
+see). Filter by **Account** (a login), **Issue** (a key such as `ACME-12`) and **Show** (all, active
+only, inactive only). A session working on an issue you cannot see is not listed.
+
+Project managers (anyone with **Manage project**, and administrators) can open a session. Its page
+shows the account and client, the client's session id and its **Parent session**, when it started,
+was last active and ended, the **Related sessions** in its parent chain, and its **Tool calls**:
+the MCP tools it ran, newest first, 20 per page, with the event and what each call named (project
+keys, issue keys, page slugs). They come from the security audit log, so only that metadata is
+shown, never what was sent to a tool or what it returned. Calls the session made in other projects
+are left out, and so are calls without a project from tools that work in projects; calls of
+`specivo_whoami`, `specivo_list_projects` and `specivo_list_lookups` are shown. **Parent session** and
+**Related sessions** show only sessions you could open on this page. Below them is the AI
+usage linked to the session (the newest 20 entries): the entries reported with its client session id, or, when it has none,
+the entries of the same account whose start and end fall in the session's time. Opening a session
+is recorded in the audit log.
+
+When a section has more than 20 items, **Newer** and **Older** links and a page size (20, 50 or 100)
+appear above it and load that section in place, without reloading the page. Without JavaScript the links
+reload the page. The paging applies to **Tool calls** and to **AI usage** separately.
+
+Tool calls made before this page existed are not linked to a session, so older sessions show none.
+
+The same data is in the REST API: `GET /api/v1/projects/{key}/agent-sessions/` returns a paginated
+list (`offset`, `limit`, and the filters `account`, `issue`, `active` and `external_session_id`),
+and, for project managers, `GET .../agent-sessions/{id}/` returns one session with
+`tool_call_count` and `usage_entry_count`, and `GET .../agent-sessions/{id}/events/` its tool calls.
+
+### The Agents tab on an issue
+
+On an issue, the **Agents** tab shows what agents did for it and what that cost: one block per agent
+session that worked on the issue, newest first, 20 per page. It answers "what did my agent do
+overnight, and what did it cost". Like a session's page, the tab is for project managers (anyone with
+**Manage project**, and administrators), and only on issues they can see.
+
+A session belongs to the issue when it worked on it, or when AI usage reported for the issue carries
+its client session id. Each block starts at the top of the session's parent chain: the sessions above
+it and its subagents are in the same block, the subagents listed under it. When one run is known to
+Specivo twice, as an MCP connection and as [Hermes events](hermes-events.md) with the same client
+session id, the two are shown as one session. An issue with sub-issues has a **With sub-issues** /
+**This issue only** switch; sessions on sub-issues you cannot see are left out.
+
+Each block shows:
+
+- the **account** (with the **Service account** badge), the client, the type (MCP, REST, Webhook),
+  the agent profile when its usage names one and an **unattended** mark for runs nobody watched;
+- the **state**: **Running** (active in the last 30 minutes), **Completed**, **Interrupted** (Hermes
+  said the run was interrupted) or **Idle**, with when it started, when it ended or was last active,
+  and how long it took;
+- the **counters**: tool calls, approvals asked and how they were answered, and subagents;
+- the **AI cost** of the block: the spend and API-equivalent value, tokens and number of entries of
+  the usage reported for its sessions, in the project's reporting currency, without seat cost. The
+  line follows the [AI usage](../projects/ai-usage.md) rules: you need **View AI usage**, and you see
+  only the entries your role lets you read. Until the reporter has sent the usage (every 30 minutes)
+  the line says **Not reported yet**;
+- the subagents, each with its state and a link to its own page;
+- the **steps**: the newest 30 tool calls, approvals and subagent starts and stops of the session and
+  its subagents, as on the session's page. **Show all** and **Open session** lead to that page.
+
+Like the session pages, the tab shows only metadata (tool names, statuses, the keys a call named),
+never what was sent to a tool or what it returned, and leaves out what the sessions did in other
+projects. Opening the tab uses one AI report from your budget, as the **AI usage** tab does. The tab
+also works as a page of its own, `/issue/{key}/agents/`.
+
+The REST API has the same list: `GET /api/v1/issues/{key}/agent-sessions/` returns a paginated list
+(`offset`, `limit` up to 50, `sub=true` to include sub-issues) with each session's ids, account,
+client, state, counters, subagent ids and, for readers who may see AI usage, its `cost`.
 
 The session's issue is a hint for attributing AI usage to an issue (`specivo_log_ai_usage` without
 an issue or project uses it, when the account may log usage there); it grants nothing. Nothing about

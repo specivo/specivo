@@ -280,6 +280,35 @@ async def project_roadmap(
     )
 
 
+@router.get("/projects/{key}/graph/", response_class=HTMLResponse)
+async def project_graph(
+    request: Request,
+    user: WebUser,
+    project: ProjectByKeyForReader,
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Render the project's link graph page: its most linked issues and wiki pages, drawn client-side.
+
+    The graph is read from ``/api/v1/projects/{key}/links/``, which filters it for the reader. A reader who
+    may see neither the project's issues nor its wiki gets the same 404 as that endpoint.
+    """
+    from specivo.services.entity_link_nodes import HubReader
+
+    hubs = HubReader(db, user)
+    if not (await hubs.issues_readable(project.id) or await hubs.wiki_readable(project.id)):
+        raise HTTPException(status_code=404, detail="Not found")
+    return get_templates().TemplateResponse(
+        request,
+        "pages/projects/graph.html",
+        context={
+            "user": user,
+            "active_page": "graph",
+            "active_project": project,
+            "project": project,
+        },
+    )
+
+
 async def _settings_members(db: AsyncSession, project: Project) -> dict[str, Any]:
     """The members tab: membership rows of users then groups, every group for the picker, and the people count."""
     from specivo.services.user_group_service import UserGroupService
@@ -494,7 +523,8 @@ async def _settings_integrations(db: AsyncSession, project: Project, user: User)
 
 
 async def _settings_instance_switches(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
-    """Anonymous access and similar issues as the instance has them, the reporting currency choices and graph keys."""
+    """Anonymous access and similar issues for the instance; reporting currency, graph keys and payer default."""
+    from specivo.core.ai_billing import project_payer_default
     from specivo.core.i18n import get_locale
     from specivo.core.money import currency_display_name
     from specivo.models.setting import Setting
@@ -528,7 +558,21 @@ async def _settings_instance_switches(db: AsyncSession, project: Project, user: 
         "graph_metadata_keys": list(graph_metadata_keys(project.settings)),
         "currency_choices": currency_choices,
         "instance_reporting_currency": await currency_svc.get_instance_reporting_currency(db),
+        "ai_usage_payer_default": project_payer_default(project.settings),
+        "concept_extraction": await _concept_extraction_status(db, project, user),
     }
+
+
+async def _concept_extraction_status(db: AsyncSession, project: Project, user: User) -> dict[str, Any]:
+    """The concept extraction card's data, JSON-safe (the last run as UTC text)."""
+    from specivo.services.concept_extraction import project_status
+
+    data = await project_status(db, project, full_url=user.is_admin)
+    if data["provider"] is not None:
+        data["provider"] = {k: v for k, v in data["provider"].items() if k != "updated_at"}
+    last = data["last_extracted_at"]
+    data["last_extracted_at"] = last.strftime("%Y-%m-%d %H:%M UTC") if last is not None else None
+    return data
 
 
 @router.get("/projects/{key}/settings/", response_class=HTMLResponse)

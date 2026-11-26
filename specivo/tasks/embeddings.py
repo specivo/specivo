@@ -51,7 +51,12 @@ def embed_search_sources(self, sources: list[list]) -> None:
 
 
 async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
-    """Embed each source in its own transaction, so one failure loses only that source."""
+    """Embed each source in its own transaction, so one failure loses only that source.
+
+    Then the document vectors of the issues and wiki pages among them are
+    brought in line with their chunks, and the suggested links of those whose
+    vector changed are recomputed (``compute_similar_links``).
+    """
     from specivo.services.embedding_service import EmbeddingService
     from specivo.services.search_index_service import describe_error
 
@@ -64,6 +69,7 @@ async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
             return
         model_id = model.id
 
+        embedded: list[tuple[str, int]] = []
         for source_type, entity_id in sources:
             try:
                 count = await service.embed_pending(session, [(source_type, entity_id)], model_id=model_id)
@@ -73,8 +79,34 @@ async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
                 logger.warning("Embedding failed for %s %d: %s", source_type, entity_id, describe_error(exc))
                 logger.debug("Embedding failure for %s %d", source_type, entity_id, exc_info=True)
                 continue
+            embedded.append((source_type, entity_id))
             if count:
                 logger.info("Embedded %d chunk(s) for %s %d", count, source_type, entity_id)
+        await _refresh_document_vectors(session, model_id, embedded)
+
+
+async def _refresh_document_vectors(session, model_id: int, sources: list[tuple[str, int]]) -> None:
+    """Update the vectors of the embedded issues and pages, and queue their suggested links when one changed.
+
+    Suggestions are hints: a failure here is logged and left to the nightly sweep,
+    never retried with the embedding task.
+    """
+    from specivo.models.link_suggestion import ITEM_TYPES
+    from specivo.services.link_suggestion_service import dispatch_compute, refresh_vectors
+    from specivo.services.search_index_service import describe_error
+
+    items = [(t, i) for t, i in sources if t in ITEM_TYPES]
+    if not items:
+        return
+    try:
+        changed = await refresh_vectors(session, model_id, items=items)
+        await session.commit()
+    except Exception as exc:  # noqa: BLE001
+        await session.rollback()
+        logger.warning("Could not update the document vectors of %d item(s): %s", len(items), describe_error(exc))
+        return
+    if changed:
+        dispatch_compute(items=changed)
 
 
 def _consumes_embedding_queue(consumer: object) -> bool:
@@ -154,3 +186,8 @@ async def _backfill_async(model_id: int, reembed: bool = False) -> None:
         count = await embedding.backfill_model(session, model_id, reembed=reembed)
         await session.commit()
         logger.info("Backfill complete: %d embeddings for model %d", count, model_id)
+        # Every vector may have moved: recompute the suggested links of each project now.
+        from specivo.services.link_suggestion_service import dispatch_compute, projects_with_vectors_or_embeddings
+
+        for project_id in await projects_with_vectors_or_embeddings(session, model_id):
+            dispatch_compute(project_id=project_id)

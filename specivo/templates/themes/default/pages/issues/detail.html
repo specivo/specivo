@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
 {% from "pages/_markdown_editor_i18n.html" import markdown_editor_i18n %}
+{% from "pages/_link_graph.html" import link_graph %}
 
 {% block title %}{{ issue.display_key }} - {{ issue.subject }} - {{ brand_name }}{% endblock %}
 
@@ -288,8 +289,12 @@
         {% if show_ai_usage_tab %}
         <a class="activity-tab" data-tab="ai-usage" data-testid="ai-usage-tab" :class="{ active: tab === 'ai-usage' }" @click.prevent="show('ai-usage')" href="#ai-usage">{% trans %}AI usage{% endtrans %}{% if ai_usage_count %} <span class="tab-count" data-testid="ai-usage-tab-count">{{ ai_usage_count }}</span>{% endif %}</a>
         {% endif %}
+        {% if show_agents_tab %}
+        <a class="activity-tab" data-tab="agents" data-testid="agents-tab-link" :class="{ active: tab === 'agents' }" @click.prevent="show('agents')" href="#agents">{% trans %}Agents{% endtrans %}{% if agent_session_count %} <span class="tab-count" data-testid="agents-tab-count">{{ agent_session_count }}</span>{% endif %}</a>
+        {% endif %}
         <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
+        <a class="activity-tab" data-tab="graph" data-testid="graph-tab" :class="{ active: tab === 'graph' }" @click.prevent="show('graph')" href="#graph">{% trans %}Graph{% endtrans %}</a>
         <a class="activity-tab" data-tab="attachments" :class="{ active: tab === 'attachments' }" @click.prevent="show('attachments')" href="#attachments">{% trans %}Attachments{% endtrans %}</a>
         {% endif %}
       </div>
@@ -514,6 +519,18 @@
       </div>
       {% endif %}
 
+      {# Agents tab: what agent sessions did for the issue, loaded via htmx when first opened #}
+      {% if show_agents_tab %}
+      <div x-show="tab === 'agents'" x-cloak
+           id="issue-agents-tab"
+           data-testid="agents-tab-panel"
+           hx-get="{{ base }}/partials/issues/{{ issue.display_key }}/agents/"
+           hx-trigger="sp-show-tab-agents from:body once"
+           hx-swap="innerHTML">
+        <div class="sp-as-empty">{% trans %}Loading agent sessions…{% endtrans %}</div>
+      </div>
+      {% endif %}
+
       {# Relations tab #}
       <div x-show="tab === 'relations'">
         {% if relations %}
@@ -621,8 +638,28 @@
             <div class="sp-backlinks-empty">{% trans %}Loading mentions…{% endtrans %}</div>
           </div>
         </section>
+        {# Possibly related: suggested links (similar content, not linked yet), with
+           Accept and Dismiss for those who may link the items. Loaded with the tab. #}
+        <section class="sp-mentions">
+          <h3 class="sp-mentions-title">{% trans %}Possibly related{% endtrans %}</h3>
+          <div id="issue-suggestions"
+               hx-get="{{ base }}/partials/issues/{{ issue.display_key }}/suggestions/"
+               hx-trigger="sp-show-tab-relations from:body once"
+               hx-swap="innerHTML">
+            <div class="sp-backlinks-empty">{% trans %}Loading suggestions…{% endtrans %}</div>
+          </div>
+        </section>
         {% endif %}
       </div>
+
+      {# Graph tab: the issue's link graph, drawn client-side from the links JSON
+         when the tab is first opened (modules/link-graph-loader.js loads the
+         bundle). A signed-in reader only, like the links API it reads. #}
+      {% if not anonymous %}
+      <div x-show="tab === 'graph'" x-cloak data-testid="graph-tab-panel">
+        {{ link_graph(base ~ "/api/v1/issues/" ~ issue.display_key ~ "/links/", "item", "issue-graph") }}
+      </div>
+      {% endif %}
 
       {# Attachments tab — lazy-loaded via htmx on first click #}
       {% if not anonymous %}

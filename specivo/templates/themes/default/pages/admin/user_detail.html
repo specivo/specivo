@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "pages/admin/_user_i18n.html" import user_status_labels %}
+{% from "components/filter_combobox.html" import filter_combobox %}
 
 {% block title %}{{ target_user.display_name }} - {% trans %}Users{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -117,14 +118,46 @@
     </template>
   </div>
 
+  {# --- Works for: the person an agent's AI usage is billed as (service accounts only) --- #}
+  {% if target_user.is_service_account %}
+  <section class="card" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;" aria-labelledby="sp-works-for-heading" data-testid="works-for">
+    <h2 id="sp-works-for-heading" style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Works for{% endtrans %}</h2>
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-md); line-height: 1.5;">
+      {% trans %}The AI usage this agent reports is billed through this person's billing accounts and plans: their payer, budgets and subscriptions cover it. The usage stays listed under the agent.{% endtrans %}
+    </p>
+    {% if account_code.startswith("works_for") %}
+    {% if account_message %}<div class="flash flash-success" role="status" style="margin: var(--sp-space-md) 0;">{{ account_message }}</div>{% endif %}
+    {% if account_error %}<div class="flash flash-error" role="alert" style="margin: var(--sp-space-md) 0;">{{ account_error }}</div>{% endif %}
+    {% endif %}
+    {% if works_for %}
+    <form method="post" action="{{ base }}/admin/users/{{ target_user.id }}/works-for/" style="display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); align-items: center; margin-bottom: var(--sp-space-md);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="clear" value="1">
+      <span class="sp-info-value" data-testid="works-for-current"><strong>{{ works_for.display_name or works_for.login }}</strong> <span style="color: var(--sp-text-muted); font-family: var(--sp-font-mono);">{{ works_for.login }}</span></span>
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Remove{% endtrans %}</button>
+    </form>
+    {% else %}
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);" data-testid="works-for-none">{% trans %}Nobody: the agent's usage is billed through its own accounts.{% endtrans %}</p>
+    {% endif %}
+    <form method="post" action="{{ base }}/admin/users/{{ target_user.id }}/works-for/" class="filter-bar" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="filter-label" for="sp-works-for">{% if works_for %}{% trans %}Change to{% endtrans %}{% else %}{% trans %}Person{% endtrans %}{% endif %}</label>
+      {{ filter_combobox("works_for_id", _("Works for"), _("Search people…"), base ~ "/api/v1/admin/users/?status=active", "user", text_name="works_for_login", input_id="sp-works-for") }}
+      <button type="submit" class="sp-btn">{% trans %}Save{% endtrans %}</button>
+    </form>
+  </section>
+  {% endif %}
+
   {# --- Account status: deactivate / reactivate (server-rendered; plain forms) --- #}
   <section class="card sp-account-status" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;" aria-labelledby="sp-account-status-heading">
     <h2 id="sp-account-status-heading" style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Account status{% endtrans %}</h2>
+    {% if not account_code.startswith("works_for") %}
     {% if account_message %}
     <div class="flash flash-success" role="status" style="margin: var(--sp-space-md) 0;">{{ account_message }}</div>
     {% endif %}
     {% if account_error %}
     <div class="flash flash-error" role="alert" style="margin: var(--sp-space-md) 0;">{{ account_error }}</div>
+    {% endif %}
     {% endif %}
     {% if target_user.status == "deactivated" %}
     <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-md); line-height: 1.5;">
@@ -266,6 +299,12 @@
       </tbody>
     </table>
   </div>
+
+  {# --- Hermes event receivers of this account --- #}
+  {% if not target_user.login.startswith("$") %}
+  {% set receivers_api = base ~ "/api/v1/admin/users/" ~ target_user.id ~ "/hermes-receivers/" %}
+  {% include "pages/my/_hermes_receivers_panel.html" %}
+  {% endif %}
 
   {# --- MCP Configuration (service accounts only) --- #}
   <template x-if="targetUser.is_service_account">

@@ -22,6 +22,17 @@ write makes, not the state of the issue (§6).
 **Revised:** 2026-11-06 — recorded that notifications and mail are rendered per recipient, in their language and timezone, with links built from `APP_URL` (§6).
 **Revised:** 2026-11-07 — recorded the AI spend report drill-down: URL state, narrowing filters and bounds (§4).
 **Revised:** 2026-11-21 — recorded AI spend by release and sprint: the nearest-ancestor lookup, its visibility and its query shape (§4).
+**Revised:** 2026-11-23 — recorded the optional idempotency key on manual, API and MCP AI usage entries (§4).
+**Revised:** 2026-11-23 — recorded AI billing accounts, the payer and route on AI usage entries and the project payer default (§4).
+**Revised:** 2026-11-23 — recorded billing resolution at ingest and the re-resolution when an account changes (§4).
+**Revised:** 2026-11-23 — recorded the AI billing account and project payer default audit events (§18).
+**Revised:** 2026-11-23 — recorded the parent session, unattended flag and agent profile of AI usage entries (§4).
+**Revised:** 2026-11-23 — recorded AI reimbursement claims and their snapshot rule (§4) and the claim audit events (§18).
+**Revised:** 2026-11-23 — recorded the Hermes event receiver: webhook sessions (§4), the session-only receiver routes (§7) and the Hermes audit events (§18).
+**Revised:** 2026-11-23 — recorded the manual billing override on AI usage entries (§4) and its audit event (§18).
+**Revised:** 2026-11-24 — recorded AI spend budgets, the viewer-less budget report and the once-per-month alert rule (§4), and the budget audit events (§18).
+**Revised:** 2026-11-25 — recorded the lean MCP tool listing and MCP toolsets (§4).
+**Revised:** 2026-11-25 — recorded short MCP tool descriptions with the full help on demand (§4).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -233,8 +244,15 @@ prices, currency, identity or start. A change closes the open period and inserts
 (`AiModelPriceService.create`); the seed loader (`specivo.core.ai_pricing_seed.plan_seed`, applied by
 `specivo.services.ai_model_price_seed.apply_seed` in migration 0061, at worker start and on demand) only appends
 periods and never touches `admin` rows. Resolve a price only through `AiModelPriceService.resolve(model, at,
-provider)`: names normalised (case, provider prefixes), model before alias, `admin` before `seed`, at an aware
-instant compared in UTC; no match is `None` (unpriced), never zero and never the latest price. Compute costs only
+provider)`: names normalised (case, provider prefixes such as `openrouter/anthropic/` or `nousresearch/`) and tried
+in their spelling variants (`specivo.core.ai_pricing.model_name_variants`: dots and dashes between digits, so
+`claude-sonnet-4.6` finds `claude-sonnet-4-6`, and OpenRouter routing suffixes such as `:free`; never `-fast` or other
+name suffixes) against model names and aliases. The reported spelling ranks before an alias of it, which ranks before a
+variant; then `admin` before `seed`. Add an alias only for a name no variant covers. An explicit provider restricts the
+match unless it is a gateway (`GATEWAY_PROVIDERS`: `openrouter`, `litellm`, `nous`), whose own rows then only win
+ties. The instant is aware and compared in UTC; no match is `None` (unpriced), never zero and never the latest price.
+`GET /api/v1/admin/ai-model-prices/resolve/` and the probe on the admin price list show the variants tried and how the
+row matched. Compute costs only
 with the pure `specivo.core.ai_pricing.price_usage(tokens, long_context_tokens, price)` (exact `Decimal`, partial
 when a class with tokens has no price). A table that prices with these rows registers a `PriceReference` so
 referenced rows cannot be deleted or ended before their entries.
@@ -256,6 +274,65 @@ within a step the latest start, then the newest row. Seat cost goes through the 
 `ai_subscriptions_self_service` is on (default); administrators manage everyone's; nobody else sees one; service and
 system accounts hold none; the `/my/` routes are account-wide (`get_account_user`). Plan presets
 (`PLAN_PRESETS`) are suggestions only.
+
+**Company seat plans.** An `ai_subscriptions` row with `user_id` `NULL` is a company plan: it has a `seat_count`
+(CHECK: set exactly when there is no holder, at least 1), its fee may be zero (only then), and it is the fee schedule
+of an instance `subscription` account paid by the employer (`company_plan_account`; `AiBillingAccountService.update`
+refuses another payer). Its members are `ai_subscription_members` rows (`subscription_id`, `user_id`, `starts_on` /
+`ends_on` as UTC days, both inclusive): one person's seats of a plan never overlap and no day has more members than
+seats (checked in `AiSubscriptionService.add_member` / `update_member`, 422 `ai_subscription_member_overlap` /
+`ai_subscription_seats_full`). Memberships are dated, not replaced: leaving sets `ends_on`, so past months keep their
+allocation; deleting a membership is for mistakes. Administrators manage plans and seats, always audited
+(`ai_subscription_*`, `ai_subscription_member_added` / `_updated` / `_removed`), and a membership change re-resolves
+the member's entries from the first day it touches (`AiUsageService.rebill_for_member`). Coverage
+(`AiSubscriptionService.coverages`) tries the company plans the person holds a seat on that day before their own;
+billing resolution's `subscription` step takes the first whose account is active, and a company plan's account named
+by a record or a route sets `subscription_id` only on the member's seat days (`company_plan_for`). Seat cost is
+per plan, person and month: a member carries `prorated_fee(..., seats=seat_count)` over the days both the plan and
+the seat run, spread over their own entries of the plan; the vacant seat-days (`vacant_charges`) are unallocated and
+nobody's. The payer is the employer, so company seat cost is never reimbursable.
+
+**AI billing accounts and payer.** Who pays (`payer`: `employer` / `employee`) and what usage was paid through
+(`ai_billing_accounts`, `kind` `gateway` / `subscription` / `api_key` / `local`) sit beside `cost_type`, which stays
+the pricing mechanism; the values and pure helpers are in `specivo.core.ai_billing`. An account without
+`owner_user_id` is an instance account (administrators manage it, everyone sees it); an owned one is personal (its
+owner manages it under `ai_subscriptions_self_service`, only the owner and administrators see it). `slug` is unique per
+owner and among instance accounts (two partial unique indexes). `reimburse_share` (`NUMERIC(5, 4)`, 0 to 1) is allowed
+only on employee-paid accounts. `route_patterns` are case-insensitive `fnmatch` patterns over an entry's `route`;
+`tool_slugs` empty covers every tool. Accounts are deactivated, not deleted. Every subscription is the fee schedule of a
+personal `subscription` account (`ai_subscriptions.billing_account_id`), created with it, slug `<plan_key>-<id>`, with
+no tools of its own (coverage stays the subscription's). `ai_usage_entries.payer` (`unknown` until something decides),
+`billing_account_id` and `route` (the raw backend id, String(100)) are snapshots like `cost_type`; `route` never feeds
+pricing. The project setting `ai_usage_payer_default` (`employer` / `employee`; absent = `none`) is a key of
+`projects.settings`, read with `project_payer_default`.
+
+**Billing resolution.** Every write of an entry (ingest, replays, REST/MCP, a person's edit) resolves its account,
+payer and cost type in `specivo.services.ai_billing_resolution`, first match wins, and stores the step as
+`billing_method`: `manual` (a person set it; kept through replays and re-resolution), `record` (the record's
+`billing_account` slug: the user's own account first, then an instance account), `instance_route` and
+`personal_route` (`route_patterns` plus `tool_slugs`, oldest account first), `subscription` (the covering
+subscription's account; only when no cost type or `subscription` was asked for), then `project_default` or `none`.
+The account's payer becomes the entry's; the cost type is the one asked for (kept as `requested_cost_type`), else the
+account's `default_cost_type`, else `unknown`. `subscription_id` is set only when the account is that subscription's
+(its fee schedule), so gateway usage without a cost type is never charged to a personal plan. An unusable slug is the
+ingest warning `billing_account_unknown`, one message for unknown, foreign and inactive. Creating an account with
+route patterns, or changing an account's payer, patterns, tools, default cost type or state, re-resolves the entries it
+may affect from the stored inputs and re-prices those whose cost type or subscription changed, in the same transaction
+(`AiUsageService.rebill_for_account`; `rebill_for_project` for a changed payer default), with one
+`ai_usage_costs_recomputed` audit event (`reason` `billing`) when something changed.
+
+**Billing override.** Whoever may edit an entry (`can_edit`, also on reporter and import entries) sets its
+billing by hand through `AiUsageService.update` with the change key `BILLING_OVERRIDE` (`"billing"`): a
+`BillingOverride` with an account (one of the entry user's own or an instance account, active unless it is
+already the entry's, and one the editor may see, so a manager cannot name a person's private account; one
+422 `ai_usage_billing_account_unknown` for every refusal) whose payer becomes the entry's (a payer sent with
+it must match), or a payer alone; `None` clears it. Setting one stores `billing_method` `manual` and
+re-resolves (only the cost type follows the account's default), clearing one sets `none` and resolves by the
+other rules; clearing an entry without an override writes nothing. Surfaces: `PATCH /ai-usage/{id}/`
+(`billing_account_id` / `payer`, `null` clears), the web edit form (`billing`: `account:<id>`,
+`payer:<payer>`, `""` automatic; omitted = unchanged) and `specivo_ai_usage` `op="update"`
+(`billing_account` slug, `payer`, `""` clears). Entry responses carry `payer`, `billing_method` and the
+account (`EntryReferences.accounts`, only those the reader may see).
 
 **AI usage entries.** `ai_usage_entries` holds one bucket of usage per session x model x **UTC day**, logged in a
 user's name (`user_id`, on behalf of) and written by `reporter_user_id` / `reporter_api_key_id` with a `source`
@@ -279,6 +356,16 @@ A missing cost type defaults to `subscription` when `AiSubscriptionService.subsc
 the admin price page after a past period is entered) re-prices entries, each at its own `priced_at`, bumping `revision`
 where costs change. No prompt, code or file path is ever stored.
 
+Manual, API and MCP entries may carry an `idempotency_key` too (optional on `POST /projects/{key}/ai-usage/`,
+`POST /my/ai-usage/` and `specivo_log_ai_usage`). With a key, `AiUsageService.log_with_status` (which `log` and
+`create_for` use) hands the write to `upsert` with the caller's source, so the key names the same per-user bucket as
+the reporter's and a retry follows the same rules (`created` / `updated` / `unchanged`, `key_conflict`,
+`ai_usage_attribution_conflict`). Such an entry keeps its source and stays editable by people: only `reporter` and
+`import` entries are locked. The REST routes answer 201 for a new bucket and 200 for a replay; the MCP reply ends with
+the outcome, which the `AI_USAGE_LOGGED` audit details record as `upsert` (the key itself is never audited).
+`started_at` / `ended_at` follow the ingest rules for every source: `ended_at` lies within `usage_date` or at its
+end, and not before `started_at`.
+
 **Agent sessions.** `agent_sessions` holds one row per activity window of an API key (requests less than
 `agent_session_timeout` apart), started or extended by `AgentSessionService.get_or_create_session` on every
 API-key request and MCP tool call. `client_name` / `client_version` name the client, never a model: the MCP
@@ -292,6 +379,105 @@ their signatures, and both writes run in a savepoint so a failure never fails th
 range longest (ties: most recently active); it is an attribution hint, so callers still check they may log there.
 The id of the API key that authenticated a tool call is published the same way (`mcp_api_key_id_var`), for tools
 that record their reporting key (`specivo_log_ai_usage`).
+A session also records how it was opened (`client_type`: `mcp`, `rest`, or `webhook` for an event receiver, the
+only kind that may have no API key) and, set by the client through `specivo_agent_session(op="set")`, its own session
+id (`external_session_id`, opaque text, never parsed) and its parent's (`parent_external_session_id`, kept raw;
+`parent_session_id` is the resolved row). The tool writes only the calling connection's row, and
+`AgentSessionService.set_external` resolves and back-fills parents among the same user's rows only: a client's claim
+about its ids is trusted within its own account, never across accounts. AI usage ingest matches a record's
+`session_id` with `issue_for_external` (the newest row with the id naming an issue, else the nearest one in its
+lineage, depth bounded at `LINEAGE_MAX_DEPTH`) before the time overlap, for the reporting account and then the target
+user; when the record's own id names nothing, its `parent_session_id` is looked up the same way (a subagent's usage
+goes to its parent's issue). The stored method stays `mcp_session`.
+One connection can carry several client sessions (a client running subagents or chats over one MCP connection).
+`set` with an `external_session_id` the current row does not carry goes through
+`AgentSessionService.select_for_client`: the connection's open row with that id, else the current row when it has no
+id yet, else a new row that copies the connection's API key, `connection_hash`, `client_type` and client. The selected
+row is made active now, so `get_or_create_session` (most recently active row of the connection, ties by id) returns it
+for later calls, and the tool re-publishes `agent_session_id_var` for the rest of its own call, so the working issue,
+the audit row and `tool_call_count` go to it. Rows are only ever read across one connection and one account
+(`find_on_connection`), never linked to each other by `parent_session_id` (that stays the client's own lineage), and
+each keeps its own `external_session_id`, so the issue timeline, the event receiver and ingest matching see one row
+per client session exactly as with one connection each. Calls running at the same time on one connection still go
+to whichever row was selected last; a client that needs them apart opens a connection per session.
+`set` with `issue_ref=""` clears the session's issue (`clear_issue`), audited like a set (`AGENT_SESSION_LINKED`,
+`issue_cleared` names the key, the row in that issue's project); a session with no issue writes nothing.
+
+Entries also store where in an agent's work the usage happened, all optional on ingest records (listed in
+`optional_fields`), `AiUsageCreate` and `specivo_log_ai_usage`: `parent_session_id` (opaque, like
+`external_session_id`), `unattended` (NOT NULL, default false: a cron or scheduled run; existing and hand-logged
+entries are attended) and `profile` (the agent profile, verbatim). They take part in the replay comparison like every
+stored value, so a replay changing one is `updated`. Spend reports group by `attended` (two rows keyed by the flag) and
+`profile`, and filter by them (`ReportFilters.unattended` / `profile` / `without_profile`, applied in
+`ReportFilters.conditions` so the charts and seat breakdown narrow the same way); a seat fee never matches either
+filter.
+
+**Spend by payer and billing account.** Spend reports group by `payer`, `billing_account` and `route` and filter by
+them and by `scope=organization` (`ReportFilters.payer` / `billing_account_id` / `without_billing_account` /
+`route` / `without_route` / `organization`, i.e. `specivo.services.ai_spend_billing.BillingFilter`, applied in
+`ReportFilters.conditions` and passed to `AiUsageService.list_entries` as `billing=`); a seat fee never matches one.
+The organization scope leaves out personal entries (`personal_entry_clause`): no project, a project whose payer
+default is `employee`, or `billing_method = 'project_default'` with payer `employee`. A billing account filter is an
+id or a slug (`resolve_billing_account`); one the viewer may not see (`AiBillingAccountService.can_view`) matches
+nothing (-1). Grouped by `billing_account`, accounts the viewer may not see fold into one `HIDDEN_ACCOUNT` (0) row,
+"Personal account", which does not drill. Every report carries `payer_totals` (one finished row per payer:
+marginal, seat cost, API-equivalent value, leverage). `reimbursable` = the account's `reimburse_share` x (allocated
+seat cost + marginal) of employee-paid entries in projects whose payer default is `employer`, read at report time
+(`reimburse_factors`), each part converted on its own day; shown only with seat cost, to global administrators or
+to a viewer whose `user_id` filter is themselves (`reimbursable_allowed`), and only when the report holds
+employee-paid usage.
+
+**AI reimbursement claims.** `ai_reimbursement_claims` (one person, one past month as its first day, one
+currency; `draft` -> `submitted` -> `approved` -> `paid`, or `rejected`, final; at most one claim per person and month
+that is not rejected) and `ai_reimbursement_claim_entries` (the entries it froze) go only through
+`AiReimbursementClaimService`. A claim is built by `AiSpendReportService.holder_entry_spend`, the report's own rules
+for the holder's own usage in every project (no administrator check: `filters.user_id` must be the viewer), and keeps
+the entries with a reimbursable amount above 0, each with its `revision`, `entry_fingerprint` (day, project, account,
+payer, cost type, subscription, stored costs), share and amounts converted into the claim's currency; a missing rate
+refuses the claim. **Snapshot rule:** nothing writes to a claim when entries change. A draft is refreshed by its
+holder; a submitted, approved or paid claim never moves, and `changes` compares the frozen rows with the entries now
+(deleted, excluded, fingerprint differs = `billing`, current factor differs = `share`) at read time, in three
+queries for any number of claims. The holder creates, refreshes, submits, withdraws and deletes (draft or rejected);
+global administrators approve, reject and mark paid, never their own; nobody else sees a claim (404); a
+project-limited key is refused. Notifications are mails (`send_notification_email`): in-app notifications need a
+project and claims have none.
+
+**AI spend budgets.** `ai_spend_budgets` holds one monthly budget per billing account (`billing_account_id`, FK
+`CASCADE`) or per payer (`payer` `employer` / `employee`), exactly one of the two (two partial unique indexes), with
+an amount pair above zero and `thresholds` (`integer[]`, 1 to 5 percents from 1 to 1000, default `{80,100}`); only
+`AiSpendBudgetService` writes it. Budgets on instance accounts and payers are for global administrators only (also
+to read); a personal account's budget is its owner's (under `ai_subscriptions_self_service`, through
+`AiBillingAccountService.require_can_manage`) and administrators'. Spend is
+`AiSpendReportService.budget_spend`: the instance report without a viewer (`_report(viewer=None)`: no visibility
+narrowing, no hidden accounts, no reimbursable, `system_conditions`), grouped by `billing_account`, one report per
+budget currency for the calendar month (UTC) up to the day; an account's spend is its row (allocated and unallocated
+seat cost of plans whose account it is included), a payer's its `payer_totals` row; amounts without a rate are left
+out and flagged. The hourly beat task `check-ai-spend-budgets` (`specivo.tasks.ai_usage`, `beat_lock`) runs
+`AiSpendBudgetService.check`: each threshold reached inserts an `ai_spend_budget_alerts` row (unique per budget,
+month and threshold, `ON CONFLICT DO NOTHING`), and only inserted rows lead to mail, queued by `notify` after the
+commit, so a threshold alerts once per month whatever the run count and an amount change does not re-send it; on a
+month's first day the month that ended is checked too. Mail (`send_notification_email`, per recipient language)
+goes to active administrators and, for a personal account, its owner; in-app notifications need a project.
+
+**Hermes event receivers.** Hermes Agent posts signed outbound webhooks to
+`POST /api/v1/hermes/events/{token}/` (`specivo.api.v1.hermes_events`, served with and without the slash; no
+`Authorization` header). A receiver (`hermes_receivers`) belongs to one account; its `token` is the URL part and its
+`secret` a `secret_box` token (purpose `hermes-receiver-secret`), both shown once. Hermes treats every 4xx as final and
+retries a 5xx once, so the checks run in this order and each refusal is a 4xx: body size (413,
+`HERMES_EVENT_MAX_BODY_BYTES`), a per-address rate limit (429), the receiver (404 for an unknown or inactive token or an
+account that cannot act; a locked account keeps its receivers, as its API keys), the HMAC-SHA256 of the raw body in
+`X-Hermes-Signature-256` (401 `invalid_signature`), the JSON object and its `delivery_id` (400), `timestamp` within ten
+minutes (401 `stale`), then `(receiver_id, delivery_id)` into `hermes_deliveries` (a conflict is 200 `duplicate`, kept
+seven days). `HermesEventService.map_event` is the one mapping from Hermes events to audit events, metadata only;
+unmapped events answer 200 `ignored`. Sessions are found or opened only among the receiver's account's rows
+(`AgentSessionService.open_webhook_session`: `client_type` `webhook`, no API key, `receiver_id`, the newest open row with
+the id, parents through `set_external`), so an id another account uses never attaches; a new row takes the issue
+`issue_for_external` finds while the account may still log there (`AgentSessionService.can_log_on`, i.e.
+`AiUsageService.require_can_log`, checked on every event; otherwise the session names no issue and its rows no
+project), which puts its events on that project's timeline. The kill switch stops receivers with
+`hermes_receivers.killed_at` (set by `kill_agent` / `kill_all`, cleared by `unkill_agent`), kept apart from the owner's
+`is_active` so an unkill never turns on a receiver its owner switched off. `end_session` sets `ended_at`. The receiver
+never writes AI usage or cost.
 
 **MCP transport sessions** are a different thing from agent sessions: the `Mcp-Session-Id` of a Streamable HTTP
 connection. Their Redis entry (`specivo.mcp.session_store`, sliding TTL `mcp_session_ttl_seconds`) is the source of
@@ -302,6 +488,23 @@ with HTTP 404, the spec's signal to re-initialize, never with a JSON-RPC error: 
 and no client recovers from it. The legacy SSE transport has no session continuity (the SDK mints an id per GET), so
 each SSE stream is served born initialized too (`serve_initialized_connection`): a client that reconnects its
 stream does not repeat `initialize`.
+
+**The MCP tool listing is kept lean.** Clients without a tool search put all of `tools/list` into the prompt on every
+turn. `SpecivoMCPServer` (`specivo.mcp.compact_server`) registers tools without structured output (every tool
+returns text, so no `outputSchema` and no `structuredContent`) and advertises compacted input schemas: no `title`,
+no `null` branch, no `default: null`. Validation keeps the original schemas. Tools belong to **toolsets**
+(`specivo.mcp.toolsets.TOOLSETS`, every tool in exactly one): `core` by default, `planning`, `recurring`, `admin` and
+`ai-spend` on request through `?toolsets=` on the MCP URL (or `all`). `ToolsetMiddleware` filters `tools/list` and
+answers a call of a tool outside the connection's toolsets with a tool error naming the toolset to add; an unknown
+name refuses the request. An SSE stream's choice is carried into the message endpoint it announces. A new tool goes
+into the table, and `tests/unit/test_mcp_tools_list_budget.py` holds the listing under a size budget.
+Tools are advertised with **short descriptions** (`specivo.mcp.tool_help`): every `@mcp.tool` passes `summary=` (what
+the tool does, what to call first, hard rules: op values, where IDs come from, formats, destructive and permission
+notes) and, where a parameter's full text is too long, `params=` with a short one; shared parameters such as
+`project_key` take one short text from `COMMON_PARAMS`, and op-style arguments are `Literal` types so the schema
+carries an `enum`. The docstring and the `Field` descriptions stay the full text, served as help by
+`specivo_setup_guide(tool=...)`, the resource `specivo://docs/tools/{name}` and the error of a call whose arguments
+fail validation (`SpecivoMCPServer.call_tool` appends the tool's parameter docs; other errors keep their message).
 
 **AI usage surfaces.** The REST routes (`api/v1/ai_usage.py`) mirror time entries: `/projects/{key}/ai-usage/`,
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and
@@ -495,7 +698,7 @@ Implemented in `specivo.core.security`:
 
 **API keys** use the `spv_` prefix. Locked users can still authenticate via API key (locking is brute-force protection, not agent access control). Deactivated users are blocked from both JWT and API key auth.
 
-**Session-only admin routes.** An admin route that hands out a way to sign in or to act as someone (set a password, create any account other than a service account, unlock/reactivate an account, mint or re-enable API keys or credentials for another user, change the SSO configuration) depends on `require_admin_session_api` (`specivo/api/v1/admin/__init__.py`) instead of `require_admin_api`: API-key auth (`request.state.api_key_id` set) gets 403 `api_key_not_allowed`. The matching web forms use `require_admin_session` (`specivo/web/pages/admin.py`), because the web layer also accepts a Bearer key and a request without a session cookie is not CSRF-checked. Taking access away (lock, deactivate, revoke) and ordinary administration stay key-accessible. `tests/integration/test_admin_api_key_gates.py` lists the gated routes; add a new credential-minting route there.
+**Session-only admin routes.** An admin route that hands out a way to sign in or to act as someone (set a password, create any account other than a service account, unlock/reactivate an account, mint or re-enable API keys or credentials for another user, change the SSO configuration) depends on `require_admin_session_api` (`specivo/api/v1/admin/__init__.py`) instead of `require_admin_api`: API-key auth (`request.state.api_key_id` set) gets 403 `api_key_not_allowed`. The matching web forms use `require_admin_session` (`specivo/web/pages/admin.py`), because the web layer also accepts a Bearer key and a request without a session cookie is not CSRF-checked. Taking access away (lock, deactivate, revoke) and ordinary administration stay key-accessible. Creating a Hermes event receiver for another account (`POST /admin/users/{id}/hermes-receivers/`) is gated too, and its `PATCH` refuses a key when it rotates the secret or switches the receiver on; switching it off and deleting it stay key-accessible. `tests/integration/test_admin_api_key_gates.py` lists the gated routes; add a new credential-minting route there.
 
 **Cookie settings:** httpOnly, SameSite=Lax, Secure when not debug. Refresh token scoped to `/api/v1/auth` path.
 
@@ -744,6 +947,16 @@ await audit.log_member_change(session=db, action="added", ...)
 **Scope.** Security and administrative events, and everything agents do through MCP. People's ordinary
 edits to issues and wiki pages are not audit events: they live in issue and wiki history.
 
+**Agent sessions.** An MCP tool call's row names its agent session in the `agent_session_id` column
+(`_log_tool`, from `agent_session_id_var`; no foreign key, as for `user_id` and `project_id`, because audit
+rows outlive sessions), and `agent_sessions.tool_call_count` goes up in the same transaction, so the session
+list needs no join to the partitioned table. A project's session page lists a session's rows in the project
+and the project-less rows of tools that act in no project (`list_events(agent_session_id=..., project_id=...,
+projectless_tools=PROJECT_FREE_TOOLS)`): other project-less rows can name issues in projects the reader cannot
+see. It is for `manage_project` only, and its parent ids and related sessions pass the same visibility rule as
+the session list; opening it writes `RESOURCE_ACCESS` with `resource_type` `agent_session`. Other write
+paths leave the column empty.
+
 **Noise rules.** Each of these was one row per routine request, so it is not written:
 - `access_granted` (the enum value stays so old rows read). `access_denied` is written, only where the
   caller passes `request`; anonymous paths pass none.
@@ -797,13 +1010,45 @@ actor is not the holder (an administrator changing somebody else's). `AI_SUBSCRI
 (`enabled`) is written when the setting changes. Category Administration; `resource_type` `ai_subscription` or
 `setting`. Notes are free text and never logged.
 
+**AI billing account events.** `AI_BILLING_ACCOUNT_CREATED` / `_UPDATED` / `_DEACTIVATED` (details: `account_id`,
+`slug`, `name`, `kind`, `owner` = `instance` or the owner's login, `owner_user_id`, `payer`, `reimburse_share`,
+`route_patterns`, `tool_slugs`, `default_cost_type`, `is_active`; an update adds `changes`, and is `_DEACTIVATED` when
+it switches the account off) are written by `AiBillingAccountService` in the transaction of the change, for every
+change to an instance account and for an administrator's change to somebody else's personal account, only when
+something changed. `AI_USAGE_PAYER_DEFAULT_CHANGED` (`project_key`, `old`, `new`, `entries`, `changed`; `project_id`
+set) is written by `AiBillingAccountService.change_project_payer_default`, the one path for the project update, when the
+value changes; it re-resolves the project's entries in the same transaction. Category Administration; `resource_type`
+`ai_billing_account` or `setting`. MCP changes (`specivo_ai_billing_accounts`) also write `AI_BILLING_ACCOUNTS_CHANGED`
+(category Agents: `op`, `account_ids`, `owner`, `fields`).
+
+**AI reimbursement claim events.** `AI_REIMBURSEMENT_CLAIM_SUBMITTED` / `_WITHDRAWN` / `_APPROVED` / `_REJECTED` /
+`_PAID` / `_EXPORTED` (category AI usage, `resource_type` `ai_reimbursement_claim`; details: `claim_id`,
+`holder_user_id`, `holder_login`, `month`, `currency`, `total`, `entries`, `status_from`, `status_to`; approval adds
+`changed_entries`, rejection `reason_given` but never the reason, export `format`) are written by
+`AiReimbursementClaimService` through `log_ai_billing_change`, in the transaction of the step. Creating, refreshing and
+deleting a draft are not audited. MCP changes (`specivo_ai_reimbursement_claims`) also write
+`AI_REIMBURSEMENT_CLAIMS_CHANGED` (category Agents: `op`, `claim_ids`, `holder`).
+
+**AI spend budget events.** `AI_SPEND_BUDGET_CREATED` / `_UPDATED` / `_DELETED` (category Administration,
+`resource_type` `ai_spend_budget`; details: `budget_id`, `target` = `billing_account` or `payer`, `account_id`,
+`account_slug`, `owner` = `instance` or the owner's login, `payer`, `amount` at the currency's minor units,
+`currency`, `thresholds`, `is_active`; an update adds `changes`, only when something changed) are written by
+`AiSpendBudgetService` through `log_ai_billing_change` for instance account and payer budgets and for an
+administrator's change to somebody else's, in the transaction of the change. `AI_SPEND_BUDGET_ALERT_SENT`
+(category AI usage, no user) adds `month`, the `thresholds` reached, `spend` and `recipients`. MCP changes
+(`specivo_ai_spend_budgets`) also write `AI_SPEND_BUDGETS_CHANGED` (category Agents: `op`, `budget_ids`,
+`target`).
+
 **AI usage events** (category AI usage, `resource_type` `ai_usage_entry`, `project_id` set when the entry has one),
 written by `AiUsageService` in the transaction of the change: `AI_USAGE_LOGGED_FOR_OTHER` (an entry created in another
 user's name; details `entry_id`, `target_user_id`, `target_login`, `source`, `tool`, `provider`, `model`, `usage_date`,
 `project_key`, `issue`, `reporter_api_key_id`; a replay that changes another user's bucket writes it again with
 `status: "updated"` and `revision`, an unchanged replay none),
 `AI_USAGE_UPDATED_BY_OTHER` (an edit by someone other than the entry's user; the same plus `changes`, comments only as
-`{"changed": true}`), `AI_USAGE_EXCLUDED` / `AI_USAGE_INCLUDED` and `AI_USAGE_DELETED` (whoever did it; a delete adds
+`{"changed": true}`; billing fields of an override go to the next event instead),
+`AI_USAGE_BILLING_OVERRIDDEN` (a billing override set or cleared, by anyone; the same plus `override` `set` /
+`cleared`, `changes` of `billing_method`, `billing_account_id`, `payer`, `cost_type`, and `billing_account`
+`{old, new}` slugs), `AI_USAGE_EXCLUDED` / `AI_USAGE_INCLUDED` and `AI_USAGE_DELETED` (whoever did it; a delete adds
 `tokens` and `cost_type`), and `AI_USAGE_COSTS_RECOMPUTED` (one per range: `provider`, `models`, `from`, `to`,
 `entries`, `changed`, `before` and `after` totals per currency of `marginal` and `api_equivalent`; user none when the
 task runs without an actor). Entries a person logs for themselves are not audited.
@@ -824,6 +1069,23 @@ and `project_id` is its project. Details: `issue` (display key), `item_type` (`c
 `pull_request`), `item_id`, `item` (the SHA, or `#N` / `!N`), `repository` (full name); a move adds
 `target_issue` and `target_project_id`. Never the commit message or the request's title. Like every
 audit write, it runs in a savepoint and a failure is logged, never failing the change.
+
+**Hermes events.** An accepted Hermes event writes one row through `SecurityAuditService.log_hermes_event`, in the
+request's transaction without a savepoint (a failed write fails the request, which Hermes retries, and takes the delivery
+record with it): `AGENT_SESSION_STARTED` (`model`, `platform`, `profile`), `AGENT_TOOL_CALLED` (`tool`, `status`,
+`error_type`, `duration_ms`, `tool_call_id`, `turn_id`; `tool_call_count` goes up in the same transaction),
+`AGENT_APPROVAL_REQUESTED` (`pattern_key`, `pattern_keys`, `surface`), `AGENT_APPROVAL_RESOLVED` (`choice`,
+`decided_by`, `pattern_key`), `AGENT_SUBAGENT_STARTED` / `_STOPPED` on the parent's session (`child_session_id`,
+`child_agent_session_id`, `child_role`, `child_subagent_id`; a stop adds `child_status`, `duration_ms` and `tools`, the
+tool names only) and `AGENT_SESSION_ENDED` (`completed`, `interrupted`). Every row has `user_id` = the receiver's
+account, `agent_session_id`, `project_id` from the session's issue when it has one, and `details.source = "hermes"`,
+`event` and `delivery_id`. Never tool arguments, results or error messages, approval commands or descriptions, goals,
+summaries or `cwd`. A Hermes tool named like one of `PROJECT_FREE_TOOLS` is stored as `hermes:<name>`. Category
+Agents. `HERMES_EVENT_REJECTED` (Agents; `reason`, `receiver_id` when known, the `X-Hermes-Event` header) is buffered
+with the request so it survives the 4xx; an unknown receiver is written at most once a minute per address.
+`HERMES_RECEIVER_CREATED` / `_UPDATED` / `_DELETED` (Administration; actor = whoever made the change; `receiver_id`,
+`name`, `target_user_id`, `target_login`; an update adds `changes`, `secret_rotated` and `is_active`) never hold the
+token or the secret.
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line

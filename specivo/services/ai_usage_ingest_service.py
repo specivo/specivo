@@ -18,9 +18,10 @@ stored as ``attribution_method``:
 1a. ``attribution.issue_ref`` with ``issue_ref_source`` ``agent_log``
    (``agent_log``): the issue the reporter read from the agent's own Specivo
    MCP calls. Inferred-like: dropped with a warning when unusable;
-2. the issue of an MCP agent session overlapping ``[started_at, ended_at]``
-   (``mcp_session``): the reporting account's sessions first, then, for an
-   on-behalf record, the target user's;
+2. the issue of an MCP agent session (``mcp_session``): one carrying the
+   record's ``session_id``, then one carrying its ``parent_session_id``, then
+   one overlapping ``[started_at, ended_at]``; each time the reporting
+   account's sessions first, then, for an on-behalf record, the target user's;
 3. ``attribution.commits`` linked to an issue (``commit``): the issue most of
    them are linked to;
 4. an issue key in ``attribution.git_branch`` (``branch``), among the keys of
@@ -35,6 +36,17 @@ to 4 and the repository) that the target user cannot log to are dropped with
 an ``attribution_dropped`` warning, and the next step is tried. With a
 ``project_key``, ``agent_log`` and inferred issues of other projects are
 dropped too.
+
+Billing account and payer
+-------------------------
+Resolved for every record, replays included, by
+:mod:`specivo.services.ai_billing_resolution` from ``billing_account``,
+``route``, the tool and the project the entry ends up in. The result names the
+entry's ``payer`` and ``billing_account`` (slug). A slug no account available
+to the user has gets the warning ``billing_account_unknown`` (one message
+whether it does not exist, is someone else's or is switched off) and the
+other steps decide. A replay that changes only the route or the slug resolves
+again and is ``updated`` when the billing changes; a changed route is stored.
 
 Replays
 -------
@@ -83,6 +95,7 @@ from specivo.core.exceptions import AppError, NotFoundError
 from specivo.core.money import Money, MoneyError
 from specivo.core.utils import utcnow
 from specivo.hooks.refs import extract_branch_refs
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_usage_entry import MANUAL_ATTRIBUTION, AiUsageEntry
 from specivo.models.issue import Issue
 from specivo.models.project import Project
@@ -163,6 +176,10 @@ class RecordResult:
     entry_id: int | None = None
     revision: int | None = None
     attribution: dict[str, Any] | None = None
+    #: Who pays for the stored entry and the slug of its billing account (see
+    #: :mod:`specivo.services.ai_billing_resolution`); ``None`` when rejected.
+    payer: str | None = None
+    billing_account: str | None = None
     warnings: list[Problem] = field(default_factory=list)
     error: Problem | None = None
 
@@ -174,6 +191,8 @@ class RecordResult:
             "entry_id": self.entry_id,
             "revision": self.revision,
             "attribution": self.attribution,
+            "payer": self.payer,
+            "billing_account": self.billing_account,
             "warnings": [w.as_dict() for w in self.warnings],
             "error": self.error.as_dict() if self.error is not None else None,
         }
@@ -277,6 +296,7 @@ class AiUsageIngestService:
         result.status = "rejected"
         result.entry_id = result.revision = None
         result.attribution = None
+        result.payer = result.billing_account = None
         return result
 
     async def _write(self, session: AsyncSession, batch: _Batch, record: IngestRecord, result: RecordResult) -> None:
@@ -345,6 +365,11 @@ class AiUsageIngestService:
             client_name=batch.client_name,
             client_version=batch.client_version,
             idempotency_key=record.idempotency_key,
+            route=record.route,
+            billing_account=record.billing_account,
+            parent_session_id=record.parent_session_id,
+            unattended=record.unattended,
+            profile=record.profile,
         )
 
     async def _upsert(
@@ -400,6 +425,29 @@ class AiUsageIngestService:
         result.entry_id = entry.id
         result.revision = entry.revision
         result.attribution = await self._attribution_of(session, actor, entry)
+        result.payer = entry.payer
+        account = (
+            await session.get(AiBillingAccount, entry.billing_account_id)
+            if entry.billing_account_id is not None
+            else None
+        )
+        # A reporter logging for someone else learns nothing about that person's own accounts:
+        # neither the name of the one used nor whether a slug it sent exists among them.
+        sees_personal = actor.id == target.id or actor.is_admin
+        if account is not None and (account.owner_user_id is None or sees_personal):
+            result.billing_account = account.slug
+        else:
+            result.billing_account = None
+        if outcome.billing_slug_unknown and sees_personal:
+            # One message whether the slug does not exist, is someone else's or is switched off.
+            result.warnings.append(
+                Problem(
+                    "billing_account_unknown",
+                    f"No active billing account '{record.billing_account}' is available to this user; "
+                    "the account was found from the other rules",
+                    "billing_account",
+                )
+            )
 
     async def _target_user(
         self, session: AsyncSession, batch: _Batch, record: IngestRecord, login: str
@@ -722,16 +770,33 @@ class AiUsageIngestService:
     async def _session_issues(
         self, session: AsyncSession, batch: _Batch, record: IngestRecord, target: User
     ) -> list[int]:
+        """Issues of agent sessions: matched by the record's ``session_id``, then its ``parent_session_id``,
+        then by time overlap.
+
+        A subagent's record names its parent: when its own session is unknown,
+        the parent's session may still name the issue.
+
+        Each step tries the reporting account's sessions, then the target
+        user's; a session of any other account is never used, whatever id it
+        carries.
+        """
         from specivo.services.agent_session_service import AgentSessionService
+
+        sessions = AgentSessionService()
+        users = list(dict.fromkeys((batch.actor.id, target.id)))
+        found: list[int] = []
+        for external_id in dict.fromkeys(i for i in (record.session_id, record.parent_session_id) if i):
+            for user_id in users:
+                issue_id = await sessions.issue_for_external(session, user_id, external_id)
+                if issue_id is not None:
+                    found.append(issue_id)
 
         start = record.started_at or record.ended_at
         end = record.ended_at or record.started_at
         if start is None or end is None:
-            return []
-        found: list[int] = []
-        # The reporting account's sessions first, then the target user's.
-        for user_id in dict.fromkeys((batch.actor.id, target.id)):
-            issue_id = await AgentSessionService().issue_for(session, user_id, start, end)
+            return found
+        for user_id in users:
+            issue_id = await sessions.issue_for(session, user_id, start, end)
             if issue_id is not None:
                 found.append(issue_id)
         return found

@@ -60,3 +60,15 @@ comment row opens the issue at that comment. The list is loaded when you open th
 shows what you can open yourself: mentions in a private issue, a private note or a wiki you can't read
 are left out. Unlike relations, mentions come from the text, so to remove one, edit the text that
 contains it.
+
+To see the links of an issue as a picture, open its **Graph** tab. See
+[Seeing the graph](../wiki/history-linking.md#seeing-the-graph).
+
+## Possibly related
+
+Under **Mentioned in**, the tab lists issues and wiki pages of the project whose content is close to
+this issue but that nothing links yet, issues and wiki pages in separate groups (at most ten of
+each), each with the start of its text and a score from 0 to 1. They are suggestions from
+semantic search, not links. If you may link the items, **Accept** turns one into a relation (with
+another issue) or a typed link such as **Documents** (with a wiki page), and **Dismiss** hides it for
+good. See [Possibly related: suggested links](../wiki/history-linking.md#possibly-related-suggested-links).

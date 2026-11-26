@@ -79,7 +79,9 @@ async def test_initialize_list_call_and_read_over_http(mcp_key) -> None:  # noqa
             tools = {t["name"]: t for t in _sse_json(listed.text)["result"]["tools"]}
             assert "specivo_whoami" in tools
             assert "inputSchema" in tools["specivo_list_issues"]
-            assert tools["specivo_whoami"]["outputSchema"]["required"] == ["result"]
+            # Tools return text: no output schema, no titles, no null branches in the listing.
+            assert "outputSchema" not in tools["specivo_whoami"]
+            assert "title" not in tools["specivo_list_issues"]["inputSchema"]
 
             called = await client.post(
                 "/mcp/",
@@ -94,6 +96,7 @@ async def test_initialize_list_call_and_read_over_http(mcp_key) -> None:  # noqa
             result = _sse_json(called.text)["result"]
             assert result["isError"] is False
             assert "mcp_test_user" in result["content"][0]["text"]
+            assert "structuredContent" not in result
 
             read = await client.post(
                 "/mcp/",

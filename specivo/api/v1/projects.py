@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
+from specivo.core.ai_billing import project_payer_default
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
@@ -31,8 +32,10 @@ from specivo.schemas.project import (
 from specivo.services.api_key_scope import is_global_admin
 from specivo.services.branch_name import BranchNameSettings
 from specivo.services.computed_metadata_service import computed_values
+from specivo.services.concept_extraction import confidence_threshold, extraction_enabled, run_limit
 from specivo.services.currency_service import reporting_currency_for
 from specivo.services.entity_link_nodes import graph_metadata_keys
+from specivo.services.link_suggestion_service import similarity_threshold
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
 from specivo.services.security_audit_service import AuditEvent, MemberAction, SecurityAuditService
@@ -147,8 +150,13 @@ def _project_out(
         branch_name=_branch_name(project) if detail else None,
         similar_issues=project_setting_enabled(project.settings) if detail else None,
         graph_metadata_keys=list(graph_metadata_keys(project.settings)) if detail else None,
+        similar_links_threshold=similarity_threshold(project.settings) if detail else None,
+        concept_extraction=extraction_enabled(project.settings) if detail else None,
+        concept_confidence_threshold=confidence_threshold(project.settings) if detail else None,
+        concept_extraction_run_limit=run_limit(project.settings) if detail else None,
         reporting_currency_code=project.reporting_currency_code,
         reporting_currency=reporting_currency,
+        ai_usage_payer_default=project_payer_default(project.settings) if detail else None,
         id=project.id,
         name=project.name,
         identifier=project.identifier,
@@ -452,6 +460,7 @@ async def search_assignees(
             display_name=u.display_name,
             avatar_url=u.avatar_url,
             avatar_color=str((u.preferences or {}).get("avatar_color") or ""),
+            is_service_account=bool(u.is_service_account),
         )
         for u in users
     ]

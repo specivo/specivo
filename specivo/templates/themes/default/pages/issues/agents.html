@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+{#
+  What agents did for an issue as a page of its own (issue_agents.issue_agents_page): the Agents tab's
+  links lead here without JavaScript. The body is the tab itself.
+#}
+
+{% block title %}{% trans %}Agents{% endtrans %} - {{ issue.display_key }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Home"), "url": base ~ "/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": issue.display_key, "url": base ~ "/issue/" ~ issue.display_key ~ "/"},
+  {"label": _("Agents")}
+]) }}
+
+<div class="page-header">
+  <h1><a class="issue-key" href="{{ base }}/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a> {{ issue.subject }}</h1>
+</div>
+
+<div id="issue-agents-tab" data-testid="agents-page">
+  {% include "pages/issues/_agents_tab.html" %}
+</div>
+{% endblock %}

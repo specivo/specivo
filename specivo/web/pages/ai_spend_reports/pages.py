@@ -173,9 +173,21 @@ async def _page(
     }
     if project is not None:
         context["active_project"] = project
+    elif not request.headers.get("HX-Request"):
+        context["budgets"] = await _budget_panel(db)
     return get_templates().TemplateResponse(
         request, "pages/ai_usage/report.html", context=context, status_code=422 if error else 200
     )
+
+
+async def _budget_panel(db: AsyncSession) -> list[dict[str, Any]]:
+    """The active budgets and their month so far, for the admin report (payer budgets first)."""
+    from specivo.services.ai_spend_budget_service import AiSpendBudgetService
+    from specivo.web.pages.ai_spend_budget_views import budget_views
+
+    budgets = [b for b in (await AiSpendBudgetService().list_all(db))[0] if b.is_active]
+    views = await budget_views(db, budgets)
+    return [views[b.id] for b in budgets]
 
 
 @router.get("/projects/{project_key}/ai-usage/report/", response_class=HTMLResponse)
@@ -219,6 +231,12 @@ async def admin_spend_entries(  # noqa: PLR0913
     branch: str = Query(""),
     version: str = Query(""),
     sprint: str = Query(""),
+    attended: str = Query(""),
+    profile: str = Query("", max_length=100),
+    payer: str = Query(""),
+    billing_account: str = Query(""),
+    route: str = Query("", max_length=100),
+    scope: str = Query(""),
     cost_type: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
@@ -241,6 +259,12 @@ async def admin_spend_entries(  # noqa: PLR0913
         branch=branch,
         version=version,
         sprint=sprint,
+        attended=attended,
+        profile=profile,
+        payer=payer,
+        billing_account=billing_account,
+        route=route,
+        scope=scope,
     )
     selected: Project | None = None
     unassigned: bool | None = None
@@ -253,6 +277,7 @@ async def admin_spend_entries(  # noqa: PLR0913
             filters.project = ""
     issue_id = await _issue_filter(db, user, filters.issue, selected)
     await filters.name_planning(db, user, selected)
+    await filters.name_billing(db, user)
     entries, total = await _usage.list_entries(
         db,
         user,

@@ -58,6 +58,8 @@
 {%- elif code == "ai_usage_target_unknown" %}{% trans %}No user with that login.{% endtrans %}
 {%- elif code == "ai_usage_target_invalid" %}{% trans %}AI usage can be logged only for an active user.{% endtrans %}
 {%- elif code == "ai_usage_target_not_member" %}{% trans %}That user is not an active member of the project.{% endtrans %}
+{%- elif code in ("ai_usage_billing_account_unknown", "billing_invalid") %}{% trans %}Choose an active billing account of the entry's user or of the company, or a payer.{% endtrans %}
+{%- elif code == "ai_usage_invalid" and field == "payer" %}{% trans %}Choose who paid: the employer or the employee.{% endtrans %}
 {%- elif code == "ai_usage_field_locked" %}{% trans %}Reported usage keeps its tokens, model and tool. Only the project, the issue and the comments can change.{% endtrans %}
 {%- elif code in ("project_unknown", "issue_unknown", "issue_other_project") %}{{ list_error_text(code) }}
 {%- elif code == "not_found" %}{% trans %}The project or issue was not found, or you cannot see it.{% endtrans %}
@@ -432,6 +434,9 @@
         <div class="sp-text-muted-xs">
           {% if compact %}{{ cost_type_label(r.cost_type) }} · {% endif %}{{ source_label(r.source) }}{% if r.locked %} · <span title="{{ _('Tokens, model and tool are reported and cannot be changed') }}">{% trans %}locked{% endtrans %}</span>{% endif %}
           {% if r.excluded %} · <span class="sp-aiu-badge" data-testid="aiu-excluded-badge">{% trans %}Excluded{% endtrans %}</span>{% endif %}
+          {% if r.unattended %} · <span class="sp-aiu-badge" data-testid="aiu-unattended-badge" title="{{ _('A run with nobody in the loop, such as a cron or scheduled job') }}">{% trans %}unattended{% endtrans %}</span>{% endif %}
+          {% if r.profile %} · <span title="{{ _('Agent profile') }}">{{ r.profile }}</span>{% endif %}
+          {% if r.payer == "employer" %} · <span data-testid="aiu-payer">{% trans %}paid by the employer{% endtrans %}</span>{% elif r.payer == "employee" %} · <span data-testid="aiu-payer">{% trans %}paid by the employee{% endtrans %}</span>{% endif %}
           {% if not show_user and r.on_behalf %} · {% if r.key_name %}{% trans reporter=r.reporter_name, key=r.key_name %}logged by {{ reporter }} via key {{ key }}{% endtrans %}{% else %}{% trans reporter=r.reporter_name %}logged by {{ reporter }}{% endtrans %}{% endif %}{% endif %}
         </div>
         {% if r.comments %}<div class="sp-aiu-comment">{{ r.comments }}</div>{% endif %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_billing_account_macros.html" import error_text with context %}
+{% from "pages/auth/_ai_spend_budget_macros.html" import budget_meter, budget_error_text, budget_form with context %}
+
+{% block title %}{{ account.name }} - {% trans %}AI billing accounts{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="{{ base }}/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  {% if admin_mode %}
+  <a href="{{ base }}/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="{{ back_url | prefixed }}">{% trans %}AI billing accounts{% endtrans %}</a>
+  {% else %}
+  <a href="{{ base }}/my/ai-billing-accounts/">{% trans %}My AI billing accounts{% endtrans %}</a>
+  {% endif %}
+  <span class="sep">/</span>
+  <span class="current">{{ account.name }}</span>
+</div>
+
+<h1 class="sp-page-h1">{{ account.name }}</h1>
+{% if admin_mode %}
+<p class="sp-text-muted sp-mb-md" data-testid="billing-account-owner">{% if account.is_instance %}{% trans %}A company account. Your changes are recorded in the audit log.{% endtrans %}{% else %}{% trans name=account.owner_name, login=account.owner_login %}A personal account of {{ name }} ({{ login }}). Your changes are recorded in the audit log.{% endtrans %}{% endif %}</p>
+{% endif %}
+{% if account.subscription_ids and account.is_instance %}<p class="sp-text-muted sp-mb-md">{% trans %}This account is the fee schedule of a company plan: the plan decides which tools it covers and who holds a seat, and the employer pays for it.{% endtrans %}{% if admin_mode %} <a href="{{ base }}/admin/ai-company-plans/{{ account.subscription_ids[0] }}/">{% trans %}Company AI plan{% endtrans %} &rarr;</a>{% endif %}</p>
+{% elif account.subscription_ids %}<p class="sp-text-muted sp-mb-md">{% trans %}This account is the fee schedule of a subscription: the subscription decides which tools it covers.{% endtrans %}</p>{% endif %}
+<p class="sp-text-muted-xs sp-mb-md">{% trans %}Changing who pays, the routes, the tools, the default cost type or whether the account is active updates the usage already logged through it.{% endtrans %}</p>
+
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="billing-account-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="edit-billing-account-card">
+  {% set submit_label = _("Save") %}
+  {% set edit = True %}
+  {% include "pages/auth/_ai_billing_account_form.html" %}
+</div>
+
+{% if budget or can_budget %}
+<div class="card sp-card-pad sp-mb-md" id="budget" data-testid="billing-account-budget-card">
+  <h3 class="sp-card-h3">{% trans %}Monthly budget{% endtrans %}</h3>
+  <p class="sp-text-muted-xs sp-mb-md">{% if account.is_instance %}{% trans %}What usage paid through this account may cost in a calendar month (UTC): marginal spend plus seat cost, every project. Administrators are mailed when the month's spend reaches each alert threshold, once per month.{% endtrans %}{% else %}{% trans %}What usage paid through this account may cost in a calendar month (UTC): marginal spend plus seat cost, every project. You and the administrators are mailed when the month's spend reaches each alert threshold, once per month.{% endtrans %}{% endif %}</p>
+  {% if budget %}{{ budget_meter(budget) }}{% if budget.alerted %}<p class="sp-text-muted-xs" data-testid="budget-alerted">{% trans thresholds=budget.alerted | join("%, ") %}Alerts sent this month at {{ thresholds }}%.{% endtrans %}</p>{% endif %}{% endif %}
+  {% if budget_error.code %}<div class="flash flash-error" role="alert" data-testid="budget-error">{{ budget_error_text(budget_error) }}</div>{% endif %}
+  {% if can_budget %}{{ budget_form(budget_values, budget_action, currencies, "account-budget", budget, budget_delete_action) }}{% endif %}
+</div>
+{% endif %}
+
+{% if account.is_active %}
+<div class="card sp-card-pad" data-testid="deactivate-billing-account-card">
+  <h3 class="sp-card-h3">{% trans %}Switch this account off{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}Accounts are never deleted: usage already paid through it keeps pointing at it. New usage is no longer matched to it; switch it on again from the form above.{% endtrans %}</p>
+  <form method="post" action="{{ deactivate_action | prefixed }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="sp-btn sp-btn-danger" data-testid="billing-account-deactivate">{% trans %}Switch off{% endtrans %}</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

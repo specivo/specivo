@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, pagination %}
+{% from "pages/agent_sessions/_macros.html" import session_state, account_cell, client_type_label with context %}
+
+{% block title %}{% trans %}Agent sessions{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Projects"), "url": base ~ "/projects/"},
+  {"label": project.name, "url": base ~ "/projects/" ~ project.key ~ "/"},
+  {"label": _("Agent sessions")}
+]) }}
+
+<h1 class="sp-page-h1">{% trans %}Agent sessions{% endtrans %}</h1>
+
+<form method="get" action="{{ base }}/projects/{{ project.key }}/agent-sessions/" class="sp-form-row sp-mb-md" data-testid="as-filters">
+  <div class="sp-form-field">
+    <label class="filter-label" for="as-account">{% trans %}Account{% endtrans %}</label>
+    <input id="as-account" type="text" name="account" value="{{ filters.account }}" class="filter-input" maxlength="100" placeholder="{{ _('Login') }}">
+  </div>
+  <div class="sp-form-field">
+    <label class="filter-label" for="as-issue">{% trans %}Issue{% endtrans %}</label>
+    <input id="as-issue" type="text" name="issue" value="{{ filters.issue }}" class="filter-input" maxlength="50" placeholder="{{ _('e.g. %(key)s-1') % {'key': project.key} }}">
+  </div>
+  <div class="sp-form-field">
+    <label class="filter-label" for="as-active">{% trans %}Show{% endtrans %}</label>
+    <select id="as-active" name="active" class="filter-select">
+      <option value="">{% trans %}All sessions{% endtrans %}</option>
+      <option value="1" {{ 'selected' if filters.active == '1' else '' }}>{% trans %}Active only{% endtrans %}</option>
+      <option value="0" {{ 'selected' if filters.active == '0' else '' }}>{% trans %}Inactive only{% endtrans %}</option>
+    </select>
+  </div>
+  <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
+  {% if page_query %}<a class="sp-btn sp-btn-ghost" href="{{ base }}/projects/{{ project.key }}/agent-sessions/">{% trans %}Clear{% endtrans %}</a>{% endif %}
+</form>
+
+{% if rows %}
+<div class="card">
+  <div class="sp-table-scroll">
+  <table class="sp-table sp-as-table" data-testid="as-table">
+    <thead>
+      <tr>
+        <th>{% trans %}Account{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Client{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Type{% endtrans %}</th>
+        <th>{% trans %}Issue{% endtrans %}</th>
+        <th class="sp-as-hide-md">{% trans %}Started{% endtrans %}</th>
+        <th>{% trans %}Last activity{% endtrans %}</th>
+        <th class="sp-as-num">{% trans %}Tool calls{% endtrans %}</th>
+        <th class="sp-as-num sp-as-hide-md">{% trans %}AI usage{% endtrans %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in rows %}
+      <tr data-session-id="{{ s.id }}">
+        <td>
+          {{ account_cell(s) }}
+          {% if can_inspect %}<div><a href="{{ base }}/projects/{{ project.key }}/agent-sessions/{{ s.id }}/" class="sp-text-muted-xs" data-testid="as-open">{% trans id=s.id %}Session #{{ id }}{% endtrans %}</a></div>
+          {% else %}<div class="sp-text-muted-xs">{% trans id=s.id %}Session #{{ id }}{% endtrans %}</div>{% endif %}
+        </td>
+        <td class="sp-as-hide-md">{{ s.client or "–" }}</td>
+        <td class="sp-as-hide-md">{{ client_type_label(s.client_type) }}</td>
+        <td>{% if s.issue_key %}<a class="issue-key" href="{{ base }}/issue/{{ s.issue_key }}/" title="{{ s.issue_subject }}">{{ s.issue_key }}</a>{% else %}<span class="sp-text-muted">–</span>{% endif %}</td>
+        <td class="sp-as-hide-md sp-as-nowrap">{{ s.started_at | localdt(user.timezone) }}</td>
+        <td class="sp-as-nowrap">{{ s.last_activity_at | timeago(user.timezone) }}<div>{{ session_state(s) }}</div></td>
+        <td class="sp-as-num">{{ s.tool_calls }}</td>
+        <td class="sp-as-num sp-as-hide-md">
+          {% if s.usage_entries %}{% trans count=s.usage_entries %}{{ count }} entry{% pluralize %}{{ count }} entries{% endtrans %}{% if s.spend %}<div class="sp-text-muted-xs">{{ s.spend }}</div>{% endif %}
+          {% else %}<span class="sp-text-muted">–</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{{ pagination(total, offset, limit, base ~ "/projects/" ~ project.key ~ "/agent-sessions/", page_query) }}
+{% else %}
+<div class="card sp-as-empty" data-testid="as-empty">
+  {% if page_query %}{% trans %}No agent sessions match these filters.{% endtrans %}
+  {% else %}{% trans %}No agent sessions yet. They appear when an AI agent works in this project with an API key.{% endtrans %}{% endif %}
+</div>
+{% endif %}
+{% endblock %}

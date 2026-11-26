@@ -206,6 +206,11 @@ class Settings(BaseSettings):
     # kept must not be changeable from an admin session or key.
     audit_log_retention_months: int = Field(default=12, ge=0)
 
+    # Wiki trash: days a deleted page stays restorable before the daily purge
+    # deletes it for good, with its history, comments and attachments. 0 keeps
+    # the trash forever.
+    wiki_trash_retention_days: int = Field(default=90, ge=0)
+
     # MCP Streamable HTTP sessions.
     # How long a session may go unused before it expires: the Redis entry's
     # sliding TTL, refreshed on every request. Until then a client returning
@@ -305,6 +310,13 @@ class Settings(BaseSettings):
 
     # AI usage ingest (``/api/v1/ai-usage/ingest``): batches per minute per account.
     ai_usage_ingest_rate_limit_per_minute: int = Field(default=60, ge=1)
+
+    # Hermes event receiver (``/api/v1/hermes/events/{token}/``): the largest
+    # body accepted (a ``post_tool_call`` carries the tool's raw input and
+    # result, which are read and dropped), and requests per minute per client
+    # address. Hermes treats 413 and 429 as final, so an event over either is lost.
+    hermes_event_max_body_bytes: int = Field(default=1024 * 1024, ge=1024)
+    hermes_event_rate_limit_per_minute: int = Field(default=600, ge=1)
 
     # SCIM provisioning (``/scim/v2/{provider_slug}/``): the largest request
     # body, requests per minute per provider (and per client address for

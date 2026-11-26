@@ -103,10 +103,36 @@ as an administrator price instead (admin prices win).
 
 ## ai_model_prices_history.json
 
-Optional, maintained **by hand**: known earlier price periods that the
-snapshot cannot carry, such as a provider's price before a cut. Each entry
-has the snapshot's model fields plus `effective_from` and `effective_to`
-(ISO 8601 with an offset; both required, the end exclusive). Periods of one
-model must not overlap each other. The loader inserts a period once, and skips
-it (with a warning) when a bundled period already covers part of it. Cite the
-provider's announcement in `note`.
+Optional, maintained **by hand**: price periods that the snapshot cannot
+carry, such as a provider's price before a cut, or the models of a provider
+LiteLLM does not list (the `nous` rows). Each entry has the snapshot's model
+fields plus `effective_from` and an optional `effective_to` (ISO 8601 with an
+offset, the end exclusive). Without `effective_to` the period is open; only
+the last period of a model may be open. Periods of one model must not
+overlap each other. The loader inserts a period once, and skips it (with a
+warning) when a bundled period already covers part of it. An open period
+starts at its `effective_from` and is never moved back, so usage before it
+stays unpriced. Never delete a period from the file (the loader would treat
+the stored row as a first period and move it back); end it instead. To record
+a price change, give the open period an
+`effective_to` and add the new period from that instant: the loader closes
+the stored period there and inserts the new one. Cite the source of every
+price in `note` (the provider's announcement or price list URL and the date
+it was read).
+
+Spelling variants need no rows or aliases: `claude-sonnet-4.6` is priced by
+`claude-sonnet-4-6`, and `nousresearch/hermes-4-405b` or
+`openrouter/nousresearch/hermes-4-405b:free` by `nous/hermes-4-405b` (see
+`model_name_variants` in `specivo/core/ai_pricing.py`).
+
+After new periods land, entries logged before them keep their old (or no)
+price: an administrator runs **Recompute entries in range** on the AI usage
+admin page, filtered by provider or model.
+
+**Nous models.** The Nous Portal routes to other labs' models at the same
+list prices as OpenRouter; those are priced by their own providers' rows,
+because `nous` (like `openrouter` and `litellm`) is a gateway provider that
+does not restrict the match. Only models Nous Research publishes itself get
+`nous` rows, and only with a price that can be cited. Re-check
+<https://openrouter.ai/api/v1/models> (ids starting `nousresearch/`) and
+<https://inference-api.nousresearch.com/v1/models> once per release.

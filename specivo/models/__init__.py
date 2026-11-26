@@ -2,22 +2,29 @@
 # when it inspects Base.metadata.
 from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPolicy
 from specivo.models.agent_session import AgentSession
+from specivo.models.ai_billing_account import AiBillingAccount
 from specivo.models.ai_model_price import AiModelPrice
-from specivo.models.ai_subscription import AiSubscription, AiTool
+from specivo.models.ai_provider import ProjectAiProvider
+from specivo.models.ai_reimbursement_claim import AiReimbursementClaim, AiReimbursementClaimEntry
+from specivo.models.ai_spend_budget import AiSpendBudget, AiSpendBudgetAlert
+from specivo.models.ai_subscription import AiSubscription, AiSubscriptionMember, AiTool
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.billing_rate import BillingRate
+from specivo.models.concept import ConceptExtractionSource, ConceptMention, EntityConcept
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
 from specivo.models.currency import Currency
 from specivo.models.entity_link import EntityLink
 from specivo.models.exchange_rate import ExchangeRate
+from specivo.models.hermes_receiver import HermesDelivery, HermesReceiver
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.issue_source_ref import IssueSourceRef
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.kill_switch import KillEvent, KillTriggerConfig
+from specivo.models.link_suggestion import EntitySuggestion, EntityVector
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.metadata_schema import MetadataSchema
@@ -63,12 +70,20 @@ __all__ = [
     "AgentGroup",
     "AgentGroupMembership",
     "AgentSession",
+    "AiBillingAccount",
     "AiModelPrice",
+    "AiReimbursementClaim",
+    "AiReimbursementClaimEntry",
+    "AiSpendBudget",
+    "AiSpendBudgetAlert",
     "AiSubscription",
+    "AiSubscriptionMember",
     "AiTool",
     "AiUsageEntry",
     "BillingRate",
     "Base",
+    "HermesDelivery",
+    "HermesReceiver",
     "LockVersionMixin",
     "TimestampMixin",
     "ActiveTimer",
@@ -118,6 +133,12 @@ __all__ = [
     "GroupPolicy",
     "EnabledModule",
     "EntityLink",
+    "EntitySuggestion",
+    "EntityConcept",
+    "ConceptMention",
+    "ConceptExtractionSource",
+    "ProjectAiProvider",
+    "EntityVector",
     "ExchangeRate",
     "ProjectKeyAlias",
     "Member",
