@@ -365,7 +365,8 @@ def passes_threshold(centred: float, threshold: float) -> bool:
 # For each item of the scope, its nearest issues and, apart, its nearest pages
 # in its own (current) project, with the same model, ranked by raw cosine;
 # each with its centred cosine around the project's mean vector, which the
-# threshold is checked on. Projects with too few vectors are left out. Exact: no vector index.
+# threshold is checked on (computed after the LIMIT, for the candidates only).
+# Projects with too few vectors are left out. Exact: no vector index.
 _NEIGHBOURS_SQL = """
 WITH centre AS (
     SELECT ss.project_id, avg(ev.vector) AS m
@@ -378,14 +379,14 @@ WITH centre AS (
     HAVING count(*) >= :min_items
 )
 SELECT ss1.source_type AS item_type, ss1.entity_id AS item_id, ss1.project_id AS project_id,
-       nb.source_type AS other_type, nb.entity_id AS other_id, nb.score AS score, nb.centred AS centred
+       nb.source_type AS other_type, nb.entity_id AS other_id, nb.score AS score, {centred} AS centred
 FROM entity_vectors ev1
 JOIN search_sources ss1 ON ss1.id = ev1.search_source_id
 JOIN centre c ON c.project_id = ss1.project_id
 CROSS JOIN (VALUES ('issue'), ('wiki_page')) AS kind(other_type)
 CROSS JOIN LATERAL (
     SELECT ss2.source_type, ss2.entity_id, 1 - (ev2.vector <=> ev1.vector) AS score,
-           {centred} AS centred
+           ev2.vector AS vector
     FROM entity_vectors ev2
     JOIN search_sources ss2 ON ss2.id = ev2.search_source_id
     WHERE ev2.model_id = ev1.model_id
@@ -433,7 +434,7 @@ async def _neighbours(
         )
         params["issue_ids"] = issue_ids
         params["page_ids"] = page_ids
-    centred = CENTRED_COSINE_SQL.format(a="ev2.vector", b="ev1.vector", m="c.m")
+    centred = CENTRED_COSINE_SQL.format(a="nb.vector", b="ev1.vector", m="c.m")
     rows = await session.execute(text(_NEIGHBOURS_SQL.format(scope=scope, centred=centred)), params)
     return [
         _Neighbour((r.item_type, r.item_id), r.project_id, (r.other_type, r.other_id), float(r.score), float(r.centred))
