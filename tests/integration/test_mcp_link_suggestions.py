@@ -162,6 +162,43 @@ async def test_link_suggestion_cannot_reach_an_item_the_caller_cannot_see(db_ses
     assert (await db_session.execute(select(EntitySuggestion.status))).scalar_one() == "suggested"
 
 
+async def test_get_links_without_wiki_access_lists_no_page_suggestions(db_session, world):
+    from specivo.services.wiki_service import WikiService
+    from tests.integration.link_graph_helpers import grant
+
+    root = await issue(db_session, world, world.home, "Root")
+    near = await page(db_session, world, world.home, "Near page")
+    twin = await issue(db_session, world, world.home, "Twin")
+    trashed = await page(db_session, world, world.home, "Old page")
+    await _suggest(db_session, world, (root, A), (near, NEAR_A), (twin, A), (trashed, A))
+    await WikiService().delete_page(db_session, trashed.id, world.admin)
+    await db_session.commit()
+
+    wikiless = UserFactory.build(login="sgm_wikiless", status="active")
+    db_session.add(wikiless)
+    await db_session.commit()
+    await grant(db_session, wikiless, world.home, ["view_issues"])
+    data = json.loads(await _get_links(db_session, wikiless, root.display_key, include_suggestions=True))
+    assert [(e["kind"], e["target"]) for e in data["edges"]] == [("similar", twin.display_key)]
+    assert "wiki:" not in json.dumps(data)
+    # From a page the reader may not read, nothing at all.
+    with pytest.raises((NotFoundError, PermissionDeniedError)):
+        await _get_links(db_session, wikiless, wiki_ref(world.home, "near-page"), include_suggestions=True)
+
+    # The reader with the wiki sees the page, never the one in the trash.
+    data = json.loads(await _get_links(db_session, world.reader, root.display_key, include_suggestions=True))
+    targets = {e["target"] for e in data["edges"] if e["kind"] == "similar"}
+    assert targets == {twin.display_key, wiki_ref(world.home, "near-page")}
+    # Deciding with the page in the trash fails as with a page that never existed.
+    await add_permission(db_session, world.reader, world.home, "edit_issues")
+    errors = []
+    for slug in ("old-page", "never-was"):
+        with pytest.raises(NotFoundError) as exc:
+            await _link_suggestion(db_session, world.reader, "dismiss", root.display_key, wiki_ref(world.home, slug))
+        errors.append(str(exc.value).replace(slug, "<slug>"))
+    assert errors[0] == errors[1]
+
+
 async def test_the_tool_is_registered_hinted_and_documented():
     assert server.specivo_link_suggestion.__doc__
     hints = TOOL_ANNOTATIONS["specivo_link_suggestion"]

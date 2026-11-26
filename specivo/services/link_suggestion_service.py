@@ -706,11 +706,17 @@ class Decision:
 
 
 async def _item_info(session: AsyncSession, item: Item) -> tuple[int, str]:
-    """``(project id, ref)`` of an issue or page: ``ACME-12`` or ``wiki:ACME/slug``."""
+    """``(project id, ref)`` of an issue or page: ``ACME-12`` or ``wiki:ACME/slug``.
+
+    Checks no visibility: callers check it first (see :func:`_require_visible`).
+    A missing item is refused like a hidden one.
+    """
+    from specivo.core.exceptions import NotFoundError
+
     if item[0] == ITEM_ISSUE:
         issue = await session.get(Issue, item[1])
         if issue is None:
-            raise ValueError("Issue not found")
+            raise NotFoundError("Item not found")
         return issue.project_id, issue.display_key
     row = (
         await session.execute(
@@ -721,9 +727,7 @@ async def _item_info(session: AsyncSession, item: Item) -> tuple[int, str]:
         )
     ).one_or_none()
     if row is None:
-        from specivo.core.exceptions import NotFoundError
-
-        raise NotFoundError("Wiki page not found")
+        raise NotFoundError("Item not found")
     return row.project_id, f"wiki:{row.key}/{row.slug}"
 
 
@@ -753,7 +757,10 @@ async def _require_decide_permission(
 
 
 async def _require_visible(session: AsyncSession, user: User, items: Iterable[Item]) -> None:
-    """Refuse (not found) an item *user* may not see; callers resolve refs first, this is the backstop."""
+    """Refuse (not found) an item *user* may not see, or that does not exist (or is in the trash), alike.
+
+    Callers resolve refs first; this is the backstop.
+    """
     from specivo.core.exceptions import NotFoundError
     from specivo.services.entity_link_service import _Reader
 
@@ -813,9 +820,10 @@ async def decide(
         raise ValidationError(_("Suggested links join issues and wiki pages only"), field="other_ref")
     value = check_link_type(source, target, link_type) if op == OP_ACCEPT else ""
 
+    # Visibility first: a missing item and a hidden one are refused with the same error.
+    await _require_visible(session, user, [source, target])
     source_project_id, source_ref = await _item_info(session, source)
     target_project_id, target_ref = await _item_info(session, target)
-    await _require_visible(session, user, [source, target])
     await _require_decide_permission(session, user, source, target, source_project_id, target_project_id)
 
     model_id = await default_model_id(session)
