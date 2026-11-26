@@ -199,7 +199,7 @@ def test_duplicate_repository_is_shown_on_the_repository_field(
     )
     assert resp.status_code == 201, resp.text
     _open_form(admin_page, project_key)
-    admin_page.get_by_label("Provider").select_option("forgejo")
+    admin_page.get_by_test_id("repository-provider").select_option("forgejo")
     name = admin_page.get_by_test_id("repository-name")
     name.fill(_REPO)
     admin_page.get_by_test_id("repository-url").fill(_URL)
